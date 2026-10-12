@@ -6,8 +6,8 @@ from uuid import UUID
 from pydantic import AwareDatetime, Field, model_validator
 
 from app.schemas.bid_review import FILE_BYTE_LIMIT, NonBlank
-from app.schemas.budget_contracts import BudgetPreflightData
 from app.schemas.contracts import Contract
+from app.schemas.preflight_contracts import PreflightData
 from app.schemas.screenshot_contracts import Sha256
 
 ReportSectionKey = Literal[
@@ -54,24 +54,24 @@ class BidReportRenderRequest(Contract):
 
 
 class BidReportRenderPreview(Contract):
+    preflight: PreflightData
     dry_run: Literal[True] = True
     report_id: UUID
     input_hash: Sha256
     report_input_hash: Sha256
     decisions_snapshot_sha256: Sha256
     renderer_identity: NonBlank
-    budget: BudgetPreflightData
     expires_at: AwareDatetime
     preflight_token: str = Field(min_length=1, max_length=4096, repr=False)
     formats: tuple[Literal["docx"], Literal["console"]] = ("docx", "console")
 
     @model_validator(mode="after")
     def local_only(self):
-        if self.budget.input_hash != self.input_hash or self.budget.planned_calls != 0:
+        if self.preflight.input_hash != self.input_hash or self.preflight.planned_calls != 0:
             raise ValueError("report rendering has zero external calls")
-        if self.budget.next_call is not None or self.budget.estimate.task_amount != 0:
-            raise ValueError("report rendering has zero paid call liability")
-        if (self.expires_at - self.budget.as_of).total_seconds() != 900:
+        if self.preflight.next_call is not None:
+            raise ValueError("report rendering has no provider calls")
+        if (self.expires_at - self.preflight.as_of).total_seconds() != 900:
             raise ValueError("report receipt lasts fifteen minutes")
         return self
 

@@ -2,7 +2,6 @@
 
 import json
 from datetime import UTC, date, datetime
-from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, tuple_
@@ -118,10 +117,6 @@ async def submit_check(
                 "input": assessment_input(fixed.manifest, fixed.input_hash),
                 "selected_item_ids": [item["requirement_id"] for item in fixed.secret["items"]],
                 "estimated_cost": Cost(),
-                "estimated_charge": Decimal(0),
-                "billing_currency": settings.billing_currency,
-                "cost_basis": "known",
-                "cost_basis_reason": "no_model_calls",
                 "redaction_revision": fixed.manifest["model_redaction_revision"],
                 "redaction_rule_version": fixed.manifest["redaction_rule_version"],
                 "redacted_counts": fixed.manifest.get("redacted_counts", {}),
@@ -139,7 +134,6 @@ async def submit_check(
                     item["partition"] == "gap" for item in fixed.secret["items"]
                 ),
                 "limitations": fixed.limitations,
-                "max_charge": body.max_charge,
                 **(
                     {
                         "provider_config_id": getattr(llm, "provider_config_id", None),
@@ -155,34 +149,26 @@ async def submit_check(
                 **semantic_preview,
             }
         ).model_dump(mode="json")
-        from app.services import budget_preflight
+        from app.services import preflight as preflight_service
 
         quotes = []
-        if (
-            body.mode == "combined"
-            and isinstance(llm, HTTPExtractor)
-            and semantic_preview.get("estimated_charge") is not None
-        ):
+        if body.mode == "combined" and isinstance(llm, HTTPExtractor):
             adapter = check_semantic.check_provider(llm)
             quotes = [
                 llm.quote(adapter.request_body(request))
                 for request in check_semantic.requests_for(fixed.secret["outbound"], llm)
             ]
-        data = await budget_preflight.attach(
+        data = await preflight_service.attach(
             session,
             data,
             command="check run",
             task_id=task_id,
             input_hash=fixed.input_hash,
-            currency=settings.billing_currency,
             settings=settings,
             quotes=quotes,
             planned_calls=len(quotes)
-            if quotes
-            or body.mode == "rules"
-            or semantic_preview.get("cost_basis_reason") == "no_model_calls"
+            if quotes or body.mode == "rules" or semantic_preview.get("admission_blocker") is None
             else None,
-            max_charge=body.max_charge,
         )
         return data, None
     if semantic_preview.get("admission_blocker") == "redaction_required":
@@ -238,7 +224,6 @@ async def submit_check(
                     "scopes": sorted(actor.scopes),
                     "limitations": fixed.limitations,
                     "provider_source": fixed.manifest.get("provider_source"),
-                    "max_charge": str(body.max_charge) if body.max_charge is not None else None,
                 }
             },
         )
@@ -271,16 +256,7 @@ async def submit_check(
                 4,
             )
         job.status, job.error, job.queue_id, job.attempts = "queued", None, None, 0
-        if body.max_charge is not None:
-            job.result = {
-                **job.result,
-                "submission": {**job.result["submission"], "max_charge": str(body.max_charge)},
-            }
         job.lease_until, job.finished_at, job.run_id = None, None, None
-    elif body.max_charge is not None and job.status in {"queued", "running"}:
-        cap = job.result["submission"].get("max_charge")
-        if cap is None or Decimal(cap) > body.max_charge:
-            cards.fail("check_cap_conflict", "The existing check has a higher charge cap", 409, 2)
     await session.flush()
     return AssessmentJobAccepted.model_validate(
         {"job_id": job.id, "status": job.status, "cached": cached}
@@ -487,12 +463,7 @@ async def publish(
                 "job_id": job.id,
                 "completion": completion,
                 "usage_record_ids": [row.id for row in usage_rows],
-                "charge": sum(
-                    (Decimal(str(row.charge)) for row in usage_rows if row.charge is not None),
-                    Decimal(0),
-                ),
                 "stop_reason": stop_reason,
-                "billing_currency": settings.billing_currency,
                 "checked_requirements": len(evaluated),
                 "finding_count": finding_count,
                 "unassessed_requirements": unassessed,
@@ -541,7 +512,7 @@ async def validity(
             semantic=combined,
         )
         if combined:
-            # The immutable model/price identity belongs to this job, never today's default.
+            # The immutable model identity belongs to this job, never today's default.
             job = await session.get(Job, run.job_id)
             if job is None:
                 raise not_found()

@@ -237,12 +237,12 @@ def validated_result(
         result = Result.model_validate(body)
         value = result.model_dump(mode="json")
         if data_model is not None:
-            budget = value["data"].get("budget_preflight")
+            preflight = value["data"].get("preflight")
             value["data"] = data_model.model_validate(
-                {key: item for key, item in value["data"].items() if key != "budget_preflight"}
+                {key: item for key, item in value["data"].items() if key != "preflight"}
             ).model_dump(mode="json")
-            if budget is not None:
-                value["data"]["budget_preflight"] = budget
+            if preflight is not None:
+                value["data"]["preflight"] = preflight
         if item_model is not None:
             value["items"] = [
                 item_model.model_validate(item).model_dump(mode="json") for item in value["items"]
@@ -351,7 +351,7 @@ async def submit_with_preflight(
         html=html,
     )
     preview = SandboxPreview.model_validate(
-        {key: value for key, value in preview_body["data"].items() if key != "budget_preflight"}
+        {key: value for key, value in preview_body["data"].items() if key != "preflight"}
     )
     if not preview.ready:
         code = next(

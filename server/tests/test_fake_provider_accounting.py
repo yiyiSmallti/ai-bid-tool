@@ -1,7 +1,7 @@
 """Offline fake-provider boundary scenarios, specified before changing the helpers.
 
 Failures: fixture overrides bypass admission; completed malformed/refused responses lose
-usage or settle twice; absent usage clears a hold; cancellation loses settled usage;
+usage or settle twice; absent usage clears an unresolved external call; cancellation loses settled usage;
 OCR overrides or direct test-only calls lose their original fixture behavior.
 """
 
@@ -13,7 +13,7 @@ from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.calls import current_accounting
 from app.schemas.contracts import ProviderUsage
 from fakes import FakeLLM, FakeOCR
-from test_budget_provider_metering import Accounting
+from test_provider_metering import Accounting
 from test_response_cards import PhaseOneExtraction
 
 
@@ -42,7 +42,6 @@ async def test_standalone_fixture_inherits_single_metered_boundary(accounting):
     assert provider.records_calls and provider.calls == 1
     assert len(accounting.quotes) == len(accounting.usages) == 1
     assert result.usage == result.usages[0] == accounting.usages[0]
-    assert result.usage.payer == "local_free" and result.usage.task_amount == 0
     assert result.extraction.items[0].starred
 
 
@@ -54,7 +53,6 @@ async def test_response_failure_settles_known_usage_then_preserves_error(account
         version="v1",
         duration_ms=1,
         tokens=10,
-        usd=0,
         test_only=True,
     )
     failure = (
@@ -72,11 +70,10 @@ async def test_response_failure_settles_known_usage_then_preserves_error(account
     assert caught.value is failure
     assert len(accounting.quotes) == len(accounting.usages) == 1
     assert caught.value.usage == accounting.usages
-    assert accounting.usages[0].payer == "local_free"
     assert not accounting.unknowns
 
 
-async def test_failure_without_usage_keeps_unknown_hold(accounting):
+async def test_failure_without_usage_keeps_unknown_external_outcome(accounting):
     class Failed(FakeLLM):
         async def _extract(self, chunks, schema):
             raise ProviderFailure("synthetic timeout", retryable=True)
@@ -107,6 +104,7 @@ async def test_cancelled_fake_drains_one_admitted_call_and_keeps_cancellation(ac
 
 
 async def test_ocr_hook_preserves_content_and_single_usage(accounting):
+
     class OCR(FakeOCR):
         async def _recognize(self, image, page):
             result = await super()._recognize(image, page)
@@ -116,7 +114,7 @@ async def test_ocr_hook_preserves_content_and_single_usage(accounting):
     assert result.text == "custom synthetic page"
     assert len(accounting.quotes) == len(accounting.usages) == 1
     assert result.usage == accounting.usages[0]
-    assert result.usage.ocr_pages == 1 and result.usage.task_amount == 0
+    assert result.usage.ocr_pages == 1
 
 
 async def test_fake_direct_calls_remain_explicitly_test_only():

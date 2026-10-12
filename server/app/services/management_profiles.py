@@ -278,16 +278,14 @@ async def authors(session: AsyncSession, actor: Identity, revisions) -> dict[UUI
     return result
 
 
-def encoded_result(
-    command: str, data: Contract, items: list[Contract], currency: str, duration_ms=0
-) -> Result:
+def encoded_result(command: str, data: Contract, items: list[Contract], duration_ms=0) -> Result:
     return Result(
         ok=True,
         command=command,
         data=data.model_dump(mode="json"),
         items=[item.model_dump(mode="json") for item in items],
         warnings=WARNINGS,
-        cost=Cost(billing_currency=currency),
+        cost=Cost(),
         duration_ms=duration_ms,
     )
 
@@ -297,22 +295,21 @@ def result_bytes(result: Result) -> int:
     return len(json.dumps(result.model_dump(mode="json"), ensure_ascii=False).encode())
 
 
-def page_result(command: str, page: Page, currency: str, duration_ms: int) -> Result:
-    value = encoded_result(command, page.data, page.items, currency, duration_ms)
+def page_result(command: str, page: Page, duration_ms: int) -> Result:
+    value = encoded_result(command, page.data, page.items, duration_ms)
     if result_bytes(value) > PAGE_BYTE_LIMIT:
         too_large()
     return value
 
 
-def detail_result(command: str, data: Contract, currency: str, duration_ms: int) -> Result:
-    value = encoded_result(command, data, [], currency, duration_ms)
+def detail_result(command: str, data: Contract, duration_ms: int) -> Result:
+    value = encoded_result(command, data, [], duration_ms)
     if result_bytes(value) > DETAIL_BYTE_LIMIT:
         too_large()
     return value
 
 
 def build_page(session, actor, purpose, parent, normalized, items, anchors, more, as_of):
-    currency = settings_for(session).billing_currency
     retained = len(items)
     while retained:
         has_more = more or retained < len(items)
@@ -330,9 +327,7 @@ def build_page(session, actor, purpose, parent, normalized, items, anchors, more
         )
         if (
             result_bytes(
-                encoded_result(
-                    COMMANDS[purpose], data, items[:retained], currency, 9223372036854775807
-                )
+                encoded_result(COMMANDS[purpose], data, items[:retained], 9223372036854775807)
             )
             <= PAGE_BYTE_LIMIT
         ):
@@ -473,9 +468,7 @@ async def detail(
             if "byte budget" in str(error):
                 too_large()
             fail("management_integrity_error", "Profile detail is invalid", 409, 4)
-        detail_result(
-            COMMANDS["detail"], value, settings_for(session).billing_currency, 9223372036854775807
-        )
+        detail_result(COMMANDS["detail"], value, 9223372036854775807)
         return value
 
 

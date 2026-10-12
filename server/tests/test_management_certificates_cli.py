@@ -313,7 +313,7 @@ def test_management_certificates_invalid_and_legacy_no_request(monkeypatch, caps
         assert error.value.code == 2
         assert (
             json.loads(capsys.readouterr().out)["data"]["error"]["message"]
-            == "This command requires contract 4.0"
+            == "Only contract 5.0 is supported"
         )
     assert calls == []
 
@@ -327,10 +327,10 @@ def test_management_certificates_schema_and_legacy_list(monkeypatch, capsys):
         for kind in ("product", "feature", "certificate", "profile", "template"):
             assert "resource " + kind + " " + command in commands
     assert "ResourceQuery" in json.dumps(commands["resource certificate browse"])
-    cli.main(["--contract-version", "3.0", "schema", "--json"])
-    legacy = json.loads(capsys.readouterr().out)["data"]["commands"]
-    assert "resource certificate list" in legacy
-    assert "resource certificate browse" not in legacy
+    with pytest.raises(SystemExit) as error:
+        cli.main(["--contract-version", "3.0", "schema", "--json"])
+    assert error.value.code == 2
+    assert json.loads(capsys.readouterr().out)["data"]["error"]["code"] == "invalid_input"
     calls = []
 
     def call(method, path, **kwargs):

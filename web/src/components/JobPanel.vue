@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { confirmAction, display, errorText, jobKinds, jobStatuses, jobTag, label, orgRequest, warningText } from "../org.js";
 import { assessmentError } from "../assessments.js";
 import { reviewError, safeWarning } from "../bid-review.js";
-import { money } from "../api.js";
+import { count } from "../api.js";
 const props = defineProps({ jobId: String, writable: Boolean, assessmentMode: Boolean, bidPreparation: Boolean });
 const emit = defineEmits(["finished"]);
 const job = ref(null), warnings = ref([]), error = ref(""), cancelling = ref(false), actualCost = ref(null);
@@ -22,7 +22,7 @@ async function load() {
   if (!props.jobId || document.hidden) return;
   controller = new AbortController();
   try {
-    const result = await orgRequest("GET", `/jobs/${props.jobId}`, undefined, { signal: controller.signal, contractVersion: props.assessmentMode ? 4 : undefined });
+    const result = await orgRequest("GET", `/jobs/${props.jobId}`, undefined, { signal: controller.signal});
     job.value = result.data; actualCost.value = result.cost; warnings.value = result.warnings; error.value = ""; failures = 0;
     if (terminal(job.value.status)) { if (finished !== props.jobId) { finished = props.jobId; emit("finished", job.value); } }
     else schedule(2000);
@@ -33,9 +33,9 @@ async function load() {
   }
 }
 async function cancel() {
-  if (!await confirmAction(job.value?.kind === "bid_review_prepare" ? "取消本地准备后将不发布页面清单；可以明确重试。" : "取消后，已获准发出的调用仍可能产生费用。", "取消作业", "确认取消", true)) return;
+  if (!await confirmAction(job.value?.kind === "bid_review_prepare" ? "取消本地准备后将不发布页面清单；可以明确重试。" : "取消后，已发出的调用仍可能返回结果。", "取消作业", "确认取消", true)) return;
   cancelling.value = true;
-  try { await orgRequest("POST", `/jobs/${props.jobId}/cancel`, undefined, { contractVersion: props.assessmentMode ? 4 : undefined }); await load(); }
+  try { await orgRequest("POST", `/jobs/${props.jobId}/cancel`, undefined, {}); await load(); }
   catch (exc) { error.value = preparation.value ? reviewError(exc) : errorText(exc); }
   finally { cancelling.value = false; }
 }
@@ -60,16 +60,16 @@ onBeforeUnmount(() => { clearTimeout(timer); controller?.abort(); document.remov
       <span v-if="job" role="status" data-testid="job-status">作业状态：{{ label(jobStatuses, job.status) }} · {{ label(jobKinds, job.kind) }} · 尝试 {{ display(job.attempts) }} 次 · 档位 {{ display(job.reasoning) }}</span>
       <span v-if="job && !terminal(job.status)" role="progressbar" :aria-label="job.kind === 'score_rubric' ? stageLabel : '正在处理作业'" :aria-valuenow="knownBatches ? progress.completed_batches : undefined" :aria-valuemin="knownBatches ? 0 : undefined" :aria-valuemax="knownBatches ? progress.total_batches : undefined" class="job-progress">{{ job.kind === 'score_rubric' ? stageLabel : '正在处理作业' }}<template v-if="knownBatches">，已完成 {{ progress.completed_batches }} / {{ progress.total_batches }} 批</template></span>
     </div>
-    <p class="hint">作业 ID <code>{{ jobId }}</code> · {{ reportRender ? "Word 本地渲染费用为 0；失败不发布部分文件。" : job?.kind === "bid_review_prepare" ? "本地准备费用为 0；取消后不发布部分页面清单。" : "取消后已发出的调用仍可能产生费用；断网不会自动取消或重新提交作业。" }}</p>
+    <p class="hint">作业 ID <code>{{ jobId }}</code> · {{ reportRender ? "Word 本地渲染不调用模型；失败不发布部分文件。" : job?.kind === "bid_review_prepare" ? "本地准备不调用模型；取消后不发布部分页面清单。" : "取消后已发出的调用仍可能返回用量；断网不会自动取消或重新提交作业。" }}</p>
     <el-alert v-if="job?.error" :title="preparation || bidReview ? reviewError(job.error) : assessment ? assessmentError(job.error) : display(job.error)" type="error" :closable="false" show-icon />
     <el-alert v-for="warning in warnings" :key="warning" :title="preparation ? safeWarning(warning) : warningText(warning)" type="warning" :closable="false" role="note" class="section" />
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
     <template v-if="assessment && job">
       <p v-if="job.result?.completion === 'partial'">部分完成；请查看已保存报告中的未完成内容</p>
       <p v-if="job.result?.stop_reason">停止原因：{{ bidReview ? reviewError({ code: job.result.stop_reason }) : assessmentError({ code: job.result.stop_reason }) }}</p>
-      <p v-if="actualCost">实际服务用量成本：{{ money(actualCost.usd, 'USD') }} · 实际平台扣费：{{ money(actualCost.charge, actualCost.billing_currency) }} · 计入任务预算：{{ money(actualCost.task_amount, actualCost.billing_currency) }}</p>
+      <p v-if="actualCost">实际调用 {{ count(actualCost.calls) }} 次 · {{ count(actualCost.llm_tokens) }} tokens · OCR {{ count(actualCost.ocr_pages) }} 页 · 搜索 {{ count(actualCost.search_requests) }} 次 · 浏览器 {{ count(actualCost.browser_units) }} 单位 · 未确定 {{ count(actualCost.unresolved_calls) }} 次</p>
     </template>
-    <details v-else-if="job?.result"><summary>作业结果、拒绝条目与费用</summary><pre>{{ display(job.result) }}</pre></details>
+    <details v-else-if="job?.result"><summary>作业结果、拒绝条目与用量</summary><pre>{{ display(job.result) }}</pre></details>
   </el-card>
 </template>
 <style scoped>

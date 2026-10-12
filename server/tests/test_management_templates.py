@@ -570,7 +570,7 @@ async def test_input_unicode_envelope_and_foreign_feature_filters(api, headers):
     assert response.status_code == 413
     assert (
         await api.post(BASE.replace("/v4", "") + "/query", headers=headers[0], json={})
-    ).status_code == 404
+    ).status_code == 200
 
 
 @pytest.mark.parametrize(

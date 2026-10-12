@@ -1,4 +1,4 @@
-"""Authenticated Gateway presence triage with fixed-price accounting per dispatch."""
+"""Authenticated Gateway presence triage with usage accounting per dispatch."""
 
 import asyncio
 import base64
@@ -17,16 +17,16 @@ from pydantic import ValidationError
 from app.core.errors import ServiceError
 from app.providers.base import ProviderFailure
 from app.providers.calls import current_accounting
-from app.schemas.budget_contracts import BudgetCallQuote
 from app.schemas.clef import (
     CLEF_CONTEXT_TOKENS,
     CLEF_REQUEST_BYTE_LIMIT,
+    ClefCallPlan,
     ClefChoiceAnswer,
-    ClefFixedCallQuote,
     ClefNoulAnswer,
     ClefTriageResult,
 )
 from app.schemas.contracts import ProviderUsage
+from app.schemas.preflight_contracts import CallPlan
 
 MODEL = "@cf/cloudflare/clef"
 VERSION = "clef-presence-v1"
@@ -138,23 +138,16 @@ class HTTPClefProvider:
 
     def quote(self, request, redacted_images):
         _, encoded = wire_body(request, redacted_images)
-        return ClefFixedCallQuote(
+        return ClefCallPlan(
             platform_config_revision=self.config.revision,
-            quote=BudgetCallQuote(
+            quote=CallPlan(
                 capability="vision",
-                payer="org_platform",
                 provider="cloudflare",
                 model=MODEL,
                 version=VERSION,
                 platform_model_id="bid-review-clef",
-                price_revision=str(self.config.price_revision),
                 request_sha256=hashlib.sha256(encoded).hexdigest(),
-                currency=self.config.currency,
-                reserved_charge=self.config.fixed_sale_price,
-                reserved_task_amount=self.config.fixed_sale_price,
-                vendor_usd_upper_bound=None,
                 image_count=len(redacted_images),
-                image_price_revision=str(self.config.price_revision),
             ),
         )
 
@@ -237,16 +230,9 @@ class HTTPClefProvider:
                 tokens=reported_tokens,
                 input_tokens=reported_tokens,
                 duration_ms=int((time.monotonic() - started) * 1000),
-                usd=None,
                 platform_model_id="bid-review-clef",
-                charge=self.config.fixed_sale_price,
                 capability="vision",
-                payer="org_platform",
-                billing_currency=self.config.currency,
-                task_amount=self.config.fixed_sale_price,
-                price_revision=str(self.config.price_revision),
                 image_count=len(redacted_images),
-                image_price_revision=str(self.config.price_revision),
                 image_input_sha256=request.images[0].sha256,
             )
             await accounting.complete(call_id, usage)
@@ -325,8 +311,8 @@ class HTTPClefProvider:
                 try:
                     output = await asyncio.shield(pending)
                 except asyncio.CancelledError as cancelled:
-                    # Drain the already-admitted operation and its settlement;
-                    # cancellation can never start another retry or erase liability.
+                    # Drain the already-admitted operation and its usage receipt;
+                    # cancellation can never start another retry or erase an unresolved outcome.
                     while not pending.done():
                         try:
                             await asyncio.shield(pending)

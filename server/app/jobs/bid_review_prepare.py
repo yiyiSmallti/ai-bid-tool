@@ -515,7 +515,7 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
             "page_count": page_total,
             "documents": len(prepared_documents),
             "completion": "complete",
-            "cost": await job_cost(session, job.id, execution.settings.billing_currency),
+            "cost": await job_cost(session, job.id),
             "published_ids": [str(publication.id)],
         }
         audit(

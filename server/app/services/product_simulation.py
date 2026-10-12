@@ -200,7 +200,7 @@ async def submit(
         else None
     )
     if body.dry_run:
-        from app.services import budget_preflight
+        from app.services import preflight as preflight_service
 
         ids = [UUID(value) for item in items for value in item["requirement_ids"]]
         originals = {
@@ -223,7 +223,7 @@ async def submit(
             else []
         )
 
-        return await budget_preflight.attach(
+        return await preflight_service.attach(
             session,
             {
                 "dry_run": True,
@@ -247,7 +247,6 @@ async def submit(
             planned_calls=None if items else 0,
             dynamic=bool(items),
             settings=settings,
-            currency=settings.billing_currency,
         ), None
     if body.expected_input_hash != input_hash:
         images.fail("simulation_input_changed", "Inputs changed since the preview", 409, 3)

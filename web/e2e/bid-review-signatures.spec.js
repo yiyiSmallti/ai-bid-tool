@@ -6,7 +6,7 @@ const output = resolve(process.env.E2E_OUTPUT ?? "../data/work/bid-review-sig/br
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const org = uuid(1), user = uuid(2), task = uuid(3), submission = uuid(4), document = uuid(10), anchorId = uuid(20);
 const hash = "a".repeat(64), now = "2026-10-08T00:00:00Z";
-const zero = { llm_tokens: 0, ocr_pages: 0, usd: 0, basis: "zero", charge: "0", billing_currency: "USD", task_amount: "0", unpriced_calls: 0, unresolved_calls: 0 };
+const zero = { calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 };
 const result = (command, data = {}, items = []) => ({ ok: true, command, data, items, warnings: [], cost: zero, duration_ms: 0 });
 const preview = { label: "合成 CA", fingerprint_sha256: hash, subject: "CN=Synthetic root", issuer: "CN=Synthetic root", not_before: "2026-01-01T00:00:00Z", not_after: "2027-01-01T00:00:00Z", is_ca: true };
 const anchor = () => ({ ...preview, id: anchorId, enabled: true, revision: 1, created_by: "operator@example.test", created_at: now, disabled_by: null, disabled_at: null });
@@ -26,7 +26,7 @@ async function fixture(page, { platform = false, restricted = false } = {}) {
   const candidate = ordinal => { const quote = ordinal === 1 ? "投标文件须逐页加盖公章。<img src=x onerror=window.__unsafe=1>" : "授权代理人应签字并填写日期。"; return ({ id: uuid(30 + ordinal), document_id: document, page_id: uuid(40 + ordinal), ordinal, page: ordinal, candidate_kind: "signing_clause", applicability: "unknown", ...(!restricted ? { quote, start_offset: 0, end_offset: [...quote].length, mark_types: ["company_seal", "personal_seal", "every_page_electronic_seal", "pdf_digital_signature"], owner_roles: ["company"], date_required: false, location_hint: "每页" } : {}) }); };
   const detail = { submission: { id: submission, org_id: org, task_id: task, revision: 1, manifest_sha256: hash, state: "prepared", created_at: now, documents: [{ id: document, role: "bid", kind: "qualification", media_type: "application/pdf", sha256: hash, size_bytes: 1000 }] }, preparation: null, inventory: [], signature_validations: [{ document_id: document, original_sha256: hash, trust_store_sha256: hash, validator_identity: "synthetic-local-v1", validation_network: "disabled", validation_time: now, status: "invalid", signatures, final_revision: { status: "invalid", covered_by_signature_indices: [2], modified_after_last_signature: false } }, { document_id: uuid(11), original_sha256: hash, trust_store_sha256: hash, validator_identity: "synthetic-local-v1", validation_time: now, status: "not_applicable", signatures: [], final_revision: { status: "unsigned", covered_by_signature_indices: [], modified_after_last_signature: false } }], signing_candidates: [candidate(1)], signing_candidate_count: 2, signing_candidates_next_cursor: 2 };
   await page.route("**/*", async route => {
-    const request = route.request(), url = new URL(request.url()), path = url.pathname.replace(/^\/v4(?=\/)/, ""), method = request.method();
+    const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method();
     if (url.origin !== origin) { state.unexpected.push(`${method} external-origin`); return route.abort(); }
     if (path.startsWith("/app/")) {
       const file = path.startsWith("/app/assets/") ? join(directory, "assets", basename(path)) : join(directory, "index.html");
@@ -48,8 +48,8 @@ async function fixture(page, { platform = false, restricted = false } = {}) {
       else if (path === `/tasks/${task}/workflow`) response = result("task workflow", { workflow: { org_id: org, task_id: task, state: "active" } });
       else if (path === `/tasks/${task}/members`) response = result("task member list", { org_id: org, task_id: task, next_cursor: null }, [{ user_id: user, role: restricted ? "observer" : "contributor", active: true }]);
       else if (path === `/bid-submissions/${submission}` && method === "GET") response = result("review submission show", detail);
-      else if (path === `/tasks/${task}/bid-reviews` && method === "GET") { expect(url.pathname.startsWith("/v4/")).toBe(true); response = result("review list", { task_id: task, next_cursor: null }, []); }
-      else if (path === `/bid-submissions/${submission}/signing-candidates` && method === "GET") { expect(url.pathname.startsWith("/v4/")).toBe(true); expect(url.searchParams.get("cursor")).toBe("2"); expect(url.searchParams.get("limit")).toBe("20"); state.candidateReads++; response = result("review signing-candidates", { items: [candidate(2)], total: 2, next_cursor: null }); }
+      else if (path === `/tasks/${task}/bid-reviews` && method === "GET") { expect(url.pathname.startsWith("/")).toBe(true); response = result("review list", { task_id: task, next_cursor: null }, []); }
+      else if (path === `/bid-submissions/${submission}/signing-candidates` && method === "GET") { expect(url.pathname.startsWith("/")).toBe(true); expect(url.searchParams.get("cursor")).toBe("2"); expect(url.searchParams.get("limit")).toBe("20"); state.candidateReads++; response = result("review signing-candidates", { items: [candidate(2)], total: 2, next_cursor: null }); }
     }
     if (!response) { state.unexpected.push(`${method} ${path}`); return route.abort(); }
     return route.fulfill({ json: response });

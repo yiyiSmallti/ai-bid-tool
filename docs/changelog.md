@@ -6,6 +6,18 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-11: Remove billing, prices and task budgets
+
+- Remove balance, recharge-card, price and task-budget storage, APIs, CLI commands,
+  console pages and deployment settings; remove monetary agent limits.
+- Keep provider catalogs, encrypted credentials and model selection. Result 5.0
+  records calls, tokens, OCR pages, search requests, browser units and unresolved
+  calls. Read-only preflight retains resource estimates and configuration blockers.
+- Adopt [ADR 0011](adr/0011-remove-billing.md), superseding ADR 0002 and ADR 0007.
+- Serve Result 5.0 on unversioned, `/v4` and `/v5` routes and remove the 3.0 legacy
+  projection. Uncertain stateful calls and in-flight calls of other runs still block
+  redispatch; read-only inference retries stay bounded by the existing retry limits.
+
 ## 2026-10-09: Required checks fail on drafts
 
 - The required `python` and `web` checks now fail on draft pull requests instead of
@@ -841,7 +853,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - `RubricProvider.extract_structure` and `RubricProvider.extract_items` expose the two calls. Service validation checks section keys/titles/order, aggregation, bounds, caps, weights, inclusion and review domains before stage 2. Item details use bounded Requirement batches using `llm_batch_chars`; Provider owns batching and concurrency. Every batch receives the entire fixed section list. Unknown/cross-batch references remain unresolved. Failed batches can retain valid sections even when no items were accepted; partial results exit 5.
 - Preview remains zero-write and zero-call, with an upper bound for both stages and the complete section list repeated in each stage-2 batch. Prompt/schema versions enter preview cache/input identity; incompatible queued work fails explicitly and must be resubmitted. The published rubric `input_hash` derives from the manifest containing stage-1 output and its structure hash. The queued job `cache_key` remains the preview input, while submission stores `preview_input_hash` as provenance; no migration is required.
 - The design follows a real `glm-5.3-flash` attempt over 89 Requirements and about 25,000 tokens: low reasoning at about 21,000 tokens returned `invalid_provider_output`, while high reasoning at about 32,000 tokens was truncated. Those whole-table attempts followed earlier blind batching, which produced orphan sections and left 80/89 Requirements unresolved. Existing redaction, refusal, metering, attempt ownership and human-review gates remain in force.
-- Rubric and scoring calls use shared per-call admission and settlement. Task-budget enforcement remains an external dependency governed by the [budget contract](plan/budget.md), not a score-specific guarantee. See the [score contract](plan/score.md) and [mechanism note](notes/score.md).
+- Rubric and scoring calls use shared per-call admission and settlement. Task-budget enforcement remains an external dependency governed by the budget contract, not a score-specific guarantee. See the [score contract](plan/score.md) and [mechanism note](notes/score.md).
 
 ## 2026-10-05: Built-in agent command orchestration
 
@@ -858,7 +870,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Reserve task liability and prepaid funds in the existing admission transaction; enforce Task → Job → OrgBalance locks, live submitter permissions, durable unknown holds and idempotent late settlement.
 - Meter search, local OCR and Browser operations; expose task preflight, Result 4.0 and a legacy projection, and retain actual cost and human intervention through failed or partial job status/wait.
 - Preserve actorless local worker provenance without granting Provider admission, retain validated actual-model receipts beside fixed requested-model quotes, and serialize deterministic draft cost to JSON before persistence.
-- Approve the English [budget contract](plan/budget.md) and [ADR 0007](adr/0007-task-budget-reservations.md). Mechanism: [Task budgets](notes/task-budgets.md). Plans and monthly quotas remain outside this slice.
+- Approve the English budget contract and [ADR 0007](adr/0007-task-budget-reservations.md). Mechanism: Task budgets. Plans and monthly quotas remain outside this slice.
 
 ## 2026-10-05: Faster database citation verification
 
@@ -1104,7 +1116,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Migration `0019` aligns human confirmation/table assembly (组表) with Python source spans/normalization/segment boundaries, fixing internal `3.5mm/5mm` and `内存/扩展内存` matches. Verbatim citations remain; no historical rewriting.
 - Settlement-pool timeout/unrecoverable database/accounting errors stop further admission first. Failure after an unknown write retains stop state/original reservation; sent calls continue settlement. Explicitly recoverable DBAPI errors retain bounded retries.
 - Star merging uses quote spans in complete source text, no substring starring/masking missing starred segments. Postprocessing cache version updated.
-- Added MockTransport API/job regression covering catalog/admission/citation repair/human confirmation/table assembly/star supplementation/SQL-Python agreement. See [LLM provider layer](notes/llm-providers.md), [prepaid billing](notes/prepaid-billing.md), [Word citations](notes/docx-citations.md), [response cards](notes/response-cards.md).
+- Added MockTransport API/job regression covering catalog/admission/citation repair/human confirmation/table assembly/star supplementation/SQL-Python agreement. See [LLM provider layer](notes/llm-providers.md), prepaid billing, [Word citations](notes/docx-citations.md), [response cards](notes/response-cards.md).
 - Implemented by Codex after the second adversarial review; verified against real database and corrected one test field name. Full regression at that time: 819 passed.
 
 ## 2026-10-02: Model response drafting and outbound redaction
@@ -1131,7 +1143,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Added shared job execution context: first extraction round/splits/gap fills/retries check attempt ownership/cancel/cumulative calls/platform charge cap before calls. Org transactions reserve call costs to prevent concurrent balance reuse.
 - Migration `0016` adds mandatory-org-isolated call records/idempotent usage links. Valid usage commits record/charge/ledger/cumulative cost atomically. Accounting retries never double-charge; late old-attempt charges remain. Over-limit extraction fails without half a requirement set; existing usage retained.
 - Renew by `run_id`, heartbeat during long requests. Cancel/expired lease/takeover blocks old attempts. Ordinary cancel waits for sent-call accounting; unknown reservations await reconciliation.
-- API/processor/`httpx.MockTransport` scenarios cover budgets/concurrency/cancel/accounting retries/heartbeat/takeover/isolation. Bounds/recovery in [prepaid billing](notes/prepaid-billing.md), parameters in [development](guides/development.md#configure-job-guards).
+- API/processor/`httpx.MockTransport` scenarios cover budgets/concurrency/cancel/accounting retries/heartbeat/takeover/isolation. Bounds/recovery in prepaid billing, parameters in [development](guides/development.md#configure-job-guards).
 - Call caps scale with initial batches (`BID_JOB_VENDOR_CALLS_PER_BATCH`, default 4/batch, never below `BID_JOB_MAX_VENDOR_CALLS`) so large tender documents (招标文件) are not stopped mid-first-round. Codex implemented/real-database verified. Full regression then: 717 passed.
 
 ## 2026-10-02: Unified password limits and atomic TOTP consumption
@@ -1193,7 +1205,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Platform admins batch-generate/void recharge cards (充值卡密), add/subtract/set org balances. Org admins redeem at `/app/org/billing` or `bid billing redeem`.
 - `BID_BILLING_CURRENCY`; remove `usd` suffix from selling-price/receivable fields.
 - Login lists account orgs (`/auth/orgs`).
-- Migration `0012`; [ADR 0002](adr/0002-prepaid-billing.md), [prepaid-billing.md](notes/prepaid-billing.md).
+- Migration `0012`; ADR 0002, prepaid-billing.md.
 - Full regression then: 540 passed; Playwright E2E passed.
 
 ## 2026-10-01: Platform operator console (平台运营后台)

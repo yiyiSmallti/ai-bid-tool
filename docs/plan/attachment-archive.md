@@ -42,12 +42,10 @@ for a draft (初稿) or export. Existing certificate (证书) workflows remain t
 already managed there; do not upload a second copy merely to annotate one.
 
 This contract covers cloud API/CLI/console archival, human review, declaration links,
-task pins, page sources, downloads, deactivation and the B05 handoff. It excludes OCR,
-extraction of contract terms/prices, authenticity verification, signatures/seals,
-pricing strategy, arbitrary URLs, Office/ZIP/HTML upload, cross-org sharing, public
-links, automatic resource selection, deletion and complete bid attachment assembly.
+task pins, page sources, downloads, deactivation and the B05 handoff.
 No attachment text or image enters model prompts, memory (记忆), check/score, or export
-just because it is archived. Later consumers require an explicit reviewed contract.
+just because it is archived.
+Later consumers require an explicit reviewed contract.
 
 ## Current code basis and differences
 
@@ -65,7 +63,8 @@ All proposed extensions below are requirements, not statements of deployed behav
 | [screenshots.py](../../server/app/services/screenshots.py): `prepare`, `ingest`, `resolve_source`, `rendition_access`, `withdraw`, `resolve_image_material`; [screenshot_renderer.py](../../server/app/providers/screenshot_renderer.py): `render`, `validate_png` | Reuse `ScreenshotAsset`, `ScreenshotRendition`, `ScreenshotPrivacyReview`, existing privacy plans and renderer. Add a server-bound attachment source, not a client download/re-upload receipt or second redaction engine. The attachment branch follows the enabled scope in the first slice. |
 | [response_cards.py](../../server/app/services/response_cards.py): `resolve_material`, `build_evidence`, `confirmation_inputs`; [exports.py](../../server/app/services/exports.py): `build_manifest`, `fresh_manifest`, `download_gate` | Existing `certificate_pdf_page` can contribute to exports after human page review. Do not alias attachments to that kind or to scalar `org_profile` material. New attachment evidence uses the B05 image chain only after its gates are implemented. |
 | [auth.py](../../server/app/services/auth.py): `Identity`, `authenticate`, `membership`, `HUMAN_ONLY_SCOPES`, `SCOPES`, `ROLE_SCOPES`; [task_authorization.py](../../server/app/services/task_authorization.py): `task_authorized`; [task_workflow.py](../../server/app/services/task_workflow.py): `access` | Preserve live org membership, token/role intersection, task membership, write ceilings and archival gates. Same-org resource access is not automatically task access. |
-| [contracts.py](../../server/app/schemas/contracts.py): `CONTRACT_VERSION`, `Result`, `Cost`; [budget_preflight.py](../../server/app/services/budget_preflight.py): `attach` | Task-budget work is present: use Result 4.0. The design's two-field cost example and older draft examples do not define this contract. No new billed Provider is introduced. |
+| [contracts.py](../../server/app/schemas/contracts.py): `CONTRACT_VERSION`, `Result`, `Cost`; [preflight.py](../../server/app/services/preflight.py): `attach` |The design's two-field cost example and older draft examples do not define this contract.
+No new billed Provider is introduced. |
 
 The `memory/memory_contracts.py` example has moved to
 [runtime memory contracts](../../server/app/schemas/memory_contracts.py); the
@@ -386,7 +385,7 @@ they are not a PDF or pixel privacy scanner. No automatic “safe” decision, O
 LLM or external provider call is made here. Any later model consumer must separately
 authorize sanitized bytes and preserve confidential-field (保密字段) controls.
 
-## HTTP, CLI and Result 4.0
+## HTTP, CLI and Result 5.0
 
 All routes below require authenticated org access; disabled branches return their explicit blockers. Request org/actor/review time,
 storage key and success status are server-owned. The CLI is a cloud client; upload
@@ -428,11 +427,11 @@ redaction uses existing screenshot jobs and their status/wait/cancel contract. D
 advertise that branch until the privacy workflow is enabled.
 
 Every command uses existing `Result` with exactly `ok`, `command`, `data`, `items`,
-`warnings`, `cost`, `duration_ms`. Decimal amounts serialize as strings. Set currency
-from deployment configuration; local deterministic processing has `basis=zero`, zero
-amounts and no `UsageRecord` pretending that a model was called. Storage accounting is
-not a quoted monetary charge. Future Provider usage (用量) follows the existing budget
-preflight/admission/accounting contract, not an attachment-specific budget object.
+`warnings`, `cost`, `duration_ms`.
+The `cost` field has the six resource counts defined by Result 5.0. Local
+deterministic processing makes zero provider calls and creates no invented
+`UsageRecord`. Future Provider usage (用量) follows shared read-only resource
+preflight, admission and durable usage recording.
 
 Illustrative accepted upload:
 
@@ -452,17 +451,7 @@ Illustrative accepted upload:
   },
   "items": [],
   "warnings": ["User-supplied file; archive review does not confirm evidence"],
-  "cost": {
-    "llm_tokens": 0,
-    "ocr_pages": 0,
-    "usd": 0.0,
-    "basis": "zero",
-    "charge": "0",
-    "billing_currency": "USD",
-    "task_amount": "0",
-    "unpriced_calls": 0,
-    "unresolved_calls": 0
-  },
+  "cost": {"calls": 0, "llm_tokens": 0, "ocr_pages": 0, "search_requests": 0, "browser_units": 0, "unresolved_calls": 0},
   "duration_ms": 18
 }
 ```
@@ -471,7 +460,7 @@ Errors use `data.code`/`data.message`, optional safe IDs and a next-action reaso
 never file text or signed URLs. JSON contains no file/base64/storage key; explicit
 download receipts may contain only the caller's requested local output path and safe
 descriptor, following existing `CertificateFileDownloadReceipt`. The link command's
-ephemeral URL is sensitive transport output, not an audit record. Runtime schemas register the attachment commands with Result 4.0; older command serialization remains unchanged.
+ephemeral URL is sensitive transport output, not an audit record. Runtime schemas register the attachment commands with Result 5.0; older command serialization remains unchanged.
 Sanitize validation errors as well: never echo Pydantic input values, uploaded
 filenames, label text or multipart bodies in a 422 response or log.
 
@@ -598,7 +587,7 @@ artifacts under ignored `data/work/attachment-archive-acceptance/`, never under 
 | Byte/render/privacy gates | Real synthetic PDF pixels/hash, single-PDF byte identity, canonical 150-dpi source versus zoom preview; corrupt ciphertext/descriptor, huge page/decompression/allocation bound, child timeout/kill and capacity limit. For later multipart: ordering/rotation/EXIF original retention and sanitized composed output. For later redaction: actual removed pixels, mapping/hash forgery, withdrawn ancestor, legacy-route bypass. |
 | Human/token/evidence gates | Tokens requesting any human-only scope, `evidence:confirm` or `export` fail issuance and raw SQL constraints. Upload/review/privacy never changes Evidence confirmation. Admin archive review cannot sign a domain. Unconfirmed/stale attachment Evidence cannot enter draft/export or download an existing invalidated export. |
 | B05 enablement | One approved linked contract page → privacy-cleared source → cloud annotation candidate → human card attachment → current B02 and exact domain/co-sign approval → confirmed release → draft/export. Revoke each dependency and prove consumption/download fail. Until accepted, source-advertisement/submit tests show the branch disabled. |
-| CLI and schema | Snapshot every command/variant in the route table: success/error, zero-cost Result 4.0, duplicate, dry-run, bounded list/cursor/history, download receipt and terminal codes. `bid schema` and HTTP inputs agree; no interactive fallback, secrets/pixels or partial-success archive. |
+| CLI and schema | Snapshot every command/variant in the route table: success/error, zero-cost Result 5.0, duplicate, dry-run, bounded list/cursor/history, download receipt and terminal codes. `bid schema` and HTTP inputs agree; no interactive fallback, secrets/pixels or partial-success archive. |
 | Browser | Real `admin`/`bidder` uploads, assigned reviewer sees next action, task contributor selects exact linked revision and opens one page; technical/viewer sees only cleared rendition and denied buttons align with server gates. Test wrong org, lost task membership, rejected revision, needs-redaction blocker, failed upload/retry, library-update notice and disabled B05 entry. |
 | Scale/audit/recovery | Seed large archive/review/selection histories; assert bounded query/image reads, stable pagination and batched board updates. Verify encrypted originals/parts/labels and metadata-only audit events. Restore exact retained file and rotate data keys without changing plaintext hashes; current membership still gates access. |
 
@@ -632,4 +621,3 @@ The owner approved every recommended default; implementation follows these decis
 | Download mechanism | Existing 300-second signed application routes with live authorization | Reuses encryption/read integrity and immediate access revocation; no public object-store links. |
 | Storage/DB failure recovery | Retain inaccessible encrypted orphans and reconcile IDs; no garbage collector in this slice | Matches actual Storage capabilities and avoids an implicit deletion policy. |
 | B05 release order | Archive slice first; attachment selector enabled only after full B05 dependency/read/export acceptance | The blocked-next-action UI stays truthful while approved certificate B05 can proceed independently. |
-| Limits and billing | Existing 40 MiB/200-page/20-part/raster limits; metadata pagination 50/100; deterministic zero cost | Reuses measured bounds and Result 4.0; storage quotas and charged processing require a separate contract. |

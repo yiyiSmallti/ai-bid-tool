@@ -3,15 +3,12 @@
     "score rubric classify": {
       "command": "score rubric classify",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "actor_kind": "session",
@@ -36,15 +33,12 @@
     "score rubric classify item": {
       "command": "score rubric classify",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "actor_kind": "session",
@@ -69,15 +63,12 @@
     "score rubric coverage decide": {
       "command": "score rubric coverage decide",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "action": "mapped",
@@ -105,15 +96,12 @@
     "score rubric decide": {
       "command": "score rubric decide",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "completeness": {
@@ -162,34 +150,24 @@
     "score rubric generate": {
       "command": "score rubric generate",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "admission_blocker": null,
-        "billing_currency": "CNY",
-        "cost_basis": "known",
-        "cost_basis_reason": "configured_price",
         "dry_run": true,
         "estimate_kind": "first_pass_upper_bound",
-        "estimated_charge": "0.04",
         "estimated_cost": {
-          "basis": "zero",
-          "billing_currency": "USD",
-          "charge": "0",
+          "browser_units": 0,
+          "calls": 2,
           "llm_tokens": 800,
           "ocr_pages": 0,
-          "task_amount": "0",
-          "unpriced_calls": 0,
-          "unresolved_calls": 0,
-          "usd": 0.02
+          "search_requests": 0,
+          "unresolved_calls": 0
         },
         "estimated_duration_ms": null,
         "input": {
@@ -200,11 +178,50 @@
           "scope": "scoring_requirements",
           "task_id": "00000000-0000-0000-0000-000000000002"
         },
-        "max_charge": "1.25",
         "model": "synthetic-model",
         "model_revision": 1,
         "normalization_rule_version": "rubric-normalization-v1",
         "platform_model_id": "synthetic-score",
+        "preflight": {
+          "admission_blocker": null,
+          "as_of": "2026-10-04T00:00:00Z",
+          "cached_job_id": null,
+          "cached_result_cost": null,
+          "command": "score rubric generate",
+          "dry_run": true,
+          "duration_basis": "unknown",
+          "estimate": {
+            "browser_units": 0,
+            "calls": 2,
+            "llm_tokens": 800,
+            "ocr_pages": 0,
+            "search_requests": 0,
+            "unresolved_calls": 0
+          },
+          "estimated_duration_ms": null,
+          "full_run_guaranteed": false,
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "maximum_calls": 64,
+          "next_call": {
+            "browser_units": 0,
+            "capability": "llm",
+            "image_count": 0,
+            "image_input_sha256": null,
+            "input_tokens_upper_bound": 200,
+            "model": "synthetic-model",
+            "ocr_pages_upper_bound": 0,
+            "output_tokens_upper_bound": 200,
+            "platform_model_id": "synthetic-score",
+            "provider": "synthetic",
+            "provider_config_id": null,
+            "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "search_requests": 0,
+            "version": "synthetic-v1"
+          },
+          "planned_calls": 2,
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "uncertainty": []
+        },
         "prompt_version": "rubric-prompt-v1",
         "provider_config_id": null,
         "provider_source": "platform",
@@ -228,15 +245,12 @@
     "score rubric history": {
       "command": "score rubric history",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "next_cursor": null,
@@ -281,15 +295,12 @@
     "score rubric item decide": {
       "command": "score rubric item decide",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "action": "confirm",
@@ -314,15 +325,12 @@
     "score rubric list": {
       "command": "score rubric list",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "next_cursor": null,
@@ -381,15 +389,12 @@
     "score rubric revise": {
       "command": "score rubric revise",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "coverage": [
@@ -555,15 +560,12 @@
     "score rubric section decide": {
       "command": "score rubric section decide",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "action": "confirm",
@@ -588,15 +590,12 @@
     "score rubric show": {
       "command": "score rubric show",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "coverage": [
@@ -764,15 +763,12 @@
     "score rubric classify": {
       "command": "score rubric classify",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "actor_kind": "session",
@@ -797,15 +793,12 @@
     "score rubric classify item": {
       "command": "score rubric classify",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "actor_kind": "session",
@@ -830,15 +823,12 @@
     "score rubric coverage decide": {
       "command": "score rubric coverage decide",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "action": "mapped",
@@ -866,15 +856,12 @@
     "score rubric decide": {
       "command": "score rubric decide",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "completeness": {
@@ -923,34 +910,24 @@
     "score rubric generate": {
       "command": "score rubric generate",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "admission_blocker": null,
-        "billing_currency": "CNY",
-        "cost_basis": "known",
-        "cost_basis_reason": "configured_price",
         "dry_run": true,
         "estimate_kind": "first_pass_upper_bound",
-        "estimated_charge": "0.04",
         "estimated_cost": {
-          "basis": "zero",
-          "billing_currency": "USD",
-          "charge": "0",
+          "browser_units": 0,
+          "calls": 2,
           "llm_tokens": 800,
           "ocr_pages": 0,
-          "task_amount": "0",
-          "unpriced_calls": 0,
-          "unresolved_calls": 0,
-          "usd": 0.02
+          "search_requests": 0,
+          "unresolved_calls": 0
         },
         "estimated_duration_ms": null,
         "input": {
@@ -961,11 +938,50 @@
           "scope": "scoring_requirements",
           "task_id": "00000000-0000-0000-0000-000000000002"
         },
-        "max_charge": "1.25",
         "model": "synthetic-model",
         "model_revision": 1,
         "normalization_rule_version": "rubric-normalization-v1",
         "platform_model_id": "synthetic-score",
+        "preflight": {
+          "admission_blocker": null,
+          "as_of": "2026-10-04T00:00:00Z",
+          "cached_job_id": null,
+          "cached_result_cost": null,
+          "command": "score rubric generate",
+          "dry_run": true,
+          "duration_basis": "unknown",
+          "estimate": {
+            "browser_units": 0,
+            "calls": 2,
+            "llm_tokens": 800,
+            "ocr_pages": 0,
+            "search_requests": 0,
+            "unresolved_calls": 0
+          },
+          "estimated_duration_ms": null,
+          "full_run_guaranteed": false,
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "maximum_calls": 64,
+          "next_call": {
+            "browser_units": 0,
+            "capability": "llm",
+            "image_count": 0,
+            "image_input_sha256": null,
+            "input_tokens_upper_bound": 200,
+            "model": "synthetic-model",
+            "ocr_pages_upper_bound": 0,
+            "output_tokens_upper_bound": 200,
+            "platform_model_id": "synthetic-score",
+            "provider": "synthetic",
+            "provider_config_id": null,
+            "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "search_requests": 0,
+            "version": "synthetic-v1"
+          },
+          "planned_calls": 2,
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "uncertainty": []
+        },
         "prompt_version": "rubric-prompt-v1",
         "provider_config_id": null,
         "provider_source": "platform",
@@ -989,15 +1005,12 @@
     "score rubric history": {
       "command": "score rubric history",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "next_cursor": null,
@@ -1042,15 +1055,12 @@
     "score rubric item decide": {
       "command": "score rubric item decide",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "action": "confirm",
@@ -1075,15 +1085,12 @@
     "score rubric list": {
       "command": "score rubric list",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "next_cursor": null,
@@ -1142,15 +1149,12 @@
     "score rubric revise": {
       "command": "score rubric revise",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "coverage": [
@@ -1316,15 +1320,12 @@
     "score rubric section decide": {
       "command": "score rubric section decide",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "action": "confirm",
@@ -1349,15 +1350,12 @@
     "score rubric show": {
       "command": "score rubric show",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "coverage": [

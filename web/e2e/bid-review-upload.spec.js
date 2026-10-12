@@ -6,7 +6,7 @@ const output = resolve(process.env.E2E_OUTPUT ?? "../data/work/bid-review-upload
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const ids = { org: uuid(1), user: uuid(2), task: uuid(3), submission: uuid(4), job: uuid(5) };
 const hash = "a".repeat(64), now = "2026-10-08T00:00:00Z";
-const zero = { llm_tokens: 0, ocr_pages: 0, usd: 0, basis: "zero", charge: "0", billing_currency: "USD", task_amount: "0", unpriced_calls: 0, unresolved_calls: 0 };
+const zero = { calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 };
 const result = (command, data = {}, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: zero, duration_ms: 0 });
 const pdf = name => ({ name, mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\nSynthetic browser file " + name) });
 
@@ -23,7 +23,7 @@ async function fixture(page, options = {}) {
     ...(state.prepared ? { state: "prepared", preparation_job_id: ids.job, preparation_input_hash: hash, documents: state.files.map(file => ({ ...file, page_count: 2, rendered_pdf_sha256: file.sha256, render_profile: "local-v1", renderer_identity: "synthetic-v1", citation_mode: "page", parsing_warnings: [] })) } : { state: "uploaded", files: state.files }) });
   const detail = () => ({ submission: submission(), preparation: state.submitted ? { job_id: ids.job, status: state.prepared ? "succeeded" : "running", input_hash: hash } : null, inventory: state.prepared ? state.files.map(file => ({ document_id: file.id, page_count: 2, text_pages: 1, image_pages: 1, signature_fields: file.role === "bid" ? 1 : 0, parsing_warnings: file.role === "bid" ? ["pdf_signature_fields_not_validated", "<img src=x onerror=window.__unsafe=1>"] : [] })) : [] });
   await page.route("**/*", async route => {
-    const request = route.request(), url = new URL(request.url()), path = url.pathname.replace(/^\/v4(?=\/)/, ""), method = request.method();
+    const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method();
     if (url.origin !== origin) { state.unexpected.push(`${method} external-origin`); return route.abort(); }
     if (path.startsWith("/app/")) {
       const file = path.startsWith("/app/assets/") ? join(directory, "assets", basename(path)) : join(directory, "index.html");
@@ -36,24 +36,24 @@ async function fixture(page, options = {}) {
     else if (path === `/tasks/${ids.task}/workflow`) response = result("task workflow", { workflow: { org_id: ids.org, task_id: ids.task, state: "active", owner_user_id: ids.user, revision: 1 } });
     else if (path === `/tasks/${ids.task}/members`) response = result("task member list", { org_id: ids.org, task_id: ids.task, next_cursor: null }, [{ user_id: ids.user, role: state.role === "viewer" ? "observer" : "contributor", active: true }]);
     else if (method === "GET" && path === `/tasks/${ids.task}/bid-submissions`) {
-      expect(url.pathname.startsWith("/v4/")).toBe(true); expect(url.searchParams.get("limit")).toBe("50");
+      expect(url.pathname.startsWith("/")).toBe(true); expect(url.searchParams.get("limit")).toBe("50");
       response = result("review submission list", { task_id: ids.task, total: state.uploads ? 1 : 0, next_cursor: null }, state.uploads ? [submission()] : []);
     } else if (method === "POST" && path === `/tasks/${ids.task}/bid-submissions`) {
-      expect(url.pathname.startsWith("/v4/")).toBe(true);
+      expect(url.pathname.startsWith("/")).toBe(true);
       const wire = request.postDataBuffer().toString("utf8"), match = wire.match(/name="metadata"\r\n\r\n([^\r]+)/);
       expect(match).not.toBeNull(); const body = JSON.parse(match[1]);
       expect(body.files.map(file => file.role)).toEqual(["tender", "bid"]);
       expect(body.files[1].kind).toBe("qualification");
       if (body.dry_run) { state.uploadPreviews++; state.uploadRequest = body.request_id; response = result("review upload", { dry_run: true, files: body.files, payload_sha256: hash, limits: { files: 20, file_bytes: 40 * 1024 * 1024, submission_bytes: 40 * 1024 * 1024 }, cost: zero }); }
       else { expect(body.request_id).toBe(state.uploadRequest); state.uploads++; state.files = body.files.map((file, index) => ({ ...file, id: uuid(10 + index), file_id: uuid(20 + index), org_id: ids.org, task_id: ids.task, submission_id: ids.submission })); response = result("review upload", submission()); }
-    } else if (method === "GET" && path === `/tasks/${ids.task}/bid-reviews`) { expect(url.pathname.startsWith("/v4/")).toBe(true); response = result("review list", { task_id: ids.task, next_cursor: null }, []); }
+    } else if (method === "GET" && path === `/tasks/${ids.task}/bid-reviews`) { expect(url.pathname.startsWith("/")).toBe(true); response = result("review list", { task_id: ids.task, next_cursor: null }, []); }
     else if (method === "GET" && path === `/bid-submissions/${ids.submission}`) response = result("review submission show", detail());
     else if (method === "POST" && path === `/tasks/${ids.task}/bid-submissions/${ids.submission}/prepare`) {
-      const body = request.postDataJSON(); expect(body.submission_id).toBe(ids.submission); expect(url.pathname.startsWith("/v4/")).toBe(true);
+      const body = request.postDataJSON(); expect(body.submission_id).toBe(ids.submission); expect(url.pathname.startsWith("/")).toBe(true);
       if (body.dry_run) {
         state.preparePreviews++; state.prepareRequest = body.request_id;
         const asOf = new Date(), expiresAt = new Date(asOf.getTime() + 900000).toISOString();
-        response = result("review prepare", { dry_run: true, submission_id: ids.submission, input_hash: hash, local_only: true, admission_blockers: [], expires_at: expiresAt, preflight_token: "synthetic-receipt", budget: { dry_run: true, command: "review prepare", task_id: ids.task, input_hash: hash, as_of: asOf.toISOString(), task_budget: null, planned_calls: 0, maximum_calls: 0, estimate: zero, next_call: null, admission_blocker: null, first_pass_fits: true, full_run_guaranteed: false } });
+        response = result("review prepare", { dry_run: true, submission_id: ids.submission, input_hash: hash, local_only: true, admission_blockers: [], expires_at: expiresAt, preflight_token: "synthetic-receipt", preflight: { dry_run: true, command: "review prepare", task_id: ids.task, input_hash: hash, as_of: asOf.toISOString(), planned_calls: 0, maximum_calls: 0, estimate: zero, next_call: null, admission_blocker: null, full_run_guaranteed: false } });
       } else {
         expect(body.request_id).toBe(state.prepareRequest); expect(body.expected_input_hash).toBe(hash); expect(body.preflight_token).toBe("synthetic-receipt"); state.prepares++; state.submitted = true; response = result("review prepare", { job_id: ids.job, status: "queued", cached: false });
       }

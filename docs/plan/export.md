@@ -344,7 +344,7 @@ Fixed server profiles manage approved maxima: 2,000 requirements, 300 unique att
 
 dry-run performs identical authorization/citation/manifest/file-integrity/template-mapping checks and returns table/comply-only/gap/negative-deviation/attachment counts, every gate and reliable estimates, with no queues/business-audit-usage writes/objects. It does not render full files, so unknown bytes/time is null and total pages are not fabricated facts.
 
-Export invokes no model/OCR; actual/estimated Cost is llm_tokens=0, ocr_pages=0, usd=0, no empty UsageRecord/model debit/insufficient-model-balance block. Record actual render duration/storage bytes without promising free infrastructure; export/storage billing is outside this slice. Upstream drafting costs remain in original jobs, never zeroed by later zero-call export.
+Upstream drafting costs remain in original jobs, never zeroed by later zero-call export.
 
 ## File storage, download and history
 
@@ -384,7 +384,7 @@ Order: contract/schema/identity → migrations/DB gates → template adaptation 
 6. **Certificate attachments**: confirm only specified synthetic PDF pages; output only them. Shared-page Evidence deduplicates images/retains every reference/confirmation. Extract all DOCX media/compare source PNG hashes, original SHA/pages/full edges/rotation/outside labels/bookmarks. No unconfirmed scans/no-file revisions/full-PDF-OLE/guessed pages/placeholders/removed watermarks. Damaged materials fail both modes.
 7. **Concurrency/revocation**: replace selections/reopen cards/repair citations/disable members at queue/render/save/release/link stages. Old runs/signatures reject, reselecting old resources does not restore authorization. Concurrent release yields one exports/success audit; old/cancelled attempts cannot persist/overwrite new ones.
 8. **Storage/download**: complete local-encrypted/isolated-S3 downloads check no plaintext ciphertext, failed cross-org copies, 300-second expiry, wrong kind/hash, interruptions/redirects/existing paths/symlinks/races. Final 0600 files appear only after verification; failures retain old files without partial downloads.
-9. **Idempotency/reproducibility/cost**: repeats/independent same-profile renders have equal plaintext SHA. Mode/mapping/confirmation-revision changes alter inputs; upgrades never reuse old caches. dry-run zero writes, entire export zero Provider/UsageRecord/model debit, prior drafting costs retained.
+9. **Idempotency/reproducibility/cost**: repeats/independent same-profile renders have equal plaintext SHA.
 10. **Scale/failure artifacts**: labeled synthetic long responses/over 125 confirmed pages test pagination/contents-bookmarks/four-column tables/readability and approved page-byte-memory-deadline limits. Overflow/storage-DB failures yield no publications/silent omission. Real 663-page bids are not authorized test sets by default; CI has no real external calls, real-material checks need explicit authorization.
 11. **Contracts/repeatable delivery**: seven keys/0-2-3-4-5/schema/mode parity across chains. Save rerun instructions/redacted commands-JSON/input manifests-hashes/synthetic DOCX/media hashes/opened-file records in independent acceptance directories, not docs logs/screenshots/evidence. Explicit synthetic labels, no real tender text/tokens/signed URLs. Plans/worker state do not replace actual downloads.
 
@@ -402,7 +402,6 @@ GET /exports/{id}/provenance (`bid export provenance --id ID --json`) returns pu
 - Vendor (厂家)/web evidence generation-capture/new screenshots-diagrams/prototypes/Rust annotations/OCR-transcription/new contract-award-social-insurance types or packaging unconfirmed materials as “已附证明”.
 - Arbitrary Word matching/public-template sharing/DOCM/PDF final export/full-original-PDF concatenation/final-page guarantees/automatic compliance-seal verification/multiple signers/bulk automatic release.
 - Electronic/handwritten signatures/page-by-page-cross-page seals/government clients/encrypted bid packages/platform upload-submission/API integration. Humans merge full bids/check layouts/sign/upload after export.
-- Vue dashboard/role-membership management/automatic expired-file reissue/export charges/history deletion-object cleanup/key rotation/production deployment; reupload/reapproval of local Word edits needs separate contract.
 
 ## Decisions
 

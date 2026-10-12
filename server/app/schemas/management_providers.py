@@ -26,8 +26,6 @@ class PlatformModelChoice(Contract):
     revision: Revision
     model: str = Field(min_length=1, max_length=100)
     provider: Literal["anthropic", "openai"]
-    sale_input_per_mtok: float = Field(ge=0, allow_inf_nan=False)
-    sale_output_per_mtok: float = Field(ge=0, allow_inf_nan=False)
     default: bool
     reasoning: list[CatalogReasoningChoice] = Field(max_length=8)
     default_reasoning: str | None
@@ -49,8 +47,6 @@ class ProviderRevisionMetadata(Contract):
     reasoning: list[CatalogReasoningChoice] = Field(max_length=8)
     default_reasoning: str | None
     catalog_revision: Revision | None = None
-    sale_input_per_mtok: float | None = Field(default=None, ge=0, allow_inf_nan=False)
-    sale_output_per_mtok: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def read_only_configuration(self) -> Self:
@@ -65,8 +61,6 @@ class ProviderRevisionMetadata(Contract):
                 or self.provider != self.configuration.provider
                 or self.model != self.configuration.model
                 or self.catalog_revision is not None
-                or self.sale_input_per_mtok is not None
-                or self.sale_output_per_mtok is not None
             ):
                 raise ValueError("BYOK metadata must match its stored configuration")
         elif self.catalog_state == "not_applicable":
@@ -80,7 +74,6 @@ class ProviderSettingsData(Contract):
     effective_source: Literal["org", "platform", "unconfigured"]
     current: ProviderRevisionMetadata | None
     default_model: PlatformModelChoice | None
-    billing_currency: str = Field(pattern=r"^[A-Z]{3}$")
     reasoning: list[CatalogReasoningChoice] = Field(max_length=8)
     actions: list[ActionHint] = Field(max_length=16)
     connection_status: Literal["not_checked"] = "not_checked"

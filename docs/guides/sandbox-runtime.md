@@ -297,12 +297,11 @@ to include a web page; see the pitfalls in
    counters, and a missing final sample fails the run. The acknowledgement/exit interval
    remains outside that sample; it is not an exact final cgroup ledger.
 6. After caller death, call `BrowserProvider.recover(descriptor)` with the original full
-   descriptor. Only the matching descriptor digest can receive the cleanup status. A
+   descriptor.
+Only the matching descriptor digest can receive the cleanup status.
+A
    missing journal entry becomes `not_started` only after checking the daemon inventory.
-   Treat `pending`, `failed` and a failed control connection as unconfirmed cleanup.
-   Recovery receipts mark accounting as `recovered_samples_require_conservative_budget`: an
-   interrupted supervisor cannot prove terminal CPU/output samples, so retry admission
-   must charge the remaining attempt bound instead of releasing it from a partial sample.
+Treat `pending`, `failed` and a failed control connection as unconfirmed cleanup.
 7. Check total transfer output across render and validator stages, including the trusted
    request manifest or bundle, against the profile limit. The stages share one deadline
    and output/CPU counters. Neither stage receives a fresh budget.

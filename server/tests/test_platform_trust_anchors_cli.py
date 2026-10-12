@@ -99,7 +99,7 @@ def test_trust_anchor_commands_snapshot_both_modes(interface, tmp_path, capsys):
     for mode in ("remote", "local"):
         for name, arguments in flags.items():
             code, body = invoke(["--mode", mode, "platform", "trust-anchor", *arguments], capsys)
-            assert code == 0
+            assert code == 0, body
             actual[f"{mode}: {name}"] = body
     snapshot = Path(__file__).with_name("snapshots") / "platform-trust-anchors-cli.json"
     if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":

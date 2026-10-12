@@ -56,7 +56,7 @@ async def scoring_confirmed(session, task_id, extraction_id):
 
 
 async def preparation(session, requirements, *, citations=None):
-    """Pin full meaning/source and membership, without making confirmation paid work."""
+    """Pin full meaning/source and membership, without dispatching provider work."""
     if len(requirements) > 2000:
         raise ServiceError(
             "requirement_manifest_limit", "At most 2000 requirements can be consumed", 422, 2

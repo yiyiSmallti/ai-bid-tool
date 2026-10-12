@@ -1,4 +1,4 @@
-"""Allowlisted authentication metadata only; never generation or paid search."""
+"""Allowlisted authentication metadata only; never generation or search execution."""
 
 import asyncio
 import json

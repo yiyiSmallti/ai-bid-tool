@@ -132,19 +132,17 @@ def interface():
             input={"task_id": ID, "submission_id": SUBMISSION, "input_hash": SHA},
             expires_at="2026-10-08T00:15:00Z",
             preflight_token="synthetic-review-receipt",
-            budget={
+            preflight={
                 "dry_run": True,
                 "command": "review run",
                 "task_id": ID,
                 "input_hash": SHA,
                 "as_of": NOW,
-                "task_budget": None,
                 "planned_calls": 1,
                 "maximum_calls": 1,
                 "estimate": zero,
                 "next_call": None,
                 "admission_blocker": None,
-                "first_pass_fits": True,
                 "full_run_guaranteed": False,
             },
         )
@@ -262,7 +260,7 @@ def test_review_run_transport_snapshots_both_modes(monkeypatch, tmp_path, capsys
     for mode in ("remote", "local"):
         for name, flags in commands.items():
             code, body = invoke(["--mode", mode, *flags], capsys)
-            assert code == 0
+            assert code == 0, body
             actual[f"{mode}: {name}"] = body
             assert "Synthetic exact text review" not in json.dumps(body)
         state["partial"] = True
@@ -343,6 +341,8 @@ def test_review_discovery_matches_models_and_rejects_legacy():
         "review list",
         "review show",
     ):
-        assert name in commands and name not in command_schema(cli.app, "3.0")["commands"]
+        assert name in commands
+        with pytest.raises(ValueError, match="Only contract 5.0"):
+            command_schema(cli.app, "3.0")
     assert commands["review run"]["preflight"]["title"] == "BidReviewPreview"
     assert commands["review run"]["wait_output"]["title"] == "BidReviewJobResult"

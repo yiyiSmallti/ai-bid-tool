@@ -19,10 +19,9 @@ A new run selects a successful extraction explicitly. Checking and scoring selec
 current draft; scoring also selects a confirmed rubric from the same extraction.
 Rubric generation needs the extraction but does not require a draft.
 
-Preview and submit are separate actions. Model-backed runs require a positive platform
-charge ceiling and explicit consent after preview. The budget panel displays the
-server's task limit, spent liability, reservations, available amount and admission
-blocker. The [task-budget mechanism](task-budgets.md) defines their meaning.
+Preview and submit are separate actions. Read-only `data.preflight` shows planned
+calls, token/page/request estimates and configuration blockers. A human reviews
+the exact input hash and explicitly authorizes a model run.
 
 A report link opens its pinned inputs. A responsible human can dismiss or reopen a
 finding with a reason. Rubric review separates administrator classification, bidder
@@ -58,8 +57,8 @@ location. Items and coverage retain single-source traversal. Every section sourc
 contributes to the encoded row limit; sources and quotes are never silently removed.
 No arbitrary document, URL or supplied quote is accepted as a citation source.
 
-The console sends assessment and associated job requests through `/v4/` to retain real
-budget preflight and Result cost fields. The API adapter recognizes only specified
+The console sends assessment and associated job requests through the unversioned
+API paths and validates the Result 5.0 resource-count fields. The API adapter recognizes only specified
 partial assessment results and terminal job states. Ordinary error envelopes still fail.
 Org reset aborts requests, invalidates the response epoch and clears unsaved assessment
 state. Reasons and replacement content are never persisted in browser navigation storage.
@@ -81,8 +80,8 @@ overall percentage from elapsed time or an absent batch count.
 
 ## Pitfalls
 
-- A report read's zero cost is the cost of reading it. Historical expense comes from
-  the authorized job's actual cost, never from report usage identifiers.
+- A report read records no new external calls. Historical resource usage comes
+  from the authorized job; report usage identifiers do not add it again.
 - A blocked preview can have `ok=true`. Submission remains disabled until its blocker
   is resolved and a fresh preview has been reviewed.
 - Job completion, report completeness and report freshness are independent. A stale

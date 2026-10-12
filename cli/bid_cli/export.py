@@ -73,7 +73,7 @@ def _load_input(
 def _preview_exit(body: dict, model: type[ExportPreview] | type[ExportBindingPreview]) -> int:
     data = dict(body.get("data", {}))
     data.pop("error", None)
-    data.pop("budget_preflight", None)
+    data.pop("preflight", None)
     try:
         preview = model.model_validate(data)
     except ValueError:
@@ -99,7 +99,7 @@ async def _request_preview(path: str, request: dict) -> dict:
         async with runtime.transport() as transport:
             response = await transport.request(
                 "POST",
-                "/v4" + path if runtime.contract_version == "4.0" else path,
+                "/v4" + path if runtime.contract_version == "5.0" else path,
                 headers=headers,
                 json=request,
             )

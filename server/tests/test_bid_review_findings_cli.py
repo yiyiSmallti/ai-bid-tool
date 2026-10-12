@@ -214,7 +214,7 @@ def test_findings_cli_asgi_snapshots_both_modes(monkeypatch, tmp_path, capsys):
     for mode in ("local", "remote"):
         for name, flags in commands.items():
             code, body = invoke(["--mode", mode, "review", *flags, "--id", REVIEW], capsys)
-            assert code == 0
+            assert code == 0, body
             actual[f"{mode}: review {name}"] = body
         for projection in ("safe", "stale"):
             state[projection] = True
@@ -284,6 +284,8 @@ def test_conflict_and_invalid_response_are_visible(monkeypatch, tmp_path, capsys
 def test_findings_discovery_matches_models():
     schema = command_schema(cli.app)
     for name in ("review findings", "review decide", "review classify", "review history"):
-        assert name in schema["commands"] and name not in command_schema(cli.app, "3.0")["commands"]
+        assert name in schema["commands"]
+        with pytest.raises(ValueError, match="Only contract 5.0"):
+            command_schema(cli.app, "3.0")
     assert schema["commands"]["review decide"]["input"]["title"] == "BidReviewDecisionRequest"
     assert schema["commands"]["review classify"]["output"]["title"] == "BidReviewEventView"

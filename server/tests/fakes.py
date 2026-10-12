@@ -1,6 +1,6 @@
 from app.providers.base import ProviderFailure
 from app.providers.calls import accounted_call, current_accounting
-from app.providers.quotes import serialized_request, zero_quote
+from app.providers.quotes import call_plan, serialized_request
 from app.schemas.contracts import (
     Category,
     ExtractedRequirement,
@@ -24,7 +24,7 @@ async def fixture_call(quote, operation):
             return result, result.usage
         except ProviderFailure as failure:
             # A fixture hook represents one call. Missing or multiple receipts do not
-            # prove that this call completed; preserve the error and unknown hold.
+            # prove that this call completed; preserve the error and unknown external outcome.
             if len(failure.usage) != 1:
                 raise
             return failure, failure.usage[0]
@@ -68,9 +68,8 @@ class FakeLLM:
         self.calls = 0
 
     async def extract(self, chunks, schema):
-        quote = zero_quote(
+        quote = call_plan(
             "llm",
-            "local_free",
             self.name,
             self.model,
             self.version,
@@ -105,7 +104,6 @@ class FakeLLM:
                 version=self.version,
                 duration_ms=1,
                 tokens=10,
-                usd=0,
                 test_only=True,
             ),
         )
@@ -118,9 +116,8 @@ class FakeOCR:
     version = "test-v1"
 
     async def recognize(self, image, page):
-        quote = zero_quote(
+        quote = call_plan(
             "ocr",
-            "local_free",
             self.name,
             "fixture",
             self.version,
@@ -138,7 +135,6 @@ class FakeOCR:
                 version=self.version,
                 duration_ms=1,
                 ocr_pages=1,
-                usd=0,
                 test_only=True,
             ),
         )

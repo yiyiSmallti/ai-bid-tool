@@ -9,7 +9,7 @@ from dataclasses import asdict
 from typing import Any, Protocol
 
 from app.providers.calls import accounted_call
-from app.providers.quotes import zero_quote
+from app.providers.quotes import call_plan
 from app.providers.sandbox_fetch import RUN_FATAL_FETCH_CODES, FetchBroker, FetchDenied
 from app.providers.sandbox_runtime import (
     CONTROL_LIMIT,
@@ -26,8 +26,8 @@ from app.providers.sandbox_runtime import (
     send_frame,
     validate_artifact,
 )
-from app.schemas.budget_contracts import BudgetCallQuote
 from app.schemas.contracts import ProviderUsage
+from app.schemas.preflight_contracts import CallPlan
 
 ERROR_CODES = frozenset(
     {
@@ -369,7 +369,7 @@ class SocketBrowserProvider:
                 model="playwright",
                 version=self.version,
                 duration_ms=int((time.monotonic() - started) * 1000),
-                usd=0,
+                browser_units=1,
             )
 
         result, _ = await accounted_call(self.quote(descriptor, data), operation)
@@ -377,7 +377,7 @@ class SocketBrowserProvider:
             raise result
         return result
 
-    def quote(self, descriptor: RunDescriptor, data: bytes) -> BudgetCallQuote:
+    def quote(self, descriptor: RunDescriptor, data: bytes) -> CallPlan:
         # Encode the descriptor as the run frame does: its IDs are UUIDs, which the
         # strict request serializer rejects.
         request = (
@@ -392,7 +392,7 @@ class SocketBrowserProvider:
             + b"\x00"
             + data
         )
-        return zero_quote("browser", "local_free", self.name, "playwright", self.version, request)
+        return call_plan("browser", self.name, "playwright", self.version, request, browser_units=1)
 
     async def _execute_unaccounted(
         self, descriptor: RunDescriptor, data: bytes, fetcher: FetchBroker | None

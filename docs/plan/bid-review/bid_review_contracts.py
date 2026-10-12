@@ -13,12 +13,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Annotated, Literal, Protocol, Self
 from uuid import UUID
 
-from app.schemas.budget_contracts import (
-    BudgetCallQuote,
-    BudgetJobResult,
-    BudgetPreflightData,
-    Money,
-)
+from app.schemas.preflight_contracts import CallPlan, PreflightData
 from app.schemas.check_contracts import (
     AssessmentJobAccepted,
     AssessmentJobResult,
@@ -207,7 +202,7 @@ class BidPreparePreview(Contract):
     dry_run: Literal[True] = True
     submission_id: UUID
     input_hash: Sha256
-    budget: BudgetPreflightData
+    preflight: PreflightData
     expires_at: AwareDatetime
     preflight_token: str = Field(min_length=1, max_length=4096, repr=False)
     local_only: Literal[True] = True
@@ -215,18 +210,16 @@ class BidPreparePreview(Contract):
 
     @model_validator(mode="after")
     def local_calls_and_exact_expiry(self) -> Self:
-        if self.budget.input_hash != self.input_hash or self.budget.planned_calls is None:
+        if self.preflight.input_hash != self.input_hash or self.preflight.planned_calls is None:
             raise ValueError("local preparation needs the exact input hash and a bounded call plan")
-        if not 0 <= self.budget.planned_calls <= PAGE_LIMIT:
+        if not 0 <= self.preflight.planned_calls <= PAGE_LIMIT:
             raise ValueError("local preparation OCR calls cannot exceed the page limit")
-        if self.budget.maximum_calls is not None and self.budget.maximum_calls > PAGE_LIMIT:
+        if self.preflight.maximum_calls is not None and self.preflight.maximum_calls > PAGE_LIMIT:
             raise ValueError("local preparation maximum calls cannot exceed the page limit")
-        quote = self.budget.next_call
-        if quote is not None and (quote.payer != "local_free" or quote.capability != "ocr"):
+        quote = self.preflight.next_call
+        if quote is not None and (quote.capability != "ocr"):
             raise ValueError("preparation permits only metered local-free OCR calls")
-        if self.budget.estimate.task_amount != 0 or self.budget.estimate.charge != 0:
-            raise ValueError("local preparation cannot invent paid liability")
-        if (self.expires_at - self.budget.as_of).total_seconds() != PREFLIGHT_TTL_SECONDS:
+        if (self.expires_at - self.preflight.as_of).total_seconds() != PREFLIGHT_TTL_SECONDS:
             raise ValueError("preparation preview expires after 15 minutes")
         return self
 
@@ -1010,9 +1003,6 @@ class BidReviewRequest(Contract):
     retry: bool = False
     expected_input_hash: Sha256 | None = None
     preflight_token: str | None = Field(default=None, min_length=1, max_length=4096, repr=False)
-    max_charge: (
-        Annotated[Decimal, Field(gt=0, max_digits=18, decimal_places=8, allow_inf_nan=False)] | None
-    ) = None
 
     @model_validator(mode="after")
     def explicit_submit_and_scoring_scope(self) -> Self:
@@ -1108,7 +1098,6 @@ class BidReviewManifest(Contract):
     provider_bindings_sha256: Sha256
     outbound_authorization_id: UUID
     authorized_sanitized_context_sha256: Sha256
-    price_revision_sha256: Sha256
     rubric_id: UUID | None = None
     rubric_input_hash: Sha256 | None = None
     opening_price_input_sha256: Sha256 | None = None
@@ -1135,7 +1124,7 @@ class BidReviewManifest(Contract):
 class BidReviewPreview(Contract):
     dry_run: Literal[True] = True
     input: BidReviewManifest
-    budget: BudgetPreflightData
+    preflight: PreflightData
     expires_at: AwareDatetime
     preflight_token: str = Field(min_length=1, max_length=4096, repr=False)
     preflight_ttl_seconds: Literal[900] = PREFLIGHT_TTL_SECONDS
@@ -1146,14 +1135,14 @@ class BidReviewPreview(Contract):
     uncovered_codes: list[str] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
-    def same_budget_input_and_expiry(self) -> Self:
+    def same_preflight_input_and_expiry(self) -> Self:
         if (
-            self.budget.task_id != self.input.task_id
-            or self.budget.input_hash != self.input.input_hash
+            self.preflight.task_id != self.input.task_id
+            or self.preflight.input_hash != self.input.input_hash
         ):
-            raise ValueError("budget preflight must bind the review input and task")
-        if (self.expires_at - self.budget.as_of).total_seconds() != PREFLIGHT_TTL_SECONDS:
-            raise ValueError("preflight expiry must be 15 minutes after its budget snapshot")
+            raise ValueError("preflight preflight must bind the review input and task")
+        if (self.expires_at - self.preflight.as_of).total_seconds() != PREFLIGHT_TTL_SECONDS:
+            raise ValueError("preflight expiry must be 15 minutes after its preflight snapshot")
         if any(count < 0 for count in self.redacted_counts.values()):
             raise ValueError("redaction counts cannot be negative")
         if self.external_price_pages and self.input.price_release_id is None:
@@ -1349,18 +1338,18 @@ class BidReportRenderPreview(Contract):
     report_input_hash: Sha256
     decisions_snapshot_sha256: Sha256
     renderer_identity: NonBlank
-    budget: BudgetPreflightData
+    preflight: PreflightData
     expires_at: AwareDatetime
     preflight_token: str = Field(min_length=1, max_length=4096, repr=False)
     formats: tuple[Literal["docx"], Literal["console"]] = ("docx", "console")
 
     @model_validator(mode="after")
     def exact_render_and_zero_calls(self) -> Self:
-        if self.budget.input_hash != self.input_hash or self.budget.planned_calls != 0:
+        if self.preflight.input_hash != self.input_hash or self.preflight.planned_calls != 0:
             raise ValueError("render preview needs the exact hash and zero calls")
-        if self.budget.next_call is not None or self.budget.estimate.task_amount != 0:
-            raise ValueError("local report rendering has no paid call liability")
-        if (self.expires_at - self.budget.as_of).total_seconds() != PREFLIGHT_TTL_SECONDS:
+        if self.preflight.next_call is not None:
+            raise ValueError("local report rendering has no external call")
+        if (self.expires_at - self.preflight.as_of).total_seconds() != PREFLIGHT_TTL_SECONDS:
             raise ValueError("report preview expires after 15 minutes")
         return self
 
@@ -1397,7 +1386,6 @@ class BidReviewJobResult(AssessmentJobResult):
     findings: int = Field(strict=True, ge=0)
     uncovered_items: int = Field(strict=True, ge=0)
     protected_report_available: bool
-    budget: BudgetJobResult
 
 
 class ClefNoulQuestion(Contract):
@@ -1488,7 +1476,7 @@ class ClefTriageRequest(Contract):
         except (ValueError, RecursionError) as error:
             raise ValueError("triage state must be finite bounded JSON") from error
         if len(state_bytes) > 200_000:
-            raise ValueError("triage state exceeds the serialized text budget")
+            raise ValueError("triage state exceeds the serialized text preflight")
         refs = [question.ref for question in self.questions]
         images = [image.ref for image in self.images]
         if len(set(refs)) != len(refs) or len(set(images)) != len(images):
@@ -1540,30 +1528,6 @@ ClefAnswer = Annotated[
 ]
 
 
-class ClefFixedCallQuote(Contract):
-    """Fixed catalog charge, settled per dispatched call independent of usage tokens."""
-
-    quote: BudgetCallQuote
-    charge_basis: Literal["fixed_per_call"] = "fixed_per_call"
-    platform_config_revision: Revision
-    # Returned input_tokens remain telemetry and never recalculate this amount.
-    returned_tokens_affect_charge: Literal[False] = False
-
-    @model_validator(mode="after")
-    def pinned_platform_quote(self) -> Self:
-        if (
-            self.quote.capability != "vision"
-            or self.quote.payer != "org_platform"
-            or self.quote.model != "@cf/cloudflare/clef"
-            or self.quote.platform_model_id is None
-            or self.quote.reserved_task_amount is None
-            or self.quote.image_count > CLEF_IMAGE_LIMIT
-            or self.quote.unknown_reason is not None
-        ):
-            raise ValueError("Clef requires a known explicit platform vision call quote")
-        return self
-
-
 class ClefGatewayCheck(Contract):
     """AI Gateway state read through its API at configuration/test time; dispatch requires it."""
 
@@ -1576,7 +1540,6 @@ class ClefGatewayCheck(Contract):
     gateway_retries: Literal[False]
     rate_limit_requests: int = Field(gt=0)
     rate_limit_seconds: int = Field(gt=0)
-    workers_ai_billing_mode: Literal["unified"]
     checked_at: AwareDatetime
 
 
@@ -1763,10 +1726,10 @@ class BidReviewProvider(Protocol):
     """Configurable LLM boundary; local ref/quote acceptance precedes persistence.
 
     Adapters re-use pinned resolve_llm configuration and accounted_call. Complete
-    requests, retries and usage participate in existing admission and fixed caps.
+    requests, retries and usage participate in existing admission and resource limits.
     """
 
-    def quote(self, request: BidReviewProviderRequest) -> BudgetCallQuote: ...
+    def quote(self, request: BidReviewProviderRequest) -> CallPlan: ...
 
     async def review(self, request: BidReviewProviderRequest) -> BidReviewProviderResult: ...
 
@@ -1777,13 +1740,12 @@ class ClefTriageProvider(Protocol):
     Verify every byte/hash/privacy receipt before dispatch. Reject full serialized
     requests above 13 MiB or conservative context+output above 65,536 tokens, without
     vendor truncation. Strip internal IDs/receipts; no URL images or outbound fetches.
-    Validate answer refs/types against the request and score/choice bounds. Admit and
-    settle the fixed platform call amount; variable returned tokens are telemetry.
+    Validate answer refs/types against the request and score/choice bounds. Admit each dispatch and record provider/model, duration and resource usage.
     """
 
     def quote(
         self, request: ClefTriageRequest, redacted_images: Sequence[bytes]
-    ) -> ClefFixedCallQuote: ...
+    ) -> CallPlan: ...
 
     async def triage(
         self, request: ClefTriageRequest, redacted_images: Sequence[bytes]
@@ -1825,7 +1787,7 @@ class BidReviewService(Protocol):
     """Authenticated HTTP/CLI service; methods recheck live org/task authorization.
 
     Preflight is write-free and call-free. Submission fixes the input and enqueues
-    transactionally; workers recheck hashes/grants/budget before calls/publication.
+    transactionally; workers recheck hashes/grants/preflight before calls/publication.
     Source and report downloads stay human-only, including inherited generic routes.
     Decisions append; no card/Evidence confirmation or bid/export mutation occurs.
     Preflight tokens are signed service receipts bound to actor/org/task/hash/options

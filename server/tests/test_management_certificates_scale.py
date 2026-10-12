@@ -141,7 +141,7 @@ async def test_fixed_scale_certificate_reads(api, headers, application, tenants,
         "mode": "real_api",
         "scenario": "u01-certificate-fixed-scale-v1",
         "status": "running",
-        "schema": "4.0",
+        "schema": "5.0",
         "fixture": {
             "orgs": 2,
             "roots_per_org": ROOTS,

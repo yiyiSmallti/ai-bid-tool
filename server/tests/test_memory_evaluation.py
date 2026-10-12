@@ -249,7 +249,14 @@ async def test_memory_synthetic_retrieval_evaluation(api, headers, tenants):
                 assert [item["relevance"] for item in output["items"]] == [115, 25, 20, 10, 10, 115]
             if case.case_id == "top-k-priority":
                 assert {item["reason"] for item in output["data"]["omitted"]} == {"top_k_limit"}
-            assert output["cost"] == {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0}
+            assert output["cost"] == {
+                "calls": 0,
+                "llm_tokens": 0,
+                "ocr_pages": 0,
+                "search_requests": 0,
+                "browser_units": 0,
+                "unresolved_calls": 0,
+            }
         results.append(
             {
                 "case": case.model_dump(mode="json"),
@@ -295,7 +302,14 @@ async def test_memory_synthetic_retrieval_evaluation(api, headers, tenants):
             "sensitive_rejection_count": 1,
             "candidate_acceptance_rate": None,
             "candidate_acceptance_reason": "Retrieval evaluation has no candidate review cohort",
-            "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+            "cost": {
+                "calls": 0,
+                "llm_tokens": 0,
+                "ocr_pages": 0,
+                "search_requests": 0,
+                "browser_units": 0,
+                "unresolved_calls": 0,
+            },
             "duration_ms": round((time.monotonic() - started) * 1000),
         },
         "sensitive_rejection": {

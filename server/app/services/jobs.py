@@ -63,12 +63,17 @@ async def agent_access(session, identity, job):
 
 def _public_result(job: Job) -> dict:
     # Submission authorization and encrypted snapshots are internal worker state.
-    return {
+    result = {
         key: value
         for key, value in job.result.items()
         if key
         not in {"submission", "encrypted_input", "release_retries", "annotation_staged_objects"}
     }
+    if job.kind == "bid_review" and "coverage" in result:
+        from app.services.bid_review_run import public_coverage
+
+        result["coverage"] = public_coverage(result["coverage"])
+    return result
 
 
 async def read_access(
@@ -165,14 +170,7 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
     origin = await provenance(session, job.id)
     if origin is not None:
         payload["data"]["agent_provenance"] = origin
-    settings = session.info.get("memory_settings")
-    payload["cost"] = await job_cost(
-        session, job.id, settings.billing_currency if settings else None
-    )
-    public_budget = job.result.get("budget")
-    if isinstance(public_budget, dict):
-        refreshed = {**public_budget, "cost": payload["cost"]}
-        payload["data"]["result"]["budget"] = refreshed
+    payload["cost"] = await job_cost(session, job.id)
     if job.kind in {"screenshot_render", "screenshot_analyze"}:
         from app.services.screenshot_jobs import check_job_access
 
@@ -218,11 +216,6 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         payload["warnings"] = job.result.get("warnings", [])
     if job.kind == "export_render":
         payload["data"]["result"] = _public_result(job)
-        if isinstance(payload["data"]["result"].get("budget"), dict):
-            payload["data"]["result"]["budget"] = {
-                **payload["data"]["result"]["budget"],
-                "cost": payload["cost"],
-            }
         return payload
     if job.kind == "export_preview":
         # The stored PDF location is served only through the export preview routes.
@@ -231,11 +224,6 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
             **_public_result(job),
             "preview": {"page_count": preview["page_count"]} if preview else None,
         }
-        if isinstance(payload["data"]["result"].get("budget"), dict):
-            payload["data"]["result"]["budget"] = {
-                **payload["data"]["result"]["budget"],
-                "cost": payload["cost"],
-            }
         return payload
     if job.kind in {"draft", "card_generate"}:
         identity.require("draft:read" if job.kind == "draft" else "card:read")
@@ -259,20 +247,10 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         payload["data"]["result"] = _public_result(job)
 
     payload["warnings"] = job.result.get("warnings", payload["warnings"])
-    if (
-        not job.vendor_cost_history_complete
-        and "historical_vendor_cost_unavailable" not in payload["warnings"]
-    ):
-        payload["warnings"] = [*payload["warnings"], "historical_vendor_cost_unavailable"]
     payload["items"] = job.result.get("items", [])
     payload["ok"] = (
         job.status not in {"failed", "cancelled"} and job.result.get("completion") != "partial"
     )
-    if isinstance(payload["data"]["result"].get("budget"), dict):
-        payload["data"]["result"]["budget"] = {
-            **payload["data"]["result"]["budget"],
-            "cost": payload["cost"],
-        }
     if job.kind == "agent":
         from app.schemas.agent_contracts import AgentJobResult
 
@@ -282,8 +260,6 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
                 for key, value in payload["data"]["result"].items()
                 if key in AgentJobResult.model_fields
             }
-        if isinstance(job.result.get("budget"), dict):
-            payload["data"]["budget"] = {**job.result["budget"], "cost": payload["cost"]}
     return payload
 
 

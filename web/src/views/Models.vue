@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { Plus } from "@element-plus/icons-vue";
-import { count, money, request } from "../api.js";
+import { count, request } from "../api.js";
 
 const blank = () => ({
   id: "",
@@ -10,10 +10,6 @@ const blank = () => ({
   model: "claude-opus-5-5",
   base_url: "",
   credential: "",
-  vendor_input_usd_per_mtok: 0,
-  vendor_output_usd_per_mtok: 0,
-  sale_input_per_mtok: 0,
-  sale_output_per_mtok: 0,
   default: false,
   enabled: true,
   levels: [],
@@ -22,7 +18,6 @@ const blank = () => ({
 });
 const blankLevel = () => ({ name: "", label: "", options: "{}", batch_chars: 8000, effort: "" });
 const models = ref([]);
-const currency = ref("");
 const credentials = ref([]);
 const form = ref(null);
 const normalizedEndpoint = (provider, url) => {
@@ -47,7 +42,6 @@ async function load() {
     } while (cursor);
     credentials.value = available;
     models.value = result.items;
-    currency.value = result.data.currency;
   } catch (exc) {
     error.value = exc.message;
   }
@@ -115,9 +109,6 @@ function problems(body) {
   if (!matchingCredentials.value.some((credential) => credential.name === body.credential)) issues.push("请选择用途、服务商和端点匹配的目录模型凭据");
   if (body.base_url && !/^https:\/\/[^\s/]+(\/\S*)?$/.test(body.base_url)) issues.push("Base URL 必须以 https:// 开头");
   if (body.provider === "openai" && !body.base_url) issues.push("OpenAI 兼容服务需要填写 Base URL");
-  for (const key of ["vendor_input_usd_per_mtok", "vendor_output_usd_per_mtok", "sale_input_per_mtok", "sale_output_per_mtok"]) {
-    if (!Number.isFinite(body[key]) || body[key] < 0) issues.push("价格必须是不小于 0 的数字");
-  }
   if (body.default && !body.enabled) issues.push("默认模型必须启用");
   if (body.reasoning.length && !body.reasoning.some((level) => level.name === body.default_reasoning))
     issues.push("请选择一个默认档位（服务商的官方默认值）");
@@ -188,7 +179,7 @@ onMounted(load);
 
 <template>
   <div class="page-header">
-    <div><h2>模型</h2><p class="subtitle">设为默认的模型用于所有单位的要求抽取，并按售价计入应收。</p></div>
+    <div><h2>模型</h2><p class="subtitle">设为默认的模型用于所有单位的要求抽取。</p></div>
     <el-button type="primary" :icon="Plus" @click="edit(null)">添加模型</el-button>
   </div>
   <p class="notice">服务商密钥通过服务凭据页面维护。模型选择用途、服务商和端点匹配的已启用凭据。</p>
@@ -208,10 +199,6 @@ onMounted(load);
         <div class="hint cred-hint"><RouterLink to="/platform/credentials">管理服务凭据</RouterLink>。新绑定只显示匹配的已启用凭据；已有失效引用可使用列表中的“停用”停止该模型。“已配置”不代表厂商认证或额度已验证。</div>
       </div>
       <div class="grid four">
-        <el-form-item label="成本价 输入（USD/百万 token）"><el-input v-model="form.vendor_input_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-input" /></el-form-item>
-        <el-form-item label="成本价 输出"><el-input v-model="form.vendor_output_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-output" /></el-form-item>
-        <el-form-item :label="`售价 输入（${currency}/百万 token）`"><el-input v-model="form.sale_input_per_mtok" type="number" min="0" step="0.01" name="sale-input" /></el-form-item>
-        <el-form-item :label="`售价 输出（${currency}）`"><el-input v-model="form.sale_output_per_mtok" type="number" min="0" step="0.01" name="sale-output" /></el-form-item>
       </div>
       <div class="actions"><label class="check"><input v-model="form.enabled" type="checkbox" name="enabled" />启用</label><label class="check"><input v-model="form.default" type="checkbox" name="default" />设为默认</label></div>
       <h4>推理强度</h4>
@@ -241,7 +228,7 @@ onMounted(load);
   </el-card>
   <div class="table-scroll">
     <table class="data-table">
-      <thead><tr><th>标识</th><th>服务商 / 模型</th><th>凭据</th><th class="num">成本价 入/出（USD）</th><th class="num">售价 入/出（{{ currency }}）</th><th>状态</th><th class="num">操作</th></tr></thead>
+      <thead><tr><th>标识</th><th>服务商 / 模型</th><th>凭据</th><th>状态</th><th class="num">操作</th></tr></thead>
       <tbody>
         <tr v-for="model in models" :key="model.id">
           <td><strong>{{ model.id }}</strong><div class="hint">第 {{ model.revision }} 版 · {{ model.updated_by }}</div></td>
@@ -250,8 +237,6 @@ onMounted(load);
             <div v-if="model.reasoning?.length" class="hint" data-testid="levels-summary">推理强度：<span v-for="(level, index) in model.reasoning" :key="level.name">{{ index ? " / " : "" }}{{ level.name }}{{ level.name === model.default_reasoning ? "（默认）" : "" }}</span></div>
           </td>
           <td>{{ model.credential }} <span class="tag" :class="model.credential_configured ? 'success' : 'danger'">{{ model.credential_configured ? "已配置" : "未配置" }}</span></td>
-          <td class="num">{{ model.vendor_input_usd_per_mtok }} / {{ model.vendor_output_usd_per_mtok }}</td>
-          <td class="num">{{ model.sale_input_per_mtok }} / {{ model.sale_output_per_mtok }}</td>
           <td><div class="tags"><span v-if="model.default" class="tag success">默认</span><span v-if="!model.enabled" class="tag">已停用</span></div></td>
           <td class="num">
             <div class="row-actions"><el-button size="small" @click="edit(model)">编辑</el-button><el-button v-if="model.enabled" size="small" @click="disableModel(model)">停用</el-button><el-button size="small" @click="test(model)">测试</el-button></div>
@@ -259,18 +244,18 @@ onMounted(load);
               <template v-if="tests[model.id].running">测试中…</template>
               <template v-else-if="tests[model.id].levels">
                 <div v-for="level in tests[model.id].levels" :key="level.reasoning" :data-testid="`level-result-${level.reasoning}`">
-                  {{ level.reasoning }}：<template v-if="level.passed">通过 · {{ count(level.usage.tokens) }} token · {{ money(level.usage.charge, currency) }}</template
+                  {{ level.reasoning }}：<template v-if="level.passed">通过 · {{ count(level.usage.tokens) }} token</template
                   ><template v-else-if="level.error.code === 'provider_quota_exhausted'">未通过：服务商额度已用完或套餐不可用（{{ level.error.message }}）</template
                   ><template v-else>未通过：{{ level.error.code }}（{{ level.error.message }}）</template>
                 </div>
               </template>
-              <template v-else-if="tests[model.id].passed">通过 · {{ count(tests[model.id].usage.tokens) }} token · {{ money(tests[model.id].usage.charge, currency) }}</template>
+              <template v-else-if="tests[model.id].passed">通过 · {{ count(tests[model.id].usage.tokens) }} token</template>
               <template v-else-if="tests[model.id].error.code === 'provider_quota_exhausted'">未通过：服务商额度已用完或套餐不可用（{{ tests[model.id].error.message }}）</template>
               <template v-else>未通过：{{ tests[model.id].error.code }}（{{ tests[model.id].error.message }}）</template>
             </div>
           </td>
         </tr>
-        <tr v-if="!models.length"><td colspan="7" class="empty">还没有模型。添加一个并设为默认后，单位的要求抽取会使用它。</td></tr>
+        <tr v-if="!models.length"><td colspan="5" class="empty">还没有模型。添加一个并设为默认后，单位的要求抽取会使用它。</td></tr>
       </tbody>
     </table>
   </div>

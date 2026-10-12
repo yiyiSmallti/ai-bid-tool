@@ -61,8 +61,8 @@ memory-only data URLs and discard them when closed or the session changes.
 
 [JobPanel.vue](../../web/src/components/JobPanel.vue) polls active jobs, backs off
 transient read failures, honors `Retry-After`, pauses in hidden tabs and stops at
-terminal states. Cancellation and retries require separate user actions. Network
-failure never resubmits a paid or decision write.
+terminal states.
+Cancellation and retries require separate user actions.
 
 ### Review state
 
@@ -99,11 +99,10 @@ keyboard path through review without single-key human decisions.
 
 [GenerationPanel.vue](../../web/src/components/GenerationPanel.vue) reads official
 reasoning choices through extraction dry-run and displays the actual generation
-preview. Changes to scope, settings or selected materials invalidate it and clear
-the authorization. A paid run needs a charge cap (prefilled with the estimate
-rounded up to cents) and an explicit authorization checkbox; it submits the
-preview's `input_hash` and the cap, as defined in
-[drafting-binding.md](../plan/drafting-binding.md). `generation_input_changed`
+preview.
+Changes to scope, settings or selected materials invalidate it and clear
+the authorization.
+`generation_input_changed`
 discards the preview without retrying, and the job is tracked with
 [JobPanel.vue](../../web/src/components/JobPanel.vue).
 

@@ -37,7 +37,7 @@ def start_input(extraction):
             "draft:read",
             "draft:run",
         ],
-        "limits": {"max_vendor_usd": "2", "max_platform_charge": "2", "billing_currency": "USD"},
+        "limits": {},
         "idempotency_key": str(uuid4()),
     }
 

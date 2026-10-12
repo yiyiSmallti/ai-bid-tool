@@ -198,7 +198,7 @@ async def process(execution, storage):
             snapshot.submission_id,
             snapshot.review_id,
         )
-    docx_bytes, console_bytes = await render_process(execution, payload)
+    docx_bytes, console_bytes = await render_process(execution, reports.current_snapshot(payload))
     staged = []
     for format_value, content in (("docx", docx_bytes), ("console", console_bytes)):
         if not content or len(content) > 100 * 1024 * 1024:

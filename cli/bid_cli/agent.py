@@ -21,7 +21,7 @@ JsonOption = Annotated[bool, typer.Option("--json", help="Emit the machine-reada
 def helpers():
     from bid_cli import main
 
-    if main.client().contract_version != "4.0":
+    if main.client().contract_version != "5.0":
         raise ServiceError("invalid_input", "Agent commands require contract 4.0", 400, 2)
     return main
 

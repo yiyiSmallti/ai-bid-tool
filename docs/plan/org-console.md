@@ -5,20 +5,22 @@ status: "Implemented (U1, U2, U3)"
 
 # Contract: org tender-task and response-review console
 
-Status: **U1, U2, and U3 implemented**; paid drafting binds preview hashes/spending caps under [drafting-binding.md](drafting-binding.md). Implementation is explained in [org-console.md](../notes/org-console.md). Maintainers run database/real-API Playwright acceptance; large-list performance still needs verification there. Implementation status is not acceptance success. Scope corresponds to [roadmap](roadmap.md) B02/U01/U02, connecting tasks, parsing, extraction, response-card (响应卡) review, and deviation (偏离) table drafts in the web Vue 3 application. This page defines connections to existing business contracts, never permission to rewrite card rules/expand materials.
+Implementation is explained in [org-console.md](../notes/org-console.md).
+Maintainers run database/real-API Playwright acceptance; large-list performance still needs verification there.
+Implementation status is not acceptance success.
+Scope corresponds to [roadmap](roadmap.md) B02/U01/U02, connecting tasks, parsing, extraction, response-card (响应卡) review, and deviation (偏离) table drafts in the web Vue 3 application.
+This page defines connections to existing business contracts, never permission to rewrite card rules/expand materials.
 
 ## Goals, basis, and boundaries
 
 Flow: org (organization/tenant; 单位) login → create task/upload tender documents (招标文件) → track parsing → select official reasoning level/extract → select extraction history → review cards/real materials against originals → human decisions/confirmation → view three tables/gaps (缺口). Model drafting uses [model drafting](../notes/model-drafting-redaction.md), showing fee previews before calls. “处理完成” means processing the selected extraction set, not complete bid (标书) delivery or omission-free tender extraction.
-
-Rules belong to these sources, without separate confirmation/billing/outbound rules here:
 
 | Basis | Usage here |
 | --- | --- |
 | [agent.md hard rules](../../agent.md#hard-rules-must-never-be-violated), [product design](../design.md) | Org isolation, real materials, human gates, token confirmation/export prohibitions, CLI Result |
 | [ADR 0005](../adr/0005-human-confirmed-responses.md), [response-cards.md](../notes/response-cards.md), [model-drafting-redaction.md](../notes/model-drafting-redaction.md) | Adopted human-confirmation decisions/card mechanisms; delivered model drafting/redaction |
 | [reasoning-levels.md](../notes/reasoning-levels.md), [docx-citations.md](../notes/docx-citations.md) | Official levels, independent extraction sets, verbatim citations, structural Word locations |
-| [platform-console.md](../notes/platform-console.md), [api.js](../../web/src/api.js), [router.js](../../web/src/router.js), [App.vue](../../web/src/App.vue) | Separate platform/org sessions, same-origin requests/navigation/existing org billing |
+| [platform-console.md](../notes/platform-console.md), [api.js](../../web/src/api.js), [router.js](../../web/src/router.js), [App.vue](../../web/src/App.vue) | Separate platform/org sessions and same-origin requests/navigation; no platform session grants org business access. |
 | [provider-config.md](provider-config.md), [annotation.md](annotation.md) | Independent contract boundaries; schema/planning alone never proves org-owned models/annotation/derived images are usable evidence (证据) |
 
 Interface evidence is limited to this checkout's [tenders.py](../../server/app/api/tenders.py), [resources.py](../../server/app/api/resources.py), [jobs.py](../../server/app/api/jobs.py), [response_cards.py](../../server/app/api/response_cards.py), [CLI registry](../../cli/bid_cli/schema.py), and approved contracts above. Old roadmap/card-plan status wording cannot replace entry-point checks. Drafting schemas/reserved tables alone do not establish route availability. Second-stage work from another checkout must be verified at integration, never assumed locally present.
@@ -42,14 +44,13 @@ Reuse [style.css](../../web/src/style.css) base styles/native forms, adding task
 | `/app/org/tasks/:taskId` | Upload/parsing/extraction/history, server-retrievable information only |
 | `/app/org/tasks/:taskId/review?job=J` | Pinned extraction requirements/single-card edit-review; optional requirement ID location |
 | `/app/org/tasks/:taskId/drafts?job=J` | Assembly preview/history/three response tables/comply-only list/gaps |
-| `/app/org/billing` | Existing balance/recharge, admin only |
 
 Guards obtain role from GET /org/current, never emails/cached buttons/platform identities. [ROLE_SCOPES / Identity](../../server/app/services/auth.py) and card-service human checks define authorization; buttons only guide interaction, with server reauthorization on every request.
 
 | Identity | Visible content/nondecision operations | Human decisions |
 | --- | --- | --- |
-| admin | Org tasks/requirements/materials/cards/drafts; create/upload/parse/extract/edit/submit/draft/assemble; balance/redaction settings | Classify unclassified drafts with reasons; no cross-domain confirm/reject/material requests/reopen/batches |
-| bidder | Org content and task creation/business operations; no balance/model-key view | Confirm/reject/request materials/reopen/disposition within commercial/qualification (资格) domain |
+| admin | Org content; create tasks, upload/parse/extract/edit/submit/draft/assemble | Classify unclassified drafts with reasons; no cross-domain confirm/reject/material requests/reopen/batches |
+| bidder | Org content; create tasks, upload/parse/extract/edit/submit/draft/assemble | Confirm/reject/request materials/reopen/disposition within commercial/qualification (资格) domain |
 | technical | Org content; upload/parse/extract/edit/submit/draft/assemble existing tasks; no task creation | Same human actions within technical domain |
 | viewer | Read-only requirements/originals/authorized materials/cards-revisions/jobs/drafts | No edit/run/confirm/batch/comment entry |
 | Platform operator | Existing platform pages, no org materials/tasks | Platform session cannot enter org business; people with Membership log in separately |
@@ -61,7 +62,7 @@ Guards obtain role from GET /org/current, never emails/cached buttons/platform i
 
 ### Creation and recovery
 
-Forms reuse TaskCreate: name required, reference/timezone-aware deadline/budget optional. Budget is recorded only, not an enforced task-cost cap. Combined resource creation/member management are excluded. Call existing create/upload/parse APIs sequentially, retaining task/document/job IDs. Upload is not parsing completion; upload failure after creation never creates another task. Reselecting identical real files uses duplicate receipts; failed parsing retries original documents explicitly, never successful placeholders.
+Forms reuse TaskCreate: name required, reference/timezone-aware deadline optional. Combined resource creation/member management are excluded. Call existing create/upload/parse APIs sequentially, retaining task/document/job IDs. Upload is not parsing completion; upload failure after creation never creates another task. Reselecting identical real files uses duplicate receipts; failed parsing retries original documents explicitly, never successful placeholders.
 
 Upload uses FormData file, not JSON/manual multipart boundaries. Show file-type/size errors/server limits. Without progress events show in-progress, never invented percentages. Parsing shows queued/running/succeeded/failed/cancelled; unknown totals get no estimated progress bars.
 
@@ -71,7 +72,8 @@ Refresh recovers current-tab IDs then reauthorizes reads. Across devices, [G1 re
 
 Before extraction forms call POST /documents/{D}/extract with JobAction(dry_run=True). Build selectors from data.reasoning_levels name/label/default and submit official name, without hardcoded “快速/均衡/深度” mapping or platform-catalog reads for org data. Empty catalogs show “此模型未提供可选推理档位”; send no invented values. Omitted reasoning uses server defaults. unsupported_reasoning refreshes preview/requires selection, never silent downgrade.
 
-Preview parsed is not a completion promise; execution checks parsed document/server conditions. Unknown estimates show “费用暂不可估” with warnings; absent model/prices/duration remain unknown. Clearly distinguish “预检” and “开始抽取（可能产生费用）”; opening/filtering never triggers paid calls.
+Preview parsed is not a completion promise; execution checks parsed document/server conditions.
+Unconfigured models show “模型未配置”; unknown duration shows “耗时暂无法估算”. Resource uncertainty remains explicit.
 
 History shows job/document/official level/model/state/start-end/saved-rejected counts/tokens/errors/latest, with unknown missing values. Explicitly select successful jobs in page context. Failed/running jobs allow status/errors, not card scope. Reextraction retains old cards under old jobs without migration/merging/latest navigation. Default req list multi-document output cannot be the review set.
 
@@ -103,17 +105,28 @@ Batch entry makes disposition decisions, mainly comply_only, never batch respons
 
 Use existing whole-batch atomic transactions: any authorization/staleness/revision failure rejects all, retaining selection/showing reread scope. Browsers never split batches into automatic write loops. Reverting comply_only→respond is human-only; model suggestions auto-select nothing, with dispositions/confirmations counted separately.
 
-## Model drafting, assembly, and fees
+## Model drafting, assembly, and usage
 
-Model-drafting preview uses registered second-stage endpoints. Approved G3-B binding is implemented by [drafting-binding.md](drafting-binding.md): paid runs require a valid preview, input hash, explicit platform spending cap, and human outbound authorization. No production mock candidates. Select pinned job/all or explicit requirement IDs/official level. Levels reuse extraction-preview catalogs; generation preview verifies actual reasoning, reloading rather than changing selections on mismatch.
+Model-drafting preview uses registered second-stage endpoints.
+No production mock candidates.
+Select pinned job/all or explicit requirement IDs/official level.
+Levels reuse extraction-preview catalogs; generation preview verifies actual reasoning, reloading rather than changing selections on mismatch.
 
-CardGeneratePreview shows selected/skipped counts, model/catalog revision, reasoning, input refs, redaction state/hit counts, estimated tokens/vendor USD/platform charge/currency/basis/duration. No outbound bodies/preredaction values in summaries. Unknowns are null, never 0/free; wrapper dry-run cost is actual zero preview cost, not execution estimates. Redaction defaults on; read task-list settings revisions, admin humans alone change it. Disabled redaction explicitly warns which unredacted text will be sent.
+No outbound bodies/preredaction values in summaries.
+Unknowns are null, never 0/free; wrapper dry-run cost is actual zero preview cost, not execution estimates.
+Redaction defaults on; read task-list settings revisions, admin humans alone change it.
+Disabled redaction explicitly warns which unredacted text will be sent.
 
-Humans confirm this paid operation/outbound summary before execution; **this confirms no response or material**. Options/material/settings changes require a new preview. Previews reserve no budgets/lock no prices and are not final authorization. CardGenerateRequest now accepts optional expected_input_hash/max_charge for compatibility, with both required by the console. Submission recomputes bound input/model/price identity and rejects changed hashes; per-job platform charges follow the approved cap. BYOK vendor bills are not bounded by platform caps. Outbound scope/four redaction classes/dual verbatim citation checks/worker gates reuse [model drafting](../notes/model-drafting-redaction.md); frontends do no separate redaction/vendor calls.
+Options/material/settings changes require a new preview.
+Previews are read-only and are not final authorization.
+Outbound scope/four redaction classes/dual verbatim citation checks/worker gates reuse [model drafting](../notes/model-drafting-redaction.md); frontends do no separate redaction/vendor calls.
 
 After generation refresh affected cards, highlighting new revisions/rejected citations/protected skips/material needs. Results remain draft, without auto-submit/disposition adoption/review checkmarks.
 
-Assembly independently previews DraftRequest(dry_run=True), then submits, showing rows/comply_only/gaps/negative deviations. Assembly calls no model/OCR; zero current fees cannot hide previous generation fees. Show substantive (实质性条款), commercial (商务), and technical (技术) tables separately from comply-only (仅需遵守)/gaps, exactly one partition per requirement. Valid negative deviations are not gaps and remain prominent. Gaps show only original/location/reason/review links, never unconfirmed candidate text as response rows.
+Assembly independently previews DraftRequest(dry_run=True), then submits, showing rows/comply_only/gaps/negative deviations.
+Show substantive (实质性条款), commercial (商务), and technical (技术) tables separately from comply-only (仅需遵守)/gaps, exactly one partition per requirement.
+Valid negative deviations are not gaps and remain prominent.
+Gaps show only original/location/reason/review links, never unconfirmed candidate text as response rows.
 
 Drafts show status=draft/completion/validity/input job/affected requirements. Stale drafts retain snapshots with re-review/assembly notices; old complete badges cannot imply delivery readiness. This contract's base scope has no export button; later export integration follows its own contract.
 
@@ -121,9 +134,12 @@ Drafts show status=draft/completion/validity/input job/affected requirements. St
 
 Parsing/extraction/generation/assembly use existing jobs. Poll GET /jobs/{id}, suggested foreground interval 2 seconds, backoff to 30 on repeated errors, honoring Retry-After. Background tabs pause high-frequency polling, requery on return, stop at terminal. No assumed SSE without routes. Show actual attempts/reasoning/errors/results, no invented percentages.
 
-Cancel uses existing APIs; acceptance does not mean sent vendor calls cost nothing. Incurred usage settles. Disconnect/wait timeout neither auto-cancels nor retries paid writes. Explicit parse/extract/assembly retry reuses existing parameters; paid drafting follows G3-B preview/hash/cap binding, without automatic retry. Job/attempt isolation/cache follows [background-jobs.md](../notes/background-jobs.md)/second-stage drafting contracts.
+Cancel uses existing APIs; acceptance does not mean sent vendor calls cost nothing.
+Incurred usage settles.
+Job/attempt isolation/cache follows [background-jobs.md](../notes/background-jobs.md)/second-stage drafting contracts.
 
-Costs use existing job-result/UsageRecord accounting, separating Cost.usd/platform charge. Query-wrapper zero cost is not total job cost; show returned amounts only, otherwise unknown. [Prepaid billing](../notes/prepaid-billing.md) owns balance/per-call admission/reservations/cross-attempt caps/idempotent settlement. Insufficient funds stops new calls/contact admin; nonadmins never query operator APIs for balances. Task/monthly budgets/refunds/org usage-detail pages are excluded; missing interfaces remain G5.
+Query-wrapper zero resource counts describe the read; show historical job usage from its recorded operation, never fabricate missing usage.
+Org usage-detail pages are outside this console slice; missing interfaces remain G5.
 
 ## Data models and Pydantic boundaries
 
@@ -138,7 +154,6 @@ Costs use existing job-result/UsageRecord accounting, separating Cost.usd/platfo
 | response_cards/response_card_revisions/evidence/card_evidence_links | [response_cards.py](../../server/app/models/response_cards.py): current pointers/immutable revisions/human-confirmed materials |
 | draft_runs/response_items | Same model file: draft snapshots/response-comply-only-gap rows |
 | card_generation_runs | Card-generation model/second-stage contract ownership, not frontend table creation/model-result injection |
-| audit_logs/usage_records/vendor_calls/balance ledger | Existing business audit/billing, no duplicate frontend truth |
 
 Filters/selections live in page memory. Recoverable org/task/job/requirement IDs/page/nontext filters use current-tab org-namespaced storage, cleared on switch. Search text/response edits/material bytes/signed links never enter URL/localStorage/IndexedDB/persistent caches; navigation prompts about unsaved edits, without hidden disk saves.
 
@@ -177,7 +192,6 @@ class ExtractionPreviewData(Contract):
     dry_run: Literal[True]
     document_id: UUID
     parsed: bool
-    estimated_cost_usd: float | None
     reasoning: str | None
     reasoning_levels: list[ReasoningChoice]
 
@@ -243,10 +257,8 @@ T/D/J/C/S/R mean task/document/extraction-job/card/source/certificate-revision I
 | `bid card disposition --task T --input FILE` | `POST /tasks/{T}/cards/dispositions` | Existing atomic DispositionBatch |
 | `bid card submit/withdraw/confirm/reject/needs-material/reopen --id C --expected-revision N ...` | `POST /cards/{C}/actions` | Existing CardAction/action-review fields |
 | `bid task redaction set --task T --input FILE` | `PUT /tasks/{T}/model-redaction` | Existing settings; outbound uses second-stage drafting |
-| `bid card generate --task T --job J [--requirement ID ...] [--reasoning LEVEL] [--expect-input-hash HASH] [--max-charge AMOUNT] [--dry-run] [--wait]` | `POST /tasks/{T}/cards/generations` | Registered preview/paid run with implemented G3-B binding |
 | `bid draft --task T --job J [--dry-run] [--retry] [--wait]` | `POST /tasks/{T}/drafts` | Existing assembly only |
 | `bid draft list --task T --job J`, `bid draft show --id ID` | `GET /tasks/{T}/drafts?job={J}`, `GET /drafts/{id}` | Existing summaries/revalidated snapshots |
-| `bid billing balance/redeem` | `GET /billing`, `POST /billing/redeem` | Existing admin pages |
 | `bid schema --json` | No business API | Existing command/input verification, no invented schema route |
 
 Family-path abbreviations expand using preceding prefixes. No independent Evidence confirmation endpoint: card actions confirm materials transactionally, no automatic confirmation button. Citation repair retains existing admin CLI flows; this page shows invalid_citation/needs_reconfirmation without automatic tender-original repair.
@@ -257,9 +269,9 @@ Family-path abbreviations expand using preceding prefixes. No independent Eviden
 | --- | --- | --- |
 | G1 | Full task details/document/parsing-job discovery | Authorized three read-only interfaces close discovery; paths/projections/permissions in [recovery reads](../notes/org-console.md#recovery-reads), no migration/new scopes |
 | G2 | Requirements/cards/most lists lack server filters/pagination/totals/cursors; card lists return full CardView | Real full sets/frontend pagination must pass large-list gates; otherwise approve summaries/pagination on existing reads, no invented page/q or truncation |
-| G3 | Drafting preview/submission race; extraction previews do not pin model/price snapshots | Drafting hash/model/price/user cap binding is now implemented under drafting-binding.md. Extraction estimates remain advisory; stronger extraction binding needs a separate contract |
+| G3 | Drafting preview/submission race; extraction previews do not pin model snapshots | Drafting input hash/model binding is now implemented under drafting-binding.md. Extraction estimates remain advisory; stronger extraction binding needs a separate contract |
 | G4 | Original base contract excluded tender page images/Word layout/arbitrary attachments; scans lack verified text | Original blocks/downloads/certificate PNG remain valid. Authenticated tender PDF page previews now exist via DocumentPreview.vue/tenders.py; this does not add Word layout/arbitrary attachments/OCR. New material/rendering capabilities require separate contracts |
-| G5 | No org audit-query/full usage/SSE/enforced task budgets/session revocation-renewal | Existing revisions/results/polling; local logout is not server revocation; no platform API reuse/invented endpoints |
+| G5 | No org audit-query/full usage/SSE/session revocation-renewal interfaces in this slice. | Existing revisions/results/polling; local logout is not server revocation; no platform API reuse/invented endpoints |
 
 Frontend adapters support specified business partial success/multipart/authorized binary/Retry-After; rules in [request boundaries](../notes/org-console.md#session-and-request-boundaries). Unexpected server failures return Result internal_error ([handling results](../guides/cli.md#handle-results)), rendered as failure, never unknown-response empty-list fallback.
 
@@ -272,7 +284,7 @@ JSON keeps exactly seven top-level keys: ok/command/data/items/warnings/cost/dur
 | 0 | Query/action/preview success or job accepted; only terminal results show execution complete |
 | 2 | Input/level/transition/missing confirmations/revision conflicts: locate/reread, no auto-write retry |
 | 3 | Retryable network/queue/rate-limit/wait timeout/pinned-input changes: retain IDs, honor Retry-After or repreview |
-| 4 | Identity/permission/unauthorized resource/nonretryable vendor/material integrity/insufficient balance: stop explicitly, never downgrade to success |
+| 4 | Permanent permission, provider configuration or resource-limit failure; correct the named blocker before retrying |
 | 5 | Assembly gaps/partial generation/later CLI combined-create failure: retain valid outputs/per-item reasons |
 
 Handle HTTP status/exit separately, no top-level exit_code. HTTP 2xx/ok=false renders partial outputs only for explicitly contracted completion=partial in detail/job result; unknown shapes are contract errors. Jobs may succeeded with business partial; inspect parsing/extraction data.error/terminal state beyond ok. Rejected extraction entries do not automatically use generation partial semantics. 401 clears matching sessions/returns login; known org disablement stops requests; 403 is not session expiry. Missing/cross-org objects show “不可访问”; 404 leaks no existence.
@@ -309,7 +321,7 @@ Implementation boundaries follow the table; real-API Playwright/performance acce
 | --- | --- | --- |
 | U1 tasks/extraction (implemented) | Org navigation/roles/create-upload-parse/official levels/history/requirements-originals | Creation/known-ID/G1 discovery connected; maintainers run acceptance |
 | U2 human review/drafts (implemented) | Pinned materials/evidence-commitment editing/domain decisions/atomic comply_only/three tables-comply-only-gaps/concurrency-invalidation | Existing card APIs; 1,200-entry/two-org-role end-to-end checks written, pending runs. Failed G2 requires pagination contract |
-| U3 drafting integration (implemented) | Fee/outbound previews/official levels/redaction, paid runs with hash/cap/human authorization | Real second-stage APIs/G3-B request binding; disabled before preview/on invalidation or admission blockers |
+| U3 drafting integration (implemented) | Outbound scope/resource previews, official reasoning levels and redaction; model runs bind the preview hash and human authorization. | Real second-stage APIs/G3-B request binding; disabled before preview/on invalidation or admission blockers |
 
 Suggested sequence U1→U2→U3; another checkout's progress need not block the human flow. Extra G4/G5 capabilities stay in their contracts; pages do not implicitly authorize backend expansion.
 
@@ -317,14 +329,15 @@ Suggested sequence U1→U2→U3; another checkout's progress need not block the 
 
 Playwright conditions follow; entry point [org-console.spec.js](../../web/e2e/org-console.spec.js). No real model calls. Use isolated PostgreSQL/API/real worker/storage/built Vue, with admin/bidder/technical/viewer in two orgs, platform identity/restricted token. CI fakes only external Providers with clearly labeled synthetic materials, never tested APIs/DB confirmation gates/job persistence. Authorized real samples have separate acceptance, without test-service uploads/public evidence copies.
 
-1. **Entry/identity:** login→tasks, admin billing, technical no create, viewer read-only. Reject platform sessions/org APIs, changed browser roles/cross-org deep links/IDs/inactive Membership; separately verify 401/403/404/org_inactive/rate-limit countdown.
+1. Reject platform sessions/org APIs, changed browser roles/cross-org deep links/IDs/inactive Membership; separately verify 401/403/404/org_inactive/rate-limit countdown.
 2. **Creation/recovery:** upload parseable real PDF/DOCX, worker parses, refresh rereads same objects. Retry only unfinished upload/dispatch stages without duplicate tasks; identical content shows duplicate. New browser sessions recover uploaded/unparsed/failed tasks via G1 without caches.
 3. **Levels/history:** dry-run lists two configured official levels/default without jobs/usage writes. Different-level runs preserve independent sets, identical inputs cache. Empty/unknown/unavailable/rejected citations display honestly; reextraction preserves old cards. PDF page/Word label quotes match verbatim.
 4. **Material boundaries:** pinned fields/textful certificate pages become Evidence, authenticated original preview allows checks. Reject expired/cross-org signatures-IDs/wrong pages-fields/inactive selections. Scans preview only, no fabricated text. Planned features cannot show implemented; URL/performance declarations cannot show captured pages/contracts.
 5. **Human gates:** bidder commercial/technical technical/admin classify-settings only; evidence without materials cannot confirm, evidence-free commitments confirm by domain, negative deviations/proof warnings remain. Unchecked evidence/warnings block confirmation. Browser-associated API verifies token/worker cannot bypass decisions; evidence:confirm/export token requests reject; unconfirmed materials never assemble.
 6. **Batches/concurrency:** competing same-revision edit-confirm permits one success; loser retains edits but clears review checks. Hundreds of comply_only items commit once; one unauthorized/conflicting item rolls all back. Persistent revisions/audits verify results. Success creates no confirmed responses; filter changes cannot submit hidden items.
 7. **Assembly/invalidation:** UI preview/assembly partitions rows/comply_only/gaps exactly once across selected job. Three-table sources/originals/confirmed text match. HTTP 2xx/ok=false partial shows valid results/gaps; all-gap/all-comply-only/negative cases follow exit semantics. Reopen/material replacement/citation repair makes old drafts stale, not current; history/snapshots immutable.
-8. **Second-stage integration:** unavailable endpoints produce no paid requests. Delivered UI previews/authorizes/runs with actual org-only pinned text, default redaction, no full PDFs/images/unselected materials. Usage/platform charges/retry-cache-cancel settlement match. Generation writes draft only, skips/fails changed inputs without overwriting confirmation. Unknown estimates display unknown; G3-B hash/cap checks use actual implemented boundaries, never claims to cap vendor bills.
+8. Delivered UI previews/authorizes/runs with actual org-only pinned text, default redaction, no full PDFs/images/unselected materials.
+Generation writes draft only, skips/fails changed inputs without overwriting confirmation.
 9. **Large lists/accessibility:** 1,200 mixed states/long quotes/multiple materials allow filtering/cross-page selection/keyboard review/role switches/position recovery with complete statistics/performance/no image bulk loads. Locate by accessible names/roles; verify focus/field errors/announcements/200% zoom/narrow screens/no console errors.
 10. **Isolation/CSRF/audit:** every read/write/preview/job endpoint tests A→B IDs/missing context and same-org cross-task/job/source joins. External forms/no Bearer cannot mutate; delayed old-org responses never render after switches. Restricted DB roles verify existing chains/future new FORCE RLS tables/composite FKs/A-B isolation. Atomic failures leave no success audits; logs no text/credentials.
 11. **CLI/reproducible artifacts:** compare real CLI --json/API seven keys/0-2-3-4-5 on identical isolated data, distinguishing accepted/completed/partial. New artifacts/org-console/<run-id>/ or controlled temporary dirs contain sanitized result.json/assertions/synthetic IDs-hashes/performance/key screenshots/rerun arguments. Save command shapes/environment names only, no passwords/Authorization/Cookie/signed URLs/raw network traces; no docs evidence.
@@ -332,11 +345,9 @@ Playwright conditions follow; entry point [org-console.spec.js](../../web/e2e/or
 ## Explicit exclusions
 
 - Complete 663-page bid assembly, letters/authorization, 164-page proposal generation, Word/PDF exports/template adaptation in this base contract.
-- Government electronic bidding, page seals/e-signature/encryption/bid upload/pricing strategy.
 - Fabricated reports/certificates/performance/social-security/vendor pages/replacement screenshots; automatic/batch confirmation/token exports.
 - New arbitrary contract/report/team libraries, web capture/Rust annotation/ui mock/cloud OCR/multimodal image sends.
 - Requirement edits/manual additions/automatic citation repair/multidocument-extraction merges/scoring/full-text check/risk cards/comments.
-- Complete resource management/org members/countersigning/task ACL/OIDC/server revocation/org-owned model-Provider configuration/memory/agent orchestration/SSE/new audit-usage queries/task budgets/payment extensions.
 - Deciding missing API URLs/fields/migrations/persistent preferences here; separate contracts precede integration.
 
 ## Decisions
@@ -348,6 +359,6 @@ All adopted recommended options are approved.
 | First delivery | A: U1/U2 human flow before second-stage integration; B: wait for generation together | **A**, existing business APIs validate review efficiency; U3 requires real endpoints |
 | G1 discovery | A: limited creation/known-ID delivery, reads before full console; B: reads/contracts before U1 | **A**; later implementation authorization covered small G1 reads, closing discovery under [recovery reads](../notes/org-console.md#recovery-reads) |
 | 1,000+ pagination | A: full APIs/frontend pagination, 1,200 acceptance; B: server pagination-summary-total contracts first | **A**, small cost/preserved APIs; failed performance immediately needs B, no truncation/lower completeness |
-| Drafting fee binding | A: advisory estimates/explicit paid consent/current backend caps; B: input-model-price/user cap binding first | **B** remains approved and is implemented through drafting-binding.md. U3 requires bound preview/hash/cap/human outbound authorization before paid execution |
+| Drafting input binding | Option B: exact preview hash plus explicit outbound-scope consent; changed input requires another preview. | **B** remains approved and is implemented through drafting-binding.md. |
 | Preview depth | A: original blocks/existing certificate PNG/authorized downloads; B: embedded PDF-Word positioning contracts first | **A** for this base scope, reusing bytes/CSP; later original PDF page previews follow their implementation, without arbitrary materials |
 | Review position | A: current-tab IDs/nontext filters/no tables; B: server cross-device positions | **A**, fewer competing business states; B needs Pydantic/interfaces/org_id NOT NULL/FORCE RLS/composite FKs/two-org acceptance |

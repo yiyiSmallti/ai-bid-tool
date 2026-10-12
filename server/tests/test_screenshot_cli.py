@@ -842,7 +842,7 @@ def test_analyze_wait_merges_terminal_result(tmp_path, monkeypatch, capsys):
                     "analysis_id": IDENTIFIER_3,
                     "completion": "complete",
                     "warnings": ["synthetic-warning"],
-                    "cost": {"llm_tokens": 12, "ocr_pages": 0, "usd": 0.01},
+                    "cost": {"llm_tokens": 12, "ocr_pages": 0},
                 },
             }
         }

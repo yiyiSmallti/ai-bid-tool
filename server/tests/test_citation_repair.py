@@ -898,12 +898,12 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
                 original["state"],
             )
             assert data["history"][-1]["revision_id"] == original["revision_id"]
-            assert current["eligibility"] == "needs_reconfirmation"
+            assert current["eligibility"] == "requirement_invalidated"
             changed_cards[page] = current
 
         invalid = (await api.get(f"/cards/{unlocatable['id']}", headers=header)).json()["data"]
         assert invalid["state"] == "pending_review"
-        assert invalid["eligibility"] == "needs_reconfirmation"
+        assert invalid["eligibility"] == "requirement_invalidated"
         invalid_source = await api.get(
             f"/v4/requirements/{requirements[5]['id']}/review", headers=header
         )
@@ -916,7 +916,7 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         assert normalized_after["state"] == "confirmed"
         # The quote stayed exact, but this reviewed round also pinned the full
         # requirement before its provenance and protected text were changed.
-        assert normalized_after["eligibility"] == "needs_reconfirmation"
+        assert normalized_after["eligibility"] == "requirement_invalidated"
         assert normalized_after["revision_id"] == normalized["revision_id"]
         strict_gate = await card_action(api, reviewer, invalid, "confirm", reviewed_evidence_ids=[])
         assert strict_gate.status_code == 409

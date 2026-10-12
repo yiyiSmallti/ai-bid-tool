@@ -359,9 +359,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     async def annotate(
         asset_id: UUID, body: ScreenshotAnnotate, ctx=Depends(context, scope="function")
     ):
-        data, job = await screenshot_jobs.submit_render(
-            ctx[0], ctx[1], asset_id, body, storage, settings.billing_currency
-        )
+        data, job = await screenshot_jobs.submit_render(ctx[0], ctx[1], asset_id, body, storage)
         await dispatch(ctx[0], ctx[1], job)
         return result("screenshot annotate", data)
 

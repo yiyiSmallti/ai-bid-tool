@@ -8,7 +8,6 @@ from app.providers.disabled import DisabledLLM
 from app.providers.llm import resolve_llm
 from app.providers.local_ocr import LocalOCR
 from app.providers.storage import create_storage
-from app.services import billing
 
 
 async def run():
@@ -18,7 +17,6 @@ async def run():
     await get_connections(settings).reader.verify()
     db = Database(settings)
     await db.verify_role()
-    await billing.verify_currency(db, settings.billing_currency)
     queue = Queue(settings)
 
     async def resolve(session, job=None):

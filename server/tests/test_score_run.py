@@ -2,7 +2,7 @@
 
 Failure inventory: dry-run writes/calls, unconfirmed/superseded rubric, stale
 DraftRun, cross-org routes, redaction disabled/changed, malformed citations,
-bounds, refusal/truncation, cancelled/expired/taken-over attempts and billing
+bounds, refusal/truncation, cancelled/expired/taken-over attempts and usage
 failure must not bypass confirmation, publication or accounting fences.
 """
 
@@ -280,7 +280,7 @@ async def test_score_invalid_outputs_bill_once(score_case, monkeypatch, mode):
                 )
             ).all()
         )
-        assert len(usages) == len(case["score_vendor"].requests) == 1 and usages[0].charge > 0
+        assert len(usages) == len(case["score_vendor"].requests) == 1
     if mode not in {"refused", "truncated"}:
         assert terminal["result"]["completion"] == "partial"
         assert terminal["result"]["estimated_total"] is None

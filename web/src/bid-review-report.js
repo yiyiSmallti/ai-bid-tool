@@ -8,7 +8,7 @@ export const reportSections = [
   ["evidence", "六、证据核对"], ["remediation", "七、补救清单"],
   ["methodology", "八、检验说明"],
 ].map(([key, title]) => ({ key, title }));
-export const reportRequest = (method, path, body, options = {}) => orgRequest(method, path, body, { ...options, contractVersion: 4 });
+export const reportRequest = (method, path, body, options = {}) => orgRequest(method, path, body, { ...options});
 export const invalidReport = () => new ApiError(502, "invalid_response", "报告响应无法核验");
 const hash = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 export function checkedReportPage(result, taskId, reviewId, section, snapshotId = null) {

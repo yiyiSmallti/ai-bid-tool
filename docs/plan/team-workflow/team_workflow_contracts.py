@@ -1,22 +1,15 @@
-"""Approved team workflow contracts; importing this module registers no runtime handlers.
+"""Approved task access, board, discussion and human co-sign contracts.
 
-The transport uses the shared Result/CONTRACT_VERSION 4.0 from the budget branch. Identity, org context and all
-actor IDs come from authentication, never mutation bodies. Services must recheck
-active org Membership, task access, org-role authority and archive state in the
-caller transaction; task roles cannot grant org scopes or human review authority.
+Transport uses the current shared Result/Cost contract.
 """
 
-from collections.abc import AsyncIterator
-from typing import Annotated, Literal, Protocol
+from typing import Annotated, Literal
 from uuid import UUID
 
-from app.schemas.budget_contracts import TaskBudgetView as TaskBudgetStatus
-from app.schemas.contracts import Category, Contract, Cost, Result, Source
-from app.schemas.response_card_contracts import CardAction, CardState, CardView, ReviewDomain
-from app.schemas.screenshot_contracts import Sha256
-from app.services.auth import Identity
 from pydantic import AwareDatetime, Field, StringConstraints, field_validator, model_validator
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.schemas.contracts import Category, Contract
+from app.schemas.response_card_contracts import CardAction, CardState, ReviewDomain
 
 type TaskRole = Literal["owner", "contributor", "reviewer", "observer"]
 type MemberRole = Literal["contributor", "reviewer", "observer"]
@@ -25,6 +18,9 @@ type BoardBucket = Literal[
     "gap", "draft_card", "pending_review", "needs_material", "confirmed", "comply_only"
 ]
 type BoardBlocker = Literal[
+    "annotation_source_stale",
+    "annotation_release_pending",
+    "annotation_release_failed",
     "missing_card",
     "unclassified",
     "invalid_citation",
@@ -45,12 +41,13 @@ type BoardBlocker = Literal[
     "unassigned",
     "assignee_unavailable",
     "job_failed",
-    "insufficient_balance",
-    "spend_cap_reached",
-    "job_charge_limit_exceeded",
     "job_call_limit_exceeded",
 ]
 type BoardNextAction = Literal[
+    "inspect_annotated_material",
+    "confirm_annotated_material",
+    "retry_annotation_release",
+    "replace_annotation_source",
     "create_card",
     "edit_card",
     "classify",
@@ -65,7 +62,6 @@ type BoardNextAction = Literal[
     "assign",
     "find_reviewer",
     "view_job",
-    "resolve_budget",
     "prototype_decide",
     "unarchive",
 ]
@@ -95,6 +91,7 @@ type WorkflowAction = Literal[
     "card_changed",
     "job_changed",
 ]
+type Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 type Revision = Annotated[int, Field(strict=True, ge=1)]
 type Cursor = Annotated[str, Field(min_length=1, max_length=1024)]
 type Reason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
@@ -345,11 +342,16 @@ class CoSignSummary(Contract):
 
     @model_validator(mode="after")
     def domain_partition(self):
-        for field in ("required_domains", "signed_domains", "pending_domains"):
-            _unique(getattr(self, field), field)
         required, signed, pending = map(
             set, (self.required_domains, self.signed_domains, self.pending_domains)
         )
+        for field, domains in (
+            ("required_domains", required),
+            ("signed_domains", signed),
+            ("pending_domains", pending),
+        ):
+            if len(getattr(self, field)) != len(domains):
+                raise ValueError(f"{field} cannot contain duplicates")
         if signed & pending or signed | pending != required:
             raise ValueError("signed and pending must partition the required domains")
         if self.status == "not_required":
@@ -390,6 +392,7 @@ class CoSignRoundView(Contract):
     required_domains: Domains = Field(min_length=1)
     purpose: Literal["response", "disposition"]
     intended_disposition: Literal["respond", "comply_only"]
+    disposition_reason: Reason | None = None
     prior_card_state: CardState
     state: Literal["open", "complete", "invalidated"]
     created_at: AwareDatetime
@@ -551,7 +554,7 @@ class BoardQuery(Contract):
 
 
 class BoardActionTarget(Contract):
-    kind: Literal["task", "requirement", "card", "job", "thread", "evidence"]
+    kind: Literal["task", "requirement", "card", "job", "thread", "evidence", "annotation"]
     id: UUID
 
 
@@ -707,7 +710,6 @@ class BoardData(Contract):
     counts: BoardCounts
     matching: int = Field(strict=True, ge=0)
     returned: int = Field(strict=True, ge=0, le=100)
-    budget: TaskBudgetStatus
     next_cursor: Cursor | None = None
     event_cursor: Cursor
     as_of: AwareDatetime
@@ -737,20 +739,6 @@ class BoardView(BoardData):
         if len(self.rows) != self.returned:
             raise ValueError("returned must equal page row count")
         return self
-
-
-class BoardRequirementDetail(Contract):
-    org_id: UUID
-    task_id: UUID
-    extraction_job_id: UUID
-    requirement_id: UUID
-    source: Source
-    assignment: RequirementAssignmentView
-    card: CardView | None
-    co_sign_policy: RequirementCoSignPolicyView | None
-    co_sign_review: CoSignReviewView | None
-    threads: list[CommentThreadView] = Field(max_length=100)
-    next_thread_cursor: Cursor | None = None
 
 
 class BoardChanged(Contract):
@@ -997,199 +985,3 @@ class SignoffsView(Contract):
         if len(self.items) != self.data.returned:
             raise ValueError("returned must equal the signature history item count")
         return self
-
-
-type TeamWorkflowData = (
-    TaskWorkflowData
-    | TaskProgressData
-    | TaskMemberData
-    | PageData
-    | TaskRuleData
-    | AssignmentData
-    | CommentData
-    | ThreadCreatedData
-    | CoSignPolicyData
-    | CoSignData
-    | ReviewRoundData
-    | SignoffsData
-    | BoardData
-    | EventReplayData
-)
-
-type TeamWorkflowItem = (
-    TaskMemberView
-    | BoardJobView
-    | MemberCandidateView
-    | BoardRow
-    | BoardActivityView
-    | CommentThreadView
-    | CommentMessageView
-    | CoSignSignatureView
-    | TaskEventView
-)
-type TeamWorkflowItems = Annotated[list[TeamWorkflowItem], Field(max_length=100)]
-
-
-class TeamWorkflowResultAdapter(Protocol):
-    """Serialize typed metadata into Result.data and typed page entries into Result.items.
-
-    These operations make no paid calls; supplied Cost is actual zero. Enforce the
-    1 MiB board Result limit before emission; do not truncate counts or page data.
-    """
-
-    def result(
-        self,
-        command: str,
-        data: TeamWorkflowData,
-        *,
-        items: TeamWorkflowItems,
-        cost: Cost,
-        duration_ms: int,
-    ) -> Result: ...
-
-
-class TaskWorkflowService(Protocol):
-    async def access(self, actor: Identity, task_id: UUID) -> TaskAccessView: ...
-    async def members(
-        self, actor: Identity, task_id: UUID, query: PageQuery
-    ) -> PageView[TaskMemberView]: ...
-    async def member_candidates(
-        self, actor: Identity, task_id: UUID, query: PageQuery
-    ) -> PageView[MemberCandidateView]: ...
-    async def set_member(
-        self, actor: Identity, task_id: UUID, user_id: UUID, command: TaskMemberSet
-    ) -> TaskMemberData: ...
-    async def remove_member(
-        self, actor: Identity, task_id: UUID, user_id: UUID, command: WorkflowMutation
-    ) -> TaskWorkflowData: ...
-    async def handover(
-        self, actor: Identity, task_id: UUID, command: TaskOwnerHandover
-    ) -> TaskWorkflowData: ...
-    async def archive(
-        self, actor: Identity, task_id: UUID, command: TaskArchiveSet
-    ) -> TaskWorkflowData: ...
-    async def set_rule(
-        self, actor: Identity, task_id: UUID, command: TaskRuleSet
-    ) -> TaskRuleData: ...
-    async def rule(self, actor: Identity, task_id: UUID) -> TaskRuleView: ...
-
-
-class TeamBoardReadProvider(Protocol):
-    """PostgreSQL read model; authorize before read, pin one successful extraction job."""
-
-    async def board(self, actor: Identity, task_id: UUID, query: BoardQuery) -> BoardView: ...
-    async def progress(
-        self, actor: Identity, task_id: UUID, query: TaskProgressQuery
-    ) -> TaskProgressView: ...
-    async def detail(
-        self, actor: Identity, task_id: UUID, extraction_job_id: UUID, requirement_id: UUID
-    ) -> BoardRequirementDetail: ...
-    async def activity(
-        self, actor: Identity, task_id: UUID, query: PageQuery
-    ) -> PageView[BoardActivityView]: ...
-
-
-class TeamCollaborationService(Protocol):
-    """Session-only comments/assignment; request UUID binds actor, route and body hash.
-
-    Active observers may comment with proposed card:comment session authority;
-    mentions/assignees must be active task members in the same org. Comments are
-    immutable and treated only as plain text; their bodies never enter
-    event payloads, activity summaries or audit logs.
-    """
-
-    async def assign(
-        self,
-        actor: Identity,
-        task_id: UUID,
-        extraction_job_id: UUID,
-        requirement_id: UUID,
-        command: RequirementAssignmentSet,
-    ) -> AssignmentData: ...
-    async def create_thread(
-        self, actor: Identity, task_id: UUID, card_id: UUID, command: CommentThreadCreate
-    ) -> ThreadCreatedData: ...
-    async def reply(
-        self,
-        actor: Identity,
-        task_id: UUID,
-        card_id: UUID,
-        thread_id: UUID,
-        command: CommentReplyCreate,
-    ) -> CommentData: ...
-    async def threads(
-        self, actor: Identity, task_id: UUID, card_id: UUID, query: PageQuery
-    ) -> PageView[CommentThreadView]: ...
-    async def comments(
-        self, actor: Identity, task_id: UUID, card_id: UUID, thread_id: UUID, query: PageQuery
-    ) -> PageView[CommentMessageView]: ...
-
-
-class CoSignService(Protocol):
-    """Real domain-authorized humans sign; never synthesize Identity or worker authority.
-
-    Response signatures require pending_review. Disposition signatures preserve
-    prior card state and never confirm Evidence; only the final signature applies
-    disposition. Partial signatures leave the exact card revision unchanged and
-    never create new Evidence confirmation; old historical confirmation persists.
-    Final confirmation alone appends one card revision and confirms its Evidence
-    atomically through an explicit selected-domain authorization helper. Changed
-    inputs/policy or actual signer-authority loss invalidates the round; unrelated
-    access-epoch changes trigger revalidation, not blanket invalidation. Signatures
-    never independently authorize export.
-    """
-
-    async def set_policy(
-        self,
-        actor: Identity,
-        task_id: UUID,
-        extraction_job_id: UUID,
-        requirement_id: UUID,
-        command: RequirementCoSignPolicySet,
-    ) -> CoSignPolicyData: ...
-    async def policy(
-        self, actor: Identity, task_id: UUID, extraction_job_id: UUID, requirement_id: UUID
-    ) -> RequirementCoSignPolicyView: ...
-    async def review(self, actor: Identity, task_id: UUID, card_id: UUID) -> CoSignReviewView: ...
-    async def signoffs(
-        self, actor: Identity, task_id: UUID, card_id: UUID, query: PageQuery
-    ) -> SignoffsView: ...
-    async def open(
-        self, actor: Identity, task_id: UUID, card_id: UUID, command: CoSignOpen
-    ) -> ReviewRoundData: ...
-    async def confirm(
-        self, actor: Identity, task_id: UUID, card_id: UUID, command: CoSignConfirm
-    ) -> CoSignData: ...
-    async def sign_disposition(
-        self, actor: Identity, task_id: UUID, card_id: UUID, command: CoSignDispositionSign
-    ) -> CoSignData: ...
-    async def sign(
-        self, actor: Identity, task_id: UUID, card_id: UUID, command: CoSignSignRequest
-    ) -> CoSignData: ...
-
-
-class DurableTaskEventStore(Protocol):
-    """Append in the caller transaction, lock sequence head last, never commit internally.
-
-    Persist a structured invalidation with each mutation; publish after commit.
-    Reauthorize replay and every live delivery against Membership/task access.
-    Cursors use authenticated encryption or random server lookup handles, bound
-    to org/task/sequence/visibility. Neither raw sequences nor readable base64
-    signed cursor payloads appear in public event frames or Result metadata;
-    invalid/foreign cursors fail, and retention expiry returns reset_required.
-    Heartbeats/reset controls are not persisted business events or sequence IDs.
-    """
-
-    async def append(
-        self,
-        transaction: AsyncSession,
-        actor: Identity,
-        task_id: UUID,
-        payload: TaskEventPayload,
-    ) -> StoredTaskEvent: ...
-    async def replay(
-        self, actor: Identity, task_id: UUID, query: EventReplayQuery
-    ) -> EventReplayView: ...
-    def stream(
-        self, actor: Identity, task_id: UUID, after: Cursor | None
-    ) -> AsyncIterator[TaskEventView | StreamControl]: ...

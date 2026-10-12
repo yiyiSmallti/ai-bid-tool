@@ -89,10 +89,10 @@ onBeforeUnmount(() => { serial++; controller?.abort(); invalidate(); detail.valu
       </el-table>
     </el-card>
     <el-card v-if="canPrepare" class="section" shadow="never"><template #header><h3>本地准备</h3></template>
-      <p>解析与分页渲染生成固定页面清单，合计最多 1,000 页，并对原件运行本地数字签名验证与签章条款扫描；不运行 OCR 或模型。准备费用为 0。</p>
+      <p>解析与分页渲染生成固定页面清单，合计最多 1,000 页，并对原件运行本地数字签名验证与签章条款扫描；不运行 OCR 或模型。准备不调用模型。</p>
       <el-button type="primary" plain :loading="busy" @click="inspect">预检本地准备</el-button>
       <div v-if="preview" class="preview section" role="status">
-        <p>本地处理 · 费用 0 · 预检有效至 {{ formatTime(preview.expires_at) }}</p>
+        <p>本地处理 · 预检有效至 {{ formatTime(preview.expires_at) }}</p>
         <p>输入哈希 <code>{{ preview.input_hash }}</code> · 预检未创建作业或保存页面。</p>
         <el-alert v-for="blocker in preview.admission_blockers" :key="blocker" :title="reviewError({code: blocker})" type="warning" :closable="false" />
         <el-checkbox v-if="['failed', 'cancelled'].includes(detail.preparation?.status)" v-model="retry" :disabled="busy">明确重试本地准备</el-checkbox>

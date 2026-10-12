@@ -389,8 +389,6 @@ async def show_run(
             "metrics": attempt.metrics if attempt and attempt.metrics else None,
             "issues": issues,
             "usage_ids": [],
-            "charge": None,
-            "charge_currency": None,
         }
     ).model_dump(mode="json")
 
@@ -465,19 +463,17 @@ async def submit(
             policy_revision=revision,
             ready=not issues,
             issues=issues,
-            estimated_cost=Cost(usd=0),
+            estimated_cost=Cost(),
             estimate_basis="no_vendor_call",
         ).model_dump(mode="json")
-        from app.services import budget_preflight
+        from app.services import preflight as preflight_service
 
-        settings = session.info.get("memory_settings")
-        return await budget_preflight.attach(
+        return await preflight_service.attach(
             session,
             data,
             command="sandbox render" if prototype else "sandbox capture",
             task_id=task_id,
             input_hash=request_hash,
-            currency=settings.billing_currency if settings else "USD",
             planned_calls=0,
         ), None
     if body.expected_request_hash != request_hash:

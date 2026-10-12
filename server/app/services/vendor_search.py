@@ -98,9 +98,9 @@ async def submit(session, actor, task_id, body, provider):
     input_hash = images.digest(manifest)
     blocker = None if provider else "search_unavailable"
     if body.dry_run:
-        from app.services import budget_preflight
+        from app.services import preflight as preflight_service
 
-        return await budget_preflight.attach(
+        return await preflight_service.attach(
             session,
             {
                 "dry_run": True,

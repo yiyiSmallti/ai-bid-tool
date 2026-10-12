@@ -17,11 +17,12 @@ report. `bid check list` and `bid check show` read reports; a responsible bidder
 or technical reviewer uses `bid check decide` and `bid check history` to append
 and inspect a dismiss or reopen decision.
 
-The default mode is `rules`. Add `--mode combined` to assess contradictions,
-weak responses and material coverage with the configured model. Combined checks
+The default mode is `rules`.
+Add `--mode combined` to assess contradictions,
+weak responses and material coverage with the configured model.
+Combined checks
 require redaction to be enabled; dry-run reports `redaction_required` when it is
-off, and submission refuses the call without changing the setting. A dry run makes no job, audit, usage, balance or report write
-and performs no provider call.
+off, and submission refuses the call without changing the setting.
 
 ## How it works
 
@@ -33,7 +34,7 @@ comply-only (须遵守) or gap row. Candidate card text is absent from the fixed
 only verbatim confirmed response fields and confirmed material can enter it.
 Submission must return the preview hash, and the worker recomputes the input and
 authorization before each model admission and publication. Combined input identity
-also fixes the provider configuration, reasoning level, prices and prompt/schema/
+also fixes the provider configuration, reasoning level and prompt/schema/
 adapter versions. Tenant configuration takes precedence over the platform catalog;
 a worker never substitutes an environment model or a different catalog revision.
 
@@ -58,13 +59,14 @@ batched without splitting fields or truncating text; a single item above the
 configured context budget fails explicitly. Tender and bid instructions remain
 data under a fixed system prompt.
 
-Only confirmed response rows with bid text enter those requests. Gap and comply-only
+Only confirmed response rows with bid text enter those requests.
+Gap and comply-only
 rows retain deterministic coverage and findings with `semantic_status=not_requested`
-and no semantic outcome, reason or citations. They do not by themselves make a
-report partial. Preview semantic item counts, request bounds and worker call plans
-use this same scope. With no response rows, combined runs have zero planned calls,
-zero estimated cost and charge, and no usage or reservations; deterministic unknown
-observations can still make the report partial.
+and no semantic outcome, reason or citations.
+They do not by themselves make a
+report partial.
+Preview semantic item counts, request bounds and worker call plans
+use this same scope.
 
 The model returns `no_risk_found`, `risk` or `unknown` for each requested ID.
 Missing, duplicate and unknown IDs cannot imply a pass. Each accepted citation
@@ -78,15 +80,12 @@ Unknown remains unassessed. Requirements containing masked values remain
 containing sensitive literals or unknown placeholders are rejected locally.
 
 Every combined call executes inside `JobExecution.activate` through
-`accounted_call`. The existing ledger owns admission, reservations, `UsageRecord`
-and `billing.charge_usage`; returned provider usages only corroborate the ledger.
-Refusal, truncation and late cancelled calls retain incurred usage. Dry-run derives
-an exact-request first-pass upper bound with no writes; unknown prices remain
-null. Per-call balance, job ceiling and `--max-charge` checks apply again at actual
-admission. Org-owned keys retain vendor usage with zero platform charge and a
-warning that the cap does not bound the vendor bill.
+`accounted_call`.
+Refusal, truncation and late cancelled calls retain incurred usage.
+Dry-run derives
+planned calls and resource estimates for the exact request with no writes.
 
-A provider or later budget stop may publish completed deterministic coverage plus
+A provider or later call-limit stop may publish completed deterministic coverage plus
 unassessed semantic items as partial. Cancellation, lease loss, changed input and
 accounting failures publish nothing. Reports keep all job usage references,
 including earlier attempts, without resettling those usages.

@@ -178,29 +178,27 @@ def issue_cursor(session, actor, purpose, parent, normalized, anchor):
     return result
 
 
-def encoded_result(
-    command: str, data: Contract, items: list[Contract], currency: str, duration_ms=0
-):
+def encoded_result(command: str, data: Contract, items: list[Contract], duration_ms=0):
     return Result(
         ok=True,
         command=command,
         data=data.model_dump(mode="json"),
         items=[item.model_dump(mode="json") for item in items],
         warnings=[],
-        cost=Cost(billing_currency=currency),
+        cost=Cost(),
         duration_ms=duration_ms,
     )
 
 
-def page_result(command: str, page: Page, currency: str, duration_ms: int) -> Result:
-    result = encoded_result(command, page.data, page.items, currency, duration_ms)
+def page_result(command: str, page: Page, duration_ms: int) -> Result:
+    result = encoded_result(command, page.data, page.items, duration_ms)
     if result_bytes(result) > PAGE_BYTE_LIMIT:
         too_large()
     return result
 
 
-def detail_result(command: str, data: Contract, currency: str, duration_ms: int) -> Result:
-    result = encoded_result(command, data, [], currency, duration_ms)
+def detail_result(command: str, data: Contract, duration_ms: int) -> Result:
+    result = encoded_result(command, data, [], duration_ms)
     if result_bytes(result) > DETAIL_BYTE_LIMIT:
         too_large()
     return result
@@ -226,7 +224,6 @@ def build_page(session, actor, purpose, parent, normalized, items, anchors, more
             COMMANDS[purpose],
             data,
             items[:retained],
-            settings_for(session).billing_currency,
             9223372036854775807,
         )
         if result_bytes(result) <= PAGE_BYTE_LIMIT:

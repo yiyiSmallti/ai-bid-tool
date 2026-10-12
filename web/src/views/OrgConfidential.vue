@@ -87,7 +87,7 @@ async function saveValue() {
 async function reveal(value) {
   if (busy.value || !canReveal(value)) return; clearReveal(); const run = detailGeneration; busy.value = true; error.value = "";
   try { await authority(); if (run !== detailGeneration || !canReveal(value)) return;
-    const result = await orgRequest("POST", `/confidential-values/${value.value_id}/reveal`, undefined, { contractVersion: 4 });
+    const result = await orgRequest("POST", `/confidential-values/${value.value_id}/reveal`, undefined, {});
     if (run !== detailGeneration || stopped || document.hidden) return; shown.value = checkConfidentialReveal(result.data, value); revealTimer = setTimeout(clearReveal, 30000);
   } catch (exc) { if (exc.name !== "AbortError") { deny(exc); error.value = safeFailure(exc); } } finally { busy.value = false; }
 }
@@ -111,7 +111,7 @@ async function saveMetadata(archive = null) {
   busy.value = true; error.value = "";
   try { await authority(); if (!writable.value || metadata.value !== target) return;
     const body = { expected_revision: target.revision, ...(archive === null ? { label: labelDraft.value.trim() } : { archived: archive }) };
-    const result = await orgRequest("POST", `/confidential-fields/${target.id}/revisions`, body, { contractVersion: 4 }); checkConfidentialField(result.data, target.id);
+    const result = await orgRequest("POST", `/confidential-fields/${target.id}/revisions`, body, {}); checkConfidentialField(result.data, target.id);
     metadata.value = null; labelDraft.value = ""; notice.value = `字段元数据已保存 · 并发修订 ${result.data.revision}`; await resetList();
   } catch (exc) { deny(exc); if (exc.code === "revision_conflict" && !revoked.value) { try { metadata.value = await exactField(target.id, target.key); await resetList(); } catch (readError) { deny(readError); } error.value = "字段已变化；未保存名称已保留，请核对最新状态后主动保存。"; } else error.value = errorText(exc); }
   finally { busy.value = false; }
@@ -119,7 +119,7 @@ async function saveMetadata(archive = null) {
 async function create() {
   if (!writable.value || busy.value) return; busy.value = true; error.value = "";
   try { await authority(); if (!writable.value || !creating.value) return;
-    const result = await orgRequest("POST", "/confidential-fields", { ...form.value, label: form.value.label.trim() }, { contractVersion: 4 }); checkConfidentialField(result.data);
+    const result = await orgRequest("POST", "/confidential-fields", { ...form.value, label: form.value.label.trim() }, {}); checkConfidentialField(result.data);
     creating.value = false; form.value = blankConfidentialField(); mode.value = "fields"; notice.value = "已登记保密字段；键名、类别和范围固定"; await resetList();
   } catch (exc) { deny(exc); error.value = errorText(exc); } finally { busy.value = false; }
 }

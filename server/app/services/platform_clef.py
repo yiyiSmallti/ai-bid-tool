@@ -148,10 +148,6 @@ class PlatformClefService:
             ) from None
 
     async def set(self, actor: PlatformOperator, body: ClefSettingsSet) -> ClefSettingsData:
-        if body.currency != self.settings.billing_currency:
-            raise ServiceError(
-                "invalid_input", "Clef price must use the deployment billing currency", 422, 2
-            )
         config = await self._manage(actor, "set", body.model_dump(mode="json"))
         blockers = await _readiness(self.settings, config)
         if not config.enabled:

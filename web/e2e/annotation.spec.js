@@ -10,7 +10,7 @@ test.use({trace:"on"});
 const output=resolve("../data/work/annotation-acceptance");
 const path=`/app/org/tasks/${ids.task}/cards/${ids.card}/annotation?job=${ids.extract}`;
 async function select(page){await page.getByRole("button",{name:"选择证书页：合成证书.pdf 第 1 页",exact:true}).click();await expect(page.getByAltText("证书来源原页")).toBeVisible();}
-async function artifact(page,state,name){state.verify();mkdirSync(output,{recursive:true});await page.screenshot({path:join(output,`${name}.png`),fullPage:true});writeFileSync(join(output,`${name}.json`),JSON.stringify({seed:"annotation-mocked-v1",scenario:name,requests:state.requests,max_image_requests:state.maxImages,checks:["bounded-pages","explicit-reviewed-hashes","no-worker-card-write","no-paid-requests"],replay:"E2E_BASE_URL=http://127.0.0.1:8000 E2E_STATIC_DIR=$PWD/web/dist npm --prefix web run e2e -- annotation.spec.js --output=../data/work/annotation-acceptance/playwright"},null,2));}
+async function artifact(page,state,name){state.verify();mkdirSync(output,{recursive:true});await page.screenshot({path:join(output,`${name}.png`),fullPage:true});writeFileSync(join(output,`${name}.json`),JSON.stringify({seed:"annotation-mocked-v1",scenario:name,requests:state.requests,max_image_requests:state.maxImages,checks:["bounded-pages","explicit-reviewed-hashes","no-worker-card-write","no-provider-requests"],replay:"E2E_BASE_URL=http://127.0.0.1:8000 E2E_STATIC_DIR=$PWD/web/dist npm --prefix web run e2e -- annotation.spec.js --output=../data/work/annotation-acceptance/playwright"},null,2));}
 test("explicit preview creates actual candidate then human saves exact content-region evidence", async ({ page }) => {
   const state = await annotationFixture(page);
   await page.goto(path);

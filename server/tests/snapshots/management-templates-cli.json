@@ -2,15 +2,12 @@
   "local:HTTP404": {
     "command": "resource template lifecycle set",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -27,15 +24,12 @@
   "local:HTTP409": {
     "command": "resource template lifecycle set",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -52,15 +46,12 @@
   "local:HTTP429": {
     "command": "resource template lifecycle set",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -77,15 +68,12 @@
   "local:HTTP503": {
     "command": "resource template lifecycle set",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -102,15 +90,12 @@
   "local:browse": {
     "command": "resource template browse",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "as_of": "2026-10-06T00:00:00Z",
@@ -153,15 +138,12 @@
   "local:empty:browse": {
     "command": "resource template browse",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "as_of": "2026-10-06T00:00:00Z",
@@ -178,15 +160,12 @@
   "local:empty:history": {
     "command": "resource template history",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "as_of": "2026-10-06T00:00:00Z",
@@ -203,15 +182,12 @@
   "local:empty:lifecycle history": {
     "command": "resource template lifecycle history",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "as_of": "2026-10-06T00:00:00Z",
@@ -228,15 +204,12 @@
   "local:history": {
     "command": "resource template history",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "as_of": "2026-10-06T00:00:00Z",
@@ -268,15 +241,12 @@
   "local:lifecycle history": {
     "command": "resource template lifecycle history",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "as_of": "2026-10-06T00:00:00Z",
@@ -310,15 +280,12 @@
   "local:lifecycle set": {
     "command": "resource template lifecycle set",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "event": {
@@ -351,15 +318,12 @@
   "local:show": {
     "command": "resource template show",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "actions": [
@@ -417,15 +381,12 @@
   "remote:HTTP404": {
     "command": "resource template lifecycle set",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -442,15 +403,12 @@
   "remote:HTTP409": {
     "command": "resource template lifecycle set",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -467,15 +425,12 @@
   "remote:HTTP429": {
     "command": "resource template lifecycle set",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -492,15 +447,12 @@
   "remote:HTTP503": {
     "command": "resource template lifecycle set",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -517,15 +469,12 @@
   "remote:browse": {
     "command": "resource template browse",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "as_of": "2026-10-06T00:00:00Z",
@@ -568,15 +517,12 @@
   "remote:empty:browse": {
     "command": "resource template browse",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "as_of": "2026-10-06T00:00:00Z",
@@ -593,15 +539,12 @@
   "remote:empty:history": {
     "command": "resource template history",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "as_of": "2026-10-06T00:00:00Z",
@@ -618,15 +561,12 @@
   "remote:empty:lifecycle history": {
     "command": "resource template lifecycle history",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "as_of": "2026-10-06T00:00:00Z",
@@ -643,15 +583,12 @@
   "remote:history": {
     "command": "resource template history",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "as_of": "2026-10-06T00:00:00Z",
@@ -683,15 +620,12 @@
   "remote:lifecycle history": {
     "command": "resource template lifecycle history",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "as_of": "2026-10-06T00:00:00Z",
@@ -725,15 +659,12 @@
   "remote:lifecycle set": {
     "command": "resource template lifecycle set",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "event": {
@@ -766,15 +697,12 @@
   "remote:show": {
     "command": "resource template show",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "actions": [

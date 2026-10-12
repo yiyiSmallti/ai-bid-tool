@@ -5,14 +5,14 @@ kind: plan
 # Team workflow: task membership, dashboard, live progress, and co-sign
 
 Status: **approved; slices 1–3 implemented**. Covers [roadmap](roadmap.md) F06,
-U01, U02, and B07. The owner approved every default in [Decisions](#decisions),
+U01, U02, and B07. The owner approved every default in [Decisions](#decisions-已定决定),
 including the co-sign amendment to [ADR 0005](../adr/0005-human-confirmed-responses.md).
 Slice 1 supplies task membership, archival, the read board and durable progress.
 Slice 2 supplies requirement assignment and immutable card discussion with in-task
 mentions. Slice 3 supplies co-sign policy, input-bound human review rounds and
 complete-round database, service and consumer gates. The [contract module](team-workflow/team_workflow_contracts.py)
 records the approved interfaces; [runtime schemas](../../server/app/schemas/team_workflow.py)
-implement the approved workflow interfaces with the shared Result 4.0 budget types.
+implement the approved workflow interfaces with the shared Result 5.0 resource types.
 The runtime round view additionally exposes the authorized `disposition_reason`
 from its encrypted record so every signer can inspect the same intended decision.
 See [Team workflow](../notes/team-workflow.md) for the mechanism and cutover procedure.
@@ -32,12 +32,11 @@ It adds task membership, assignment, card discussions, and co-sign (会签) by r
 domain (职责). It preserves the separation between a model proposal, human
 confirmation (人工确认), table assembly (组表), and export authorization.
 
-Exclude org account provisioning/invitations, custom review-domain vocabularies,
-electronic signatures, external messaging/email, workflow designers, deadlines per
-card, multiple extraction-set merging, shared cross-org tasks, new paid Provider
-calls, and automatic approval or reassignment. Mentions notify inside the task
-only. Comment text never becomes evidence, response (响应) text, memory, or model
-input automatically. Budget enforcement belongs to [budget.md](budget.md).
+Mentions notify inside the task
+only.
+Comment text never becomes evidence, response (响应) text, memory, or model
+input automatically.
+Resource usage follows [usage-only decision](../adr/0011-remove-billing.md).
 
 ## Code basis and differences from the design
 
@@ -46,15 +45,17 @@ in [Team workflow](../notes/team-workflow.md#how-it-works).
 
 | Basis | Integration contract |
 | --- | --- |
-| [entities.py](../../server/app/models/entities.py), `Task`, `Membership`, `ApiToken`; [documents.py](../../server/app/services/documents.py), `create_task`, `list_tasks`, `upload` | Tasks have a creator, deadline, and `budget_usd`, but no members, owner, lifecycle, or task ACL. `list_tasks` is org-wide after `task:read`. Add membership/lifecycle checks to these existing entry points, not just new board routes. |
+| [entities.py](../../server/app/models/entities.py), `Task`, `Membership`, `ApiToken`; [documents.py](../../server/app/services/documents.py), `create_task`, `list_tasks`, `upload` |`list_tasks` is org-wide after `task:read`.
+Add membership/lifecycle checks to these existing entry points, not just new board routes. |
 | [auth.py](../../server/app/services/auth.py), `Identity`, `authenticate`, `membership`, `ROLE_SCOPES`, `SCOPES`; [api/main.py](../../server/app/api/main.py), `context` | Bearer credentials plus `X-Org-Id` establish an active org membership and transaction context. Task roles must intersect these grants. Org RLS alone does not authorize a particular task. |
 | [response_cards.py](../../server/app/services/response_cards.py), `access`, `human`, `extraction_scope`, `CardReadBatch`, `card_view_data`, `card_action`, `dispose_cards` | One primary domain and confirmer; state, disposition, and eligibility are separate. Reuse the validity calculation and explicit extraction scope. New co-sign checks are additional gates. |
 | [ADR 0005](../adr/0005-human-confirmed-responses.md) | The approved co-sign amendment permits one professional reviewer per required domain. Slice 3 must extend the database and consumption gates before enabling that policy; slice 1 retains the existing single-domain runtime. |
 | [0015_response_cards.py](../../server/migrations/versions/0015_response_cards.py), `response_revision_gate`, `response_evidence_confirmation_complete`, `response_revision_complete`, `response_item_gate`; [0023_screenshots.py](../../server/migrations/versions/0023_screenshots.py), `response_evidence_gate` | Database human/confirmation/completion gates assume single-review confirmation. Later migrations must extend these gates together with Python services, retaining immutable history and direct-SQL rejection. |
 | [drafts.py](../../server/app/services/drafts.py), `assemble`, `current_draft_inputs`, `draft_view`; [exports.py](../../server/app/services/exports.py), `build_manifest`, `fresh_manifest`, `release`, `download_gate` | Existing draft (初稿) and export gates inspect fixed inputs and current validity. Bind policy/round/signature manifests here; no board badge authorizes consumption. |
 | [prototype_decisions.py](../../server/app/services/prototype_decisions.py), `apply`, `decision_view`, `export_decision_manifest` | Prototype (原型) decisions bind exact card/evidence inputs. Co-sign does not replace keep/replace decisions, nor change their corresponding-domain rule. |
-| [tender_jobs.py](../../server/app/services/tender_jobs.py), `submit`; [jobs.py](../../server/app/services/jobs.py), `status`, `cancel`; [processor.py](../../server/app/jobs/processor.py), `Processor.__call__`; [execution.py](../../server/app/jobs/execution.py), `JobExecution` | Jobs persist status, attempts, run ownership and accounting, but provide no task SSE stream. Cancellation does not undo already-dispatched charges. Progress must come from committed records, not simulated percentages. |
-| [contracts.py](../../server/app/schemas/contracts.py), `CONTRACT_VERSION`, `Result`, `Cost`; [CLI schema](../../cli/bid_cli/schema.py) | The branch uses runtime Result 4.0 and its shared accounting Cost. Workflow reads and writes import it without reproducing task-budget accounting. |
+| [tender_jobs.py](../../server/app/services/tender_jobs.py), `submit`; [jobs.py](../../server/app/services/jobs.py), `status`, `cancel`; [processor.py](../../server/app/jobs/processor.py), `Processor.__call__`; [execution.py](../../server/app/jobs/execution.py), `JobExecution` | Jobs persist status, attempts, run ownership and accounting, but provide no task SSE stream.
+Progress must come from committed records, not simulated percentages. |
+| [contracts.py](../../server/app/schemas/contracts.py), `CONTRACT_VERSION`, `Result`, `Cost`; [CLI schema](../../cli/bid_cli/schema.py) | The branch uses runtime Result 5.0 and its shared accounting Cost.|
 | [org-console.md](org-console.md), [api.js](../../web/src/api.js), [router.js](../../web/src/router.js), [JobPanel.vue](../../web/src/components/JobPanel.vue) | Console currently polls jobs and derives review responsibility from org role. Add real task ownership and SSE; retain separate platform/org sessions and authenticated previews. |
 
 The [design](../design.md#multi-tenancy-and-permissions) promises that a read-only
@@ -162,10 +163,11 @@ affected task projections without giving the caller those task IDs.
 
 ## Archival and concurrency
 
-Archive sets `active → archived` under the task/workflow lock. It fails with
+Archive sets `active → archived` under the task/workflow lock.
+It fails with
 `task_busy` if any task job is queued/running or any vendor call is pending/unknown,
-including calls attached to failed/cancelled jobs. It neither cancels jobs nor
-forgives charges. The owner explicitly finishes/cancels/reconciles work and retries.
+including calls attached to failed/cancelled jobs.
+The owner explicitly finishes/cancels/reconciles work and retries.
 Unarchive increments workflow/access revisions and records the reason; it does
 not restore expired grants, discarded signatures, or obsolete drafts.
 
@@ -295,11 +297,7 @@ warning handling. Expiry is not invented as a new unconditional rejection rule.
 Prototype undecided blocks a final section (正式件), not independently a review
 copy (审阅件). A task may have confirmed rows with either of these warnings.
 
-Budget displays `not_enforced` for legacy task `budget_usd`; never infer remaining
-budget by subtracting a USD estimate from prepaid charges. Existing job errors
-such as `insufficient_balance` or charge/call caps provide actionable blocker
-codes. Do not disclose org balances to nonadmins. Once budget interfaces merge,
-consume their typed task status/admission blocker without reproducing accounting.
+Consume shared typed preflight/admission blockers without reproducing usage accounting.
 
 Filters: bucket, category, starred, assignee (including unassigned), primary/required
 review domain, blocker, and `mine`. `mine` means assigned work or a pending decision
@@ -408,12 +406,13 @@ bound, fail the mutation with `affected_task_limit` until a separately approved
 durable fan-out contract exists; do not silently lose notifications. Reads always
 recompute validity, so even an event delay cannot authorize stale output.
 
-No network broker/dependency is required. Poll committed events in short org
+No network broker/dependency is required.
+Poll committed events in short org
 transactions (up to 100 rows, ascending seq, at most once per second per task
-dispatcher); an optional PostgreSQL NOTIFY is only a wake-up hint. Queue dispatch
-failure after a committed job leaves its event/job visible, following existing job
-recovery; reconnect does not resubmit paid work. Stream handlers hold no long-lived
-transaction/row lock. `api.main.context` cannot simply be retained through an
+dispatcher); an optional PostgreSQL NOTIFY is only a wake-up hint.
+Stream handlers hold no long-lived
+transaction/row lock.
+`api.main.context` cannot simply be retained through an
 unbounded streaming response: authenticate the handshake, then open fresh scoped
 transactions per replay/auth check and release them before writes to the socket.
 
@@ -590,7 +589,7 @@ Local mode uses the same services/PostgreSQL/RLS and bounded replay without
 bypassing authentication. Register every command/schema in `bid schema` at
 implementation, not by importing the plan contract.
 
-The Result envelope retains seven top-level fields. The following example is conceptual; the authoritative Cost schema is [budget_contracts.py](../../server/app/schemas/budget_contracts.py):
+The Result envelope retains seven top-level fields. The following example is conceptual; the authoritative Cost schema is [contracts.py](../../server/app/schemas/contracts.py):
 
 ```json
 {
@@ -610,35 +609,25 @@ The Result envelope retains seven top-level fields. The following example is con
   },
   "items": [],
   "warnings": [],
-  "cost": {
-    "llm_tokens": 0,
-    "ocr_pages": 0,
-    "usd": 0.0,
-    "basis": "zero",
-    "charge": "0",
-    "billing_currency": "USD",
-    "task_amount": "0",
-    "unpriced_calls": 0,
-    "unresolved_calls": 0
-  },
+  "cost": {"calls": 0, "llm_tokens": 0, "ocr_pages": 0, "search_requests": 0, "browser_units": 0, "unresolved_calls": 0},
   "duration_ms": 4
 }
 ```
 
 This illustrative no-cursor replay tells the caller to fetch a fresh snapshot.
-All new workflow operations make no paid calls: wrapper cost is actual zero, not
-accumulated job/task cost. Board job summaries never overwrite that meaning.
-Runtime schema version remains 4.0 for additive commands; preserve existing card
-Result shapes with separate sign-off data. If an implementation changes an existing
+Board job summaries never overwrite that meaning.
+Runtime uses Result 5.0 with separate sign-off data.
+If an implementation changes an existing
 output incompatibly, bump the major version and apply the project's compatibility
-policy. Do not copy draft BudgetCost into this contract.
+policy.
+Use the shared six-field resource-count `Cost` contract.
 
 | Exit | Semantics and failure examples |
 | --- | --- |
 | 0 | Successful read/atomic mutation/partial sign-off recorded. Partial sign-off is a successful action with `status=partial`, not CLI partial failure. A read-only board may contain blockers. |
 | 2 | Invalid/missing arguments, invalid cursor, bounds, revision conflict, task archived/busy, member assignments outstanding, invalid transition, co-sign required, stale inputs/policy, expired board/event cursor requiring refresh. |
 | 3 | Temporary DB/transport failure, board timeout, stream cap/rate limit; honor Retry-After. Do not replay non-idempotent writes blindly. |
-| 4 | Invalid session, action forbidden, missing/inaccessible object, content-integrity failure, or existing hard billing/evidence gate failure. |
+| 4 | Permanent permission, provider configuration or resource-limit failure; correct the named blocker before retrying |
 | 5 | Reserved for existing job commands' partial output. New workflow writes are atomic and do not report half-applied membership, signature or comment batches. |
 
 Errors use `ok=false`, `data.error={code,message,exit_code}`, empty items and measured duration/cost;
@@ -690,9 +679,8 @@ audit inserts. Denials log only nonsensitive codes and identity context.
 | Concurrent member/handover/archive/assignment update | Expected revision plus row lock; exactly one commit, other request 409. No zero/two owners or assignment to removed member. |
 | Comment or signature response lost after commit | Repeat client request ID with identical input returns original receipt; mismatched content conflicts. |
 | Business write/event insertion/audit fails | Roll back the entire transaction. Never report a committed card without its durable event. |
-| Disconnect after commit, missed NOTIFY, process restart | Replay durable events; safe duplicates; no paid write resubmission. Expired cursor explicitly resets. |
+| Disconnect after commit, missed NOTIFY, process restart |Expired cursor explicitly resets. |
 | Slow/unavailable client, DB timeout, clock-derived expiry | Bounded buffers/queries/backoff and fresh snapshot; never fake progress or stale confirmation eligibility. |
-| Archive racing job submission/admission/publication or late billing | Shared locks/checks prevent new task work; accounting settles dispatched calls once. Archived means business read-only, not deletion of liabilities. |
 | Policy/material/citation/member change while signing | Current dependency/authority validation invalidates the round, rejects stale sign-off, marks consumption stale; no partial Evidence confirmation. |
 | Shared-resource fan-out exceeds 100 tasks | Explicit mutation failure before commit; approved scalable outbox is prerequisite to lifting this bound. |
 
@@ -744,4 +732,4 @@ workspace cannot reach PostgreSQL. Test artifacts remain outside `docs/`.
 | Board query/stream limits | Bounds defined above; error on overflow; 7-day/50,000-event retention | Predictable resource use, honest counts and recoverable clients. |
 | Shared-library fan-out | Fail above 100 affected tasks until a durable fan-out contract is approved | Prevent undocumented event loss or unbounded transactions. |
 | New domains, notifications and comment editing | Defer; two domains, in-task mentions, append-only discussion | Focus on ownership/blockers/next action with a small auditable surface. |
-| Budget Result dependency | Import current runtime Result/Cost; migrate to shared 4.0 only after budget merges | One authoritative cost shape and no invented budget enforcement. |
+| Result dependency | Import current runtime Result/Cost 5.0 | One authoritative six-field resource shape |

@@ -6,14 +6,13 @@ calls; snapshots change after submission; missing tenant context bypasses RLS.
 """
 
 import json
-from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
 from app.jobs.execution import authorized_job
 from app.models.entities import Job, VendorCall
 from app.providers.base import ProviderFailure
-from app.schemas.budget_contracts import BudgetCallQuote
+from app.schemas.preflight_contracts import CallPlan
 from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -63,18 +62,12 @@ async def test_actorless_job_stays_actorless_and_cannot_dispatch(
         assert await session.get(Job, job.id) is None
     async with application.state.db.transaction() as session:
         assert await session.get(Job, job.id) is None
-    quote = BudgetCallQuote(
+    quote = CallPlan(
         capability="llm",
-        payer="org_direct",
         provider="synthetic",
         model="synthetic",
         version="1",
-        price_revision="synthetic-v1",
         request_sha256="a" * 64,
-        currency="USD",
-        reserved_charge=Decimal(0),
-        reserved_task_amount=Decimal(1),
-        vendor_usd_upper_bound=Decimal(1),
     )
     with pytest.raises(DBAPIError, match="authenticated job"):
         async with application.state.db.transaction(org) as session:
@@ -84,15 +77,9 @@ async def test_actorless_job_stays_actorless_and_cannot_dispatch(
                     task_id=UUID(task),
                     job_id=job.id,
                     run_id=job.run_id,
-                    budget_revision=1,
                     capability=quote.capability,
-                    payer=quote.payer,
-                    currency=quote.currency,
-                    price_revision=quote.price_revision,
                     request_sha256=quote.request_sha256,
-                    reserved_charge=quote.reserved_charge,
-                    reserved_task_amount=quote.reserved_task_amount,
-                    quote=quote.model_dump(mode="json"),
+                    provider_identity=quote.model_dump(mode="json"),
                 )
             )
             await session.flush()
@@ -102,7 +89,7 @@ async def test_actorless_job_stays_actorless_and_cannot_dispatch(
                 "job_id": str(job.id),
                 "actor_user_id": None,
                 "status": "succeeded",
-                "paid_admission": "rejected",
+                "vendor_admission": "rejected",
                 "cross_org": "hidden",
                 "missing_org": "hidden",
             }

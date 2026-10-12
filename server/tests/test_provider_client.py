@@ -1,7 +1,7 @@
 """Non-database provider boundary and CLI contracts, specified before implementation.
 
 Failures: JSON-key leaks, loose key-file permissions, URL credential injection,
-unsupported or malformed balance replies, redirects, unsafe reasoning options,
+redirects, unsafe reasoning options,
 wrong encryption context, and unregistered commands or Result shape drift.
 """
 
@@ -10,12 +10,10 @@ import os
 from pathlib import Path
 from uuid import uuid4
 
-import httpx
 import pytest
 from app.core.config import Settings
 from app.core.errors import ServiceError
 from app.core.provider_secrets import ProviderSecrets
-from app.providers.balance import provider_balance
 from app.schemas.provider_contracts import ProviderConfigSet
 from bid_cli.main import main
 from cryptography.fernet import Fernet
@@ -51,8 +49,11 @@ def test_key_encryption_context_and_separation():
             "default_reasoning": "high",
         },
         {"reasoning": [{"name": "low"}], "default_reasoning": "high"},
-        {"input_usd_per_mtok": float("inf")},
-        {"source": "platform", "platform_model_id": "paid", "api_key": "synthetic-private"},
+        {
+            "source": "platform",
+            "platform_model_id": "catalog-model",
+            "api_key": "synthetic-private",
+        },
     ],
 )
 def test_provider_input_failures(changes):
@@ -68,66 +69,6 @@ def test_provider_input_failures(changes):
         )
 
 
-@pytest.mark.parametrize(
-    "reply,status",
-    [
-        (
-            httpx.Response(
-                200,
-                json={
-                    "is_available": True,
-                    "balance_infos": [
-                        {
-                            "currency": "USD",
-                            "total_balance": "1.2",
-                            "granted_balance": "0",
-                            "topped_up_balance": "1.2",
-                        }
-                    ],
-                },
-            ),
-            "supported",
-        ),
-        (
-            httpx.Response(
-                200,
-                json={
-                    "is_available": True,
-                    "balance_infos": [{"currency": "USD", "total_balance": "NaN"}],
-                },
-            ),
-            "unavailable",
-        ),
-        (httpx.Response(401, json={"error": "synthetic-private-key"}), "unavailable"),
-        (httpx.Response(302, headers={"Location": "https://elsewhere.example"}), "unavailable"),
-        (httpx.Response(200, json=[]), "unavailable"),
-    ],
-)
-async def test_balance_http_boundary(reply, status):
-    calls = []
-
-    def vendor(request):
-        calls.append(request)
-        assert (
-            request.method == "GET" and str(request.url) == "https://api.deepseek.com/user/balance"
-        )
-        return reply
-
-    result = await provider_balance(
-        "openai",
-        "https://api.deepseek.com/v1",
-        SecretStr("synthetic-private-key"),
-        httpx.MockTransport(vendor),
-    )
-    assert result["status"] == status and len(calls) == 1
-    assert "synthetic-private-key" not in json.dumps(result)
-    for url in (None, "https://api.openai.com/v1", "https://api.deepseek.com.evil.test/v1"):
-        unsupported = await provider_balance(
-            "openai", url, SecretStr("synthetic-private-key"), httpx.MockTransport(vendor)
-        )
-        assert unsupported["status"] == "unsupported" and len(calls) == 1
-
-
 def test_provider_cli_snapshots(tmp_path, monkeypatch, capsys):
     from bid_cli.client import Client
 
@@ -141,7 +82,7 @@ def test_provider_cli_snapshots(tmp_path, monkeypatch, capsys):
             "data": {"configured": True},
             "items": [],
             "warnings": [],
-            "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0},
+            "cost": {"llm_tokens": 0, "ocr_pages": 0},
             "duration_ms": 0,
         }
 

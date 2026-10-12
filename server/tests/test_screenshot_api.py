@@ -3,7 +3,7 @@
 Failures: multipart spooling or duplicate/missing parts; unbounded fields;
 foreign task/job/asset/rendition/run/decision access; token privacy release;
 wrong hash or image kind; footer-region observations; stale preflight;
-withdrawal between admission/publication; unknown vendor refs; missing prices;
+withdrawal between admission/publication; unknown vendor refs; missing provider configuration;
 paid invalid model output; batch decision omissions and changed card revisions.
 Database scenarios use the actual tenant API and Processor. No real vendor calls.
 """
@@ -196,7 +196,7 @@ async def test_image_jobs_preview_download_derivation_and_withdrawal(tenants, tm
         )
         feature = await selected_feature(api, header, task)
         stored = await ingest_synthetic_screenshot(api, header, task, extraction, feature["id"])
-        asset, root = stored["asset"], stored["rendition"]
+        asset, root = (stored["asset"], stored["rendition"])
         link = await api.post(f"/screenshot-renditions/{root['id']}/preview-link", headers=header)
         assert link.status_code == 200
         path = link.json()["data"]["url"]
@@ -214,7 +214,7 @@ async def test_image_jobs_preview_download_derivation_and_withdrawal(tenants, tm
         preview = await api.post(
             f"/screenshots/{asset['id']}/renditions", headers=header, json=plan | {"dry_run": True}
         )
-        assert preview.status_code == 200 and preview.json()["data"]["estimated_charge"] == 0
+        assert preview.status_code == 200
         response = await api.post(
             f"/screenshots/{asset['id']}/renditions", headers=header, json=plan
         )
@@ -229,7 +229,14 @@ async def test_image_jobs_preview_download_derivation_and_withdrawal(tenants, tm
             and derived["parent_rendition_id"] == root["id"]
         )
         assert derived["image"]["sha256"] != root["image"]["sha256"]
-        assert completed["result"]["cost"] == {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0}
+        assert completed["result"]["cost"] == {
+            "calls": 0,
+            "llm_tokens": 0,
+            "ocr_pages": 0,
+            "search_requests": 0,
+            "browser_units": 0,
+            "unresolved_calls": 0,
+        }
         revoked = await api.post(
             f"/screenshots/{asset['id']}/withdrawals",
             headers=header,

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from decimal import Decimal
 from typing import TYPE_CHECKING, Literal, cast
 
 import httpx
@@ -89,7 +88,7 @@ WIRE_SCHEMA = strict_schema(CheckWireOutput)
 
 
 def request_body(llm: HTTPExtractor, request: CheckProviderRequest) -> dict:
-    """Build the exact JSON body used for both reservation and transport."""
+    """Build the exact JSON body used for both call planning and transport."""
 
     text = json.dumps(request.model_dump(mode="json"), ensure_ascii=False)
     return json_request(llm, SYSTEM_PROMPT, text, WIRE_SCHEMA, "semantic_check")
@@ -135,11 +134,6 @@ class HTTPCheckProvider:
 
     def request_body(self, request: CheckProviderRequest) -> dict:
         return request_body(self.llm, request)
-
-    def reservation(self, request: CheckProviderRequest) -> Decimal:
-        """Return the first-pass bound for the exact body that check() sends."""
-
-        return self.llm.reservation(self.request_body(request))
 
     async def check(self, request: CheckProviderRequest) -> CheckProviderResult:
         if current_accounting.get() is None:

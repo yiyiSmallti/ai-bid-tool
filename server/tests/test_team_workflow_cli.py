@@ -152,21 +152,6 @@ def response_page(path, empty=False):
         }
         if not empty:
             counts.update(total=1, gap=1)
-        budget = {
-            "org_id": ID,
-            "task_id": ID,
-            "revision": 1,
-            "limit": "10",
-            "currency": "USD",
-            "state": "active",
-            "spent": "0",
-            "reserved": "0",
-            "available": "10",
-            "unpriced_calls": 0,
-            "unresolved_calls": 0,
-            "history_complete": True,
-            "as_of": WHEN,
-        }
         data, model = (
             {
                 "org_id": ID,
@@ -176,7 +161,6 @@ def response_page(path, empty=False):
                 "counts": counts,
                 "matching": 0 if empty else 1,
                 "returned": 0 if empty else 1,
-                "budget": budget,
                 "next_cursor": None,
                 "event_cursor": "opaque-snapshot",
                 "as_of": WHEN,
@@ -331,7 +315,15 @@ def test_workflow_transport_and_snapshots(monkeypatch, capsys, tmp_path):
             flags = flags + (["--input", str(input_file)] if path == "members/" + ID else [])
             cli.main(["--mode", mode, "task", *flags, "--task", ID, "--json"])
             body = json.loads(capsys.readouterr().out)
-            assert len(body) == 7 and body["cost"]["usd"] == 0
+            assert len(body) == 7
+            assert body["cost"] == {
+                "calls": 0,
+                "llm_tokens": 0,
+                "ocr_pages": 0,
+                "search_requests": 0,
+                "browser_units": 0,
+                "unresolved_calls": 0,
+            }
             assert calls[-1][:2] == (method, f"/v4/tasks/{ID}/{path}")
             body["duration_ms"] = 0
             snapshots[mode + ":" + " ".join(flags[:2])] = body

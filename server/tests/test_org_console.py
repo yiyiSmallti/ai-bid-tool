@@ -28,7 +28,6 @@ async def create_task(api, header, name="Synthetic console task"):
             "name": name,
             "tender_number": "SYNTHETIC-001",
             "deadline": "2027-01-02T03:04:05+00:00",
-            "budget_usd": 123.45,
         },
     )
     assert response.status_code == 200, response.text
@@ -63,7 +62,6 @@ async def test_g1_views_return_stable_recovery_shapes_and_worker_state(
     task_id = await create_task(api, headers[0])
     parsed_document = await upload(api, headers[0], task_id, "parsed.pdf", pdf_bytes)
     unparsed_document = await upload(api, headers[0], task_id, "unparsed.docx", docx_bytes)
-
     queued = await api.post(f"/documents/{parsed_document}/parse", headers=headers[0], json={})
     assert queued.status_code == 200, queued.text
     parse_job = queued.json()["data"]["job_id"]
@@ -73,11 +71,9 @@ async def test_g1_views_return_stable_recovery_shapes_and_worker_state(
     assert extraction_preview.status_code == 200
     preview = extraction_preview.json()["data"]
     assert preview["parsed"] is False and preview["input_blocker"] == "not_parsed"
-    assert preview["budget_preflight"]["planned_calls"] is None
-    assert preview["budget_preflight"]["next_call"] is None
-    assert preview["budget_preflight"]["admission_blocker"] is None
-    assert preview["budget_preflight"]["estimate"]["basis"] == "unknown"
-
+    assert preview["preflight"]["planned_calls"] is None
+    assert preview["preflight"]["next_call"] is None
+    assert preview["preflight"]["admission_blocker"] is None
     detail = (await api.get(f"/tasks/{task_id}", headers=headers[0])).json()["data"]
     assert set(detail) == {
         "id",
@@ -85,7 +81,6 @@ async def test_g1_views_return_stable_recovery_shapes_and_worker_state(
         "name",
         "tender_number",
         "deadline",
-        "budget_usd",
         "created_by",
         "created_at",
         "model_redaction_enabled",
@@ -94,18 +89,12 @@ async def test_g1_views_return_stable_recovery_shapes_and_worker_state(
     }
     assert detail["id"] == task_id
     assert detail["tender_number"] == "SYNTHETIC-001"
-    # The same instant; the database session may render it in its own UTC offset.
     assert datetime.fromisoformat(detail["deadline"]) == datetime.fromisoformat(
         "2027-01-02T03:04:05+00:00"
     )
-    assert detail["budget_usd"] == 123.45
-
     documents = (await api.get(f"/tasks/{task_id}/documents", headers=headers[0])).json()
     assert documents["data"] == {"task_id": task_id}
-    assert [item["id"] for item in documents["items"]] == [
-        parsed_document,
-        unparsed_document,
-    ]
+    assert [item["id"] for item in documents["items"]] == [parsed_document, unparsed_document]
     assert all(
         set(item)
         == {
@@ -123,7 +112,6 @@ async def test_g1_views_return_stable_recovery_shapes_and_worker_state(
     )
     assert [item["status"] for item in documents["items"]] == ["uploaded", "uploaded"]
     assert all("storage_key" not in item for item in documents["items"])
-
     await application.state.processor(headers[0]["X-Org-Id"], parse_job)
     extraction = await api.post(
         f"/documents/{parsed_document}/extract", headers=headers[0], json={}
@@ -131,11 +119,7 @@ async def test_g1_views_return_stable_recovery_shapes_and_worker_state(
     assert extraction.status_code == 200
     assert extraction.json()["data"]["job_id"] != parse_job
     jobs = (
-        await api.get(
-            f"/tasks/{task_id}/jobs",
-            headers=headers[0],
-            params={"kind": "parse"},
-        )
+        await api.get(f"/tasks/{task_id}/jobs", headers=headers[0], params={"kind": "parse"})
     ).json()
     assert jobs["data"] == {"task_id": task_id, "kind": "parse", "document_id": None}
     assert len(jobs["items"]) == 1
@@ -157,7 +141,6 @@ async def test_g1_views_return_stable_recovery_shapes_and_worker_state(
     assert jobs["items"][0]["status"] == "succeeded"
     assert jobs["items"][0]["result"]["pages"] == 2
     assert "queue_id" not in jobs["items"][0] and "lease_until" not in jobs["items"][0]
-
     filtered = await api.get(
         f"/tasks/{task_id}/jobs",
         headers=headers[0],

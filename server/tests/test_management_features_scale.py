@@ -127,7 +127,7 @@ async def test_fixed_scale_feature_reads(api, headers, application, tenants, adm
         "mode": "real_api",
         "scenario": "u01-feature-fixed-scale-v1",
         "status": "running",
-        "schema": "4.0",
+        "schema": "5.0",
         "fixture": {"orgs": 2, "roots_per_org": ROOTS, "revisions_per_org": ROOTS * REVISIONS},
         "hardware": {
             "system": platform.platform(),

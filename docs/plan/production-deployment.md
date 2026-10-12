@@ -5,10 +5,11 @@ status: approved; environment decisions pending
 
 # Production deployment plan
 
-This plan defines the first production environment and its release gates. The owner
+This plan defines the first production environment and its release gates.
+The owner
 approved it with the recommended defaults; environment decisions, separate deployment
-authorization and recorded acceptance are still required before execution or go-live. Approval of this plan does not establish that deployment, paid provider
-checks or acceptance have occurred. Actual release identifiers, configuration hashes
+authorization and recorded acceptance are still required before execution or go-live.
+Actual release identifiers, configuration hashes
 and results belong in a restricted release record outside `docs/`.
 
 The approved default is a Linux application host with separately operated PostgreSQL
@@ -41,7 +42,7 @@ The production manifest must explicitly forward every approved runtime setting.
 Compose interpolation does not pass arbitrary entries from an env file to containers.
 In particular, account for `BID_WEB_DIR`, `BID_SCREENSHOT_RENDERER`, PDF limits,
 LLM concurrency/deadlines/request options, rubric limits, drafting limits, job
-budgets/leases, and sandbox policy/transport/TLS settings. Reconcile the differing
+call limits/leases, and sandbox policy/transport/TLS settings. Reconcile the differing
 Compose and [Settings](../../server/app/core/config.py) defaults rather than relying
 on an assumed env-file override. Verify effective setting names and non-secret values
 without dumping credentials or a fully expanded Compose configuration into logs.
@@ -83,13 +84,13 @@ an accountable operator before its step; values are not provisioned resources or
 | Domain, ingress and TLS | One HTTPS origin for console/API, automated certificate renewal, private upstreams | Ingress configuration: domain ownership, DNS operator, proxy and renewal owner |
 | PostgreSQL operator | PostgreSQL 16 with pgvector and the role privileges required by the migrations; managed service if compatible | Provisioning: service choice, connection limits, extension policy and maintenance windows |
 | Storage operator and retention | Maintained private S3-compatible service, versioning, encrypted off-host backup; no public bucket | Bucket creation: location, access policy, retention/deletion requirements and conditional-write support |
-| Backup destination and recovery objectives | Independent failure domain and separate backup authority; proposed RPO at most 15 minutes and RTO at most 4 hours, subject to a measured drill | Backup design: encrypted destination, retention, budget and approved RPO/RTO |
-| LLM/vision vendors, models and keys | Owner-approved supported Anthropic/OpenAI-compatible endpoints, explicit model/pricing records; enable vision only after real-image acceptance | Provider setup: vendors, models, data-retention/training terms, quota and keys supplied privately |
-| Search vendor and cost payer | Start with `disabled`; enable Perplexity after approved coverage/cost tests, or choose private SearXNG after coverage/rate-limit acceptance | Search release: vendor, key if required, approved sources and platform cost budget |
+| Backup destination and recovery objectives | Independent failure domain and separate backup authority; proposed RPO at most 15 minutes and RTO at most 4 hours, subject to a measured drill | Backup design: encrypted destination, retention, capacity and approved RPO/RTO |
+| LLM/vision vendors, models and keys | Owner-approved supported Anthropic/OpenAI-compatible endpoints and explicit model capabilities; enable vision only after real-image acceptance. | Provider setup: vendors, models, data-retention/training terms, quota and keys supplied privately |
+| Search configuration | Start with `disabled`; enable Perplexity or private SearXNG after coverage/rate-limit acceptance | Search release: provider, key if required, approved sources and request limits |
 | OCR and embeddings | Local Tesseract with packaged language data; defer cloud OCR and embeddings until their separate scope is approved | Capability selection: required languages and whether additional integration is needed |
 | Email and identity operations | No application email dependency for initial release; manually controlled onboarding/password setup and platform TOTP | Onboarding: confirm whether email delivery is mandatory; if so, specify sender/domain/vendor and implement and accept delivery separately |
 | Secret custody and recovery | Secret manager; owner-only 0600 service env files as a small-installation alternative | Provisioning: custodians, rotation process, offline recovery access and audit retention |
-| Billing and spending | Choose billing currency before balances exist; explicit model prices and conservative per-job/vendor-call ceilings | First org/model: currency, initial acceptance credit, monthly operating budget and alert recipients |
+| Resource usage | Record provider/model/duration and resource counts under [ADR 0011](../adr/0011-remove-billing.md) | First org/model: credentials, model capabilities and operational call limits |
 | Capacity and concurrency | One application replica and one worker process initially; bound model concurrency, worker/render resources and database pools by acceptance measurements | Sizing: simultaneous tasks, maximum documents, daily volume and acceptable queue delay |
 | Sandbox and vendor egress | Dedicated Linux runsc node, private mTLS control, exact approved vendor policy and kernel-filtered broker egress | Capture enablement: node operator, allowed sites, per-org request budget and accepted runtime profile |
 | Monitoring and incident response | Restricted centralized logs, external probes and infrastructure/queue monitoring with an accountable on-call operator | Rehearsal: monitoring destination, alert channels, retention and escalation coverage |
@@ -223,12 +224,13 @@ and supervisor configuration as well. Retain database and storage recovery point
 can be reconciled: an object key is insufficient if its overwritten ciphertext needs a
 different historical key. A live volume copy is not a verified PostgreSQL backup.
 
-Before go-live and at least quarterly thereafter, restore into an isolated environment
-with outbound paid calls and job execution disabled. Test both a full restore and a
+Test both a full restore and a
 selected PITR timestamp, recover encrypted fields and objects with retained keys, verify
 RLS/role grants and signed access, and reconcile application/queue/vendor-call records
-before allowing any worker to resume. Record recovery point, elapsed recovery time,
-missing objects, key availability and owner verdict. A successful backup upload alone
+before allowing any worker to resume.
+Record recovery point, elapsed recovery time,
+missing objects, key availability and owner verdict.
+A successful backup upload alone
 does not pass the restore gate.
 
 ## Storage and document processing
@@ -265,10 +267,9 @@ must also be exercised on Linux; matching an env template on macOS is insufficie
 
 Keep API and business workers non-root on Linux and supervise both independently.
 Set memory/CPU/pids/temporary-storage limits for the full service, plus the PDF/export
-child limits in [Settings](../../server/app/core/config.py). Match model concurrency,
-job charge/call ceilings, heartbeat and lease settings across callers; acceptance must
-show heartbeats renew before lease expiry and cancellation fences late publication.
-Size connection pools and per-process concurrency before adding workers. Preserve
+child limits in [Settings](../../server/app/core/config.py).
+Size connection pools and per-process concurrency before adding workers.
+Preserve
 queue/business IDs through restarts and never truncate queue tables to clear a backlog.
 
 Install the Rust executable and fonts read-only for the target architecture and run a
@@ -316,7 +317,7 @@ Provision monitoring as deployment work; no Prometheus `/metrics` endpoint or co
 dependency readiness should be inferred from the application. The existing
 [`/health` handler](../../server/app/api/account.py) reports API/model configuration and
 can exercise resolution, but does not prove queue consumption, storage, converter,
-sandbox connectivity or real-model authorization. Startup role/currency checks must
+sandbox connectivity or real-model authorization. Startup role/readiness checks must
 pass, followed by separate synthetic end-to-end probes.
 
 | Signal | Collection and proposed alert |
@@ -326,7 +327,7 @@ pass, followed by separate synthetic end-to-end probes.
 | Database | Connections/pool saturation, locks, query latency, disk/WAL growth, replication/archive lag and backup completion. Alert immediately on backup/WAL failure or lag that threatens the approved RPO. |
 | Storage and conversion | Failed/slow object writes/reads, missing/decryption failures, free space, converter failures/timeouts and preview output bounds. Repeated deterministic failures require investigation, not unbounded retry. |
 | Sandbox | Admission failures, profile/pin drift, CPU/memory/output peaks, orphan inventory, supervisor restarts and cleanup quarantine. Stop affected admissions on unconfirmed cleanup or isolation drift. |
-| Providers and cost | Provider failure/rate-limit counts, durations, `UsageRecord` and reservation/settlement totals, budgets and credential availability. Alert before the owner-approved monthly cap and at sustained model/search degradation. |
+| Providers and cost |Alert before the owner-approved monthly cap and at sustained model/search degradation. |
 
 Collect API, worker, converter and supervisor logs centrally with access control,
 rotation and owner-approved retention. Keep Uvicorn access logging disabled as in
@@ -383,10 +384,10 @@ roles as well as truncate test tables.
    org for isolation acceptance, not imported development accounts.
 6. **Configure credentials and catalog.** Apply the fresh credential setup or the
    explicitly authorized legacy import sequence above; set model identity, endpoints,
-   prices, currency and budgets, and the explicit search selection. Gate: credential
+   capabilities and request limits, and the explicit search selection.
+Gate: credential
    function grants/readiness, catalog FK validation, disabled/replaced key behavior and
-   removal of forbidden legacy env names. Metadata probes alone do not satisfy paid
-   real-model acceptance.
+   removal of forbidden legacy env names.
 7. **Start private services in dependency order.** Start converter/selected search,
    the accepted sandbox supervisor if enabled, API and worker from the same release.
    Native commands are `uvicorn app.api.main:create_app --factory --host 127.0.0.1
@@ -401,17 +402,18 @@ roles as well as truncate test tables.
    WPS review and full/PITR recovery have recorded owner verdicts; no unexplained skips.
 9. **Approve go-live and open ingress/admissions.** Capture the approval and exact
    release/configuration references in the release record, take a final consistent
-   recovery checkpoint and confirm operators are available. Enable only accepted
-   capabilities; watch queue, errors, provider spending and backups through the agreed
-   observation window. Gate: smoke checks stay within the accepted limits and rollback/
-   recovery material is immediately accessible. A failed gate stops promotion.
+   recovery checkpoint and confirm operators are available.
+Gate: smoke checks stay within the accepted limits and rollback/
+   recovery material is immediately accessible.
+A failed gate stops promotion.
 
 ## Development data and exceptional migration
 
-Do not migrate development databases, local file volumes, sessions, tokens, balances,
-credentials or demonstration materials. Recreate authorized catalog configuration and
-fresh identities through the normal administration paths. Production acceptance data
-must be synthetic or approved public inputs in dedicated acceptance orgs only. Decide
+Recreate authorized catalog configuration and
+fresh identities through the normal administration paths.
+Production acceptance data
+must be synthetic or approved public inputs in dedicated acceptance orgs only.
+Decide
 their retention/disablement before inviting business users; retain acceptance records
 without copying confidential content into evidence bundles.
 
@@ -435,9 +437,7 @@ workflow creation and do not need a fabricated legacy import.
 ## Rollback and incident recovery
 
 Record a pre-release checkpoint, previous immutable images, compatible configuration,
-database revision and key references before every rollout. Drain admissions/workers
-and reconcile paid requests; never start old and new workers together across a change
-in authorization, budgeting or credential semantics.
+database revision and key references before every rollout.
 
 Application rollback is allowed only when the previous binary is verified compatible
 with the migrated schema, stored data/key formats, queue payloads and all security
@@ -452,13 +452,15 @@ failure, keep traffic closed, inspect the committed revision/schema and apply a 
 forward repair. Do not stamp a revision or bypass constraints to make startup pass.
 
 If forward repair cannot recover within the accepted outage window, the owner must
-authorize database restoration and its measured loss window. Restore into a new private
+authorize database restoration and its measured loss window.
+Restore into a new private
 database, recover the selected base/WAL point with matching objects and keyrings, and
-reapply compatible migrations and role verification before switching endpoints. Keep
-the damaged environment isolated for reconciliation. Resolve queue entries and unknown
-vendor calls before re-enabling workers so a restore cannot silently duplicate paid
-requests or resurrect revoked access. Reapply post-checkpoint revocations and deliberate
-session invalidation before reopening. Re-run isolation, object decryption and workflow
+reapply compatible migrations and role verification before switching endpoints.
+Keep
+the damaged environment isolated for reconciliation.
+Reapply post-checkpoint revocations and deliberate
+session invalidation before reopening.
+Re-run isolation, object decryption and workflow
 smokes, then record the actual RPO/RTO and affected data with the owner.
 
 ## Security review gates
@@ -511,10 +513,13 @@ screens, signed URLs or private document content in general-purpose reports.
 | Release checks and migration rehearsal | Run the actual CI checks and [development verification](../guides/development.md#run-the-checks) on disposable PostgreSQL, including runtime-role/RLS, credential, token and workflow suites. Save machine-readable results and the image inventory. Relevant skips or mock-only coverage remain explicit failures of the corresponding live gate. |
 | Container smoke | Use [container_smoke.py](../../scripts/container_smoke.py) only with a dedicated test Docker daemon/project and a new output directory. Verify API, real worker, encrypted S3 writes and isolated downloads. Its `result.json` covers its synthetic flow; also test the final production manifest, console and chosen storage service. |
 | Human and token end-to-end journey | On the built console and CLI, use acceptance org A/B and intended admin, bidder, technical reviewer, observer and token roles. Upload/parse a public tender, extract/review requirements, select pinned resources, collect/confirm evidence, draft, check/score and export. Verify denied foreign-org/task access, stale approvals, token human-gate attempts, archive writes and SSE reconnect. Save sanitized job/output IDs and hashes. Existing [browser scenarios](../../web/playwright.config.js) and [org console driver](../../scripts/org_console_e2e.py) aid rehearsal; mocked browser routes do not replace a live backend journey. |
-| Real providers and accounting | Authorize a bounded paid run with approved public documents/images and owner-selected model/search services. [extract_tender.py](../../evals/extract_tender.py) provides a standalone extraction check; also test tenant catalog/BYOK resolution, drafting, check/score and enabled vision/agent paths through real jobs. Inspect citations, quality, usage, reservations/settlement and balance changes; test disable/rotation and budget failures. Metadata probes are insufficient. Search acceptance must measure vendor-source coverage and incomplete/rate-limited results; Perplexity expense remains a platform cost until its separate attribution decision is resolved. |
+| Real providers and accounting |[extract_tender.py](../../evals/extract_tender.py) provides a standalone extraction check; also test tenant catalog/BYOK resolution, drafting, check/score and enabled vision/agent paths through real jobs.
+Metadata probes are insufficient.
+Search acceptance must measure vendor-source coverage and incomplete/rate-limited results; Perplexity expense remains a platform cost until its separate attribution decision is resolved. |
 | Export and WPS | Follow [export scale preparation](../guides/development.md#check-an-export-in-word), then open the same final DOCX in the owner's target WPS version. Inspect Chinese fonts, long/repeated table headers, row counts, page breaks, captions, evidence/bookmark references and attachment order; compare with Gotenberg PDF preview and record discrepancies. Word/LibreOffice success is not WPS acceptance. Include review-copy/final-section gates and a denied cross-org S3 download. |
 | Sandbox isolation and failure drills | Follow [real pipeline](../guides/sandbox-runtime.md#run-the-real-pipeline-check) and [contract acceptance](sandbox.md#end-to-end-acceptance-after-approval) on the selected Linux/runtime/architecture: zero container egress, seccomp/cgroup enforcement, maximum inputs, CPU/memory/pids/output exhaustion, DNS/redirect/metadata denials, cross-instance canaries, expiry takeover, caller/worker disconnect, supervisor crash, failed cleanup and storage failure. Require no accessible partial artifact, no leaked container and conservative recovered accounting. Preserve packet counters, resource peaks and inventories. |
-| Queue and outage recovery | Kill/restart only the isolated acceptance worker, interrupt database/object/converter access and revoke a lease during work. Confirm bounded retries, publication fencing, no duplicate paid calls and explicit handling of stale `doing` queue rows. Use the [known-defects register](roadmap.md#known-defects) to resolve or restrict affected launch paths; agent wake recovery is not proof of generic sandbox recovery. |
+| Queue and outage recovery | Kill/restart only the isolated acceptance worker, interrupt database/object/converter access and revoke a lease during work.
+Use the [known-defects register](roadmap.md#known-defects) to resolve or restrict affected launch paths; agent wake recovery is not proof of generic sandbox recovery. |
 | Backup/PITR and alert delivery | Restore the candidate environment from independent backups, recover encrypted data/objects and perform the chosen PITR point. Meet approved measured RPO/RTO, preserve isolation/revocations and reconcile queue/accounting before resume. Trigger each critical alert and confirm delivery to the named operator. |
 
 [sandbox_proxy_acceptance.py](../../scripts/sandbox_proxy_acceptance.py) exercises
@@ -529,26 +534,11 @@ Go-live requires the owner's recorded approval of the enabled scope, all corresp
 gates and residual defects. A blocked sandbox, WPS, credential, isolation or recovery
 gate blocks the affected release scope; a successful HTTP health response cannot waive it.
 
-## Cost estimate structure
+## Capacity planning
 
-Prepare a monthly worksheet using dated vendor quotes after provider/region choices;
-this plan provides no price quote. Compare the single-host and recommended split
-options at pilot, expected and peak demand, with explicit measured assumptions.
-
-| Cost line | Quantity and calculation inputs |
-| --- | --- |
-| Application and worker compute | Host hours × rate, CPU/RAM tier, peak concurrent tasks, OCR/export load, disk and temporary-space headroom |
-| Sandbox compute | Node hours × rate, accepted concurrent render/validation capacity, idle reservation and isolated build/registry cost |
-| PostgreSQL | Compute, provisioned storage/IOPS, growth, connections, redundancy, WAL/PITR retention and restore-test capacity |
-| Object storage and backups | Encrypted source/evidence/export GiB-month, retained versions, request counts, replication and independent backup storage |
-| Models and vision | Measured input/output tokens or images × vendor unit price, multiplied by calls/batches/retries per task; separate catalog sale prices from vendor cost |
-| Search and OCR | Perplexity requests × rate or private SearXNG compute/operations; local OCR compute; cloud OCR only if separately selected |
-| Network and ingress | Domain, proxy/load balancer, certificate operations, inter-service and download egress, backup transfer and fixed addresses if required |
-| Monitoring and operations | Log/metric retention, alerts, patching, on-call effort, periodic restore/sandbox drills and any selected email service |
-| Contingency | Owner-selected allowance for burst load, retries, growth and rehearsal capacity; do not treat budget ceilings as usage forecasts |
-
-Record tasks/month, pages/task, image count/size, model calls/tokens, export volume,
-retention and peak concurrency next to every estimate. Sum fixed infrastructure,
-variable usage and operations/contingency separately. Compare realized `UsageRecord`
-and vendor invoices after acceptance, particularly platform-paid search; set alerts
-and admission budgets before increasing concurrency or opening additional orgs.
+Compare single-host and split application/worker/sandbox deployments at pilot,
+expected and peak demand using measured resource assumptions. Record tasks/day,
+pages/task, image count/size, model calls/tokens, OCR/search/browser counts,
+export volume, retention and peak concurrency. Size CPU/RAM, database connections,
+object storage, backup retention, network throughput and queue limits from those
+measurements. Product resource usage follows [ADR 0011](../adr/0011-remove-billing.md).

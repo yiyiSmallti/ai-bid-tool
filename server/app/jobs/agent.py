@@ -30,7 +30,8 @@ from app.schemas.agent_contracts import (
     ToolDecision,
 )
 from app.schemas.contracts import Cost
-from app.services import agent_limits, agent_tools, agents, budget_preflight
+from app.services import agent_limits, agent_tools, agents
+from app.services import preflight as preflight_service
 from app.services.auth import Identity, agent_identity, set_actor_context
 from app.services.versioned import audit
 
@@ -44,20 +45,20 @@ AUTHORITY_STOPS = {
     "org_inactive",
     "task_archived",
 }
-RECOVERY_STOPS = {"agent_request_uncertain", "usage_accounting_failed", "agent_receipt_unreadable"}
+RECOVERY_STOPS = {
+    "agent_request_uncertain",
+    "usage_accounting_failed",
+    "agent_receipt_unreadable",
+    "unresolved_call",
+}
 CHANGE_STOPS = {
     "agent_inputs_changed",
     "agent_model_changed",
     "tool_schema_changed",
     "agent_context_limit",
 }
-BUDGET_STOPS = ADMISSION_STOPS | {
-    "billing_price_unavailable",
-    "billing_bound_unavailable",
-    "billing_currency_mismatch",
-    "agent_unpriced",
+CONFIGURATION_STOPS = ADMISSION_STOPS | {
     "provider_unavailable",
-    "spend_cap_below_first_call",
 }
 
 
@@ -406,7 +407,7 @@ async def checkpoint(
     await session.flush()
     # ORM cost queries may autoflush. Complete them before marking a session
     # terminal: that transition must include its cleared execution binding.
-    cost = Cost.model_validate(await job_cost(session, job.id, processor.settings.billing_currency))
+    cost = Cost.model_validate(await job_cost(session, job.id))
     from app.models.team_workflow import TaskWorkflow
 
     archived = (
@@ -634,23 +635,20 @@ async def decide(processor, execution):
         quote = provider.quote(request)
         await agent_limits.enforce(session, row, settings, quote)
         preflight = (
-            await budget_preflight.attach(
+            await preflight_service.attach(
                 session,
                 {},
                 command="agent start",
                 task_id=row.task_id,
                 input_hash=agents.digest(request),
-                currency=settings.billing_currency,
                 settings=settings,
                 quotes=[quote],
                 planned_calls=1,
             )
-        )["budget_preflight"]
+        )["preflight"]
         blocker = preflight["admission_blocker"]
         if blocker:
-            await execution.admission_failure(
-                session, job, quote, blocker, "Review the next decision's budget"
-            )
+            raise execution.stop(blocker, "Review the next decision's configuration")
 
     async def before_admit(session):
         row, _, actor = await fence(session, execution, expected_revision=expected)
@@ -976,7 +974,7 @@ async def collect_child(processor, execution, step_id):
             code = error.get("code", "agent_child_failed")
             if code in RECOVERY_STOPS:
                 raise ProviderFailure("Verify the interrupted child request", code=code)
-            if code in BUDGET_STOPS:
+            if code in CONFIGURATION_STOPS:
                 advance_step(
                     step,
                     job,
@@ -989,8 +987,8 @@ async def collect_child(processor, execution, step_id):
                 pending = await agents.pause(
                     session,
                     row,
-                    "budget",
-                    "Review the child job's existing budget intervention before retrying its fixed input.",
+                    "human_action",
+                    "Review the child's configuration or call-count limit before retrying its fixed input.",
                     processor.settings,
                     step,
                 )
@@ -1091,11 +1089,11 @@ async def fragment(processor, execution):
             return
         step_id = last.id if last else None
         state, kind = (last.state, last.kind) if last else (None, None)
-        retry_budget_tool = (
+        retry_configuration_tool = (
             last is not None
             and last.kind == "tool"
             and last.state == "failed"
-            and last.error_code in BUDGET_STOPS
+            and last.error_code in CONFIGURATION_STOPS
         )
         changed_intent = (
             last is not None
@@ -1111,7 +1109,7 @@ async def fragment(processor, execution):
             is not None
         )
         if changed_intent:
-            retry_budget_tool = False
+            retry_configuration_tool = False
         saved_action = None
         if last is not None and kind == "decision" and state == "completed":
             saved_action = AgentDecision.model_validate(
@@ -1121,7 +1119,7 @@ async def fragment(processor, execution):
             saved_action = None
     if retry_planned_tool:
         await execute_tool(processor, execution, tool_step_id=step_id)
-    elif retry_budget_tool:
+    elif retry_configuration_tool:
         await execute_tool(processor, execution, retry_step_id=step_id)
     elif step_id is not None and state == "waiting_job":
         await collect_child(processor, execution, step_id)
@@ -1200,7 +1198,7 @@ async def fail_fragment(processor, execution, error):
                 last.id,
                 {"command": last.command, "reason_code": code},
             )
-        if code in agent_limits.HARD_STOPS or code == "agent_cost_limit_reached":
+        if code in agent_limits.HARD_STOPS:
             audit(
                 session,
                 actor,
@@ -1229,10 +1227,10 @@ async def fail_fragment(processor, execution, error):
                 "authority",
                 "The owner's delegation expired or permissions changed. Resume from a current human session after restoring the required access.",
             )
-        elif code in BUDGET_STOPS:
+        elif code in CONFIGURATION_STOPS:
             kind, question = (
-                "budget",
-                "The existing budget preflight or admission blocked further work. Review the task budget, prepaid balance or configured pricing before resuming.",
+                "human_action",
+                "Preflight or call admission blocked further work. Review provider configuration and the call-count limit before resuming.",
             )
         elif code in CHANGE_STOPS:
             kind, question = (
@@ -1454,7 +1452,7 @@ async def wake(processor, org_id, session_id):
                     if child.status == "queued":
                         await processor.queue.ensure_process_delivery(session, child)
                     return
-                # Reclaiming an unknown paid child is forbidden. The next controller
+                # Reclaiming a child with an unknown external outcome is forbidden. The next controller
                 # inspects accounting and produces a recovery pause instead.
                 child.status, child.finished_at = "failed", timestamp
                 admitted = await session.scalar(

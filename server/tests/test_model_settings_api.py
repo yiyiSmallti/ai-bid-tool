@@ -69,10 +69,9 @@ async def test_metadata_reads_do_not_decrypt_call_vendor_or_aggregate_usage(
             ciphertexts = list(await session.scalars(select(ProviderConfig.encrypted_key)))
 
         def forbidden(*args, **kwargs):
-            pytest.fail("Metadata read attempted decryption, balance or usage aggregation")
+            pytest.fail("Metadata read attempted decryption or usage aggregation")
 
         monkeypatch.setattr(ProviderSecrets, "decrypt", forbidden)
-        monkeypatch.setattr(provider_configs, "balance_view", forbidden)
         monkeypatch.setattr(provider_configs, "monthly_usage", forbidden)
         for response in await reads(api, headers[0], first["id"]):
             assert response.status_code == 200, response.text
@@ -87,7 +86,7 @@ async def test_metadata_reads_do_not_decrypt_call_vendor_or_aggregate_usage(
         assert detail["revised_at"] is not None
         current = (await api.get(BASE, headers=headers[0])).json()["data"]
         assert current["current"]["id"] == second["id"]
-        assert vendor.calls == [] and vendor.balance_calls == 0
+        assert vendor.calls == []
         async with app.state.db.transaction(tenants["orgs"][0]) as session:
             audits = list(await session.scalars(select(AuditLog.details)))
             assert_safe(audits, *ciphertexts)
@@ -164,7 +163,7 @@ async def test_role_matrix_including_scoped_tokens(role, tenants, tmp_path, admi
                         "/v4/providers/test", headers=headers[0], json={"dry_run": dry_run}
                     )
                 ).status_code == 403
-        assert vendor.calls == [] and vendor.balance_calls == 0
+        assert vendor.calls == []
 
 
 @pytest.mark.parametrize("change", ["membership", "user", "role"])
@@ -231,7 +230,7 @@ async def test_concurrent_save_key_reuse_and_append_only_history(tenants, tmp_pa
                     await session.execute(text(sql))
 
 
-async def test_platform_unavailable_retains_saved_identity_prices_and_reasoning(
+async def test_platform_unavailable_retains_saved_identity_and_reasoning(
     tenants, tmp_path, admin_engine
 ):
     async with configured(tenants, tmp_path) as (app, api, headers, vendor):
@@ -248,12 +247,9 @@ async def test_platform_unavailable_retains_saved_identity_prices_and_reasoning(
         ]
         with Session(admin_engine) as session, session.begin():
             row = session.get(PlatformModel, "paid")
-            # The platform default must stay enabled, so an operator retires it first.
             row.is_default = False
             row.enabled = False
             row.model = "changed-catalog-name"
-            row.sale_input_per_mtok = 91
-            row.sale_output_per_mtok = 92
         for result in (
             await api.get(BASE, headers=headers[0]),
             await api.get(f"{BASE}/revisions/{revision_id}", headers=headers[0]),
@@ -263,18 +259,11 @@ async def test_platform_unavailable_retains_saved_identity_prices_and_reasoning(
             current = result.json()["data"].get("current", result.json()["data"])
             assert current["configuration"]["platform_model_id"] == "paid"
             assert current["catalog_state"] == "unavailable"
-            for field in (
-                "provider",
-                "model",
-                "reasoning",
-                "default_reasoning",
-                "sale_input_per_mtok",
-                "sale_output_per_mtok",
-            ):
+            for field in ("provider", "model", "reasoning", "default_reasoning"):
                 assert current[field] == before[field]
         choices = (await api.post(BASE + "/catalog/query", headers=headers[0], json={})).json()
         assert choices["items"] == []
-        assert vendor.calls == [] and vendor.balance_calls == 0
+        assert vendor.calls == []
 
 
 async def test_preflight_then_failed_paid_test_is_accounted_once_without_fallback(
@@ -296,7 +285,14 @@ async def test_preflight_then_failed_paid_test_is_accounted_once_without_fallbac
         assert receipt["data"]["provider_config_id"] == first["id"]
         assert len(vendor.calls) == 1
         assert_safe(receipt)
-        assert len(receipt["cost"]) == 9
+        assert set(receipt["cost"]) == {
+            "calls",
+            "llm_tokens",
+            "ocr_pages",
+            "search_requests",
+            "browser_units",
+            "unresolved_calls",
+        }
         async with app.state.db.transaction(tenants["orgs"][0]) as session:
             assert await session.scalar(select(func.count()).select_from(Job)) == 1
             assert_safe(list(await session.scalars(select(AuditLog.details))))
@@ -351,10 +347,6 @@ async def test_catalog_prefix_keysets_and_history_continuations(tenants, tmp_pat
                         credential="provider_test",
                         is_default=False,
                         enabled=True,
-                        vendor_input_usd_per_mtok=1,
-                        vendor_output_usd_per_mtok=2,
-                        sale_input_per_mtok=3,
-                        sale_output_per_mtok=4,
                         reasoning=[],
                         revision=1,
                         updated_by="ops@example.test",
@@ -437,7 +429,7 @@ async def test_metadata_unconfigured_and_default_do_not_create_revision(tenants,
         assert value["effective_source"] == "platform"
         assert value["current"] is None and value["default_model"]["id"] == "paid"
         assert_safe(value, "https://vendor.example/v1", "provider_test")
-        assert vendor.calls == [] and vendor.balance_calls == 0
+        assert vendor.calls == []
         async with app.state.db.transaction(tenants["orgs"][0]) as session:
             assert await session.scalar(select(func.count()).select_from(ProviderConfig)) == 0
 

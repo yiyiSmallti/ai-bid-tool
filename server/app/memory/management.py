@@ -44,27 +44,27 @@ async def reader(session, actor, *, scope: str | None = "memory:read"):
     return actor
 
 
-def encoded(command, data, items, currency, duration_ms=0):
+def encoded(command, data, items, duration_ms=0):
     return Result(
         ok=True,
         command=command,
         data=data.model_dump(mode="json"),
         items=[item.model_dump(mode="json") for item in items],
         warnings=WARNINGS,
-        cost=Cost(billing_currency=currency),
+        cost=Cost(),
         duration_ms=duration_ms,
     )
 
 
-def page_result(command, page, currency, duration_ms=0):
-    output = encoded(command, page.data, page.items, currency, duration_ms)
+def page_result(command, page, duration_ms=0):
+    output = encoded(command, page.data, page.items, duration_ms)
     if bounded.result_bytes(output) > PAGE_BYTE_LIMIT:
         bounded.too_large()
     return output
 
 
-def detail_result(command, value, currency, duration_ms=0):
-    output = encoded(command, value, [], currency, duration_ms)
+def detail_result(command, value, duration_ms=0):
+    output = encoded(command, value, [], duration_ms)
     if bounded.result_bytes(output) > DETAIL_BYTE_LIMIT:
         bounded.too_large()
     return output
@@ -96,7 +96,6 @@ def build_page(session, actor, command, purpose, parent, filters, items, anchors
                     command,
                     data,
                     items[:count],
-                    bounded.settings_for(session).billing_currency,
                     9223372036854775807,
                 )
             )
@@ -347,7 +346,7 @@ async def detail(session, actor, identifier, body: ResourceDetailQuery, settings
             revised_by=by[revision.id],
             actions=actions,
         )
-        detail_result("memory show", value, settings.billing_currency, 9223372036854775807)
+        detail_result("memory show", value, 9223372036854775807)
         return value
 
 

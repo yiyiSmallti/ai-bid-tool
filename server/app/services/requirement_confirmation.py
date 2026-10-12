@@ -673,7 +673,7 @@ async def preview_manual(session, actor, task_id, request, *, settings=None):
         preview_hash=digest([str(actor.org_id), str(task_id), body, pin.model_dump(mode="json")]),
         verified_source=pin,
         duplicate_requirement_id=duplicate,
-        estimated_cost=schema.Cost(billing_currency=config(settings).billing_currency),
+        estimated_cost=schema.Cost(),
     )
 
 

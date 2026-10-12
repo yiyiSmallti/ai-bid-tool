@@ -9,7 +9,6 @@ import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -20,7 +19,7 @@ from app.core.config import Settings
 from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets
 from app.jobs.execution import job_cost
-from app.models.entities import Job, OrgBalance, UsageRecord, VendorCall
+from app.models.entities import Job, UsageRecord, VendorCall
 from app.models.score import (
     ScoreRubricCoverage,
     ScoreRubricItem,
@@ -68,23 +67,13 @@ from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 PARTIAL_STOPS = {
-    "task_budget_exceeded",
-    "task_budget_unpriced",
-    "task_budget_currency_review_required",
-    "insufficient_balance",
-    "spend_cap_reached",
-    "job_charge_limit_exceeded",
     "job_call_limit_exceeded",
 }
 HARD_STOPS = {
     "job_attempt_stopped",
     "job_heartbeat_failed",
     "usage_accounting_failed",
-    "call_charge_bound_exceeded",
     "invalid_provider_usage",
-    "billing_currency_mismatch",
-    "billing_price_unavailable",
-    "billing_bound_unavailable",
     "score_rubric_usage_integrity",
     "score_rubric_input_changed",
     "redaction_required",
@@ -100,36 +89,27 @@ async def resolve(session: AsyncSession, settings: Settings, job: Job | None = N
     return await llm_providers.resolve_llm(session, settings, job=job)
 
 
-def prices(llm, *, rubric: bool = False) -> dict:
+def provider_options(llm, *, rubric: bool = False) -> dict:
     configured = getattr(llm, "settings", None)
     return {
-        "sale": [str(value) for value in llm.sale]
-        if getattr(llm, "sale", None) is not None
-        else None,
-        "vendor_input": str(configured.llm_input_usd_per_mtok)
-        if configured and configured.llm_input_usd_per_mtok is not None
-        else None,
-        "vendor_output": str(configured.llm_output_usd_per_mtok)
-        if configured and configured.llm_output_usd_per_mtok is not None
-        else None,
         "org_owned": bool(getattr(llm, "org_owned", False)),
         "request_options_sha256": drafts.digest(configured.request_options())
         if configured
         else None,
+        "batch_chars": configured.llm_batch_chars if configured else None,
+        "output_tokens": configured.llm_max_output_tokens if configured else None,
+        "json_mode": configured.llm_json_mode if configured else None,
+        "effort": configured.llm_effort if configured else None,
         **(
             {
                 "rubric_max_request_bytes": configured.rubric_max_request_bytes
                 if configured
                 else None,
-                "batch_chars": configured.llm_batch_chars if configured else None,
                 "concurrency": configured.llm_concurrency if configured else None,
             }
             if rubric
-            else {"batch_chars": configured.llm_batch_chars if configured else None}
+            else {}
         ),
-        "output_tokens": configured.llm_max_output_tokens if configured else None,
-        "json_mode": configured.llm_json_mode if configured else None,
-        "effort": configured.llm_effort if configured else None,
     }
 
 
@@ -258,8 +238,8 @@ async def prepare(
             "schema_version": SCHEMA_VERSION,
             "adapter_version": ADAPTER_VERSION,
             "model": None,
+            "provider_options": None,
             "reasoning": None,
-            "price": None,
             "provider_source": None,
             "outbound_sha256": None,
             "redacted_counts": {},
@@ -272,15 +252,10 @@ async def prepare(
         "schema_version": SCHEMA_VERSION,
         "adapter_version": ADAPTER_VERSION,
         "model": model_identity(llm),
+        "provider_options": provider_options(llm, rubric=True),
         "reasoning": reasoning,
-        "price": prices(llm, rubric=True),
         "provider_source": "org" if getattr(llm, "org_owned", False) else "platform",
     }
-    if getattr(llm, "org_owned", False):
-        fixed.manifest["warnings"] = [
-            *fixed.manifest["warnings"],
-            "org_key_max_charge_does_not_limit_vendor_bill",
-        ]
     fields, library = await secret_library(session, fixed.task.id, settings)
     outbound = build_outbound(fixed.secret, fields, library)
     fixed.secret["outbound"] = outbound
@@ -298,98 +273,38 @@ async def prepare(
     return llm
 
 
-async def preview_cost(
-    session: AsyncSession,
-    fixed: RubricSnapshot,
-    llm,
-    body: RubricGenerateRequest,
-    settings: Settings,
-) -> dict:
-    unknown = {
-        "estimated_cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": None},
-        "estimated_charge": None,
-        "cost_basis": "unknown",
-        "cost_basis_reason": "model_unavailable",
-        "admission_blocker": None,
-    }
-    if not fixed.manifest["model_redaction_enabled"]:
-        return unknown | {
-            "admission_blocker": "redaction_required",
-            "cost_basis_reason": "redaction_required",
-        }
-    if fixed.secret["outbound"]["redacted_requirements"]:
-        return unknown | {
-            "admission_blocker": "sensitive_scoring_source",
-            "cost_basis_reason": "sensitive_source_cannot_be_persisted",
-        }
-    if not supports_rubric(llm):
-        return unknown | {"admission_blocker": "rubric_capability_unavailable"}
-    adapter = rubric_provider(llm)
-    request = provider_request(fixed.secret["outbound"])
-    if not isinstance(adapter, HTTPRubricProvider):
-        if getattr(adapter, "test_only", False):
-            return {
-                "estimated_cost": Cost().model_dump(mode="json"),
-                "estimated_charge": Decimal(0),
-                "cost_basis": "known",
-                "cost_basis_reason": "test_provider",
-                "admission_blocker": None,
-            }
-        return unknown | {"admission_blocker": "billing_bound_unavailable"}
-    try:
-        adapter.validate_request(request)
-    except ProviderFailure as error:
-        if error.code != "rubric_context_limit":
-            raise
-        return unknown | {
-            "admission_blocker": error.code,
-            "cost_basis_reason": "complete_rubric_request_exceeds_limit",
-        }
-    try:
-        if adapter.llm.platform_model_id is None and not adapter.llm.org_owned:
-            return unknown | {
-                "admission_blocker": "billing_price_unavailable",
-                "cost_basis_reason": "prices_unavailable",
-            }
-        inputs, outputs, bound, first = adapter.preview_bounds(request)
-    except ProviderFailure as error:
-        return unknown | {
-            "admission_blocker": error.code,
-            "cost_basis_reason": "prices_unavailable",
-        }
-    input_price = adapter.llm.settings.llm_input_usd_per_mtok
-    output_price = adapter.llm.settings.llm_output_usd_per_mtok
-    usd = (
-        None
-        if input_price is None or output_price is None
-        else (inputs * input_price + outputs * output_price) / 1_000_000
+async def preview_cost(session, fixed, llm, body, settings) -> dict:
+    from app.services.preflight import estimate_quotes
+
+    blocker = (
+        "redaction_required"
+        if not fixed.manifest["model_redaction_enabled"]
+        else "sensitive_scoring_source"
+        if fixed.secret["outbound"]["redacted_requirements"]
+        else None
     )
-    blocker = None
-    if first > settings.job_max_charge:
-        blocker = "job_charge_limit_exceeded"
-    elif body.max_charge is not None and first > body.max_charge:
-        blocker = "spend_cap_below_first_call"
-    if adapter.llm.platform_model_id is not None:
-        balance = await session.scalar(select(OrgBalance))
-        held = await session.scalar(
-            select(func.coalesce(func.sum(VendorCall.reserved_charge), 0)).where(
-                VendorCall.state != "completed"
-            )
-        )
-        if balance is not None and balance.currency != settings.billing_currency:
-            blocker = "billing_currency_mismatch"
-        elif balance is None or balance.balance <= 0 or balance.balance - (held or 0) < first:
-            blocker = "insufficient_balance"
+    if blocker:
+        return {"estimated_cost": Cost().model_dump(mode="json"), "admission_blocker": blocker}
+    if not supports_rubric(llm):
+        return {
+            "estimated_cost": Cost().model_dump(mode="json"),
+            "admission_blocker": "rubric_capability_unavailable",
+        }
+    adapter = rubric_provider(llm)
+    if not isinstance(adapter, HTTPRubricProvider):
+        return {
+            "estimated_cost": Cost().model_dump(mode="json"),
+            "admission_blocker": None
+            if getattr(adapter, "test_only", False)
+            else "rubric_capability_unavailable",
+        }
+    try:
+        plans = adapter.preview_quotes(provider_request(fixed.secret["outbound"]))
+    except ProviderFailure as error:
+        return {"estimated_cost": Cost().model_dump(mode="json"), "admission_blocker": error.code}
     return {
-        "estimated_cost": {"llm_tokens": inputs + outputs, "ocr_pages": 0, "usd": usd},
-        "estimated_charge": bound,
-        "cost_basis": "known",
-        "cost_basis_reason": (
-            "org_key_platform_charge_zero_vendor_cost_estimate"
-            if adapter.llm.org_owned
-            else "first_pass_token_bound"
-        ),
-        "admission_blocker": blocker,
+        "estimated_cost": estimate_quotes(plans).model_dump(mode="json"),
+        "admission_blocker": None,
     }
 
 
@@ -431,62 +346,51 @@ async def _submit_rubric(
     )
     requirement_ids = [UUID(entry["requirement_id"]) for entry in fixed.manifest["requirements"]]
     if body.dry_run:
-        data = RubricPreview.model_validate(
-            {
-                "input": rubric_input(fixed.manifest, fixed.input_hash),
-                "selected_item_ids": requirement_ids,
-                "scoring_requirement_ids": requirement_ids,
-                "billing_currency": settings.billing_currency,
-                "redaction_revision": fixed.manifest["model_redaction_revision"],
-                "redaction_rule_version": fixed.manifest["redaction_rule_version"],
-                "redacted_counts": fixed.manifest.get("redacted_counts", {}),
-                "prompt_version": PROMPT_VERSION,
-                "schema_version": SCHEMA_VERSION,
-                "normalization_rule_version": score_inputs.NORMALIZATION_RULE_VERSION,
-                "max_charge": body.max_charge,
-                **(
-                    {
-                        "provider_config_id": getattr(llm, "provider_config_id", None),
-                        "provider_source": fixed.manifest["provider_source"],
-                        "platform_model_id": fixed.manifest["model"].get("platform_model_id"),
-                        "model_revision": fixed.manifest["model"].get("model_revision"),
-                        "model": fixed.manifest["model"]["model"],
-                        "reasoning": fixed.manifest["reasoning"],
-                    }
-                    if llm is not None
-                    else {}
-                ),
-                **estimate,
-            }
-        ).model_dump(mode="json")
-        from app.services import budget_preflight
+        data = {
+            "input": rubric_input(fixed.manifest, fixed.input_hash),
+            "selected_item_ids": requirement_ids,
+            "scoring_requirement_ids": requirement_ids,
+            "redaction_revision": fixed.manifest["model_redaction_revision"],
+            "redaction_rule_version": fixed.manifest["redaction_rule_version"],
+            "redacted_counts": fixed.manifest.get("redacted_counts", {}),
+            "prompt_version": PROMPT_VERSION,
+            "schema_version": SCHEMA_VERSION,
+            "normalization_rule_version": score_inputs.NORMALIZATION_RULE_VERSION,
+            **(
+                {
+                    "provider_config_id": getattr(llm, "provider_config_id", None),
+                    "provider_source": fixed.manifest["provider_source"],
+                    "platform_model_id": fixed.manifest["model"].get("platform_model_id"),
+                    "model_revision": fixed.manifest["model"].get("model_revision"),
+                    "model": fixed.manifest["model"]["model"],
+                    "reasoning": fixed.manifest["reasoning"],
+                }
+                if llm is not None
+                else {}
+            ),
+            **estimate,
+        }
+        from app.services import preflight as preflight_service
 
         quotes = []
-        if (
-            isinstance(llm, HTTPExtractor)
-            and estimate.get("estimated_charge") is not None
-            and estimate.get("cost_basis_reason") != "test_provider"
-        ):
+        if isinstance(llm, HTTPExtractor) and estimate.get("admission_blocker") is None:
             adapter = rubric_provider(llm)
             if isinstance(adapter, HTTPRubricProvider):
                 quotes = adapter.preview_quotes(provider_request(fixed.secret["outbound"]))
-        data = await budget_preflight.attach(
+        data = await preflight_service.attach(
             session,
             data,
             command="score rubric generate",
             task_id=task_id,
             input_hash=fixed.input_hash,
-            currency=settings.billing_currency,
             settings=settings,
             quotes=quotes,
             planned_calls=len(quotes)
-            if quotes
-            or estimate.get("cost_basis_reason") in {"no_assessable_items", "test_provider"}
+            if quotes or estimate.get("admission_blocker") is None
             else None,
-            max_charge=body.max_charge,
             cached_job=await session.scalar(select(Job).where(Job.cache_key == cache_key)),
         )
-        return data, None
+        return RubricPreview.model_validate(data).model_dump(mode="json"), None
     if estimate.get("admission_blocker") == "redaction_required":
         cards.fail("redaction_required", "Rubric generation requires redaction", 409, 4)
     if fixed.input_hash != body.expected_input_hash:
@@ -529,7 +433,6 @@ async def _submit_rubric(
                     "actor_kind": actor.actor_kind,
                     "scopes": sorted(actor.scopes),
                     "provider_source": fixed.manifest.get("provider_source"),
-                    "max_charge": str(body.max_charge) if body.max_charge is not None else None,
                 }
             },
         )
@@ -559,21 +462,7 @@ async def _submit_rubric(
                 4,
             )
         job.status, job.error, job.queue_id, job.attempts = "queued", None, None, 0
-        if body.max_charge is not None:
-            job.result = {
-                **job.result,
-                "submission": {**job.result["submission"], "max_charge": str(body.max_charge)},
-            }
         job.lease_until, job.finished_at, job.run_id = None, None, None
-    elif body.max_charge is not None and job.status in {"queued", "running"}:
-        cap = job.result["submission"].get("max_charge")
-        if cap is None or Decimal(cap) > body.max_charge:
-            cards.fail(
-                "score_rubric_cap_conflict",
-                "The existing rubric job has a higher charge cap",
-                409,
-                2,
-            )
     await session.flush()
     return AssessmentJobAccepted.model_validate(
         {"job_id": job.id, "status": job.status, "cached": cached}
@@ -954,7 +843,7 @@ async def usage_integrity(
     if len(completed) != len(usages) or {usage.call_id for usage in usages} != set(completed):
         cards.fail(
             f"{kind}_usage_integrity",
-            "Score capability usage does not match settled calls",
+            "Score capability usage does not match completed calls",
             500,
             4,
         )
@@ -969,7 +858,6 @@ async def usage_integrity(
             usage.output_tokens,
             usage.provider_config_id,
             usage.platform_model_id,
-            Decimal(str(usage.charge or 0)).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP),
         )
 
     for usage in usages:
@@ -979,13 +867,10 @@ async def usage_integrity(
             or usage.task_id != job.task_id
             or call_id is None
             or call_id != usage.id
-            or usage.charge is None
-            or Decimal(str(usage.charge)).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
-            != completed[call_id].charge
         ):
             cards.fail(
                 f"{kind}_usage_integrity",
-                "Score capability usage settlement identity is invalid",
+                "Score capability usage call identity is invalid",
                 500,
                 4,
             )
@@ -1176,11 +1061,6 @@ async def publish(
             "candidate_items": len(accepted["items"]),
             "unresolved_requirements": unresolved,
             "usage_record_ids": [row.id for row in usage_rows],
-            "charge": sum(
-                (Decimal(str(row.charge)) for row in usage_rows if row.charge is not None),
-                Decimal(0),
-            ),
-            "billing_currency": settings.billing_currency,
             "stop_reason": stop_reason,
         }
     ).model_dump(mode="json")

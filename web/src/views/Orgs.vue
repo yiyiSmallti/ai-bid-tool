@@ -1,16 +1,13 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { Plus } from "@element-plus/icons-vue";
-import { count, money, request } from "../api.js";
+import { count, request } from "../api.js";
 import { confirmAction } from "../ui.js";
 import OrgApplications from "../components/OrgApplications.vue";
 
 const orgs = ref([]);
 const usage = ref({});
-const totals = ref({ calls: 0, tokens: 0, charge: 0 });
-const currency = ref("");
-const adjusting = ref(null);
-const adjustment = ref({ mode: "add", amount: "", reason: "" });
+const totals = ref({ calls: 0, tokens: 0 });
 const error = ref("");
 const creating = ref(false);
 const form = ref({ name: "", admin_email: "" });
@@ -29,12 +26,10 @@ async function load() {
     orgs.value = list.items;
     pendingApplications.value = list.data.pending_applications ?? 0;
     totals.value = month.data.totals;
-    currency.value = month.data.currency;
     const byOrg = {};
     for (const row of month.items) {
-      const entry = (byOrg[row.org_id] ??= { tokens: 0, charge: 0 });
+      const entry = (byOrg[row.org_id] ??= { tokens: 0 });
       entry.tokens += row.tokens;
-      entry.charge += row.charge;
     }
     usage.value = byOrg;
   } catch (exc) {
@@ -62,27 +57,6 @@ async function create() {
   }
 }
 
-function startAdjust(org) {
-  adjusting.value = org;
-  adjustment.value = { mode: "add", amount: "", reason: "" };
-}
-
-async function adjust() {
-  error.value = "";
-  const amount = Number(adjustment.value.amount);
-  if (adjustment.value.amount === "" || Number.isNaN(amount) || !adjustment.value.reason.trim()) {
-    error.value = "填写金额和原因";
-    return;
-  }
-  try {
-    await request("POST", `/platform/orgs/${adjusting.value.id}/balance`, { ...adjustment.value, amount });
-    adjusting.value = null;
-    await load();
-  } catch (exc) {
-    error.value = exc.code === "currency_mismatch" ? "该单位余额使用其他币种，无法调整" : exc.message;
-  }
-}
-
 async function setActive(org, active) {
   const verb = active ? "启用" : "停用";
   if (!(await confirmAction(`${verb}「${org.name}」？停用后该单位所有登录和令牌立即失效。`, `${verb}单位`, "确定", !active))) return;
@@ -105,7 +79,6 @@ onMounted(load);
   <div class="stat-grid">
     <div class="stat"><span class="label">启用中单位</span><span class="value">{{ activeCount }}</span></div>
     <div class="stat"><span class="label">本月 token</span><span class="value">{{ count(totals.tokens) }}</span></div>
-    <div class="stat"><span class="label">本月应收</span><span class="value">{{ money(totals.charge, currency) }}</span></div>
   </div>
   <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
   <el-tabs v-model="tab" aria-label="单位与申请">
@@ -131,37 +104,22 @@ onMounted(load);
     </template>
     <template v-else>已开通，{{ created.admin_email }} 用现有密码即可登录。</template>
   </el-alert>
-  <el-card v-if="adjusting" shadow="never" class="section">
-    <template #header><h3 class="card-title">调整「{{ adjusting.name }}」的余额</h3></template>
-    <form class="panel el-form el-form--label-top" data-testid="adjust-panel" @submit.prevent="adjust">
-      <p class="hint">当前余额 {{ money(adjusting.balance, adjusting.currency ?? currency) }}</p>
-      <div class="grid three">
-        <el-form-item label="方式"><el-select v-model="adjustment.mode" name="adjust-mode"><el-option value="add" label="增减（负数为扣减）" /><el-option value="set" label="设为" /></el-select></el-form-item>
-        <el-form-item :label="`金额（${currency}）`"><el-input v-model="adjustment.amount" type="number" step="0.01" name="adjust-amount" /></el-form-item>
-        <el-form-item label="原因"><el-input v-model="adjustment.reason" maxlength="500" name="adjust-reason" /></el-form-item>
-      </div>
-      <div class="actions"><el-button type="primary" native-type="submit">确认调整</el-button><el-button @click="adjusting = null">取消</el-button></div>
-    </form>
-  </el-card>
   <div class="table-scroll">
     <table class="data-table">
-      <thead><tr><th>名称</th><th>状态</th><th class="num">成员</th><th>管理员</th><th class="num">余额</th><th class="num">本月 token</th><th class="num">本月应收</th><th class="num">操作</th></tr></thead>
+      <thead><tr><th>名称</th><th>状态</th><th class="num">成员</th><th>管理员</th><th class="num">本月 token</th><th class="num">操作</th></tr></thead>
       <tbody>
         <tr v-for="org in orgs" :key="org.id">
           <td><strong>{{ org.name }}</strong></td>
           <td><span class="tag" :class="org.active ? 'success' : ''">{{ org.active ? "启用" : "已停用" }}</span></td>
           <td class="num">{{ org.member_count }}</td>
           <td>{{ org.admin_emails.join("，") || "—" }}</td>
-          <td class="num">{{ money(org.balance, org.currency ?? currency) }}</td>
           <td class="num">{{ count(usage[org.id]?.tokens) }}</td>
-          <td class="num">{{ money(usage[org.id]?.charge ?? 0, currency) }}</td>
           <td class="num"><div class="row-actions">
-            <el-button size="small" @click="startAdjust(org)">调整余额</el-button>
             <el-button v-if="org.active" size="small" type="danger" plain @click="setActive(org, false)">停用</el-button>
             <el-button v-else size="small" type="success" plain @click="setActive(org, true)">启用</el-button>
           </div></td>
         </tr>
-        <tr v-if="!orgs.length"><td colspan="8" class="empty">还没有单位。点「开通单位」创建第一个。</td></tr>
+        <tr v-if="!orgs.length"><td colspan="6" class="empty">还没有单位。点「开通单位」创建第一个。</td></tr>
       </tbody>
     </table>
   </div>

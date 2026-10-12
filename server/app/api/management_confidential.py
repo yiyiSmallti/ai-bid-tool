@@ -21,7 +21,7 @@ def create_router(context, settings):
     secrets = Secrets.for_data(settings)
 
     async def management_context(request: Request, ctx=Depends(context, scope="function")):
-        if getattr(request.state, "contract_version", None) != "4.0":
+        if getattr(request.state, "contract_version", None) != "5.0":
             raise not_found()
         session, actor = ctx
         session.info["management_settings"] = settings
@@ -31,7 +31,6 @@ def create_router(context, settings):
         return confidential.page_result(
             confidential.COMMANDS[purpose],
             value,
-            settings.billing_currency,
             round((time.monotonic() - started) * 1000),
         )
 
@@ -79,7 +78,6 @@ def create_router(context, settings):
         return confidential.detail_result(
             confidential.COMMANDS["set_value"],
             value,
-            settings.billing_currency,
             round((time.monotonic() - started) * 1000),
         )
 

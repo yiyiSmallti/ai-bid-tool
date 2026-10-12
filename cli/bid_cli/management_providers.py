@@ -71,22 +71,12 @@ def validated(body: dict, command: str, org_id: UUID, config_id: UUID | None = N
         if set(body) != {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}:
             raise ValueError("invalid envelope")
         result = Result.model_validate(body)
-        if (
-            not result.ok
-            or result.command != command
-            or result.warnings
-            or result.cost != Cost(billing_currency=result.cost.billing_currency)
-        ):
+        if not result.ok or result.command != command or result.warnings or result.cost != Cost():
             raise ValueError("invalid metadata result")
         if command in COMMAND_DATA:
             detail = COMMAND_DATA[command].model_validate(result.data)
             if detail.org_id != org_id or result.items:
                 raise ValueError("wrong org or detail items")
-            if (
-                isinstance(detail, ProviderSettingsData)
-                and detail.billing_currency != result.cost.billing_currency
-            ):
-                raise ValueError("inconsistent billing currency")
             if isinstance(detail, ProviderRevisionMetadata) and detail.id != config_id:
                 raise ValueError("wrong exact revision")
             result.data = detail.model_dump(mode="json")

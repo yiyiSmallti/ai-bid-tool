@@ -7,8 +7,8 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, JsonValue, StringConstraints, model_validator
 
-from app.schemas.budget_contracts import BudgetCallQuote, Currency, Money
 from app.schemas.contracts import Contract, ProviderUsage
+from app.schemas.preflight_contracts import CallPlan
 from app.schemas.screenshot_contracts import Sha256
 
 CLEF_IMAGE_LIMIT = 4
@@ -165,25 +165,19 @@ ClefAnswer = Annotated[
 ]
 
 
-class ClefFixedCallQuote(Contract):
-    """Fixed catalog charge, settled per dispatched call independent of usage tokens."""
+class ClefCallPlan(Contract):
+    """Fixed catalog identity and bounded input for each admitted call."""
 
-    quote: BudgetCallQuote
-    charge_basis: Literal["fixed_per_call"] = "fixed_per_call"
+    quote: CallPlan
     platform_config_revision: Revision
-    # Returned input_tokens remain telemetry and never recalculate this amount.
-    returned_tokens_affect_charge: Literal[False] = False
 
     @model_validator(mode="after")
     def pinned_platform_quote(self) -> Self:
         if (
             self.quote.capability != "vision"
-            or self.quote.payer != "org_platform"
             or self.quote.model != "@cf/cloudflare/clef"
             or self.quote.platform_model_id is None
-            or self.quote.reserved_task_amount is None
             or self.quote.image_count > CLEF_IMAGE_LIMIT
-            or self.quote.unknown_reason is not None
         ):
             raise ValueError("Clef requires a known explicit platform vision call quote")
         return self
@@ -201,7 +195,6 @@ class ClefGatewayCheck(Contract):
     gateway_retries: Literal[False]
     rate_limit_requests: int = Field(gt=0)
     rate_limit_seconds: int = Field(gt=0)
-    workers_ai_billing_mode: Literal["unified"]
     checked_at: AwareDatetime
 
 
@@ -211,7 +204,7 @@ class ClefTriageResult(Contract):
     request_sha256: Sha256
     answers: list[ClefAnswer] = Field(min_length=1, max_length=64)
     usage: ProviderUsage
-    fixed_quote: ClefFixedCallQuote
+    fixed_quote: ClefCallPlan
     triage_only: Literal[True] = True
     contains_reasons_or_citations: Literal[False] = False
 
@@ -229,9 +222,6 @@ class ClefSettingsSet(Contract):
     account_id: str = Field(pattern=r"^[a-f0-9]{32}$")
     gateway_id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
     enabled: bool = True
-    price_revision: Revision
-    fixed_sale_price: Money
-    currency: Currency = "USD"
     workers_credential_id: UUID
     gateway_credential_id: UUID
 
@@ -249,10 +239,6 @@ class ClefPlatformConfig(ClefSettingsSet):
     gateway_credential_revision: Revision
     gateway_check: ClefGatewayCheck | None = None
     updated_at: AwareDatetime
-
-    @property
-    def price_version(self) -> int:
-        return self.price_revision
 
 
 class ClefSettingsData(Contract):

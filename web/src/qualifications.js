@@ -7,7 +7,7 @@ export { validId, reasonLabels } from './products.js';
 export function qualificationReader() {
  const channels=new Map(),pending=[];let active=0,closed=false;
  function pump(){while(!closed&&active<2&&pending.length){const job=pending.shift();if(job.controller.signal.aborted){job.reject(new DOMException('读取已取消','AbortError'));continue;}active++;job.execute().then(job.resolve,job.reject).finally(()=>{active--;pump();});}}
- function read(channel,method,path,body,options={}){channels.get(channel)?.abort();const controller=new AbortController();channels.set(channel,controller);return new Promise((resolve,reject)=>{pending.push({controller,resolve,reject,execute:()=>orgRequest(method,path,body,{...options,signal:controller.signal,contractVersion:4})});pump();});}
+ function read(channel,method,path,body,options={}){channels.get(channel)?.abort();const controller=new AbortController();channels.set(channel,controller);return new Promise((resolve,reject)=>{pending.push({controller,resolve,reject,execute:()=>orgRequest(method,path,body,{...options,signal:controller.signal})});pump();});}
  function cancel(channel){channels.get(channel)?.abort();}
  function stop(){closed=true;for(const controller of channels.values())controller.abort();for(const job of pending.splice(0))job.reject(new DOMException('读取已取消','AbortError'));}
  return {read,cancel,stop};

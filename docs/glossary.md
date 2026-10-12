@@ -54,8 +54,6 @@ retain their original spelling. The root README also retains a short Chinese sum
 | --- | --- | --- |
 | 单位 | org (organization/tenant) | The tenant and primary data-isolation boundary; use **org** after its first definition. |
 | 任务 | task | A bid-preparation task. |
-| 充值卡密 | recharge card | A prepaid recharge credential. |
-| 预付余额 | prepaid balance | The balance used for platform-billed calls. |
 | 平台运营后台 | platform operator console | The platform administration interface. |
 | 发起人 | initiator | The human who initiates an operation or agent session. |
 | 人工确认 | human confirmation | Confirmation performed by an authorized human. |

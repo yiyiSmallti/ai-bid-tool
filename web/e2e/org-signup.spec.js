@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 
 const output = resolve(process.env.E2E_OUTPUT ?? "../data/work/org-signup/browser");
-const result = (command, data = {}, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: { llm_tokens: 0, ocr_pages: 0, usd: "0" }, duration_ms: 0 });
+const result = (command, data = {}, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: { calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 }, duration_ms: 0 });
 const receipt = result("auth org-application submit", { submitted: true, review: "platform_manual", sign_in_after_approval: true });
 const failure = (code, message = "Operation failed") => result("auth org-application submit", { error: { code, message, exit_code: 3 } }, [], false);
 const password = "synthetic-signup-password";
@@ -122,7 +122,7 @@ test("platform badge, escaped applications, corrected approval, explicit attachm
   ];
   const decisions = [], orgs = [];
   await page.route((url) => url.pathname === "/platform/orgs", (route) => route.fulfill({ json: result("platform org list", { pending_applications: applications.filter(row => row.status === "pending").length }, orgs) }));
-  await page.route((url) => url.pathname === "/platform/usage", (route) => route.fulfill({ json: result("platform usage", { totals: { calls: 0, tokens: 0, charge: 0 }, currency: "USD" }) }));
+  await page.route((url) => url.pathname === "/platform/usage", (route) => route.fulfill({ json: result("platform usage", { totals: { calls: 0, tokens: 0, }, }) }));
   await page.route((url) => url.pathname.startsWith("/platform/org-applications"), async (route) => {
     expect(route.request().headers().authorization).toBe("Bearer synthetic-session");
     const url = new URL(route.request().url());
@@ -133,7 +133,7 @@ test("platform badge, escaped applications, corrected approval, explicit attachm
     if (mode === "approve") {
       expect(body.attach_existing_user).toBe(row.existing_user);
       const decision = { application_id: target, status: "approved", org_id: id(100 + decisions.length), admin_user_id: id(200 + decisions.length), user_created: !row.existing_user, attached_existing_user: row.existing_user };
-      orgs.push({ id: decision.org_id, name: body.org_name ?? row.org_name, active: true, member_count: 1, admin_emails: [row.email], balance: 0, currency: "USD" });
+      orgs.push({ id: decision.org_id, name: body.org_name ?? row.org_name, active: true, member_count: 1, admin_emails: [row.email], });
       applications = applications.map(item => item.id === target ? { ...item, ...decision, decided_at: "2026-10-07T11:00:00Z", decided_by: "ops@example.test" } : item);
       return route.fulfill({ json: result("platform org application approve", decision) });
     }
@@ -188,15 +188,14 @@ test("platform badge, escaped applications, corrected approval, explicit attachm
   await expect(expired).toContainText("已过期");
   await expect(expired.getByRole("button")).toHaveCount(0);
   await page.getByRole("tab", { name: "单位", exact: true }).click();
-  await expect(page.getByRole("row", { name: /更正后的组织名称/ })).toContainText("0.00 USD");
-  writeFileSync(join(output, "review-result.json"), JSON.stringify({ passed: true, checks: ["pending-badge", "escaped-fields", "name-correction", "explicit-attach", "required-reason", "expiry-no-approval", "zero-balance"] }, null, 2));
+  writeFileSync(join(output, "review-result.json"), JSON.stringify({ passed: true, checks: ["pending-badge", "escaped-fields", "name-correction", "explicit-attach", "required-reason", "expiry-no-approval", "created-membership"] }, null, 2));
 });
 
 test("account appearing at approval requires renewed explicit attachment", async ({ page }) => {
   await page.addInitScript(() => sessionStorage.setItem("bid.platform.session", "synthetic-session"));
   const row = application(8); let writes = 0;
   await page.route((url) => url.pathname === "/platform/orgs", (route) => route.fulfill({ json: result("platform org list", { pending_applications: 1 }) }));
-  await page.route((url) => url.pathname === "/platform/usage", (route) => route.fulfill({ json: result("platform usage", { totals: { calls: 0, tokens: 0, charge: 0 }, currency: "USD" }) }));
+  await page.route((url) => url.pathname === "/platform/usage", (route) => route.fulfill({ json: result("platform usage", { totals: { calls: 0, tokens: 0, }, }) }));
   await page.route((url) => url.pathname.startsWith("/platform/org-applications"), async (route) => {
     if (route.request().method() === "GET") return route.fulfill({ json: result("platform org application list", {}, writes > 1 ? [] : [row]) });
     writes++;

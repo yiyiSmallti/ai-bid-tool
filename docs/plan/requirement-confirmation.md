@@ -52,7 +52,8 @@ override the runtime modules listed here.
 
 | Existing mechanism | B02 integration |
 | --- | --- |
-| `Source`, `ExtractedRequirement`, `Result`, `Cost`, `CONTRACT_VERSION` in [schemas/contracts.py](../../server/app/schemas/contracts.py); `Requirement` in [models/entities.py](../../server/app/models/entities.py) | Source requires exactly one PDF page or Word `Location`; separate `requirement_reviews` records hold review state/revision/confirmer. Result is **4.0**, including the task-budget cost fields. No duplicate Source or Result definition is needed. |
+| `Source`, `ExtractedRequirement`, `Result`, `Cost`, `CONTRACT_VERSION` in [schemas/contracts.py](../../server/app/schemas/contracts.py); `Requirement` in [models/entities.py](../../server/app/models/entities.py) | Source requires exactly one PDF page or Word `Location`; separate `requirement_reviews` records hold review state/revision/confirmer.
+No duplicate Source or Result definition is needed. |
 | `source_text`, `locate_span`, `locate_spans`, `split_cited`, `merge_starred`, `fingerprint` in [services/extraction.py](../../server/app/services/extraction.py) | Verification binds a parsed page/block. Normalized matching resolves a unique original span, with a boundary preference; saved quote is literal original text. Fingerprint deduplicates normalized quote and position within a job, not a full reviewed meaning or explicit occurrence. |
 | `attach` in [providers/llm.py](../../server/app/providers/llm.py), `Processor.__call__` in [jobs/processor.py](../../server/app/jobs/processor.py) | Rejected records contain `position`, at most 200 quote characters and `reason`, without complete Source/category/text/condition. All rejected and no kept items fails `invalid_citation` before the starred-rule union. Mixed results succeed with warnings. There is no `jobs/extract*.py` module in this checkout: extraction execution lives in Processor. |
 | `submit` in [services/tender_jobs.py](../../server/app/services/tender_jobs.py), `latest_extractions`, `list_requirements`, `extraction_history` in [services/requirements.py](../../server/app/services/requirements.py) | Fixed model/reasoning inputs reuse a cached job. Successful different jobs keep separate requirements; default lists select the latest successful job per document. Original `created` counts describe model publication, not subsequent manual additions. |
@@ -63,12 +64,13 @@ override the runtime modules listed here.
 | `row_projection`, `matches`, `board`, `progress`, `activity` in [task_board.py](../../server/app/services/task_board.py), `requirements_with_collaboration`, `load` in [task_board_projection.py](../../server/app/services/task_board_projection.py) | The default projection retains response enums with requirement gaps; [the opt-in overlay](../../server/app/services/requirement_board.py) adds requirement buckets and a live next actor. Citation repair remains admin-only. |
 
 [The design's typical flow](../design.md#users-and-core-scenarios) includes “confirm
-requirements”; its human-gate prose largely describes evidence confirmation. These are
-different decisions. The runtime keeps independent decisions for both. Likewise, the design's
+requirements”; its human-gate prose largely describes evidence confirmation.
+These are
+different decisions.
+The runtime keeps independent decisions for both.
+Likewise, the design's
 rerun wording does not mean equivalent requirements inherit human decisions: extraction
 jobs are separate scopes under [ADR 0004](../adr/0004-extractions-per-reasoning-level.md).
-Old budget examples in [org-console.md](org-console.md) and [check.md](check.md) predate
-the enforced task budget and Result 4.0; this contract reuses the current schemas.
 
 Manual verification uses `extraction.locate_source_citation_span`, integrated from the
 merged PR #18 helper, with the requested Source quote as both the pinned quote and
@@ -328,13 +330,14 @@ reject all add/confirm/reopen/repair writes until authorized restoration.
 
 ## Consumer gates and freshness
 
-Do not filter unconfirmed requirements out of counts or lists. Each consumer pins the
+Do not filter unconfirmed requirements out of counts or lists.
+Each consumer pins the
 review policy version, complete requirement membership and applicable review hashes.
 `RequirementConsumptionManifest` describes accepted/gap/preparation-only entries; a
 manifest over 2,000 items fails explicitly rather than silently dropping requirements.
-Preparation caches bind content/source/membership; a confirmation-only change need not
-discard a paid candidate. Acceptance/assembly/check/score/export additionally bind current
-decision revision/hash. New input-version namespaces distinguish old caches.
+Acceptance/assembly/check/score/export additionally bind current
+decision revision/hash.
+New input-version namespaces distinguish old caches.
 
 | Consumer and actual integration points | Before confirmation; after reopen/invalidation |
 | --- | --- |
@@ -367,12 +370,14 @@ Preparation-time `rubric_current_inputs` cannot globally require confirmation, s
 also validates unconfirmed rubric preparation. Extend `GapReason`, `CardEligibility`,
 board enums and client renderers in one compatible rollout.
 
-For asynchronous work, preview is not authority. Recheck live membership/archive, pinned
-content and the consumer-specific review manifest at submission, each paid admission
-and publication. Changes after dispatch still settle sent calls through `JobExecution`;
-they cannot publish stale accepted output or erase actual cost. Historical reads return
-validity metadata, not blanket 404 because an input is now stale. Actual authorization
-loss still follows current 404/403 boundaries. Scoring Source identity resolution follows
+For asynchronous work, preview is not authority.
+Changes after dispatch still settle sent calls through `JobExecution`;
+they cannot publish stale accepted output or erase actual cost.
+Historical reads return
+validity metadata, not blanket 404 because an input is now stale.
+Actual authorization
+loss still follows current 404/403 boundaries.
+Scoring Source identity resolution follows
 the [scoring citation contract](score.md#citations-outbound-calls-and-confidentiality);
 identity-preserving classification or verification drift remains readable as stale.
 
@@ -387,14 +392,14 @@ once; rejected summaries are a separate diagnostic queue, not saved requirements
 denominator entries. Confirmed requirement count is not completed-response count and
 never claims that the extractor found everything.
 
-Expose the extended board/progress projection through `/v4/tasks/{T}/board` and
-`/v4/tasks/{T}/progress` with opt-in `view=requirement-review`; CLI equivalents are
+Expose the extended board/progress projection through `/tasks/{T}/board` and
+`/tasks/{T}/progress` with opt-in `view=requirement-review`; CLI equivalents are
 `bid task board/progress --task T --job J --view requirement-review --json`. Both require
 the explicit `extraction_job_id=J` query in this view. The new console uses this view.
-Default v4 and v3 board projections retain their closed enums: pending B02 work
-projects as existing bucket `gap`, blocker `unconfirmed` (or `invalid_citation`), action
-`view`, plus a warning to open requirement review in the updated console/CLI. They must
-still use the new eligibility predicate, never call a reopened requirement complete.
+The default board retains its closed enums: pending B02 work projects as existing
+bucket `gap`, blocker `unconfirmed` (or `invalid_citation`), action `view`, plus a
+warning to open requirement review in the console/CLI. Every view uses the current
+eligibility predicate and cannot call a reopened requirement complete.
 The opt-in board returns `RequirementBoardData` / `RequirementBoardItem[]`; its nested
 `board` and `response` preserve legacy-safe metadata, while `buckets` and `requirement`
 are the canonical extended projection. Its response subcounts cover only confirmed
@@ -402,7 +407,7 @@ requirements, and their total plus requirement_review equals the scope total. Pr
 returns `RequirementProgressData` / existing `BoardJobView[]`, retaining existing job
 pagination alongside the selected set's review summary. Requirement next_actor is null
 after confirmation; outstanding response next actions remain in the response projection.
-The opt-in view is unavailable on v3, matching other v4-only console projections.
+All projections use contract 5.0; older contract versions are rejected.
 
 `RequirementActorHint` gives one accountable next actor, not a truncated list pretending
 to enumerate all authority. Choose an active eligible assignee, otherwise the eligible
@@ -413,7 +418,7 @@ role and scope. Other authorized contributors can act; the chosen actor is respo
 guidance, not an ACL. A viewer/token sees that person and action but no executable button.
 
 `row_projection` must prefer archive recovery first, then source repair, then
-`confirm_requirement`, then response work. Budget blockers cannot replace a zero-cost
+`confirm_requirement`, then response work. Provider/resource blockers cannot replace a local
 requirement action. Existing `repair_citation` actions must use the real admin predicate;
 an ordinary contributor instead sees “请任务负责人协调管理员修复引用”. Update `matches(mine)`
 and assignment filters for the named next actor, and `progress` for independent confirmed/
@@ -439,20 +444,26 @@ task/extraction history and review board. The implemented console follows this o
   controls, retains unsaved text and asks for a new read; never auto-resubmits decisions.
 
 Use existing authenticated originals/page previews and short-lived download rules; never
-put tokens into URLs. Navigation/refetch/filtering makes no paid calls. Archived state,
+put tokens into URLs.
+Archived state,
 404 authorization changes, empty results, failed manual preview, stale cursors and offline
-recovery have explicit read-only/error views. Tokens cannot turn the console into a human
-session. The existing response-review page links back to the outstanding requirement.
+recovery have explicit read-only/error views.
+Tokens cannot turn the console into a human
+session.
+The existing response-review page links back to the outstanding requirement.
 
 ## HTTP, CLI JSON and service interfaces
 
 All routes are relative to the existing versioned API base, with session/org context
 resolved by `api.main.context`; no mutation accepts actor, org_id or confirmation time.
-Resource existence/access is established before revealing scoped errors. Multi-ID bodies
-are same-task/same-scope or fail atomically. Request payloads and envelopes use strict
-shared `Contract` (`extra=forbid`). The runtime exports `RequirementCitationVerifier`
+Resource existence/access is established before revealing scoped errors.
+Multi-ID bodies
+are same-task/same-scope or fail atomically.
+Request payloads and envelopes use strict
+shared `Contract` (`extra=forbid`).
+The runtime exports `RequirementCitationVerifier`
 (deterministic local provider) and `RequirementReviewService` Protocols; no new vendor
-Provider method or dependency is needed. No LLM/OCR/billing work happens in these methods.
+Provider method or dependency is needed.
 
 | HTTP | CLI, all with `--json` | Request → Result.data / Result.items |
 | --- | --- | --- |
@@ -488,16 +499,12 @@ before an additional full item exceeds the byte cap. One oversize legacy record 
 in `list_requirements` with requirement UUID as tie breaker; history uses revision, rejected
 receipts use index. Changed set or ACL cursors return a reload error, not mixed snapshots.
 
-Result keeps exactly `ok, command, data, items, warnings, cost, duration_ms`. Its cost is
-the shared 4.0 `Cost`: llm_tokens/ocr_pages/usd/basis/charge/billing_currency/task_amount/
-unpriced_calls/unresolved_calls. New local deterministic operations use `basis=zero`,
-all amounts/counts zero, and configured billing currency; Decimal amounts serialize as
-strings. Original failed extraction cost stays on its original job. Contract negotiation
-uses `/v4` and `X-Bid-Contract-Version`, not an added JSON version key. Existing `/v3`
-projection remains as defined by the runtime; new routes/enum members target v4 only,
-and must not leak into legacy/default board responses. The opt-in projection above is
-an additive interface; both its schema and the legacy projection must be registered and
-snapshot-tested. Existing strict clients never receive a new enum without opting in.
+Result keeps exactly `ok, command, data, items, warnings, cost, duration_ms`.
+Original failed extraction cost stays on its original job.
+HTTP paths are unversioned and return Result 5.0. The optional contract header
+accepts only 5.0; no JSON version key is added. Default and opt-in projections
+remain registered with their respective closed enums. Strict clients receive
+extended requirement-review enums only by selecting that view.
 
 Example successful rejected-item read with no reported entries; identifiers and timing
 are illustrative, not an execution record:
@@ -514,17 +521,7 @@ are illustrative, not an execution record:
   },
   "items": [],
   "warnings": [],
-  "cost": {
-    "llm_tokens": 0,
-    "ocr_pages": 0,
-    "usd": 0.0,
-    "basis": "zero",
-    "charge": "0",
-    "billing_currency": "USD",
-    "task_amount": "0",
-    "unpriced_calls": 0,
-    "unresolved_calls": 0
-  },
+  "cost": {"calls": 0, "llm_tokens": 0, "ocr_pages": 0, "search_requests": 0, "browser_units": 0, "unresolved_calls": 0},
   "duration_ms": 3
 }
 ```
@@ -543,7 +540,7 @@ IDs/revisions only when safe. Shared new codes include `requirement_unconfirmed`
 `rejected_reference_changed`, `duplicate_requirement`, `idempotency_conflict`,
 `invalid_review_transition`, `nonverbatim_quote`, `ambiguous_quote`, `quote_not_at_position`, `unverified_location`,
 `legacy_item_too_large`. Cross-org manual source or rejection refs return 404 before
-hash/verification details. Existing task_archived and budget errors retain their contracts.
+hash/verification details. Existing task_archived and resource-limit errors retain their contracts.
 
 ## Audit and durable task events
 
@@ -593,10 +590,11 @@ required evidence; test definitions and discovery do not establish executed acce
 | Human gates and authority | Owner/contributor across eligible org roles succeed; reviewer/observer/viewer, nonmember admin, token/agent/worker/platform fail writes. Token issuance and direct DB insertion reject req:confirm/req:manual, evidence:confirm and export. Revoke role/membership/archive between preview and execute; atomically reject. Confirmed metadata cannot be inserted by constructing Pydantic views or raw SQL. |
 | Citations and recovery | Real parsed synthetic PDF/Word fixtures: full Location mismatch, wrong task/document/chunk/page, unverified OCR, blank/oversize, quote absent, repeated literal/normalized ambiguity, Unicode expansion and boundary preference; normalize-only manual input rejected. Manual missing and truncated rejected recovery, stale summary hash, same-source different-job refs, all-rejected failed job preserved with cost, new manual-only scope, duplicate fingerprint. SQL/Python verifier parity. |
 | State, concurrency and replay | Confirm exact revision, reopen, repair/changed source, changed text/category/starred/condition, verifier-version invalidation, change-away-and-back, manual-add versus draft publication, archive/revocation races. Stale batch rejects all; repeated request returns one receipt, cross-action input conflict, response lost after commit, no double audit/event. Source repair cannot silently inherit approval. |
-| Consumer gates | Prepare card/rubric while unconfirmed; block response confirm, comply-only and whole-rubric confirmation; draft creates exhaustive gaps without candidate text; check diagnoses gaps; score rejects any unconfirmed fixed scoring requirement, including ignored/duplicate coverage. Accept remaining partial-draft gaps. Test service **and direct SQL** response/score gates, exact gap reasons, queued/admitted job invalidation, preserved call charges and no stale publication. |
+| Consumer gates | Prepare card/rubric while unconfirmed; block response confirm, comply-only and whole-rubric confirmation; draft creates exhaustive gaps without candidate text; check diagnoses gaps; score rejects any unconfirmed fixed scoring requirement, including ignored/duplicate coverage.
+Accept remaining partial-draft gaps.|
 | Migration and history | Existing extraction/card/evidence remains readable; all legacy requirements start unconfirmed; owner explicit bounded batch works without fabricated approval. Old draft/report/download manifests stale; regenerate after review. Cache hit preserves same-job decisions/manual adds; new extraction copies none; new manual scope does not replace latest model/default selection. Model counts/cost and rejected receipts never rewritten. |
-| Board and events | Exactly one bucket per saved requirement, no rejected-count denominator, no completed response when its requirement is pending, eligible assignee→owner→recovery routing, actual admin-only quote repair, mine filter, archive and zero-cost action priority over budget blockers. Transaction rollback yields no SSE/audit; source_id semantics, cursor watermark and reconnect reload hold. |
-| CLI contracts | Snapshot all new commands with `--json`, shared Result 4.0 full zero Cost, manual create/replay receipts, input-file validation and exits 0/2/3/4. Verify existing partial-extract exit unchanged, atomic batches never 5, discovery schema matches models, v3 projection cannot bypass gates or receive unrecognized v4 enums. |
+| Board and events | Exactly one bucket per saved requirement, no rejected-count denominator, no completed response when its requirement is pending, eligible assignee→owner→recovery routing, actual admin-only quote repair, mine filter, archive and local human-action priority over provider/resource blockers. Transaction rollback yields no SSE/audit; source_id semantics, cursor watermark and reconnect reload hold. |
+| CLI contracts | Snapshot all new commands with `--json`, shared Result 5.0 full zero Cost, manual create/replay receipts, input-file validation and exits 0/2/3/4. Verify existing partial-extract exit unchanged, atomic batches never 5, discovery schema matches models, default projection cannot bypass gates or receive unrecognized extended enums. |
 | Browser end-to-end | Human owner A reviews, contributor A adds an omitted/rejected item from a real source picker, confirms, domain reviewer accepts response, draft/check/score gates follow the matrix; viewer/token and org B cannot mutate/read A. Cover all-rejected manual scope, 409 with retained edits, stale source/reopen, owner batch, archived recovery, next-actor links and SSE reconnect. |
 
 Extend the behavior covered by `test_citation_repair.py`, `test_adversarial_citations.py`,
@@ -627,4 +625,4 @@ The owner approved every recommended default; the models implement these decisio
 | Board presentation? | Add requirement_review bucket, preserve separate response state and named assignee/owner/recovery | Staff can see who must act next without interpreting a second response-review badge. |
 | Saved false positives/corrections? | Remain unconfirmed; no deletion/exclusion/general-edit API in this slice | Keeps the first contract bounded and prevents omission from coverage. This limitation must be explicit in the console; a later supersession contract can resolve it. |
 | Mixed extraction exit 5? | Preserve current exit behavior; rejected reporting and recovery are explicit reads | Avoid unrelated CLI behavior changes under a confirmation contract. |
-| Provider/dependency changes? | Local deterministic verifier protocol only, zero vendor usage | Existing source bytes and verifier are sufficient; no paid model judgment is needed to establish a literal location. |
+| Provider/dependency changes? | Local deterministic verifier protocol only, zero vendor usage | Existing source bytes and the deterministic verifier establish literal locations; model judgment is not needed. |

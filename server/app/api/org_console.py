@@ -47,7 +47,6 @@ def create_router(
                     "name",
                     "tender_number",
                     "deadline",
-                    "budget_usd",
                     "created_by",
                     "created_at",
                     "model_redaction_enabled",

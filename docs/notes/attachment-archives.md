@@ -54,11 +54,12 @@ authentication; original preview signatures also bind archive workflow state. Wi
 require the explicit `history=true` preview route and human original-reader grants.
 No archive or privacy action creates confirmed Evidence or authorizes a bid export.
 
-Task changes reuse statement event producers. Library changes enqueue
+Task changes reuse statement event producers.
+Library changes enqueue
 [bounded task invalidation](../../server/app/jobs/attachment_events.py) in the same
-transaction as their audit. Queue arguments carry the durable task-ID cursor;
-resolvers deny stale use before projections catch up. No separate business Job,
-model call or charge is created for deterministic archive operations.
+transaction as their audit.
+Queue arguments carry the durable task-ID cursor;
+resolvers deny stale use before projections catch up.
 
 ## Pitfalls
 

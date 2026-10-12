@@ -116,7 +116,7 @@ class Page[T](Contract):
         if self.data.returned != len(self.items):
             raise ValueError("returned must equal the page row count")
         if len(self.model_dump_json().encode("utf-8")) > PAGE_BYTE_LIMIT:
-            raise ValueError("page payload exceeds its byte budget")
+            raise ValueError("page payload exceeds its byte preflight")
         if any(
             getattr(item, "org_id", self.data.org_id) != self.data.org_id for item in self.items
         ):
@@ -258,7 +258,7 @@ class ResourceDetailData(Contract):
         ):
             raise ValueError("resource, org and revision must match")
         if len(self.model_dump_json().encode("utf-8")) > DETAIL_BYTE_LIMIT:
-            raise ValueError("detail exceeds its byte budget")
+            raise ValueError("detail exceeds its byte preflight")
         return self
 
 
@@ -332,8 +332,6 @@ class PlatformModelChoice(Contract):
     revision: Revision
     model: str = Field(min_length=1, max_length=100)
     provider: Literal["anthropic", "openai"]
-    sale_input_per_mtok: float = Field(ge=0, allow_inf_nan=False)
-    sale_output_per_mtok: float = Field(ge=0, allow_inf_nan=False)
     default: bool
     reasoning: list[CatalogReasoningChoice] = Field(max_length=8)
     default_reasoning: str | None
@@ -378,7 +376,6 @@ class ProviderSettingsData(Contract):
     effective_source: Literal["org", "platform", "unconfigured"]
     current: ProviderRevisionMetadata | None
     default_model: PlatformModelChoice | None
-    billing_currency: str = Field(pattern=r"^[A-Z]{3}$")
     reasoning: list[CatalogReasoningChoice] = Field(max_length=8)
     actions: list[ActionHint] = Field(max_length=16)
     # This is configuration metadata, never a successful connection/decryption claim.
@@ -438,7 +435,7 @@ class ConfidentialValueRevisionSet(ConfidentialValueSet):
 
 
 class ManagementResultAdapter(Protocol):
-    """Use shared Result 4.0, never a second wrapper or a seventh-to-eighth-key change.
+    """Use shared Result 5.0, never a second wrapper or a seventh-to-eighth-key change.
 
     Reads must fit the complete envelope and generate the exact continuation before
     constructing Page. This adapter validates the final encoder's complete Result
@@ -508,7 +505,7 @@ class ManagementBindingReads(Protocol):
 
 
 class ManagementProviderReads(Protocol):
-    """Reuse provider_configs.require_access; no balance query, decryption or vendor SDK.
+    """Reuse provider_configs.require_access; no decryption or vendor SDK.
 
     Platform catalog fields come only from the existing org-safe catalog view.
     History cannot run one usage aggregation per revision or resolve old keys.

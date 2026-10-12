@@ -1,8 +1,8 @@
 """Inputs for the platform operator console."""
 
 import re
-from datetime import UTC, datetime
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
 
@@ -69,10 +69,6 @@ class PlatformModelSet(Contract):
     model: str = Field(min_length=1, max_length=100)
     base_url: str | None = Field(default=None, max_length=300)
     credential: str = Field(pattern=r"^[a-z0-9_]{1,40}$")
-    vendor_input_usd_per_mtok: float = Field(ge=0)
-    vendor_output_usd_per_mtok: float = Field(ge=0)
-    sale_input_per_mtok: float = Field(ge=0)
-    sale_output_per_mtok: float = Field(ge=0)
     default: bool = False
     enabled: bool = True
     reasoning: list[ReasoningLevel] = Field(default_factory=list, max_length=8)
@@ -102,43 +98,19 @@ class PlatformModelSet(Contract):
         return self
 
 
-class CardRedeem(Contract):
-    code: str = Field(min_length=1, max_length=64)
-
-
 class OrgLookup(Contract):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=1024)
 
 
-class PlatformBalanceAdjust(Contract):
-    mode: Literal["add", "set"]
-    amount: float
-    reason: str = Field(min_length=1, max_length=500)
-
-    @field_validator("reason")
-    @classmethod
-    def meaningful_reason(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("reason must contain non-whitespace characters")
-        return value.strip()
+class PlatformModelTest(Contract):
+    dry_run: bool = False
+    test_org_id: UUID | None = None
 
     @model_validator(mode="after")
-    def bounded(self):
-        if abs(self.amount) > 10**9 or (self.mode == "set" and self.amount < 0):
-            raise ValueError("amount is out of range")
+    def live_probe_has_tenant(self):
+        if not self.dry_run and self.test_org_id is None:
+            raise ValueError(
+                "live platform probes require an authorized internal test organization"
+            )
         return self
-
-
-class PlatformCardCreate(Contract):
-    count: int = Field(ge=1, le=500)
-    face_value: float = Field(gt=0, le=10**7)
-    expires_at: datetime | None = None
-    note: str | None = Field(default=None, max_length=200)
-
-    @field_validator("expires_at")
-    @classmethod
-    def future_with_timezone(cls, value: datetime | None) -> datetime | None:
-        if value is not None and (value.tzinfo is None or value <= datetime.now(UTC)):
-            raise ValueError("expires_at must be a future time with a timezone")
-        return value

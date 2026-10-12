@@ -1,7 +1,7 @@
 """Model-generated HTML prototypes rendered offline, through the real API, worker and ingest.
 
 Failure modes enumerated before implementation:
-- a dry-run must not call the vendor or create a job, and must price the one planned call;
+- a dry-run must not call the vendor or create a job, and must count the one planned call;
 - a paid run whose fixed inputs changed since the preview must be refused before any job;
 - the vendor must receive only the redacted requirement text and the feature declaration;
 - the generated HTML and PNG must be stored encrypted, bound to the sandbox receipt, and
@@ -87,19 +87,15 @@ async def test_generate_render_store_ingest_and_fences(tenants, tmp_path, admin_
             "requirement_id": requirements[2]["id"],
             "task_feature_id": feature["id"],
         }
-
         preview = await post(api, header, task, {**body, "dry_run": True})
         assert preview.status_code == 200, preview.text
         estimate = preview.json()["data"]
         assert estimate["planned_calls"] == 1 and estimate["admission_blocker"] is None
-        assert float(estimate["estimated_charge"]) > 0
         assert not vendor.drafts and await jobs(app, org) == 0
-
         stale = await post(api, header, task, {**body, "expected_input_hash": "0" * 64})
         assert stale.status_code == 409, stale.text
         assert stale.json()["data"]["error"]["code"] == "prototype_input_changed"
         assert await jobs(app, org) == 0
-
         submitted = await post(
             api, header, task, {**body, "expected_input_hash": estimate["input_hash"]}
         )
@@ -117,7 +113,6 @@ async def test_generate_render_store_ingest_and_fences(tenants, tmp_path, admin_
         sent = vendor.drafts[0]
         assert set(sent) == {"requirement", "feature"}
         assert sent["feature"]["name"] == "Synthetic delivery workflow"
-
         prototype_id = generation["id"]
         shown = await api.get(f"/prototype-runs/{prototype_id}", headers=header)
         assert shown.status_code == 200 and shown.json()["data"] == generation
@@ -132,11 +127,9 @@ async def test_generate_render_store_ingest_and_fences(tenants, tmp_path, admin_
             stored = app.state.storage.path(org, row.html_storage_key).read_bytes()
             assert stored.startswith(b"BIDFILE1\n") and HTML.encode() not in stored
             assert row.sandbox_receipt_id and row.provenance["model"] == "synthetic-model"
-
         for path in (f"/prototype-runs/{prototype_id}", f"/prototype-runs/{prototype_id}/source"):
             assert (await api.get(path, headers=headers[1])).status_code == 404
         assert (await post(api, headers[1], task, {**body, "dry_run": True})).status_code == 404
-
         uploaded = await prepare_ingest_prototype(
             api,
             app,
@@ -150,12 +143,10 @@ async def test_generate_render_store_ingest_and_fences(tenants, tmp_path, admin_
             },
         )
         assert uploaded["asset"]["prototype_generation"]["id"] == prototype_id
-
         browser.available = False
         blocked = await post(api, header, task, {**body, "dry_run": True})
         assert blocked.json()["data"]["admission_blocker"] == "sandbox_runtime_unavailable"
         browser.available = True
-
         other = {**body, "requirement_id": requirements[3]["id"]}
         fresh = (await post(api, header, task, {**other, "dry_run": True})).json()["data"]
         queued = await post(

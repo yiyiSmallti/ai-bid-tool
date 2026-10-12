@@ -11,10 +11,10 @@ Failure modes identified before implementation:
   recorded negative deviations cannot be weakened; workers cannot confirm.
 * Concurrency: confirmed/pending/comply_only and newly confirmed cards stay
   untouched; input changes, lease loss and cancellation cannot publish old work.
-* Cost: each retry/split call settles before parsing; balance, charge and call
-  ceilings fence subsequent calls; first-pass planning scales the call ceiling.
+* Usage: each retry/split call settles before parsing; call ceilings fence
+  subsequent calls; first-pass planning scales the call ceiling.
 * Idempotency: cache includes model/catalog/reasoning/prompt/redaction/inputs;
-  retries cannot duplicate revisions or billing; dry-run makes no calls or writes.
+  retries cannot duplicate revisions or usage; dry-run makes no calls or writes.
 * Workflow: extraction -> generation -> human review -> immutable draft, with
   two-org isolation and a repeatable sanitized artifact outside the repository.
 * Output limits: legacy/environment options must not inject a conflicting output
@@ -27,13 +27,12 @@ import json
 import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
 from app.api.main import create_app
-from app.models.entities import AuditLog, BalanceEntry, Job, OrgBalance, UsageRecord, VendorCall
+from app.models.entities import AuditLog, Job, UsageRecord, VendorCall
 from app.models.response_cards import (
     CardGenerationRun,
     Evidence,
@@ -129,10 +128,9 @@ class DraftVendor:
 
 @asynccontextmanager
 async def drafting_client(
-    tenants, tmp_path, provider="openai", *, paid=True, lines=None, **options
+    tenants, tmp_path, provider="openai", *, catalog_model=True, lines=None, **options
 ):
     vendor = DraftVendor(provider, lines)
-    # Tiny batch budgets (one requirement per batch) are below the configurable minimum.
     batch = options.pop("llm_batch_chars", None)
     settings = settings_for(tmp_path, provider, **options)
     if batch is not None:
@@ -141,10 +139,9 @@ async def drafting_client(
     llm = adapter(
         settings,
         httpx.MockTransport(vendor),
-        platform_model_id="draft-test" if paid else None,
-        sale_usd_per_mtok=(1, 1) if paid else None,
+        platform_model_id="draft-test" if catalog_model else None,
     )
-    llm.model_revision = 1 if paid else None
+    llm.model_revision = 1 if catalog_model else None
     app = await credential_app(settings, llm=llm, queue=FakeQueue())
     async with (
         app.router.lifespan_context(app),
@@ -154,22 +151,7 @@ async def drafting_client(
             await login(api, org, label)
             for org, label in zip(tenants["orgs"], ("a", "b"), strict=True)
         ]
-        if paid:
-            for org in tenants["orgs"]:
-                async with app.state.db.transaction(org) as session:
-                    session.add(OrgBalance(org_id=org, currency="USD", balance=Decimal("10")))
-                    session.add(
-                        BalanceEntry(
-                            org_id=org,
-                            kind="adjust",
-                            currency="USD",
-                            amount=Decimal("10"),
-                            balance_after=Decimal("10"),
-                            actor="test",
-                            reason="Synthetic initial funds",
-                        )
-                    )
-        yield api, app, headers, vendor, llm
+        yield (api, app, headers, vendor, llm)
 
 
 async def submit(api, header, task, extraction, **body):
@@ -320,7 +302,7 @@ async def test_generation_review_and_draft_full_chain(tenants, tmp_path, admin_e
             assert (
                 card["state"] == "draft"
                 and card["origin"] == "model"
-                and card["actor_kind"] == "worker"
+                and (card["actor_kind"] == "worker")
             )
             assert card["confirmed_by"] is None and card["disposition"] is None
             assert all(evidence["confirmed_by"] is None for evidence in card["evidence"])
@@ -330,15 +312,7 @@ async def test_generation_review_and_draft_full_chain(tenants, tmp_path, admin_e
         assert len(vendor.drafts) == 1
         async with app.state.db.transaction(tenants["orgs"][0]) as session:
             usage = await session.get(UsageRecord, UUID(generated["usage_record_ids"][0]))
-            assert usage is not None and usage.call_id == usage.id and usage.charge > 0
-            entries = list(
-                (
-                    await session.scalars(
-                        select(BalanceEntry).where(BalanceEntry.usage_record_id == usage.id)
-                    )
-                ).all()
-            )
-            assert len(entries) == 1 and entries[0].amount == -usage.charge
+            assert usage is not None and usage.call_id == usage.id
             run = await session.scalar(select(CardGenerationRun))
             assert run and run.actor_kind == "worker" and run.encrypted_input
             assert "Synthetic model proposal" not in json.dumps(run.input_manifest)
@@ -598,7 +572,7 @@ async def test_redaction_all_inputs_dry_run_and_admin_switch(
                 json={"expected_revision": 1, "model_redaction_enabled": False},
             )
             assert changed.status_code == 200, changed.text
-        before, queued = await counts(app, tenants["orgs"][0]), list(app.state.queue.calls)
+        before, queued = (await counts(app, tenants["orgs"][0]), list(app.state.queue.calls))
         preview = await submit(api, header, task, extraction, dry_run=True)
         assert await counts(app, tenants["orgs"][0]) == before and app.state.queue.calls == queued
         assert not vendor.drafts
@@ -608,7 +582,6 @@ async def test_redaction_all_inputs_dry_run_and_admin_switch(
             data["redacted_counts"][key] > 0
             for key in ("amount", "contact", "identity", "bank_account")
         )
-        assert data["cost_basis"] == "known" and Decimal(data["estimated_charge"]) > 0
         if not enabled:
             assert data["input_hash"] != original["data"]["input_hash"]
             assert any("unredacted" in warning for warning in preview["warnings"])
@@ -715,7 +688,7 @@ async def test_changes_while_vendor_runs_are_fenced(tenants, tmp_path, admin_eng
                 "evidence": [],
             },
         )
-        entered, release = asyncio.Event(), asyncio.Event()
+        entered, release = (asyncio.Event(), asyncio.Event())
 
         async def response(sent):
             entered.set()
@@ -761,7 +734,6 @@ async def test_changes_while_vendor_runs_are_fenced(tenants, tmp_path, admin_eng
             release.set()
         await running
         shown = (await api.get(f"/cards/{card['id']}", headers=header)).json()["data"]
-        # Same instants; a write response and a later read may differ only in UTC offset.
         assert same_instants(shown) == same_instants(card)
         terminal = (await api.get(f"/jobs/{job_id}", headers=header)).json()["data"]
         if change in {"confirm", "edit"}:
@@ -770,14 +742,14 @@ async def test_changes_while_vendor_runs_are_fenced(tenants, tmp_path, admin_eng
                 "confirmed" if change == "confirm" else "revision_conflict"
             )
         async with app.state.db.transaction(tenants["orgs"][0]) as session:
-            paid = list(
+            usages = list(
                 (
                     await session.scalars(
                         select(UsageRecord).where(UsageRecord.job_id == UUID(job_id))
                     )
                 ).all()
             )
-            assert len(paid) == 1 and paid[0].charge > 0
+            assert len(usages) == 1
 
 
 @pytest.mark.parametrize("failure", ["truncated", "malformed", "transient"])
@@ -832,12 +804,6 @@ async def test_drafting_halving_and_retries_account_every_call(
                 ).all()
             )
             assert sum(row.tokens for row in usage) == result["cost"]["llm_tokens"]
-            charged = await session.scalar(
-                select(func.sum(-BalanceEntry.amount)).where(
-                    BalanceEntry.usage_record_id.in_([row.id for row in usage])
-                )
-            )
-            assert charged == sum(row.charge for row in usage)
 
 
 async def test_first_pass_planning_scales_call_ceiling(tenants, tmp_path):
@@ -898,59 +864,18 @@ async def test_ceiling_keeps_valid_partial_results_and_cache_does_not_rebill(
         assert len(vendor.drafts) == 2
 
 
-@pytest.mark.parametrize("guard", ["balance_at_submission", "balance_at_call", "charge_ceiling"])
-async def test_funds_and_charge_guards_prevent_any_drafting_call(tenants, tmp_path, guard):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        header = headers[0]
-        task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
-        if guard == "balance_at_submission":
-            async with app.state.db.transaction(tenants["orgs"][0]) as session:
-                await session.execute(update(OrgBalance).values(balance=0))
-            before = await counts(app, tenants["orgs"][0])
-            preview = await submit(api, header, task, extraction, dry_run=True)
-            assert "insufficient_balance" in preview["warnings"]
-            denied = await api.post(
-                f"/tasks/{task}/cards/generations",
-                headers=header,
-                json={"extraction_job_id": extraction},
-            )
-            assert (
-                denied.status_code == 402
-                and denied.json()["data"]["error"]["code"] == "insufficient_balance"
-            )
-            assert await counts(app, tenants["orgs"][0]) == before
-        else:
-            receipt = await submit(api, header, task, extraction)
-            if guard == "balance_at_call":
-                async with app.state.db.transaction(tenants["orgs"][0]) as session:
-                    await session.execute(update(OrgBalance).values(balance=0))
-            else:
-                app.state.processor.settings = app.state.processor.settings.model_copy(
-                    update={"job_max_charge": Decimal("0.000001")}
-                )
-            terminal = await execute(api, app, header, receipt)
-            assert terminal["data"]["status"] == "failed", terminal
-            assert terminal["data"]["error"]["code"] == (
-                "insufficient_balance"
-                if guard == "balance_at_call"
-                else "job_charge_limit_exceeded"
-            )
-        assert not vendor.drafts
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
-            assert await session.scalar(select(func.count()).select_from(ResponseCard)) == 0
-
-
-async def test_unknown_prices_and_no_catalog_reasoning_do_not_invent_estimates(tenants, tmp_path):
-    async with drafting_client(tenants, tmp_path, paid=False) as (api, app, headers, vendor, _):
+async def test_missing_catalog_reasoning_is_ignored(tenants, tmp_path):
+    async with drafting_client(tenants, tmp_path, catalog_model=False) as (
+        api,
+        app,
+        headers,
+        vendor,
+        _,
+    ):
         task, _, extraction, _ = await create_tender(api, app, headers[0], tmp_path)
         preview = await submit(api, headers[0], task, extraction, reasoning="high", dry_run=True)
         assert preview["data"]["reasoning"] is None
-        assert (
-            preview["data"]["cost_basis"] == "unknown"
-            and preview["data"]["estimated_cost"]["usd"] is None
-        )
-        assert preview["data"]["estimated_charge"] is None
-        assert any("ignored" in warning for warning in preview["warnings"]) and not vendor.drafts
+        assert any("ignored" in warning for warning in preview["warnings"]) and (not vendor.drafts)
 
 
 async def test_reasoning_cache_and_changed_configuration_fail_closed(tenants, tmp_path):
@@ -1370,8 +1295,7 @@ async def test_platform_default_catalog_is_used_without_changing_extraction(
     from app.models.entities import PlatformModel
     from sqlalchemy.orm import Session
 
-    # Long catalog IDs exercise the 0018 adapter identity width as well as real resolution.
-    catalog_id = "synthetic-drafting-catalog-long-id-12345"  # the 40-character maximum
+    catalog_id = "synthetic-drafting-catalog-long-id-12345"
     from conftest import seed_platform_credential
 
     await seed_platform_credential(
@@ -1389,10 +1313,6 @@ async def test_platform_default_catalog_is_used_without_changing_extraction(
                 model="synthetic-model",
                 base_url="https://vendor.example.test/v1",
                 credential="synthetic_unset",
-                vendor_input_usd_per_mtok=1,
-                vendor_output_usd_per_mtok=2,
-                sale_input_per_mtok=1,
-                sale_output_per_mtok=2,
                 is_default=True,
                 enabled=True,
                 reasoning=[
@@ -1418,8 +1338,6 @@ async def test_platform_default_catalog_is_used_without_changing_extraction(
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
         header = await login(api, tenants["orgs"][0], "a")
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
-            session.add(OrgBalance(org_id=tenants["orgs"][0], currency="USD", balance=10))
         task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
         preview = await submit(api, header, task, extraction, dry_run=True)
         assert (
@@ -1435,7 +1353,7 @@ async def test_platform_default_catalog_is_used_without_changing_extraction(
         assert terminal["data"]["reasoning"] == "low"
         async with app.state.db.transaction(tenants["orgs"][0]) as session:
             run = await session.scalar(select(CardGenerationRun))
-            assert run and len(run.adapter_version) > 40 and run.platform_model_id == catalog_id
+            assert run and len(run.adapter_version) > 40 and (run.platform_model_id == catalog_id)
             usages = list(
                 (
                     await session.scalars(
@@ -1446,7 +1364,6 @@ async def test_platform_default_catalog_is_used_without_changing_extraction(
                 ).all()
             )
             assert len(usages) == 1 and usages[0].platform_model_id == catalog_id
-            assert usages[0].usd is not None and usages[0].charge is not None
 
 
 async def test_live_token_grants_are_rechecked_before_vendor_and_result_reads(tenants, tmp_path):
@@ -1517,6 +1434,6 @@ async def test_drafting_actual_fallback_identity_and_unsafe_metadata(
                     )
                 ).all()
             )
-            assert len(rows) == 1 and rows[0].model == expected and rows[0].charge > 0
+            assert len(rows) == 1 and rows[0].model == expected
             if job_state == "failed":
                 assert await session.scalar(select(func.count()).select_from(ResponseCard)) == 0

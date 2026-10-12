@@ -313,7 +313,7 @@ onBeforeUnmount(() => {
           <summary>按原因查看缺口</summary>
           <ul><li v-for="(count, reason) in preview.gap_reasons" :key="reason">{{ gapLabels[reason] ?? reason }}：{{ count }}</li></ul>
         </details>
-        <p class="hint">本次预检实际模型成本为 {{ display(preview.estimated_cost?.usd) }} USD；这是确定性组表的零成本，不抵消此前模型起草费用。</p>
+        <p class="hint">本次预检为确定性组表，不调用模型。</p>
         <p class="hint">输入标识 <code>{{ preview.input_hash }}</code> · 预计时长 {{ preview.estimated_duration_ms == null ? "未知" : `${preview.estimated_duration_ms} ms` }}</p>
         <div class="actions"><label class="check"><input v-model="retry" type="checkbox" />显式重试已失败或取消的组表作业</label><el-button type="primary" :loading="submitting" :disabled="!canWrite" @click="submitDraft">确认生成初稿</el-button></div>
       </div>

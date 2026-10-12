@@ -10,7 +10,6 @@ from app.api.main import create_app
 from app.core.config import Settings
 from conftest import FakeQueue, seed_platform_credential
 from fakes import FakeLLM
-from sqlalchemy import text
 from test_api import create_document
 from test_job_boundaries import session_for
 from test_llm_providers import GOOD_ITEMS
@@ -42,10 +41,6 @@ GLM = {
     "model": "glm-synthetic",
     "base_url": "https://llm.example.test/v1",
     "credential": "main",
-    "vendor_input_usd_per_mtok": 1.0,
-    "vendor_output_usd_per_mtok": 2.0,
-    "sale_input_per_mtok": 1.0,
-    "sale_output_per_mtok": 2.0,
     "default": True,
     "enabled": True,
     "reasoning": LEVELS,
@@ -102,16 +97,11 @@ async def glm(operator, tmp_path, monkeypatch, tenants):
         saved = await api.post("/platform/models", headers=ops, json=GLM)
         assert saved.status_code == 200, saved.text
         org = tenants["orgs"][0]
-        async with app.state.db.transaction() as session:
-            await session.execute(
-                text("SELECT * FROM platform_adjust_balance(:o, 'add', 10, 'seed', 'ops', 'USD')"),
-                {"o": org},
-            )
         header = await org_header(api, org, "a@example.test")
         task, document = await create_document(api, header, two_page_tender())
         parsed = await api.post(f"/documents/{document}/parse", headers=header, json={})
         await app.state.processor(str(org), parsed.json()["data"]["job_id"])
-        yield api, app, vendor, header, ops, task, document
+        yield (api, app, vendor, header, ops, task, document)
 
 
 async def extract(api, app, header, document, **body):
@@ -231,12 +221,6 @@ async def test_catalog_validates_levels_and_tests_each_one(glm):
     )
     assert created.status_code == 200, created.text
     test_org = created.json()["data"]["org_id"]
-    funded = await api.post(
-        f"/platform/orgs/{test_org}/balance",
-        headers=ops,
-        json={"mode": "add", "amount": 10, "reason": "Synthetic reasoning probe allowance"},
-    )
-    assert funded.status_code == 200
     probe = await api.post(
         "/v4/platform/models/glm/test", headers=ops, json={"test_org_id": test_org}
     )

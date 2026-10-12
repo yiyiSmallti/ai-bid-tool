@@ -15,7 +15,6 @@ deterministic, sanitized report artifact under the pytest temporary directory.
 
 import json
 from copy import deepcopy
-from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -207,10 +206,8 @@ async def test_oversized_confirmed_bid_text_is_blocked_without_truncation_or_cal
 
 async def test_preview_estimates_actual_scoring_groups_without_database_or_calls(tmp_path):
     outbound, request = build_request(large_draft())
-    provider = adapter(tmp_path, [], [], batch_chars=64_000)
+    provider = adapter(tmp_path, [], [], batch_chars=64000)
     llm = provider.llm
-    llm.settings.llm_input_usd_per_mtok = Decimal("1.25")
-    llm.settings.llm_output_usd_per_mtok = Decimal("5")
     fixed = SimpleNamespace(
         manifest={"model_redaction_enabled": True}, secret={"outbound": outbound}
     )
@@ -220,27 +217,19 @@ async def test_preview_estimates_actual_scoring_groups_without_database_or_calls
             pytest.fail("Org-owned scoring preview must not query PostgreSQL")
 
     preview = await score_execution.preview_cost(
-        NoDatabase(), fixed, llm, SimpleNamespace(max_charge=None), llm.settings
+        NoDatabase(), fixed, llm, SimpleNamespace(), llm.settings
     )
     groups = provider._groups(request)
     bodies = [provider.request_body(group) for group in groups]
-    inputs = sum(len(json.dumps(body, ensure_ascii=False).encode()) + 4096 for body in bodies)
+    inputs = sum(len(llm.serialized_request(body)) + 4096 for body in bodies)
     outputs = sum(llm.output_token_bound(body) for body in bodies)
     assert preview["admission_blocker"] is None
-    assert preview["cost_basis"] == "known"
     assert preview["estimated_cost"]["llm_tokens"] == inputs + outputs
-    assert (
-        preview["estimated_cost"]["usd"]
-        == (inputs * Decimal("1.25") + outputs * Decimal("5")) / 1_000_000
-    )
-    assert preview["estimated_charge"] == sum(
-        (provider.reservation(group) for group in groups), Decimal(0)
-    )
     llm.settings.llm_batch_chars = 1000
     assert [group.model_dump() for group in provider._groups(request)] == [
         group.model_dump() for group in groups
     ]
-    assert Settings.model_fields["score_batch_chars"].default == 64_000
+    assert Settings.model_fields["score_batch_chars"].default == 64000
 
 
 def successful_reply(payload):

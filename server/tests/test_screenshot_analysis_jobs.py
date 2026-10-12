@@ -2,17 +2,17 @@
 
 Failure modes fixed before the scenarios:
 - dry-run calls a deterministic preview only and creates no job, analysis row, suggestion,
-  usage, audit, reservation, balance change, queue item, or vendor request;
+  usage, audit, admission, queue item, or vendor request;
 - a missing/stale expected input hash, changed image hash, foreign task/requirement/rendition,
   or withdrawn asset cannot enqueue or publish against the preflight snapshot;
 - all three purposes use only request-local refs and published suggestions remain unreviewed
   with no confirmation endpoint or writable confirmation field;
-- invalid paid JSON and a response containing only unknown refs settle valid usage and fees,
+- invalid model JSON and a response containing only unknown refs settle valid usage,
   fail the job, and publish no analysis run or suggestion;
 - withdrawal after submission but before worker admission stops the attempt without a vendor
   call, usage row, analysis row, or suggestion;
 - analysis submission, job status and suggestion listing are hidden from the other org as 404;
-- actual token usage, vendor call state, balance deduction and job cost remain consistent.
+- actual token usage, vendor call state and job usage remain consistent.
 
 The renderer and PostgreSQL are genuine integration dependencies. The existing helpers skip
 explicitly when the Rust binary or ``BID_TEST_ADMIN_URL`` is absent. Vendor traffic uses only
@@ -24,13 +24,12 @@ import json
 import re
 from collections.abc import Callable
 from contextlib import asynccontextmanager
-from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 
 import httpx
 import pytest
-from app.models.entities import AuditLog, BalanceEntry, Job, OrgBalance, UsageRecord, VendorCall
+from app.models.entities import AuditLog, Job, UsageRecord, VendorCall
 from app.models.screenshots import ScreenshotAnalysisRun, ScreenshotSuggestion
 from app.providers.llm import OpenAICompatibleExtractor
 from conftest import (
@@ -60,7 +59,6 @@ CAPABILITY = {
         "tokens_per_image": 256,
         "tokens_per_megapixel": 1024,
     },
-    "price_revision": "synthetic-vision-price-v1",
 }
 
 
@@ -153,7 +151,7 @@ def successful_vision(body):
 
 
 @asynccontextmanager
-async def analysis_client(tenants, tmp_path, vendor, *, balance="100"):
+async def analysis_client(tenants, tmp_path, vendor):
     settings = settings_for(
         tmp_path,
         "openai",
@@ -163,20 +161,14 @@ async def analysis_client(tenants, tmp_path, vendor, *, balance="100"):
         llm_concurrency=1,
     )
     provider = OpenAICompatibleExtractor(
-        settings,
-        httpx.MockTransport(vendor),
-        platform_model_id="synthetic-vision-catalog",
-        sale_usd_per_mtok=(1.0, 2.0),
+        settings, httpx.MockTransport(vendor), platform_model_id="synthetic-vision-catalog"
     )
     provider.version = "http-extract-v5:synthetic-vision-catalog:1"
     provider.model_revision = 1
     provider.reasoning_levels = {
         "high": {
             "label": "Synthetic official high",
-            "request_options": {
-                "reasoning_effort": "high",
-                "screenshot_vision": CAPABILITY,
-            },
+            "request_options": {"reasoning_effort": "high", "screenshot_vision": CAPABILITY},
             "batch_chars": 8000,
         }
     }
@@ -190,22 +182,7 @@ async def analysis_client(tenants, tmp_path, vendor, *, balance="100"):
             await login(api, org, label)
             for org, label in zip(tenants["orgs"], ("a", "b"), strict=True)
         ]
-        for org in tenants["orgs"]:
-            async with app.state.db.transaction(org) as session:
-                amount = Decimal(balance)
-                session.add(OrgBalance(org_id=org, currency="USD", balance=amount))
-                session.add(
-                    BalanceEntry(
-                        org_id=org,
-                        kind="adjust",
-                        currency="USD",
-                        amount=amount,
-                        balance_after=amount,
-                        actor="test",
-                        reason="Synthetic screenshot analysis funds",
-                    )
-                )
-        yield api, app, headers, provider
+        yield (api, app, headers, provider)
 
 
 async def fixture_chain(api, app, header, tmp_path, suffix):
@@ -248,7 +225,6 @@ async def counts(app, org):
             "usage": await session.scalar(select(func.count()).select_from(UsageRecord)),
             "calls": await session.scalar(select(func.count()).select_from(VendorCall)),
             "audits": await session.scalar(select(func.count()).select_from(AuditLog)),
-            "balance": Decimal(await session.scalar(select(OrgBalance.balance))),
         }
 
 
@@ -281,21 +257,15 @@ async def test_three_purpose_analysis_preflight_accounting_and_org_isolation(ten
         preflight = preview.json()["data"]
         assert preflight["dry_run"] is True
         assert preflight["planned_calls"] == preflight["input_image_count"] == 1
-        assert Decimal(preflight["estimated_charge"]) > 0
         assert preflight["estimated_cost"]["ocr_pages"] == 0
         assert vendor.vision_requests == []
         assert await counts(app, tenants["orgs"][0]) == before
         assert app.state.queue.calls == queued_before
-
         stale = await api.post(
             f"/tasks/{task}/screenshot-analyses",
             headers=header,
             json=request_body(
-                extraction,
-                requirements[2],
-                rendition,
-                dry_run=False,
-                expected_input_hash="0" * 64,
+                extraction, requirements[2], rendition, dry_run=False, expected_input_hash="0" * 64
             ),
         )
         assert stale.status_code == 409
@@ -303,14 +273,12 @@ async def test_three_purpose_analysis_preflight_accounting_and_org_isolation(ten
         assert vendor.vision_requests == []
         assert await counts(app, tenants["orgs"][0]) == before
         assert app.state.queue.calls == queued_before
-
         foreign = await api.post(
             f"/tasks/{task}/screenshot-analyses",
             headers=headers[1],
             json=request_body(extraction, requirements[2], rendition),
         )
         assert foreign.status_code == 404
-
         submitted = await api.post(
             f"/tasks/{task}/screenshot-analyses",
             headers=header,
@@ -324,7 +292,6 @@ async def test_three_purpose_analysis_preflight_accounting_and_org_isolation(ten
         )
         assert submitted.status_code == 200, submitted.text
         job_id = submitted.json()["data"]["job_id"]
-        balance_before = (await counts(app, tenants["orgs"][0]))["balance"]
         await app.state.processor(header["X-Org-Id"], job_id)
         status = await api.get(f"/jobs/{job_id}", headers=header)
         assert status.status_code == 200, status.text
@@ -360,14 +327,12 @@ async def test_three_purpose_analysis_preflight_accounting_and_org_isolation(ten
         assert after["suggestions"] == before["suggestions"] + 3
         assert after["calls"] == before["calls"] + 1
         assert after["usage"] == before["usage"] + 1
-        assert balance_before - after["balance"] == Decimal("0.00020000")
         artifact(
             "analysis-success.json",
             {
                 "job_id": job_id,
                 "analysis_id": analysis_id,
                 "purposes": [row["proposal"]["purpose"] for row in suggestions],
-                "charge": str(balance_before - after["balance"]),
             },
         )
 
@@ -418,7 +383,9 @@ async def test_withdrawal_after_submission_stops_before_vendor_call(tenants, tmp
 
 
 @pytest.mark.parametrize("case", ["invalid_json", "unknown_ref"])
-async def test_paid_invalid_or_unknown_only_output_publishes_nothing(tenants, tmp_path, case):
+async def test_invalid_or_unknown_only_output_records_usage_without_publication(
+    tenants, tmp_path, case
+):
     if case == "invalid_json":
         reply = openai_reply("not-json")
         expected = "invalid_provider_output"
@@ -475,9 +442,8 @@ async def test_paid_invalid_or_unknown_only_output_publishes_nothing(tenants, tm
         after = await counts(app, tenants["orgs"][0])
         assert after["usage"] == before["usage"] + 1
         assert after["calls"] == before["calls"] + 1
-        assert after["balance"] < before["balance"]
         assert after["runs"] == before["runs"] and after["suggestions"] == before["suggestions"]
         artifact(
             f"analysis-{case}.json",
-            {"job_id": job_id, "error": terminal["error"], "charged": True},
+            {"job_id": job_id, "error": terminal["error"], "usage_recorded": True},
         )

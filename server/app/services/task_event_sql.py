@@ -300,7 +300,6 @@ PRODUCER_ARGUMENTS = {
     ),
     "screenshot_vendor_archives": ("derived_job", "sandbox_runs", "sandbox_run_id", "job_id"),
     "screenshot_withdrawals": ("task_id", ""),
-    "task_budget_revisions": ("task_id", ""),
     "task_certificates": ("task_id", ""),
     "task_features": ("task_id", ""),
     "task_org_profiles": ("task_id", ""),

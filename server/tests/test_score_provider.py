@@ -3,7 +3,6 @@
 import asyncio
 import json
 from contextlib import asynccontextmanager
-from decimal import ROUND_CEILING, Decimal
 from types import SimpleNamespace
 from typing import cast
 from uuid import UUID, uuid4
@@ -24,8 +23,8 @@ from app.providers.rubric import (
     rubric_provider,
     supports_rubric,
 )
-from app.schemas.budget_contracts import BudgetCallQuote
 from app.schemas.check_contracts import OutboundContext, OutboundText
+from app.schemas.preflight_contracts import CallPlan
 from app.schemas.score_contracts import (
     RubricItemsRequest,
     RubricProviderRequest,
@@ -42,11 +41,11 @@ STRUCTURE_HASH = "a" * 64
 
 class Accounting:
     def __init__(
-        self, *, platform_billed=False, block_after=None, block_code="job_charge_limit_exceeded"
+        self, *, platform_billed=False, block_after=None, block_code="job_call_limit_exceeded"
     ) -> None:
         self.planned: list[int] = []
-        self.reservations: list[Decimal] = []
-        self.quotes: list[BudgetCallQuote] = []
+        self.plans: list[CallPlan] = []
+        self.quotes: list[CallPlan] = []
         self.completed = []
         self.unknown_calls = []
         self.not_sent_calls = []
@@ -57,12 +56,10 @@ class Accounting:
     def plan(self, first_pass_calls: int) -> None:
         self.planned.append(first_pass_calls)
 
-    async def admit(self, quote: BudgetCallQuote):
-        reserved_charge, platform_billed = quote.reserved_charge, quote.payer == "org_platform"
-        assert platform_billed is self.platform_billed
-        if self.block_after is not None and len(self.reservations) >= self.block_after:
-            raise ProviderFailure("Synthetic budget stop", code=self.block_code)
-        self.reservations.append(reserved_charge)
+    async def admit(self, quote: CallPlan):
+        if self.block_after is not None and len(self.plans) >= self.block_after:
+            raise ProviderFailure("Synthetic call-limit stop", code=self.block_code)
+        self.plans.append(quote)
         self.quotes.append(quote)
         return uuid4()
 
@@ -199,7 +196,6 @@ def adapter(tmp_path, replies, sent, *, handler=None, platform=False, **options)
         httpx.MockTransport(handler or transport),
         org_owned=not platform,
         platform_model_id="synthetic-platform" if platform else None,
-        sale_usd_per_mtok=(1, 2) if platform else None,
     )
     return HTTPRubricProvider(llm)
 
@@ -490,45 +486,21 @@ async def test_items_admission_stop_preserves_answered_batch_and_skips_unstarted
     finally:
         current_accounting.reset(token)
     assert result.failure is not None
-    assert result.failure.code == "job_charge_limit_exceeded"
+    assert result.failure.code == "job_call_limit_exceeded"
     assert len(result.batches) == len(result.usages) == len(sent) == 1
     assert not accounting.unknown_calls
 
 
-async def test_task_budget_admission_stops_third_call_and_retains_first_item_batch(tmp_path):
-    sent = []
-    provider = adapter(
-        tmp_path,
-        [structure_wire(), items_wire([REQ_1])],
-        sent,
-        llm_batch_chars=1000,
-        llm_concurrency=1,
-    )
-    accounting = Accounting(block_after=2, block_code="task_budget_exceeded")
-    whole = request(3, padding=650)
-    token = current_accounting.set(accounting)
-    try:
-        structure = await provider.extract_structure(whole)
-        result = await provider.extract_items(items_request(whole))
-    finally:
-        current_accounting.reset(token)
-    assert structure.output is not None and structure.failure is None
-    assert result.failure is not None and result.failure.code == "task_budget_exceeded"
-    assert [batch.requested_requirement_ids for batch in result.batches] == [[REQ_1]]
-    assert len(sent) == len(accounting.completed) == len(accounting.reservations) == 2
-    assert len(structure.usages + result.usages) == 2
-
-
-async def test_budget_stop_remains_explicit_after_an_earlier_malformed_batch(tmp_path):
+async def test_call_limit_stop_remains_explicit_after_an_earlier_malformed_batch(tmp_path):
     sent = []
     provider = adapter(tmp_path, ["{broken"], sent, llm_batch_chars=1000, llm_concurrency=1)
-    accounting = Accounting(block_after=1, block_code="task_budget_exceeded")
+    accounting = Accounting(block_after=1, block_code="job_call_limit_exceeded")
     token = current_accounting.set(accounting)
     try:
         result = await provider.extract_items(items_request(request(3, padding=650)))
     finally:
         current_accounting.reset(token)
-    assert result.failure is not None and result.failure.code == "task_budget_exceeded"
+    assert result.failure is not None and result.failure.code == "job_call_limit_exceeded"
     assert result.batches == []
     assert len(result.usages) == len(sent) == 1
 
@@ -590,7 +562,7 @@ async def test_request_limit_counts_messages_schema_and_options_before_admission
             assert result.batches == result.usages == []
     finally:
         current_accounting.reset(token)
-    assert not sent and not accounting.reservations
+    assert not sent and not accounting.plans
 
 
 async def test_oversized_item_batch_is_missing_while_an_independent_batch_completes(tmp_path):
@@ -613,7 +585,7 @@ async def test_oversized_item_batch_is_missing_while_an_independent_batch_comple
         current_accounting.reset(token)
     assert result.failure is not None and result.failure.code == "rubric_context_limit"
     assert [batch.requested_requirement_ids for batch in result.batches] == [[REQ_2]]
-    assert len(result.usages) == len(sent) == len(accounting.reservations) == 1
+    assert len(result.usages) == len(sent) == len(accounting.plans) == 1
 
 
 async def test_all_batch_failures_reported_when_structural_error_precedes_hard_failure(tmp_path):
@@ -686,10 +658,10 @@ async def test_invalid_request_never_calls_model(tmp_path, invalid):
     finally:
         current_accounting.reset(token)
     assert blocked.value.code == "invalid_rubric_request"
-    assert not sent and not accounting.reservations
+    assert not sent and not accounting.plans
 
 
-async def test_preview_is_call_free_and_conservatively_bounds_actual_reservations(tmp_path):
+async def test_preview_is_call_free_and_conservatively_bounds_actual_tokens(tmp_path):
     sent = []
     provider = adapter(
         tmp_path,
@@ -699,15 +671,15 @@ async def test_preview_is_call_free_and_conservatively_bounds_actual_reservation
         llm_batch_chars=1000,
     )
     whole = request(3, padding=650)
-    input_bound, output_bound, charge_bound, first_charge = provider.preview_bounds(whole)
+    plans = provider.preview_quotes(whole)
+    input_bound = sum(plan.input_tokens_upper_bound for plan in plans)
+    output_bound = sum(plan.output_tokens_upper_bound for plan in plans)
     assert not sent
-    assert first_charge == provider.reservation(whole)
+    assert plans[0] == provider.llm.quote(provider.validate_request(whole))
     assert output_bound == 4 * 4096
-    expected_stage2_charge = (
-        (Decimal(2 * provider.llm.settings.rubric_max_request_bytes + 4096) + Decimal(4096 * 2))
-        / 1_000_000
-    ).quantize(Decimal("0.00000001"), rounding=ROUND_CEILING)
-    assert charge_bound == first_charge + 3 * expected_stage2_charge
+    assert input_bound == plans[0].input_tokens_upper_bound + 3 * (
+        2 * provider.llm.settings.rubric_max_request_bytes + 4096
+    )
     accounting = Accounting(platform_billed=True)
     token = current_accounting.set(accounting)
     try:
@@ -720,8 +692,8 @@ async def test_preview_is_call_free_and_conservatively_bounds_actual_reservation
         len(json.dumps(body, ensure_ascii=False).encode()) + 4096 for body in sent
     )
     assert input_bound >= actual_input_bound
-    assert charge_bound >= sum(accounting.reservations)
-    assert accounting.reservations == [provider.llm.reservation(body) for body in sent]
+    assert output_bound >= sum(plan.output_tokens_upper_bound for plan in accounting.plans)
+    assert accounting.plans == [provider.llm.quote(body) for body in sent]
 
 
 async def test_unknown_item_ids_are_preserved_for_service_rejection(tmp_path):
@@ -740,7 +712,7 @@ async def test_unknown_item_ids_are_preserved_for_service_rejection(tmp_path):
 async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounting(
     tmp_path, monkeypatch, platform
 ):
-    from app.models.entities import Document, Job, OrgBalance, Task, UsageRecord
+    from app.models.entities import Document, Job, Task, UsageRecord
     from app.services import score_generation, score_inputs
     from app.services.auth import Identity
 
@@ -751,22 +723,11 @@ async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounti
         sent,
         platform=platform,
         llm_batch_chars=1000,
-        llm_input_usd_per_mtok=1,
-        llm_output_usd_per_mtok=2,
     )
     whole = request(3, padding=650)
     first = provider.llm.quote(provider.validate_request(whole))
-    assert first.reserved_task_amount is not None and first.reserved_task_amount > 0
     actor = Identity(uuid4(), uuid4(), {"score:rubric:generate"}, "bidder")
-    budget_limit = first.reserved_task_amount * 2
-    task = Task(
-        id=uuid4(),
-        org_id=actor.org_id,
-        budget_currency="USD",
-        budget_state="active",
-        budget_limit=budget_limit,
-        budget_revision=1,
-    )
+    task = Task(id=uuid4(), org_id=actor.org_id)
     extraction = Job(id=uuid4())
     document = Document(id=uuid4())
     fixed = score_inputs.RubricSnapshot(
@@ -811,14 +772,12 @@ async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounti
 
         async def scalar(self, statement):
             entity = statement.column_descriptions[0]["entity"]
-            if entity is OrgBalance:
-                return OrgBalance(balance=Decimal(10), currency="USD")
             if entity is Job:
                 if self.cached_job is not None and "jobs.cache_key =" in str(statement):
                     assert self.cached_job.cache_key in statement.compile().params.values()
                     return self.cached_job
                 return None
-            return Decimal(0)
+            return 0
 
         async def execute(self, statement):
             entity = statement.column_descriptions[0]["entity"]
@@ -854,16 +813,12 @@ async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounti
         RubricGenerateRequest(extraction_job_id=extraction.id, dry_run=True),
         provider.llm.settings,
     )
-    assert job is None and not sent
-    preflight = preview["budget_preflight"]
+    assert job is None and (not sent)
+    preflight = preview["preflight"]
     assert preflight["planned_calls"] == 4
     assert preflight["admission_blocker"] is None
-    assert preflight["first_pass_fits"] is False
     assert preflight["next_call"] == first.model_dump(mode="json")
-    assert Decimal(preflight["estimate"]["task_amount"]) > budget_limit
-    assert Decimal(preflight["estimate"]["charge"]) == Decimal(preview["estimated_charge"])
     assert preflight["estimate"]["llm_tokens"] == preview["estimated_cost"]["llm_tokens"]
-
     accounting = Accounting(platform_billed=platform)
     token = current_accounting.set(accounting)
     try:
@@ -873,19 +828,9 @@ async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounti
         current_accounting.reset(token)
     assert structure.failure is items.failure is None
     assert len(sent) == len(accounting.completed) == 4
-    task_reservations = []
-    for quote in accounting.quotes:
-        assert quote.reserved_task_amount is not None
-        task_reservations.append(quote.reserved_task_amount)
-    assert Decimal(preflight["estimate"]["task_amount"]) >= sum(task_reservations)
-    assert not accounting.unknown_calls and not accounting.not_sent_calls
-    for quote, (_, usage), body in zip(accounting.quotes, accounting.completed, sent, strict=True):
+    assert not accounting.unknown_calls and (not accounting.not_sent_calls)
+    for quote, (_, _usage), body in zip(accounting.quotes, accounting.completed, sent, strict=True):
         assert quote == provider.llm.quote(body)
-        assert usage.payer == quote.payer
-        assert usage.price_revision == quote.price_revision
-        assert usage.billing_currency == quote.currency
-        assert usage.task_amount is not None and 0 < usage.task_amount <= quote.reserved_task_amount
-
     from app.jobs import execution
     from app.schemas.contracts import Cost
 
@@ -910,15 +855,9 @@ async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounti
     cached_session.cached_job = cached_job
     usages = [usage for _, usage in accounting.completed]
 
-    async def cached_cost(session, job_id, currency):
-        assert session is cached_session and job_id == cached_job.id and currency == "USD"
-        return Cost(
-            basis="actual",
-            llm_tokens=sum(usage.tokens for usage in usages),
-            usd=sum(usage.usd for usage in usages),
-            charge=sum(usage.charge for usage in usages),
-            task_amount=sum(usage.task_amount for usage in usages),
-        ).model_dump(mode="json")
+    async def cached_cost(session, job_id):
+        assert session is cached_session and job_id == cached_job.id
+        return Cost(llm_tokens=sum(usage.tokens for usage in usages)).model_dump(mode="json")
 
     monkeypatch.setattr(execution, "job_cost", cached_cost)
     cached_preview, job = await score_generation._submit_rubric(
@@ -928,7 +867,7 @@ async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounti
         RubricGenerateRequest(extraction_job_id=extraction.id, dry_run=True),
         provider.llm.settings,
     )
-    cached = cached_preview["budget_preflight"]
+    cached = cached_preview["preflight"]
     assert job is None and len(sent) == 4
     assert cached["cached_job_id"] == str(cached_job.id)
     assert (
@@ -937,10 +876,8 @@ async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounti
         == cached_job.result["submission"]["preview_input_hash"]
     )
     assert cached_job.result["submission"]["input_hash"] == "c" * 64
-    assert cached["planned_calls"] == 0 and cached["estimate"]["basis"] == "cache_hit"
+    assert cached["planned_calls"] == 0 and cached["estimate"] == Cost().model_dump(mode="json")
     assert cached["next_call"] is cached["admission_blocker"] is None
-    assert cached["first_pass_fits"] is True
-    assert Decimal(cached["estimate"]["charge"]) == Decimal(cached["estimate"]["task_amount"]) == 0
     assert cached["cached_result_cost"]["llm_tokens"] == sum(usage.tokens for usage in usages)
     (tmp_path / "preflight-accounting.json").write_text(
         json.dumps(

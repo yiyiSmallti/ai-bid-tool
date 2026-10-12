@@ -304,7 +304,7 @@ async def test_fixed_scale_confidential_reads(
         "mode": "real_api",
         "scenario": "u01-confidential-fixed-scale-v1",
         "status": "running",
-        "schema": "4.0",
+        "schema": "5.0",
         "run_id": tenants["run_id"],
         "fixture": {
             "orgs": 2,

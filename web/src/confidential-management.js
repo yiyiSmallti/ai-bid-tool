@@ -50,7 +50,7 @@ export async function confidentialAuthority(reader, taskId) {
 }
 // Secret transports construct the single transient body explicitly. Do not pass a
 // whole reactive form or serialize it into navigation, telemetry or persistent state.
-export const submitConfidentialValue = (fieldId, value, taskId, revision, valueId) => orgRequest("POST", `/management/confidential-fields/${fieldId}/values`, { value, task_id: taskId, expected_field_revision: revision, expected_value_id: valueId }, { contractVersion: 4 });
+export const submitConfidentialValue = (fieldId, value, taskId, revision, valueId) => orgRequest("POST", `/management/confidential-fields/${fieldId}/values`, { value, task_id: taskId, expected_field_revision: revision, expected_value_id: valueId }, {});
 export function checkConfidentialReveal(item, value) {
   if (!exact(item, ["field_id", "value_id", "key", "value"]) || item.field_id !== value.field_id || item.value_id !== value.value_id || item.key !== value.key || typeof item.value !== "string" || !item.value || item.value.length > 2000) invalid();
   return item;

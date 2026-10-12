@@ -82,8 +82,8 @@ A user may join multiple orgs. Every request carries current-org context.
 **Audit and usage**
 
 - Audit login, confirmation, rejection, export, configuration changes, and token issuance; query by org.
-- Meter model calls/tokens, OCR pages, and storage by org for quotas/billing.
-- Org monthly budget caps pause new jobs and notify administrators when exceeded.
+- Meter model calls/tokens, OCR pages, and storage by org for operational limits and resource usage.
+- Bound jobs by resource counts, concurrency and duration.
 - Private deployment can enable one org using the same code on the customer's server.
 
 ## Data model
@@ -92,7 +92,7 @@ Requirements and evidence remain central: requirements locate original tender te
 
 | Group | Entity | Meaning | Key fields |
 | --- | --- | --- | --- |
-| Tenants/accounts | Org | One org | Name, plan, monthly budget |
+| Tenants/accounts | Org | One org | Name, active state |
 | Tenants/accounts | User, Membership | Global user and roles in orgs | Login method, org, role |
 | Tenants/accounts | ApiToken | CLI/external-agent token | Org, issuer, scopes, expiry |
 | Tenants/accounts | AuditLog, UsageRecord | Audit and usage | Actor, action, object, usage, cost |
@@ -101,7 +101,7 @@ Requirements and evidence remain central: requirements locate original tender te
 | Org resources | Product | Frequently proposed product | Vendor, exact model/version, official specs page, white paper |
 | Org resources | Certificate | Qualification/personnel certificate (证照) | Name, number, expiry, scans |
 | Org resources | OrgProfile | Org profile (单位资料) and track record | Registration, past contracts, common wording |
-| Tasks | Task | One bid-preparation project | Name, tender number, deadline, members, budget |
+| Tasks | Task | One bid-preparation project | Name, tender number, deadline, members |
 | Tasks | TaskResource | Selected-resource snapshot | Resource type/ID/version |
 | Tasks | Document, Chunk | Uploaded file and parsed content | Type, content hash, page, section path, OCR flag |
 | Tasks | Requirement | One requirement | Category, starred flag, original text/location, structured condition |
@@ -161,14 +161,14 @@ Every resource change creates a new version and retains older versions. Certific
 1. Enter name, tender number, deadline, and members.
 2. Upload tender documents; background parsing starts.
 3. Select template, products (separately per lot if needed), feature list, certificate set, and provider profile.
-4. Set a budget cap and confirm to generate the dashboard.
+4. Review scope and model configuration, then confirm to generate the dashboard.
 
 CLI equivalent:
 
 ```bash
 bid task create --name "某单位 GPU 服务器采购" --tender tender.pdf \
   --template tpl-standard@v3 --product prod-gpu-01 --features fl-platform@v5 \
-  --certs cert-set-default --providers profile-default --budget-usd 20
+  --certs cert-set-default --providers profile-default
 ```
 
 Resources can be added/replaced later. Audit every change and identify potentially affected confirmed cards.
@@ -298,7 +298,7 @@ CLI is an external interface. Dashboard backend, internal agents, and external a
   "data": { "created": 86, "starred": 7 },
   "items": [ { "id": "req-031", "source": { "doc": "tender.pdf", "page": 42 } } ],
   "warnings": [ "第 18–20 页为图片，未解析" ],
-  "cost": { "llm_tokens": 152000, "usd": 0.41 },
+  "cost": { "calls": 2, "llm_tokens": 152000, "ocr_pages": 0, "search_requests": 0, "browser_units": 0, "unresolved_calls": 0 },
   "duration_ms": 38200
 }
 ```
@@ -315,7 +315,7 @@ CLI is an external interface. Dashboard backend, internal agents, and external a
 
 **Idempotence/cache**: identical file hash/prompt version/model inputs reuse cached results without another call. Reruns update changed records only and never overwrite human-confirmed content.
 
-**Estimation**: `--dry-run` reports item count, estimated cost/time without writes.
+**Estimation**: `--dry-run` reports item count, estimated resource use/time without writes.
 
 **Jobs**: expensive commands immediately return job ID; `--wait` waits for completion. `bid job status` queries state; dashboards use SSE.
 
@@ -367,7 +367,6 @@ Parameter cards reach terminal state only through pending-human-confirmation. Mi
 - Run as initiator but cannot confirm evidence, edit confirmed cards, or export, like external agents.
 - Load memory under memory-system rules and identify used entries.
 - Keep state on server; resume from cards without repeating completed work.
-- Aggregate `--dry-run` estimates; ask a human before exceeding task budget/org quota.
 - Initially use Claude Code/Codex with a CLI guide to validate external integration; later implement an internal agent with an SDK.
 
 ## Evaluation
@@ -382,7 +381,7 @@ Rerun a fixed dataset after prompt/model/rule changes. Starred-clause recall is 
 | Parameter verdict accuracy | Agreement on satisfied/not satisfied/not found | After measurement |
 | Evidence acceptance | Human-confirmed rather than rejected | After measurement |
 | Risk detection/false positives | Compare human-annotated findings | After measurement |
-| Per-document cost/time | Model cost/total time from parse through check | After measurement |
+| Per-document resource use/time | Model cost/total time from parse through check | After measurement |
 
 **Dataset**
 
@@ -445,17 +444,16 @@ Establish isolation before adding capabilities. Org business tables carry `org_i
 | 3 | 11/30–12/27 | Dashboard/internal agent/`score`/`export`/org templates; multi-org/roles/tokens/external agents; model/OCR pages; project/org memory |
 | 4 | 12/28–2027/1/24 | User/global memory, audit/usage quotas, `bid mcp serve`, private deployment packaging, polish/demo |
 
-The scope is much larger than originally planned. Phase 4 is the most likely to be reduced: if time is short, global memory, quota billing, MCP and private deployment can wait until after the job search.
+The scope is much larger than originally planned.
 
 These are planning windows, not implementation status. Remaining scope and priorities are maintained in the [roadmap](plan/roadmap.md).
 
 ## Open decisions
 
-- [ ] Platform-default LLM/vision/embedding providers: compare Chinese long-document extraction, prices, and data policies.
+- [ ] Platform-default LLM/vision/embedding providers: compare Chinese long-document extraction, capabilities, and data policies.
 - [ ] Search API: coverage of domestic vendor sites. Existing explicit selection is defined in [platform credentials](plan/platform-credentials.md#resolution-cache-and-job-boundaries).
 - [ ] Platform-default OCR: cloud versus local engine.
 - [x] Background queue: Procrastinate; see [queue.py](../server/app/jobs/queue.py).
-- [x] Payment: prepaid balance (预付余额)/recharge cards (充值卡密) under [ADR 0002](adr/0002-prepaid-billing.md); current admission/accounting is maintained in [prepaid billing](notes/prepaid-billing.md).
 - [ ] Initial global-memory sources and reviewers.
 - [ ] Public platform templates and cross-org template sharing.
 - [ ] Adapt Word exports to widely varying org templates.

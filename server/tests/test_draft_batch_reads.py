@@ -6,7 +6,7 @@ Failure modes enumerated before these gates:
 * Projection drift: row/comply-only/gap snapshots, source order, evidence order,
   partial completion, negative deviations and invalidation order must exactly
   match the retained slow reference, for current and stale drafts.
-* Contract drift: versioned reads retain the complete 4.0 Result and nullable
+* Contract drift: versioned reads retain the complete 5.0 Result and nullable
   agent provenance, while legacy reads omit that attachment and retain the
   strict three-field Cost.
 * Freshness drift: changed card pointers, newly created cards for old gaps,
@@ -35,7 +35,6 @@ from app.core.errors import not_found
 from app.models.entities import Requirement
 from app.models.response_cards import DraftRun, ResponseCard, ResponseCardRevision, ResponseItem
 from app.providers.llm import OpenAICompatibleExtractor
-from app.schemas.compatibility import legacy_projection
 from app.schemas.contracts import Result
 from app.schemas.response_card_contracts import DraftView
 from app.services import drafts, task_cosign
@@ -519,7 +518,7 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
         with statement_count(app) as counter:
             response = await api.get(f"/v4/drafts/{draft_id}", headers=header)
         assert response.status_code == 200, response.text
-        assert response.headers["X-Bid-Contract-Version"] == "4.0"
+        assert response.headers["X-Bid-Contract-Version"] == "5.0"
         reference = references[draft_id]
         warnings = [
             f"negative_deviation:{row['requirement_id']}"
@@ -540,8 +539,8 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
         with statement_count(app) as legacy_counter:
             legacy_response = await api.get(f"/drafts/{draft_id}", headers=header)
         assert legacy_response.status_code == 200, legacy_response.text
-        assert legacy_response.headers["X-Bid-Contract-Version"] == "3.0"
-        assert {**legacy_response.json(), "duration_ms": 0} == legacy_projection(expected_result)
+        assert legacy_response.headers["X-Bid-Contract-Version"] == "5.0"
+        assert {**legacy_response.json(), "duration_ms": 0} == expected_result
         assert legacy_counter["statements"] == counter["statements"]
         legacy_counts.append(legacy_counter["statements"])
         partition = [row["requirement_id"] for rows in reference["tables"].values() for row in rows]
@@ -557,7 +556,7 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
             params={"job": fixture["extraction"]},
         )
     assert response.status_code == 200, response.text
-    assert response.headers["X-Bid-Contract-Version"] == "4.0"
+    assert response.headers["X-Bid-Contract-Version"] == "5.0"
     summary_keys = (
         "id",
         "task_id",
@@ -603,8 +602,8 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
             params={"job": fixture["extraction"]},
         )
     assert legacy_response.status_code == 200, legacy_response.text
-    assert legacy_response.headers["X-Bid-Contract-Version"] == "3.0"
-    assert {**legacy_response.json(), "duration_ms": 0} == legacy_projection(expected_result)
+    assert legacy_response.headers["X-Bid-Contract-Version"] == "5.0"
+    assert {**legacy_response.json(), "duration_ms": 0} == expected_result
     assert legacy_counter["statements"] == counter["statements"]
     return {
         "detail_queries": fast_counts,

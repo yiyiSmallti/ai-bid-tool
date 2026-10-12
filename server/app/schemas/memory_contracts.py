@@ -2,7 +2,6 @@
 
 from collections.abc import Sequence
 from datetime import datetime
-from decimal import Decimal
 from typing import TYPE_CHECKING, Annotated, Literal, Protocol
 from uuid import UUID
 
@@ -585,7 +584,6 @@ class EmbeddingIdentity(Contract):
     model: ShortText
     version: ShortText
     model_revision: ShortText
-    price_revision: ShortText
     dimensions: int = Field(strict=True, ge=1, le=16000)
     metric: Literal["cosine"] = "cosine"
     provider_config_id: UUID
@@ -729,8 +727,6 @@ class MemoryAwareLLMProvider(LLMProvider, Protocol):
 
 class EmbeddingProvider(Protocol):
     identity: EmbeddingIdentity
-
-    def reservation(self, request: EmbeddingRequest) -> Decimal: ...
 
     async def embed(self, request: EmbeddingRequest) -> EmbeddingOutput: ...
 

@@ -40,12 +40,10 @@ their settlement before propagating cancellation. This can take up to the
 vendor request deadline plus accounting time.
 
 The call ledger persists before HTTP dispatch; response usage is committed
-before processing output. Accounting identifiers, ceilings, unresolved holds
-and the concurrent spending bound are defined in
-[prepaid-billing.md](prepaid-billing.md). Job costs are rebuilt from persisted
-usage when an attempt is claimed, on completion/failure and after each call,
-so a retry does not reset charges. No partial extraction is published on a
-guard failure. Model card generation activates the same execution context;
+before processing output.
+No partial extraction is published on a
+guard failure.
+Model card generation activates the same execution context;
 its publication and partial-result rules are defined in
 [response-cards.md](response-cards.md#model-proposals).
 
@@ -54,20 +52,26 @@ Configure lease and heartbeat settings using
 
 ## Pitfalls
 
-An unconfigured production LLM fails explicitly. Test fixtures are labelled and
-only injected by tests. Native PDF work runs in one disposable child per parse;
-OCR calls and usage accounting remain in the worker. Child resource failures are
-terminal, non-retryable `pdf_resource_limits` failures. Process limits, mixed-page
+An unconfigured production LLM fails explicitly.
+Test fixtures are labelled and
+only injected by tests.
+Native PDF work runs in one disposable child per parse;
+OCR calls and usage accounting remain in the worker.
+Child resource failures are
+terminal, non-retryable `pdf_resource_limits` failures.
+Process limits, mixed-page
 OCR selection and incomplete-page warnings are defined in [PDF parsing](pdf-parsing.md).
-Local OCR requires actual Tesseract language data. DOCX layout is unverified and cannot provide valid page
-citations until converted to PDF. No Word page numbers are guessed.
-Queue permissions apply only to internal dispatch tables. There is no agent
-confirmation/export endpoint. Failed/cancelled identical jobs stay terminal until an explicit `--retry`; a new
+Local OCR requires actual Tesseract language data.
+DOCX layout is unverified and cannot provide valid page
+citations until converted to PDF.
+No Word page numbers are guessed.
+Queue permissions apply only to internal dispatch tables.
+There is no agent
+confirmation/export endpoint.
+Failed/cancelled identical jobs stay terminal until an explicit `--retry`; a new
 attempt UUID prevents older cancelled workers from overwriting the new attempt.
 `--retry` may reclaim an expired lease; it cannot take a live, renewed lease.
-Pending call reservations survive both paths. Process death between a vendor
-response and a database commit still requires reconciliation, as described in
-[prepaid-billing.md](prepaid-billing.md#pitfalls). Interactive progress/SSE is
+Interactive progress/SSE is
 separate from the lease heartbeat.
 
 ## Code

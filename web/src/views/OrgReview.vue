@@ -167,7 +167,7 @@ onMounted(load);
       <div class="strip-item danger"><span class="label">负偏离</span><strong>{{ summary.negative }}</strong></div>
       <span class="hint strip-hint">统计只覆盖所选抽取集合，不表示招标文件没有漏抽或完整标书已交付。</span>
     </div>
-    <el-collapse v-if="writable" v-model="generationOpen" class="section generation"><el-collapse-item name="generation" title="模型起草费用预览"><GenerationPanel :task="task" :job="job" :requirement-ids="selected.length ? selected : undefined" :role="orgAccess.role" :material-revision="materialRevision" @changed="taskChanged" /></el-collapse-item></el-collapse>
+    <el-collapse v-if="writable" v-model="generationOpen" class="section generation"><el-collapse-item name="generation" title="模型起草预览"><GenerationPanel :task="task" :job="job" :requirement-ids="selected.length ? selected : undefined" :role="orgAccess.role" :material-revision="materialRevision" @changed="taskChanged" /></el-collapse-item></el-collapse>
     <el-card shadow="never" class="section filters-card">
       <el-form label-position="top" class="filters" @submit.prevent>
         <el-form-item label="搜索要求或引文" class="filter-search"><el-input v-model="filters.query" maxlength="200" type="search" clearable :prefix-icon="Search" placeholder="要求文字或招标原文" /></el-form-item>

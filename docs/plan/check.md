@@ -6,7 +6,10 @@ kind: plan
 
 Status: **Approved. Stage one rules and stage two combined are implemented.** Corresponds to [roadmap](roadmap.md) B09.
 
-The [Pydantic contract](../../server/app/schemas/check_contracts.py) is the active definition for the API, CLI, and schema. Stage one implements deterministic rules, persistent reports, and human false-positive decisions. Stage two implements the Provider, semantic checks, outbound boundaries, per-call billing, and synthetic tests. Real-model evaluation must still be explicitly run in `evals/`. This module also defines the input, citation, preview, and job-receipt types shared with B10; the [score contract draft](score.md) imports them.
+The [Pydantic contract](../../server/app/schemas/check_contracts.py) is the active definition for the API, CLI, and schema.
+Stage one implements deterministic rules, persistent reports, and human false-positive decisions.
+Real-model evaluation must still be explicitly run in `evals/`.
+This module also defines the input, citation, preview, and job-receipt types shared with B10; the [score contract draft](score.md) imports them.
 
 ## Goals and boundaries
 
@@ -32,7 +35,6 @@ This scope does not check the complete delivered bid: it excludes DOCX value fil
 | `strict_schema`, `json_request`, `json_call` in [providers/structured.py](../../server/app/providers/structured.py) | Stage two reuses structured requests and the accounted HTTP boundary |
 | `status`, `cancel` in [services/jobs.py](../../server/app/services/jobs.py) | Check result filtering and permission checks are present; submission/encrypted_input remain hidden |
 | `Job.job_document_binding` in [models/entities.py](../../server/app/models/entities.py) | Ordinary task jobs require a real task/document; provider_test is the unbound exception. The old annotation draft's “always NOT NULL” statement does not apply to that exception |
-| [prepaid-billing.md](../notes/prepaid-billing.md) | Per-call prepaid admission exists; cumulative task budgets/monthly quotas in the design are not yet general execution gates |
 
 ## Interfaces
 
@@ -40,7 +42,7 @@ The following paths are all used in stage one. Requests must not supply `org_id`
 
 | HTTP | CLI (all support `--json`) | Request → data / items |
 | --- | --- | --- |
-| `POST /tasks/{task_id}/checks` | `bid check run --task UUID --draft UUID --as-of YYYY-MM-DD [--mode rules\|combined] [--reasoning LEVEL] [--dry-run] [--expected-input-hash HASH] [--max-charge AMOUNT] [--retry] [--wait] --json` | `CheckRequest`; dry-run → `CheckPreview` / []; submission → `AssessmentJobAccepted` / []; successful wait → `CheckJobResult` / [] |
+| `POST /tasks/{task_id}/checks` | `bid check run --task UUID --draft UUID --as-of YYYY-MM-DD [--mode rules\|model\|combined] [--dry-run] [--expected-input-hash HASH]` | `CheckRequest`; dry-run → `CheckPreview` / []; submission → `AssessmentJobAccepted` / []; successful wait → `CheckJobResult` / [] |
 | `GET /tasks/{task_id}/checks?cursor=…&limit=…` | `bid check list --task UUID [--cursor CURSOR] [--limit N] --json` | `AssessmentListData` / `CheckRunView[]` |
 | `GET /checks/{report_id}` | `bid check show --id UUID --json` | `CheckReportData` (including coverage and certificate date checks) / `FindingView[]` |
 | `POST /checks/{report_id}/findings/{finding_id}/decisions` | `bid check decide --report UUID --finding UUID --action dismiss\|reopen --expected-revision N --expected-input-hash HASH --reason TEXT --json` | `FindingDecisionRequest` → `FindingDecisionData` / [] |
@@ -48,21 +50,29 @@ The following paths are all used in stage one. Requests must not supply `org_id`
 
 List limit defaults to 50, with range 1–200; the server binds cursors to org, task, and ordering. The first report version allows at most 2,000 requirements, 20 risks per requirement, and 20 citations per risk. Exceeding a limit explicitly fails the entire batch without silent truncation. `--wait` uses existing `bid job status/wait`; cancellation uses `bid job cancel`. Local mode still uses local PostgreSQL/RLS, the same identities and services, and cannot bypass authorization by reading files directly. Missing parameters fail immediately without interactive prompts. `total` counts entries before pagination under current authorized query conditions; history cursors additionally bind the finding. Every path task must match the draft/report task or return 404. Public-view org_id is read-only, never a POST parameter.
 
-`Result` contains only `ok command data items warnings cost duration_ms`; models define data/items payloads without redefining the wrapper. Commands are `check run/list/show/decide/history`. Actual rules cost is `{llm_tokens:0,ocr_pages:0,usd:0}`; the dry-run wrapper cost is also zero, with estimates in `data.estimated_cost`. Execution duration is measured; unknown estimated duration is null. Amounts use existing Decimal JSON strings, with platform charges separate from vendor USD costs. The existing contract version is in `contracts.CONTRACT_VERSION`; `cli/bid_cli/schema.py` includes corresponding entries, preserving existing JSON rather than reusing old annotation version numbers. Rules previews retain the same structure: provider/config/model/reasoning fields are null, estimated charge=0, cost_basis=known, reason=`no_model_calls`, and currency still comes from platform configuration. Redaction fields only describe current settings. Preview exit 0 means read-only analysis succeeded; `admission_blocker != null` explicitly means submission under these conditions is unavailable. Actual submission must recheck and reject it, never treating a preview as admission authorization. Default mode is `rules`; `combined` uses pinned Provider configuration for semantic checks. Models without that capability fail explicitly without silent fallback.
+`Result` contains only `ok command data items warnings cost duration_ms`; models define data/items payloads without redefining the wrapper.
+Commands are `check run/list/show/decide/history`.
+Execution duration is measured; unknown estimated duration is null.
+The existing contract version is in `contracts.CONTRACT_VERSION`; `cli/bid_cli/schema.py` includes corresponding entries, preserving existing JSON rather than reusing old annotation version numbers.
+Redaction fields only describe current settings.
+Preview exit 0 means read-only analysis succeeded; `admission_blocker != null` explicitly means submission under these conditions is unavailable.
+Actual submission must recheck and reject it, never treating a preview as admission authorization.
+Default mode is `rules`; `combined` uses pinned Provider configuration for semantic checks.
+Models without that capability fail explicitly without silent fallback.
 
 | Exit code | Result semantics |
 | --- | --- |
 | 0 | Preview complete (still inspect admission_blocker), job accepted, read/human decision succeeded, or all selected rules completed; risks do not imply command failure |
 | 2 | Missing parameters, invalid mode/date/cursor, limits exceeded, stale draft, preview hash/human revision conflict, or model options supplied to rules mode |
 | 3 | Temporary network/queue failure, timeout, or rate limit with no publishable report; returns a retryable code without reporting success |
-| 4 | Identity/permission failure, cross-org or missing resource, hard citation/storage integrity failure, refusal, or balance/price/billing gate failure with no publishable report |
-| 5 | Report saved with unassessable items, citation rejection, or later-batch/budget interruption; `ok=false`, `completion=partial`, with per-item reasons |
+| 4 | Permanent permission, provider configuration or resource-limit failure; correct the named blocker before retrying |
+| 5 | Report saved with unassessable items, citation rejection, or later-batch/resource-limit interruption; `ok=false`, `completion=partial`, with per-item reasons |
 
 For 2/3/4, `data` retains the existing error `code`/`message` format, adding `job_id` if a job exists and never echoing raw vendor text. Reading a partial report with `show` also returns 5. Stale history is readable with warnings, but further human decisions are blocked. 404 uniformly covers cross-org, unauthorized, and missing objects; existing 401/403 identity/feature authorization semantics remain.
 
 ## Input manifest, rules, and citations
 
-The server pins draft/extraction/document, every Requirement quote/location hash, ResponseItem and card revisions, Evidence/resource selections/revisions, certificate selections/dates, explicit `assessment_date`, role review domains (职责), parsing/extraction warnings, redaction setting revisions/rules, confidential field (保密字段)/value-row IDs, and rule/prompt/schema/adapter versions. Stage two also pins model catalog revisions, reasoning level, and prices. Public previews expose only these IDs/hashes, counts, and limits. Original-text snapshots use `card_generation.snapshot` encryption and are hidden from audits, UsageRecord, and job status. Task deadlines never implicitly become certificate assessment dates; callers must provide `--as-of`.
+The server pins draft/extraction/document, every Requirement quote/location hash, ResponseItem and card revisions, Evidence/resource selections/revisions, certificate selections/dates, explicit `assessment_date`, role review domains (职责), parsing/extraction warnings, redaction setting revisions/rules, confidential field (保密字段)/value-row IDs, and rule/prompt/schema/adapter versions. Stage two also pins model catalog revisions, reasoning level. Public previews expose only these IDs/hashes, counts, and limits. Original-text snapshots use `card_generation.snapshot` encryption and are hidden from audits, UsageRecord, and job status. Task deadlines never implicitly become certificate assessment dates; callers must provide `--as-of`.
 
 Reads must verify that the draft has exactly one ResponseItem for each requirement in its extraction job, and that ResponseItem.draft_id/requirement_id and DraftRun.task_id/extraction_job_id all match. A gap also requires that row; input reconstructed only from Requirement is rejected. An existing requirement citation that cannot be located returns `invalid_input_citation`; invalid quotations never enter a new report.
 
@@ -74,9 +84,16 @@ Reads must verify that the draft has exactly one ResponseItem for each requireme
 | Certificate dates | Call `certificates.inspect_dates` on pinned task certificates, retaining inclusive boundary dates; expired/not-yet-valid dates produce risks, missing dates are unknown | Checks declared dates, not authenticity; without a reliable requirement binding, list certificate information only, without inferring qualification (资格) rejection |
 | Contradictions, weak responses, insufficient material coverage (stage two) | Only `combined` calls the LLM, returning no_risk_found/risk/unknown per requirement and distinguishing commitments, declarations, and proof | Arbitrary condition, unit conversion, hidden attachments, visual content, and extraction omissions cannot deterministically be claimed as passing |
 
-`mode=rules` completes only the local checks above, with semantic_status=not_requested and an explicit statement that semantics were not checked. It requires no model configuration, balance, or UsageRecord. `combined` cannot silently revert to rules; LLM failure can still preserve completed deterministic coverage and unassessed reasons as partial. Coverage counts each requirement once, never deriving coverage from finding counts. Unknown dates on unmapped certificates do not fail unrelated requirements, but report limitations must remain.
+`mode=rules` completes only the local checks above, with semantic_status=not_requested and an explicit statement that semantics were not checked.
+`combined` cannot silently revert to rules; LLM failure can still preserve completed deterministic coverage and unassessed reasons as partial.
+Coverage counts each requirement once, never deriving coverage from finding counts.
+Unknown dates on unmapped certificates do not fail unrelated requirements, but report limitations must remain.
 
-`combined` sends only `response` rows containing confirmed bid text for semantic checking. `gap` and `comply_only` retain all deterministic rules and findings; semantic status is `not_requested`, with empty outcome, reason, and citations. Such rows do not independently cause unassessed or partial and do not establish that materials or substantive requirements are satisfied. Preview `semantic_items`, complete-request estimates, worker planned calls, and report statistics use the same scope. Without response rows, there are no Provider calls, reservations, or usage; estimated cost/charge is zero, reason=`no_model_calls`. Unknown/rejected confirmed responses and deterministic unknowns still make the report partial.
+`combined` sends only `response` rows containing confirmed bid text for semantic checking.
+`gap` and `comply_only` retain all deterministic rules and findings; semantic status is `not_requested`, with empty outcome, reason, and citations.
+Such rows do not independently cause unassessed or partial and do not establish that materials or substantive requirements are satisfied.
+Preview `semantic_items`, complete-request estimates, worker planned calls, and report statistics use the same scope.
+Unknown/rejected confirmed responses and deterministic unknowns still make the report partial.
 
 Shared `VerifiedCitation` distinguishes tender `Source`, a draft response row's `response_text/deviation_note`, and confirmed `Evidence.quote`. Tender PDF references use page; Word references use `Location`, never fabricated DOCX page numbers. A draft is not an uploaded `Document`: citations locate draft/response_item/card_revision/field rather than a fake `Source.document_id`. Evidence citations resolve to original material locations and recheck confirmation and valid selection. An image_region visual observation is human observation text; the first version neither treats it as verbatim image text nor sends images.
 
@@ -84,7 +101,7 @@ The following model citation rules apply to **stage two combined**. Models recei
 
 ## Stage two outbound boundary
 
-Stage one `rules` sends no text externally, requires no model configuration, balance, or redaction switch, and creates no UsageRecord or VendorCall. The following boundaries apply to `combined`.
+The following boundaries apply to `combined`.
 
 Follow the replacement order in [model-drafting-redaction.md](../notes/model-drafting-redaction.md) and [confidential-values.md](../notes/confidential-values.md): replace registered values with placeholders first, then redact remaining business text with `redaction.redact_tree`. All original text, responses, deviation notes, Word location labels, and field names/labels use the same outbound traversal. Send only `OutboundContext` local refs, text, and field hints, without values, suffixes, paths, credentials, file bytes, unselected resources, or human false-positive reasons. Titles/materials are data; embedded instructions are never executed.
 
@@ -127,31 +144,45 @@ Review domains follow existing card `ReviewDomain`. Findings without a domain ca
 
 Dismissal retains original machine conclusions and all evidence, is reopenable, and changes only this finding's display state, never gates, deviations, scores, or rerun results. New reports start open and never inherit dismissals automatically. The first version has no “fixed” button or automatic clearing; materials must change, undergo human reconfirmation, and be checked again. Models cannot write human reasons or automatically generate/activate candidate memories; later memory capabilities require a separate contract.
 
-## Jobs, Provider, and billing
+## Jobs, Provider, and usage
 
 ### Stage one rules
 
 Job kind=`check` uses the real tender document from the draft's extraction as `document_id`, never an invented bid document. It follows persist-before-dispatch, lease/heartbeat/attempt `run_id`, cancellation, and explicit retry in [background-jobs.md](../notes/background-jobs.md). [jobs/processor.py](../../server/app/jobs/processor.py) includes the branch; `services/jobs.status/cancel` use equivalent permission gates. Workers revalidate input, identity, and all dependencies within publication transactions. Changes return `check_input_changed`; old workers, lost leases, or cancellation cannot publish.
 
-Cache identity binds org/task/initiator, full draft input hash, assessment date, mode, rule/prompt/schema/adapter, and redaction/confidential value revisions. Identical input returns the same job/report; new input yields a new report without overwriting human decisions. `--retry` for failed/cancelled/expired-lease jobs reuses original input and cannot take a live lease. Rules calls no Provider, creates no UsageRecord/VendorCall, and reserves/deducts no balance; fees and wrapper cost are zero.
+Cache identity binds org/task/initiator, full draft input hash, assessment date, mode, rule/prompt/schema/adapter, and redaction/confidential value revisions.
+Identical input returns the same job/report; new input yields a new report without overwriting human decisions.
+`--retry` for failed/cancelled/expired-lease jobs reuses original input and cannot take a live lease.
 
 Unknown mapped-certificate dates or inability to form valid rule citations leave corresponding requirements unassessed and the report `partial`; reads/waits return exit 5. Unknown unmapped-certificate dates appear only in the certificate list and limitations. Partial is terminal for a published job and the same input still hits that report. Input or rule-version changes trigger new assessment without inheriting human decisions.
 
-`--dry-run` makes zero external calls and zero writes (including Job/Audit/Finding/Usage/VendorCall/balance), computing a consistent input hash first. Actual submission must return `expected_input_hash`. Preview provider/config/model/reasoning are null, `cost_basis_reason=no_model_calls`, and `admission_blocker=null`.
+Actual submission must return `expected_input_hash`.
 
 ### Stage two combined
 
-The following Provider, billing, partial publication, and model estimation rules are implemented by [check_semantic.py](../../server/app/services/check_semantic.py), [checking.py](../../server/app/providers/checking.py), and [jobs/check.py](../../server/app/jobs/check.py).
+`CheckProvider.check(CheckProviderRequest) -> CheckProviderResult` is a separate LLM capability; business code depends only on the Protocol.
+Adapters implement the `HTTPExtractor` structured-call pattern in `providers/`.
+`CheckWireOutput` forbids extra fields and each batch must cover exactly the requested requirement IDs.
+Batches neither split individual original-text fields nor implicitly shorten them; context overflow fails explicitly.
+Missing/duplicate/unknown IDs and invalid citations record rejection codes without borrowing another requirement's result.
+Server batches pin the refs actually sent per call.
+The adapter returns failure codes and usable batches without raw vendor errors.
+Wire types allow candidate parsing to retain usable batches; the server then rejects missing/duplicate/mismatched answers and out-of-scope citations against request IDs/refs, without equating structural validation with acceptance. unknown has no findings; risk citations belong to the requirement and its bound response; no_risk_found requires verified tender/bid citations.
+B10 uses separate score jobs, Protocol, and cache space, importing only shared Assessment types rather than reusing CheckJobResult.
 
-`CheckProvider.check(CheckProviderRequest) -> CheckProviderResult` is a separate LLM capability; business code depends only on the Protocol. Adapters implement the `HTTPExtractor` structured-call pattern in `providers/`. `CheckWireOutput` forbids extra fields and each batch must cover exactly the requested requirement IDs. Batches neither split individual original-text fields nor implicitly shorten them; context overflow fails explicitly. Missing/duplicate/unknown IDs and invalid citations record rejection codes without borrowing another requirement's result. Server batches pin the refs actually sent per call. Each call returns wire candidates and `usages`, reusing `ProviderUsage` for model/version/duration/input/output tokens/vendor cost/platform charge, never fabricating actual usage from text length. The adapter returns failure codes and usable batches without raw vendor errors. Wire types allow candidate parsing to retain usable batches; the server then rejects missing/duplicate/mismatched answers and out-of-scope citations against request IDs/refs, without equating structural validation with acceptance. unknown has no findings; risk citations belong to the requirement and its bound response; no_risk_found requires verified tender/bid citations. B10 uses separate score jobs, Protocol, and cache space, importing only shared Assessment types rather than reusing CheckJobResult.
+Execution must run in the accounting context of [JobExecution.activate](../../server/app/jobs/execution.py).
+Rejected citations, refusals, truncation, or cancellation do not refund incurred usage.
+Rules creates no zero-usage records.
+Call association uses accounting-context call_id and its persisted UsageRecord.
 
-Execution must run in the accounting context of [JobExecution.activate](../../server/app/jobs/execution.py). `accounted_call` in [providers/calls.py](../../server/app/providers/calls.py) and `HTTPExtractor.post` provide per-call admission and UsageRecord persistence, reusing `billing.charge_usage`, without a separate billing engine. Rejected citations, refusals, truncation, or cancellation do not refund incurred usage. Each `(org_id,job_id,run_id,call_id)` settles once; unresolved requests retain reservations. `CheckProviderResult.usages` supports association checks only, never another charge. Rules creates no zero-usage records. Vendor USD costs are separate from platform currency/selling price; billing details live solely in [prepaid billing](../notes/prepaid-billing.md#admission-and-the-spending-bound). Call association uses accounting-context call_id and its persisted UsageRecord. ProviderUsage itself has no call_id; do not change its type or infer billing associations from list order. Statistics/ledger disagreement is a hard billing failure: stop publication and retain charges/reservations for reconciliation.
+Model selection follows [configuration resolution](../notes/provider-config.md#resolution-and-cache): submission pins provider_config_id, provider_source, and nonsecret identity; workers resolve that immutable revision.
+Disabled or changed catalogs or unsupported new capabilities fail explicitly without switching vendors.
 
-Model selection follows [configuration resolution](../notes/provider-config.md#resolution-and-cache): submission pins provider_config_id, provider_source, and nonsecret identity; workers resolve that immutable revision. Disabled/repriced catalogs or unsupported new capabilities fail explicitly without switching vendors. Org-owned keys also record usage, VendorCall, and cumulative call ceilings, but existing mechanisms set platform charge/reservation=0 and skip prepaid balance (预付余额) checks. Unknown vendor USD remains null; zero platform charge is not “free.” Only platform models enforce selling price, max_charge, and balance reservation. For org-paid models, max_charge does not promise to bound vendor bills; previews warn explicitly.
+Combined preview follows `card_generation.snapshot/estimate/submit_generation`, not zero-model table-assembly cost.
+Actual submission must return `expected_input_hash`.
 
-Combined preview follows `card_generation.snapshot/estimate/submit_generation`, not zero-model table-assembly cost. `--dry-run` still makes zero external calls/writes (Job/Audit/Finding/Usage/VendorCall/balance), first computing a consistent input hash and complete-request first_pass_upper_bound. Actual submission must return `expected_input_hash`. Insufficient initial-call balance/per-job cap is an admission_blocker; unknown estimates are null with explanation, never zero. Without a usable platform selling price, no paid call may be sent. Retries/split batches remain bound by live reservation, call ceiling, `max_charge`, and balance; first-pass estimates do not promise total retry costs. `Task.budget_usd` is not a platform-currency job cap; the first version does not claim cumulative task-budget enforcement.
-
-Later provider/budget interruptions or citation rejection can publish partial reports when completed coverage exists. Cancellation, lease/heartbeat loss, invalid input, or billing failure prevents the entire report's publication. Results explicitly establish whether local rule coverage exists after total model failure; findings=[] never by itself means “no risk.”
+Later provider/resource-limit interruptions or citation rejection can publish partial reports when completed coverage exists.
+Results explicitly establish whether local rule coverage exists after total model failure; findings=[] never by itself means “no risk.”
 
 ## Audit and failure modes
 
@@ -166,7 +197,7 @@ Audit events are `check.submit`, `check.publish`, `check.dismiss`, and `check.re
 | Redaction disabled or required sensitive-value assertion redacted (stage two) | Block before semantic calls or mark items unassessed; no automatic retry with redaction disabled |
 | Joined/wrong/ambiguous citations, missing/duplicate model items (stage two) | Do not save invalid conclusions; state reasons on coverage items; partial remains reviewable |
 | Raw output/errors contain secrets or instructions (stage two) | Sanitized fixed codes, reject untrusted text, never execute embedded instructions |
-| Queue dispatch failure, worker takeover, unknown accounting response | Reuse persistent jobs and run_id fencing; stage two retains reservations without double settlement |
+| Queue dispatch failure, worker takeover, unknown accounting response | Reuse persistent jobs and run_id fencing; stop unresolved calls without duplicate dispatch or false zero-use completion. |
 
 ## Stage two evaluation basis
 
@@ -176,7 +207,8 @@ For reduced-number/truncation mutations, Clef identified 16/17 and 15/15 respect
 
 Mean matching-item relevance for complete sections was Clef 1.94/2, DeepSeek 2/2, GLM 2/2. Keeping only the first 400 characters still yielded 1.66/2, 1.82/2, 1.86/2, showing topic relevance can overrate thin content. Score must separately verify scoring conditions and required materials rather than mapping these relevance scores directly. Median call latency was 5.79s, 4.4s, and 3.0s; the latter two p90 values were 17.6s and 5.2s, with no Clef p90. Batch duration at different concurrency/sample sizes cannot directly serve as an SLA.
 
-Token statistics are aggregate only and do not prove deterministic token counts for repeated identical inputs; none of the four summaries includes per-call repeated comparisons. Later evals must measure result/token variation for identical input. Clef summary token counts are neither vendor bills nor per-request settlement evidence and cannot support prepaid charges. Catalog LLM billing likewise uses integrated actual per-call usage, never estimates from this evaluation.
+Token statistics are aggregate only and do not prove deterministic token counts for repeated identical inputs; none of the four summaries includes per-call repeated comparisons.
+Later evals must measure result/token variation for identical input.
 
 ## Acceptance and stage two tests
 
@@ -186,7 +218,7 @@ Validate the API→worker→CLI flow with synthetic tender documents, orgs A/B, 
 2. Confirmation gates: no unconfirmed materials on response rows, no gap candidate leaks, cross-role/domain rejection. Tokens requesting evidence:confirm/export/check:decide are all rejected; internal/external agents/workers cannot dismiss/reopen. Dismissal leaves draft/export/score gates intact; blank reasons, revision conflicts, and concurrent decisions remain atomic.
 3. Reproduce confirmed-input changes between preview/send/publication, reopened cards, resource replacement, citation edits, confidential value/settings changes, membership/token revocation, certificate boundary/unknown dates, and complete starred-missing/negative-deviation coverage.
 4. Stage one covers exact PDF/Word sources, no candidate-text leaks, and rejected redacted citations. Stage two additionally covers duplicate wording, cross-chunk joins, unsent refs, prompt injection, unknown/no_risk_found, and thin content never passing by default.
-5. Stage one covers rules with no provider/accounting, write-free dry-run, mismatched preview hashes, cancellation/retry, and lease takeover. Stage two covers call reservations, concurrent balance/caps, charging refusals/truncation, duplicate settlement, and unknown reservations.
+5. Stage one covers rules with no provider/accounting, write-free dry-run, mismatched preview hashes, cancellation/retry, and lease takeover.
 6. Snapshot every new CLI command, remote/local mode, seven keys, 0/2/3/4/5 semantics, and schema additions, preserving existing commands. Real-model quality/repeated-token variation/latency run only in explicitly enabled `evals/`; CI makes no real calls.
 
 Stage one automation is in `server/tests/test_check.py`, `test_check_storage.py`, `test_check_api.py`, and `test_check_cli.py`. Combined end-to-end scenarios are in `server/tests/test_check_combined.py`; storage gates in `server/tests/test_check_semantic_storage.py`; database-free transport/citation boundaries in `server/tests/test_check_provider.py` and `server/tests/test_check_semantic_boundary.py`. This page does not record individual test-run status.
@@ -200,6 +232,6 @@ Stage one automation is in `server/tests/test_check.py`, `test_check_storage.py`
 | False-positive review domains/inheritance | Domain reviewers decide individually under ADR 0005; reasons required, no rerun inheritance | Stage one |
 | Risk/export gates | Advisory only; existing export gates remain. Change materials, reconfirm, then rerun | Stage one |
 | Certificate assessment date | Required `assessment_date`, never derived from current date or task deadline | Stage one |
-| Budget scope | combined initially reuses prepaid billing, per-call admission, per-job caps, and max_charge; Task.budget_usd is not an enforced cap | Stage two |
-| Clef as a parallel Provider | Initial semantic check uses existing configurable LLMs; Clef remains a later triage/score evaluation direction, with no org balance charges until billing/reservation upper bounds are defined | Stage two |
-| Reassessment of partial reports | Fixed cache; change input/rules/model for a new run, without automatic repeat charges or overwriting historical decisions | Stages one and two |
+| Resource scope | Stage-two checks use the same bounded request plan for preview and execution; each admitted dispatch retains usage. | Stage two |
+| Clef as a parallel Provider | Semantic checks use existing configurable LLMs; a future Clef evaluation requires its own capability, citation and human triage boundaries. | Stage two |
+| Reassessment of partial reports | Fixed cache; change input/rules/model for a new run. Do not automatically repeat calls or overwrite historical decisions. | Stages one and two |

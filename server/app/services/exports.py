@@ -1098,15 +1098,14 @@ async def submit_export(
         max_attachments=settings.export_max_attachments,
     )
     if body.dry_run:
-        from app.services import budget_preflight
+        from app.services import preflight as preflight_service
 
-        return await budget_preflight.attach(
+        return await preflight_service.attach(
             session,
             preview(fixed),
             command="export prepare",
             task_id=task_id,
             input_hash=digest(fixed),
-            currency=settings.billing_currency,
             planned_calls=0,
         ), None
     ensure_ready(fixed)

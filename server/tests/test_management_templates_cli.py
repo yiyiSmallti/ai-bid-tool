@@ -321,7 +321,7 @@ def test_management_templates_invalid_and_legacy_no_request(monkeypatch, capsys,
         assert error.value.code == 2
         assert (
             json.loads(capsys.readouterr().out)["data"]["error"]["message"]
-            == "This command requires contract 4.0"
+            == "Only contract 5.0 is supported"
         )
     assert calls == []
 
@@ -336,10 +336,10 @@ def test_management_templates_schema_and_legacy_list(monkeypatch, capsys):
             assert "resource " + kind + " " + command in commands
     assert "ResourceQuery" in json.dumps(commands["resource template browse"])
     assert "revision_id" in json.dumps(commands["resource template show"])
-    cli.main(["--contract-version", "3.0", "schema", "--json"])
-    legacy = json.loads(capsys.readouterr().out)["data"]["commands"]
-    assert "resource template list" in legacy
-    assert "resource template browse" not in legacy
+    with pytest.raises(SystemExit) as error:
+        cli.main(["--contract-version", "3.0", "schema", "--json"])
+    assert error.value.code == 2
+    assert json.loads(capsys.readouterr().out)["data"]["error"]["code"] == "invalid_input"
     calls = []
 
     def call(method, path, **kwargs):

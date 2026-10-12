@@ -15,7 +15,7 @@ def create_router(context, settings):
     router = APIRouter(prefix="/management/export-bindings")
 
     async def management_context(request: Request, ctx=Depends(context, scope="function")):
-        if getattr(request.state, "contract_version", None) != "4.0":
+        if getattr(request.state, "contract_version", None) != "5.0":
             raise not_found()
         session, actor = ctx
         session.info["management_settings"] = settings
@@ -29,7 +29,6 @@ def create_router(context, settings):
         return bindings.page_result(
             bindings.COMMANDS["browse"],
             value,
-            settings.billing_currency,
             round((time.monotonic() - started) * 1000),
         )
 
@@ -50,7 +49,6 @@ def create_router(context, settings):
         return bindings.detail_result(
             bindings.COMMANDS["detail"],
             value,
-            settings.billing_currency,
             round((time.monotonic() - started) * 1000),
         )
 

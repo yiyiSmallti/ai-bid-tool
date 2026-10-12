@@ -9,7 +9,7 @@ const ids = { org: uuid(1), user: uuid(2), task: uuid(3), review: uuid(4), submi
 const hash = "a".repeat(64), decisionHash = "b".repeat(64), newerHash = "c".repeat(64), now = "2026-10-08T00:00:00Z";
 const unsafe = "合成招标逐字引用 <img src=x onerror=window.__unsafe=1>", bidQuote = "合成投标响应为 64 GB。";
 const sections = [["overall", "一、总体结论"], ["basic_information", "二、基本信息"], ["compliance", "三、废标判定"], ["signatures", "签章校验"], ["risks", "四、高风险缺陷"], ["scores", "五、得分预估"], ["evidence", "六、证据核对"], ["remediation", "七、补救清单"], ["methodology", "八、检验说明"]].map(([key, title]) => ({ key, title }));
-const zero = { llm_tokens: 0, ocr_pages: 0, usd: 0, basis: "zero", charge: "0", billing_currency: "USD", task_amount: "0", unpriced_calls: 0, unresolved_calls: 0 };
+const zero = { calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 };
 const result = (command, data, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: zero, duration_ms: 0 });
 // Minimal synthetic OOXML package; PostgreSQL acceptance checks the real renderer's contents.
 const bytes = Buffer.from("UEsDBBQAAAAIAPBGSF10JJxTuwAAAD4BAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbJWQuQ7CMAyGX6XKiqgRAwNquwArMPACVuq2EbkUuxxvT8o1sDHa//FZrk73SFzcnPVcq0EkrgFYD+SQyxDJZ6ULyaHkMfUQUZ+xJ1guFivQwQt5mcvUoZpqSx2OVordLa/ZBF+rRJZVsXkZJ1atMEZrNErW4eLbH8r8TShz8unhwUSeZYOCpjpcKCXTUnHEJHt0uQ6uIbXQBj26jCgn41+80HVG0zc/tcUUNDEb3ztbfhWHxn/ugOfbmgdQSwMEFAAAAAgA8EZIXWF7L0OJAAAA8gAAAAsAAABfcmVscy8ucmVsc43POw4CIRAG4KsQDrCzWlgYoLLZ1ngBAsMjLo8MGPX2UlisxsJy5p98f0accdU9ltxCrI090pqb5KH3egRoJmDSbSoV80hcoaT7GMlD1eaqPcJ+ng9AW4MrsTXZYiWnxe44uzwr/mMX56LBUzG3hLn/qPi6GLImj13yeyEL9r2eBstBCfh4Ub0AUEsDBBQAAAAIAPBGSF28zeml3gAAAPsAAAARAAAAd29yZC9kb2N1bWVudC54bWyzKbdKyU8uzU3NK1GoyM3JK7Yqt1XKKCkpsNLXL07OSM1NLNbLL0jNA8ql5RflJpYAuUXp+uX5RSkFRfnJqcXFmXnpuTn6RgYGZvq5iZl5SnY25VZJ+SmVILoARBSBiBK7pxM6nnVMeLa44eWqnmddS59O7HqyZ8GLfZOfbl/6ZPe2xw1NL9a3PFvQ/nT5lKcTZzzZM+tp2+an62Y9m9PwfHcHUOrpuoXPd09+Nm/O+z2zn81ZAzVhd+uTfbNf7Gt92rUSqODZ/KVAc2z0QdaByCIwWQAmIU7SR3jXDgBQSwECFAMUAAAACADwRkhddCScU7sAAAA+AQAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAPBGSF1hey9DiQAAAPIAAAALAAAAAAAAAAAAAACAAewAAABfcmVscy8ucmVsc1BLAQIUAxQAAAAIAPBGSF28zeml3gAAAPsAAAARAAAAAAAAAAAAAACAAZ4BAAB3b3JkL2RvY3VtZW50LnhtbFBLBQYAAAAAAwADALkAAACrAgAAAAA=", "base64");
@@ -45,12 +45,12 @@ async function fixture(page, options = {}) {
     scores: [notice("得分预估", "未评分；第一阶段评分不可用。")],
     evidence: [notice("证据核对", "第一阶段未执行证据核对。")],
     remediation: [notice("发现项补救", "人工核对并补充真实响应；不得编造材料。")],
-    methodology: [notice("检验范围", "部分页面未覆盖；签章存在性未核验；本地规则与模型判断分别列明。"), { kind: "usage", usage: { provider: "synthetic", model: "synthetic-model", version: "v1", input_tokens: 100, output_tokens: 20, usd: 0.01 } }, { kind: "cost", cost: { ...zero, usd: 0.01, charge: "0.01", task_amount: "0.01" } }, notice("最终认定", advisory)],
+    methodology: [notice("检验范围", "部分页面未覆盖；签章存在性未核验；本地规则与模型判断分别列明。"), { kind: "usage", usage: { provider: "synthetic", model: "synthetic-model", version: "v1", input_tokens: 100, output_tokens: 20, } }, { kind: "cost", cost: { ...zero, } }, notice("最终认定", advisory)],
   })[key];
   page.on("pageerror", error => state.errors.push(error.message));
   await page.addInitScript(org => sessionStorage.setItem("bid.org.session", JSON.stringify({ session: "synthetic-session", orgId: org, orgName: "合成单位", email: "report@example.test" })), ids.org);
   await page.route("**/*", async route => {
-    const request = route.request(), url = new URL(request.url()), path = url.pathname.replace(/^\/v4(?=\/)/, ""), method = request.method();
+    const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method();
     if (url.origin !== origin) { state.unexpected.push(`${method} external-origin`); return route.abort(); }
     if (path.startsWith("/app/")) {
       const file = path.startsWith("/app/assets/") ? join(directory, "assets", basename(path)) : join(directory, "index.html");
@@ -61,18 +61,18 @@ async function fixture(page, options = {}) {
     let response;
     if (path === "/org/current" && method === "GET") response = result("org current", { org_id: ids.org, user_id: ids.user, role: state.role });
     else if (path === `/bid-reviews/${ids.review}/report` && method === "GET") {
-      expect(url.pathname.startsWith("/v4/")).toBe(true); expect(url.searchParams.get("limit")).toBe("50");
+      expect(url.pathname.startsWith("/")).toBe(true); expect(url.searchParams.get("limit")).toBe("50");
       const key = url.searchParams.get("section"), snapshot = url.searchParams.get("snapshot_id"), cursor = url.searchParams.get("cursor"); expect(sections.map(item => item.key)).toContain(key); expect([null, ids.snapshot]).toContain(snapshot); expect([null, "synthetic-next"]).toContain(cursor);
       if (snapshot && state.historyStatus !== "ready") return route.fulfill({ status: 409, json: result("review report show", { error: { code: "bid_review_input_changed" } }, [], false) });
       const all = rows(key), paged = key === "compliance", selectedRows = paged ? cursor ? all.slice(1) : all.slice(0, 1) : all;
       response = result("review report show", { review_id: ids.review, task_id: state.wrongTask ? uuid(99) : ids.task, snapshot_id: snapshot, input_hash: hash, report_input_hash: hash, decisions_snapshot_sha256: snapshot ? decisionHash : state.changed ? newerHash : decisionHash, current_decisions_snapshot_sha256: state.changed ? newerHash : decisionHash, renderer_identity: "synthetic-report-v1", completion: "partial", advisory_statement: advisory, sections, section: key, projection: ["admin", "bidder"].includes(state.role) ? "protected" : "cleared", next_cursor: paged && !cursor ? "synthetic-next" : null, artifacts: snapshot && state.published && ["admin", "bidder"].includes(state.role) ? [artifact] : [] }, ["admin", "bidder"].includes(state.role) ? selectedRows : selectedRows.map(clearedRow), false);
     } else if (path === `/bid-reviews/${ids.review}/reports` && method === "GET") {
-      expect(url.pathname.startsWith("/v4/")).toBe(true); expect(url.searchParams.get("limit")).toBe("50");
+      expect(url.pathname.startsWith("/")).toBe(true); expect(url.searchParams.get("limit")).toBe("50");
       response = result("review report list", { review_id: ids.review, task_id: ids.task, next_cursor: null }, state.historyStatus && ["admin", "bidder"].includes(state.role) ? [{ snapshot_id: ids.snapshot, input_hash: hash, can_retry: ["failed", "cancelled"].includes(state.historyStatus), created_at: now, decisions_snapshot_sha256: decisionHash, report_input_hash: hash, artifact_status: state.historyStatus, artifacts: state.published ? [artifact] : [] }] : []);
     } else if (path === `/bid-reviews/${ids.review}/artifacts` && method === "POST") {
-      expect(url.pathname.startsWith("/v4/")).toBe(true); expect(["admin", "bidder"]).toContain(state.role);
+      expect(url.pathname.startsWith("/")).toBe(true); expect(["admin", "bidder"]).toContain(state.role);
       const body = request.postDataJSON(); state.writes.push(body); expect(body.report_id).toBe(ids.review); expect(body.expected_decisions_snapshot_sha256).toBe(state.changed ? newerHash : decisionHash);
-      if (body.dry_run) { expect(body).not.toHaveProperty("preflight_token"); expect(body).not.toHaveProperty("expected_input_hash"); response = result("review report", { report_id: ids.review, input_hash: hash, report_input_hash: hash, decisions_snapshot_sha256: state.changed ? newerHash : decisionHash, renderer_identity: "synthetic-report-v1", expires_at: new Date(Date.now() + 900000).toISOString(), preflight_token: "synthetic-signed-receipt", formats: ["docx", "console"], budget: { input_hash: hash, planned_calls: 0, estimate: zero }, admission_blockers: [] }); }
+      if (body.dry_run) { expect(body).not.toHaveProperty("preflight_token"); expect(body).not.toHaveProperty("expected_input_hash"); response = result("review report", { report_id: ids.review, input_hash: hash, report_input_hash: hash, decisions_snapshot_sha256: state.changed ? newerHash : decisionHash, renderer_identity: "synthetic-report-v1", expires_at: new Date(Date.now() + 900000).toISOString(), preflight_token: "synthetic-signed-receipt", formats: ["docx", "console"], preflight: { input_hash: hash, planned_calls: 0, estimate: zero }, admission_blockers: [] }); }
       else {
         expect(body.expected_input_hash).toBe(hash); expect(body.preflight_token).toBe("synthetic-signed-receipt");
         if (state.conflict) return route.fulfill({ status: 409, json: result("review report", { error: { code: "bid_review_decisions_changed" } }, [], false) });
@@ -81,7 +81,7 @@ async function fixture(page, options = {}) {
         state.lastSubmittedId = body.request_id; response = result("review report", { job_id: ids.job });
       }
     } else if (path === `/jobs/${ids.job}` && method === "GET") {
-      expect(url.pathname.startsWith("/v4/")).toBe(true); state.published = !state.renderFailed;
+      expect(url.pathname.startsWith("/")).toBe(true); state.published = !state.renderFailed;
       state.historyStatus = state.renderFailed ? "failed" : "ready"; if (state.renderFailed) state.failedRequestId = state.lastSubmittedId;
       response = result("job status", { id: ids.job, task_id: ids.task, kind: "bid_review_report", status: state.renderFailed ? "failed" : "succeeded", attempts: state.attempts, reasoning: null, error: state.renderFailed ? { code: "bid_review_report_render_failed", exit_code: 4 } : null, result: state.renderFailed ? null : { snapshot_id: ids.snapshot, review_id: ids.review, artifacts: [artifact] } }, [], !state.renderFailed);
     } else if (path === `/bid-review-artifacts/${ids.artifact}/download-link` && method === "GET") {

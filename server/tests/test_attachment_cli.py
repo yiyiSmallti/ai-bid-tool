@@ -85,7 +85,8 @@ def test_discovery_exact_result4_commands_and_schema_snapshot():
     for name in COMMAND_INPUTS:
         assert schema["commands"][name] == snapshot[name]
         assert schema["commands"][name]["cli_parameters"]
-        assert name not in command_schema(cli.app, "3.0")["commands"]
+        with pytest.raises(ValueError, match="Only contract 5.0"):
+            command_schema(cli.app, "3.0")
 
 
 @pytest.mark.parametrize(
@@ -230,7 +231,6 @@ class FakeDownload:
                     "expires_in": 300,
                 },
             )
-            body["cost"]["billing_currency"] = "CNY"
             return body
         return envelope("resource attachment revision show", REVISION)
 
@@ -253,8 +253,6 @@ async def test_authenticated_checksum_download_preserves_exact_bytes(tmp_path):
     assert output.read_bytes() == RAW
     assert body["data"]["file"]["sha256"] == HASH
     assert body["data"]["file_id"] == ID
-    assert body["cost"]["basis"] == "zero"
-    assert body["cost"]["billing_currency"] == "CNY"
 
 
 @pytest.mark.parametrize(

@@ -10,7 +10,6 @@ import base64
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from uuid import UUID, uuid4
 
 import httpx
@@ -26,7 +25,7 @@ from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
 from app.services.platform_clef import PlatformClefService
 from app.services.platform_credentials import PlatformCredentialService
 from conftest import seed_platform_credential
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 from test_bid_review_run_db import (
     BIDDER,
@@ -50,7 +49,6 @@ from test_check_combined import install_resolver
 
 WORKERS_TOKEN = "synthetic-clef-workers-token"
 GATEWAY_TOKEN = "synthetic-clef-gateway-token"
-FIXED_PRICE = Decimal("0.01234567")
 
 
 class Gateway:
@@ -180,8 +178,6 @@ async def configure(application, monkeypatch, *, unsafe=False):
             account_id="a" * 32,
             gateway_id="synthetic-clef",
             enabled=True,
-            price_revision=1,
-            fixed_sale_price=FIXED_PRICE,
             workers_credential_id=workers.id,
             gateway_credential_id=gateway.id,
         ),
@@ -283,16 +279,6 @@ async def authorize_images(api, header, case, *, expected_images=1, subset=False
     return grant
 
 
-def fund(admin_engine, org):
-    with admin_engine.begin() as connection:
-        connection.execute(
-            text(
-                "SELECT * FROM platform_adjust_balance(:org, 'add', 10, 'synthetic credit', 'fixture', 'USD')"
-            ),
-            {"org": org},
-        )
-
-
 async def ledger(application, org, accepted):
     async with application.state.db.transaction(org) as session:
         return (
@@ -321,19 +307,11 @@ async def ledger(application, org, accepted):
 
 @pytest.mark.parametrize("failure", [None, "429", "timeout", "malformed", "always_429"])
 async def test_exact_blurred_gateway_call_fixed_settlement_and_human_triage(
-    api,
-    headers,
-    application,
-    tenants,
-    tmp_path,
-    monkeypatch,
-    admin_engine,
-    failure,
+    api, headers, application, tenants, tmp_path, monkeypatch, admin_engine, failure
 ):
     case = await source_case(api, headers, application, tenants, tmp_path, monkeypatch)
     await configure(application, monkeypatch)
     await authorize_images(api, headers[0], case)
-    fund(admin_engine, tenants["orgs"][0])
     vendor = ClefVendor(failure=failure)
     install_vendor(monkeypatch, vendor)
     receipt = data(await preview(api, headers[0], case))
@@ -343,7 +321,6 @@ async def test_exact_blurred_gateway_call_fixed_settlement_and_human_triage(
     assert "workers_credential_id" not in json.dumps(receipt)
     assert "gateway_credential_id" not in json.dumps(receipt)
     assert receipt["input"]["clef"]["planned_calls"] == 1
-    assert Decimal(receipt["input"]["clef"]["fixed_sale_price"]) == FIXED_PRICE
     assert not vendor.requests
     accepted = data(await submit(api, headers[0], case, receipt))
     finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
@@ -354,15 +331,13 @@ async def test_exact_blurred_gateway_call_fixed_settlement_and_human_triage(
     assert vendor.maximum_active <= 3
     expected_completed = 0 if failure in {"timeout", "always_429"} else 1
     assert len(usages) == expected_completed
-    assert sum(usage.task_amount for usage in usages) == expected_completed * FIXED_PRICE
-    assert all(call.quote["reserved_charge"] == str(FIXED_PRICE) for call in calls)
     assert set(vendor.image_hashes) == {image["sha256"] for image in case["presence"]["images"]}
     for usage in usages:
-        assert usage.tokens >= 1300 and usage.charge == usage.task_amount == FIXED_PRICE
+        assert usage.tokens >= 1300
         assert usage.gateway_request_id == "synthetic-event-1"
         assert usage.gateway_trace_id == "synthetic-ray-1"
     if failure == "timeout":
-        assert calls[0].state == "unknown" and calls[0].reserved_task_amount == FIXED_PRICE
+        assert calls[0].state == "unknown"
     if failure in {"429", "always_429"}:
         assert (
             sum(call.state == "not_sent" for call in calls) == expected_calls - expected_completed
@@ -382,8 +357,6 @@ async def test_exact_blurred_gateway_call_fixed_settlement_and_human_triage(
     assert all(location["status"] != "confirmed_present" for location in locations)
     if failure == "timeout":
         assert detail["run"]["coverage"]["clef_unresolved_calls"] == 1
-        assert Decimal(detail["run"]["coverage"]["clef_reserved_amount"]) == FIXED_PRICE
-        assert Decimal(detail["run"]["coverage"]["clef_cost"]) == 0
     assert all(
         location["owner_status"] == location["date_status"] == "unresolved"
         for location in locations
@@ -426,7 +399,7 @@ async def test_exact_blurred_gateway_call_fixed_settlement_and_human_triage(
         json.dumps(
             {
                 "preview": receipt,
-                "calls": [call.quote for call in calls],
+                "calls": [call.provider_identity for call in calls],
                 "requests": vendor.requests,
                 "signing": detail,
                 "report": report.json(),
@@ -473,7 +446,6 @@ async def test_clef_unavailable_or_opt_out_preserves_run_and_explicit_coverage(
             )
         if blocked == "opt_out":
             await authorize_images(api, headers[0], case)
-    fund(admin_engine, tenants["orgs"][0])
     vendor = ClefVendor()
     install_vendor(monkeypatch, vendor)
     options = {"clef_enabled": False} if blocked == "opt_out" else {}
@@ -564,19 +536,12 @@ async def test_presence_pixels_are_not_disclosed_cross_org_or_to_tokens(
     assert (await api.get("/platform/clef", headers=headers[0])).status_code in {401, 403}
 
 
-async def test_visual_concurrency_is_three_and_token_variation_never_changes_fixed_price(
-    api,
-    headers,
-    application,
-    tenants,
-    tmp_path,
-    monkeypatch,
-    admin_engine,
+async def test_visual_concurrency_is_three_and_token_variation_is_recorded(
+    api, headers, application, tenants, tmp_path, monkeypatch, admin_engine
 ):
     case = await source_case(api, headers, application, tenants, tmp_path, monkeypatch, bid_pages=6)
     await configure(application, monkeypatch)
     await authorize_images(api, headers[0], case, expected_images=6)
-    fund(admin_engine, tenants["orgs"][0])
     vendor = ClefVendor(probability=0.98)
     vendor.first_group = asyncio.Event()
     install_vendor(monkeypatch, vendor)
@@ -589,8 +554,6 @@ async def test_visual_concurrency_is_three_and_token_variation_never_changes_fix
     assert len(calls) == len(usages) == 6
     assert vendor.maximum_active == 3
     assert len({usage.tokens for usage in usages}) > 1
-    assert all(usage.task_amount == FIXED_PRICE for usage in usages)
-    assert sum(usage.task_amount for usage in usages) == 6 * FIXED_PRICE
 
 
 async def test_grant_subset_cannot_expand_and_revoked_queued_pixels_never_dispatch(
@@ -634,7 +597,6 @@ async def test_grant_subset_cannot_expand_and_revoked_queued_pixels_never_dispat
                 )
             )
             await session.flush()
-    fund(admin_engine, tenants["orgs"][0])
     vendor = ClefVendor()
     install_vendor(monkeypatch, vendor)
     receipt = data(await preview(api, headers[0], case))

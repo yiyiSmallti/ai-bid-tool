@@ -17,8 +17,6 @@ CONFIG = ClefPlatformConfig(
     account_id="a" * 32,
     gateway_id="presence",
     enabled=True,
-    price_revision=1,
-    fixed_sale_price="0.01",
     workers_credential_id=MODEL_ID,
     gateway_credential_id=GATEWAY_ID,
     workers_credential_revision=1,
@@ -70,7 +68,6 @@ async def test_exact_fixed_metadata_request_and_no_model_call():
     assert receipt.collect_logs is False and receipt.logpush is False
     assert receipt.cache_ttl == 0 and receipt.gateway_retries is False
     assert receipt.rate_limit_requests == 200 and receipt.rate_limit_seconds == 60
-    assert receipt.workers_ai_billing_mode == "unified"
     assert len(calls) == 1
     assert "secret" not in receipt.model_dump_json()
 
@@ -106,7 +103,6 @@ async def test_every_missing_hardening_field_blocks(field):
         {"rate_limiting_interval": 0},
         {"rate_limiting_limit": True},
         {"id": "different-gateway"},
-        {"workers_ai_billing_mode": "token"},
     ],
 )
 @pytest.mark.asyncio

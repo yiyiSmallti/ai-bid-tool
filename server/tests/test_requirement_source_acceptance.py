@@ -235,7 +235,6 @@ def provider_result(provider, items, rejected=()):
             version=provider.version,
             duration_ms=1,
             tokens=10,
-            usd=0,
             test_only=True,
         ),
     )
@@ -326,7 +325,7 @@ async def test_all_rejected_recovery_preserves_receipt_cost_and_explicit_scope(
             before_usage = (
                 await session.execute(
                     text(
-                        "SELECT id,tokens,usd,charge FROM usage_records WHERE job_id=:job ORDER BY id"
+                        "SELECT id,tokens,input_tokens,output_tokens FROM usage_records WHERE job_id=:job ORDER BY id"
                     ),
                     {"job": UUID(failed_job)},
                 )
@@ -365,7 +364,7 @@ async def test_all_rejected_recovery_preserves_receipt_cost_and_explicit_scope(
             assert (
                 await session.execute(
                     text(
-                        "SELECT id,tokens,usd,charge FROM usage_records WHERE job_id=:job ORDER BY id"
+                        "SELECT id,tokens,input_tokens,output_tokens FROM usage_records WHERE job_id=:job ORDER BY id"
                     ),
                     {"job": UUID(failed_job)},
                 )

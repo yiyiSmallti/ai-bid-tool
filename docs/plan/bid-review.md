@@ -6,17 +6,16 @@ kind: plan
 
 Status: **Approved; phase 1 implemented (slices 1–5). Clef triage is on by default.**
 
-The first phase is divided into five implementation slices: upload/preparation;
-signature checklist and approved local validation; rule/LLM compliance and human
-dismissal; console/Word report; Clef triage with fixed per-call billing. Slice 3a
+Slice 3a
 implements exact human-authorized sanitized native-text review, cited tender
 obligations and signing-clause applicability with unresolved location inventories.
 Slice 3b adds authorized bid-text compliance findings, deterministic rules and
-append-only classified human decisions within that same run. Slice 4 adds the
-immutable console/Word snapshot and human-only report artifacts. Slice 5 adds
-platform Clef configuration, exact human-cleared presence JPEGs and fixed per-call
-billing. Database/browser acceptance remains pending for these implementation slices.
-Upload/preparation and local signature evidence are implemented. PostgreSQL and
+append-only classified human decisions within that same run.
+Slice 4 adds the
+immutable console/Word snapshot and human-only report artifacts.
+Database/browser acceptance remains pending for these implementation slices.
+Upload/preparation and local signature evidence are implemented.
+PostgreSQL and
 browser acceptance remain pending; static checks do not establish those gates.
 The delivered boundaries are in [slice 3a](#slice-3a-authorized-native-text-review),
 [slice 3b](#slice-3b-native-text-compliance-findings-and-human-decisions) and
@@ -35,7 +34,7 @@ registers no runtime components. Implementation follows the approved
 
 A user uploads a tender document (招标文件) and an already-written bid (投标文件),
 possibly split into qualification, commercial/technical, price and declaration
-PDF/DOCX files. An authenticated task provides the org, permissions and budget;
+PDF/DOCX files. An authenticated task provides the org and permissions;
 creating response cards or using the drafting flow is not a prerequisite. The result
 is an advisory review report (检验报告) in the console and Word, with rejection risks,
 signature completeness, evidence checks, remediation and, when requested, score ranges.
@@ -48,7 +47,7 @@ or reinterpret an uploaded bid as confirmed response cards. Uploaded statements 
 unverified assertions even when their text can be cited exactly.
 
 The new flow reuses tender parse/extraction mechanisms, source verification, provider
-configuration and budgets through explicit authorized stages. Its upload receives the
+configuration and resource limits through explicit authorized stages. Its upload receives the
 tender and bid files together and records their distinct roles. Requirement coverage
 must identify the pinned extraction and unparsed tender areas. An optional existing
 extraction must belong to the selected tender/task and pass the same integrity gates;
@@ -58,9 +57,9 @@ new service boundary, independent of confirmed-draft input builders.
 Included: complete submitted-file inventory, clause-to-response mapping, ★/▲ clauses,
 qualification/commercial/technical compliance, quotation defects visible in the bid,
 two distinct visual validation logics, local PDF signature validation and cited
-remediation. No automatic bid editing, signature creation, procurement-platform
-integration, certificate fabrication, vendor crawling or pricing strategy is included.
-Local validation of existing PDF signatures does not sign or submit a bid. Arithmetic
+remediation.
+Local validation of existing PDF signatures does not sign or submit a bid.
+Arithmetic
 evaluation of supplied opening prices is limited to the tender's explicit scoring
 rule; competitor research and strategic recommendations remain excluded by
 [design non-goals](../design.md#background-goals-and-non-goals).
@@ -70,11 +69,11 @@ rule; competitor research and strategic recommendations remain excluded by
 | Existing code anchor | Reuse and boundary |
 | --- | --- |
 | `AssessmentRequest`, `AssessmentInput`, `VerifiedCitation`, `AssessmentJobAccepted` in [check_contracts.py](../../server/app/schemas/check_contracts.py); `access`/snapshot in [check_inputs.py](../../server/app/services/check_inputs.py); `fixed_rows`/`snapshot` in [score_run_inputs.py](../../server/app/services/score_run_inputs.py) | Requests require `draft_id`, the input fixes `confirmed_draft`, and services read confirmed draft partitions. Reuse citations and job receipts, never these input loaders for arbitrary uploads. |
-| `Contract`, `Source`, `Location`, `Result`, `Cost`, `CONTRACT_VERSION` in [contracts.py](../../server/app/schemas/contracts.py) | Use Result 4.0 and original PDF-page or DOCX-block citations. Add an uploaded-bid citation branch without changing the existing `VerifiedCitation` union. |
+| `Contract`, `Source`, `Location`, `Result`, `Cost`, `CONTRACT_VERSION` in [contracts.py](../../server/app/schemas/contracts.py) | Use Result 5.0 and original PDF-page or DOCX-block citations. Add an uploaded-bid citation branch without changing the existing `VerifiedCitation` union. |
 | `Storage.read_bounded`, `FileCipher`, `validate_key` in [storage.py](../../server/app/providers/storage.py) | Encrypted immutable objects bound to `org/{org_id}/`, bounded reads then hash/size checks. The Protocol has no deletion method; retention/purge needs separate implementation, not an assumed storage API. |
 | `run_pdf_operation_async` in [pdf_process.py](../../server/app/core/pdf_process.py), raster bounds in [pdf_raster.py](../../server/app/core/pdf_raster.py), `parse_docx` in [docx_blocks.py](../../server/app/services/docx_blocks.py) | Reuse isolated PDF work and structural Word locations. Existing parsing does not establish seal coverage, stable Word pages or cryptographic signature validity. New preparation must preserve those distinctions. |
 | `resolve_llm` in [llm.py](../../server/app/providers/llm.py), [configured.py](../../server/app/providers/configured.py), [provider configuration](provider-config.md) | Existing org revision/platform default resolution supplies extraction, mapping and semantic LLMs. Clef needs an explicit optional adapter/capability; it is not an implicit LLM fallback. |
-| `BudgetCallQuote`, `BudgetPreflightData`, `BudgetJobResult` in [budget_contracts.py](../../server/app/schemas/budget_contracts.py), `attach` in [budget_preflight.py](../../server/app/services/budget_preflight.py), [JobExecution](../../server/app/jobs/execution.py) | Reuse shared admission, accounting and terminal budget attachment. The [budget contract](budget.md#result-cost-and-compatibility) governs newer 4.0 cost semantics even where older check/score prose describes zero-cost previews or predates task budgets. |
+| `CallPlan`, `PreflightData` in [preflight_contracts.py](../../server/app/schemas/preflight_contracts.py), `attach` in [preflight.py](../../server/app/services/preflight.py), [JobExecution](../../server/app/jobs/execution.py) | Reuse shared admission, accounting and terminal usage attachment.|
 | `redact`, `redact_tree`, `library_value` in [redaction.py](../../server/app/services/redaction.py) | Existing patterns and registered values protect text. Bid-derived name lists, page classification, pixel privacy, outbound grants and restricted report projections are additions, not existing guarantees. |
 | `Identity.require`, `HUMAN_ONLY_SCOPES`, `SCOPES`, `ROLE_SCOPES` in [auth.py](../../server/app/services/auth.py); [task_workflow.py](../../server/app/services/task_workflow.py) | Preserve session-only actions, live Membership/task authority and token ceilings in API, workers and DB. Proposed scopes below are declarations only. |
 | [Screenshot evidence](../notes/screenshot-evidence.md), [annotation](annotation.md), [attachment archives](attachment-archive.md) | Reuse exact pixels, source/rendition hashes, mappings, privacy lineage and separate human confirmation. Archive approval, annotation and image similarity do not prove a response claim. Uploaded-bid pages require an explicit new source branch before any later reuse in B04/B05. |
@@ -285,7 +284,7 @@ dismiss apply to an open disposition; reopen restores either closed disposition.
 Classification and decisions share the finding revision and predecessor event ID;
 reclassification is permitted only while open.
 
-## Providers, Clef and charging
+## Providers, Clef and usage
 
 Existing configurable LLMs perform extraction, location mapping, semantic compliance
 and cited reasoning. Only implementations under `server/app/providers/` may call
@@ -297,70 +296,72 @@ success. Documents are untrusted data, never tool instructions.
 [Cloudflare's Clef model reference](https://developers.cloudflare.com/workers-ai/models/clef/)
 describes `@cf/cloudflare/clef` as a 27B multimodal decision model, with a 65,536-token
 context, text/JSON state, typed `noul`/`choice`/`score` questions and probability
-outputs. It accepts at most four embedded images and is priced per input token.
+outputs.
 This contract uses only page-level triage: seal/signature presence, date filled,
-document/page type, certificate-or-not and image-supports-claim. Clef supplies **no
+document/page type, certificate-or-not and image-supports-claim.
+Clef supplies **no
 reasons or citations**; a triage answer cannot be a finding, final pass, evidence
-confirmation or score. Basis-requiring conclusions go to cited LLM/OCR/local rules
-and human review. Escalate ambiguous and all rejection-critical missing-mark checks;
+confirmation or score.
+Basis-requiring conclusions go to cited LLM/OCR/local rules
+and human review.
+Escalate ambiguous and all rejection-critical missing-mark checks;
 no confidence threshold alone closes them.
 
-Clef is enabled by default. Every review includes Clef triage once the platform has
-configured the adapter, both gateway credentials, capability validation, a versioned
-fixed **per-call sale quote**, request bounds and pricing policy. The submitter may turn
+Clef is enabled by default.
+The submitter may turn
 it off for a single review in preflight, which shows the planned Clef calls and their
-fixed price under the same budget admission. When that platform configuration is missing
+resource estimates under the same call admission.
+When that platform configuration is missing
 or invalid, or the gateway check fails, the review runs without Clef and the report states
 that triage was unavailable; local checks, cited LLM paths and human review still cover
-every required location. Initial Clef has no org BYOK path. LLM BYOK remains governed
-by the existing budget contract. Provider image limits are stricter than general page
+every required location.
+Initial Clef has no org BYOK path.
+LLM BYOK remains governed
+by the existing provider and resource-usage contract.
+Provider image limits are stricter than general page
 rendering: at most 4 MiB and 16 million pixels per image, 8 MiB total decoded image
-bytes and 13 MiB complete serialized request; no remote URLs. Questions are bounded
-to 64 and local request sizing must prevent vendor context truncation. Any deliberate
+bytes and 13 MiB complete serialized request; no remote URLs.
+Questions are bounded
+to 64 and local request sizing must prevent vendor context truncation.
+Any deliberate
 smaller image derivation must have its own hash and coordinate mapping; never silently
 downsample an authoritative source or crop away a required seal location.
 
 Returned `usage.input_tokens` has been observed to vary for identical Clef requests.
-Retain it only as provider telemetry, not the org charge or task liability. Each
-actual dispatch obtains a `BudgetCallQuote` whose platform charge/task amount is the
-fixed configured call price; the completed call settles exactly that quote once.
-Changing images/questions within the allowed envelope cannot change that call's sale
-price after admission. Retries are separate admitted calls. Vendor USD remains
-independent, nullable unless verifiable; aggregate experiment tokens do not establish
-a vendor bill. A malformed answer with proven completed dispatch still follows the
-fixed-price settlement policy; a timeout/unknown completion retains the hold until
-reconciled, never assumes free or retries without admission. Missing fixed pricing
-blocks Clef, with no token-based fallback. This is a required extension of the current
-accounting adapter, not a claim that token-based adapters already implement it.
+Each actual dispatch records its provider/model, duration and resource counts.
+Retries are separate admitted calls. Malformed answers retain their completed usage;
+timeouts or unknown completion record unresolved calls without assuming zero use.
+Further calls require current authority and resource admission.
 
 Clef traffic goes only through a configured Cloudflare AI Gateway, using its Workers AI
 route (`gateway.ai.cloudflare.com/v1/{account}/{gateway}/workers-ai/@cf/cloudflare/clef`),
-never the direct Workers AI REST endpoint. It needs two separate platform credentials
+never the direct Workers AI REST endpoint.
+It needs two separate platform credentials
 under [platform credentials](platform-credentials.md): the Workers AI model token
 (`Authorization`) and the gateway authentication token (`cf-aig-authorization`); a gateway
-with authentication enabled rejects either alone. Neither is org-visible, and a missing
-one blocks Clef. Configuration and connection tests read the gateway through its API and
+with authentication enabled rejects either alone.
+Neither is org-visible, and a missing
+one blocks Clef.
+Configuration and connection tests read the gateway through its API and
 record that authentication is on, log collection and log push are off, caching is
 disabled, gateway retries are off and a rate limit is set; any other state blocks
-dispatch. Each request also sends `cf-aig-collect-log: false`. The gateway may be shared
+dispatch.
+Each request also sends `cf-aig-collect-log: false`.
+The gateway may be shared
 with other Cloudflare capabilities, so its rate limit bounds their combined traffic.
-Workers AI usage is billed to the platform through the gateway's unified billing; that
-vendor bill is reconciled separately and never replaces the fixed per-call sale quote.
 HTTP 429 from the gateway rate limit means the call was not completed: back off per
 `Retry-After`, keep or release the hold under the admission rules, and re-admit before
-retrying. Gateway request and trace IDs are kept as provider telemetry for reconciliation.
+retrying.
+Gateway request and trace IDs are kept as provider telemetry for reconciliation.
 
 The first Clef image profile excludes price pages even after a general external-price
 grant; that grant may authorize only an enabled cited LLM/OCR path. Clef's probabilities
 remain normalized internal answer types, not a claim that the vendor returns a reason,
 an abstention probability or an independently calibrated confidence score.
 
-All paid calls use [budget admission](budget.md#admission-and-concurrent-settlement):
-Task → Job → OrgBalance locks, fixed request/provider/price hashes, live grants,
-per-call reservation and idempotent settlement. LLM BYOK has zero platform charge but
-may have positive/unknown task liability. `max_charge` bounds platform charges only.
 Local PDF signature checks and report assembly make no model call and no fabricated
-usage. Local OCR retains the existing free-call accounting and its own page count.
+usage.
+Local OCR retains the existing free-call accounting and its own page count.
 Cancellation, failed citations and model refusal never erase incurred usage.
 
 ## Confidentiality, roles and lifecycle
@@ -433,38 +434,47 @@ or shared ledger history, nor assume the storage Protocol implements deletion.
 
 ## Preflight, HTTP and CLI
 
-Proposed metadata routes use `/v4`; none are registered by this contract. A standalone
+Proposed metadata routes use the unversioned API paths; none are registered by this contract.
+A standalone
 console wizard atomically uploads the tender and bid files as one immutable submission,
-then explicitly previews/submits preparation and review. Upload validates bounded bytes
+then explicitly previews/submits preparation and review.
+Upload validates bounded bytes
 without model calls; local preparation parses/renders, discovers redaction candidates
-and validates PDF signatures. Exact outbound privacy clearance is a human action after
-preparation. Paid requirement extraction occurs only in the explicitly admitted review
-or a separately authorized existing extraction job, never secretly during upload.
+and validates PDF signatures.
+Exact outbound privacy clearance is a human action after
+preparation.
 Before review preflight, local preparation must have produced a complete immutable
-page/parse manifest and applicable human outbound grants. Missing preparation is an
-explicit blocker, not permission to OCR or render during dry-run. Local OCR preparation
-uses free per-page accounting; its preview estimates those calls without running OCR.
+page/parse manifest and applicable human outbound grants.
+Missing preparation is an
+explicit blocker, not permission to OCR or render during dry-run.
+Local OCR preparation
+records per-page OCR usage; its preview estimates those calls without running OCR.
 
 `BidReviewRequest` fixes submission, bid/assessment date, selected slice, optional
-confirmed rubric/opening-price input and supported reasoning preference. Provider
+confirmed rubric/opening-price input and supported reasoning preference.
+Provider
 configuration and deployment limits are server-resolved, not caller-selectable endpoints
-or prices. Submission requires the exact `expected_input_hash`, signed preflight receipt
+or caller-defined resource limits.
+Submission requires the exact `expected_input_hash`, signed preflight receipt
 and request identity from a successful preview; preview expires after 15 minutes.
 The manifest pins file/page/order hashes,
 tender extraction/source/rule coverage, local preparation/trust versions, redaction
-and human outbound grants, model/prompt/schema/rule/price versions, scoring inputs
-and limits. Transient balances and task budget revisions are excluded from semantic
-cache identity and rechecked live. A signed preflight receipt binds actor/org/task,
+and human outbound grants, model/prompt/schema/rule versions, scoring inputs
+and limits.
+A signed preflight receipt binds actor/org/task,
 options/hash and expiry without persisting a preview or trusting client estimates.
 
-Preview is call-free and write-free: no OCR/LLM/vision/conversion, Job, object, audit,
-reservation or usage. It reports limits, first-pass planned calls/quotes, maximum
-calls, unpriced/unknown work, next-call blocker and `full_run_guaranteed=false` using
-`BudgetPreflightData`. Unknown future mappings do not justify guessed exact request
+It reports limits, first-pass planned calls/resource estimates, maximum
+calls, unresolved/unknown work, next-call blocker and `full_run_guaranteed=false` using
+`PreflightData`.
+Unknown future mappings do not justify guessed exact request
 bytes: provide conservative stage envelopes and uncertainty, then quote actual bytes
-before each call. Findings and maps generated during execution belong to the run's
-output manifest, not an impossible preflight snapshot. A blocker still permits preview
-exit 0; submit independently rejects it. Old bytes/price/privacy/configuration require
+before each call.
+Findings and maps generated during execution belong to the run's
+output manifest, not an impossible preflight snapshot.
+A blocker still permits preview
+exit 0; submit independently rejects it.
+Old bytes/price/privacy/configuration require
 a new preview, not automatic rebinding or downgrade to a cheaper mode.
 
 | Proposed HTTP | CLI (`bid … --json`) | Typed payload/result |
@@ -483,7 +493,7 @@ a new preview, not automatic rebinding or downgrade to a cheaper mode.
 | `POST /bid-submissions/{id}/opening-prices` | `review opening-prices add --submission UUID --input PRICES.json` | `OpeningPriceCreate` → protected `OpeningPriceInput`; local scoring input only. |
 | `POST /bid-reviews/{id}/artifacts` (preview then submit) | `review report --id UUID --input REPORT.json --dry-run`; same with `--expected-input-hash HASH --preflight-token RECEIPT` | `BidReportRenderRequest` → `BidReportRenderPreview` or existing job receipt; completed output → `BidReviewReportArtifact` pair. |
 | `GET /bid-review-artifacts/{id}/download-link`; authenticated byte handler | `review report download --artifact UUID --output PATH` | Short-lived human-only link, validated file descriptor/hash and local receipt; no raw file in Result. |
-| Existing job status/wait/cancel, extended for proposed kinds | `job status/wait/cancel --id UUID` | Existing Job receipt/result filtering plus budget attachment and new origin gates. |
+| Existing job status/wait/cancel, extended for proposed kinds | `job status/wait/cancel --id UUID` | Existing Job receipt/result filtering plus resource-usage attachment and new origin gates. |
 
 The source redaction/privacy stage reuses upstream exact-pixel review before outbound
 authorization. Paths remain proposed until approval; their service boundaries are
@@ -494,10 +504,11 @@ actor/org/task/filter-bound cursors expire at 15 minutes. A large report is asse
 from bounded sections/pages, not one unrestricted list response.
 
 Result retains exactly `ok`, `command`, `data`, `items`, `warnings`, `cost`,
-`duration_ms`. Dry-run `cost` is the conservative estimate with its basis; reads and
+`duration_ms`.
+Dry-run `cost` is the conservative estimate with its basis; reads and
 admission have zero current cost; wait/status reports cumulative actual job cost.
-Vendor USD is distinct from Decimal-string platform/task amounts and may be null.
-No new Result version or legacy 3.0 command is introduced. Structured errors retain
+No new Result version or legacy 3.0 command is introduced.
+Structured errors retain
 safe `code`/`message` and available job ID, never source content or vendor bodies.
 
 Illustrative `BidReviewRequest` dry-run input; identifiers are synthetic:
@@ -527,31 +538,20 @@ completed report and no incurred model cost:
   },
   "items": [],
   "warnings": [],
-  "cost": {
-    "llm_tokens": 0,
-    "ocr_pages": 0,
-    "usd": 0.0,
-    "basis": "zero",
-    "charge": "0",
-    "billing_currency": "USD",
-    "task_amount": "0",
-    "unpriced_calls": 0,
-    "unresolved_calls": 0
-  },
+  "cost": {"calls": 0, "llm_tokens": 0, "ocr_pages": 0, "search_requests": 0, "browser_units": 0, "unresolved_calls": 0},
   "duration_ms": 18
 }
 ```
 
-The example currency is illustrative; actual currency comes from deployment
-configuration. The CLI overlays the returned hash/receipt only for deliberate submit,
+The CLI overlays the returned hash/receipt only for deliberate submit,
 and never echoes receipt strings into logs or shared test artifacts.
 
 | Exit | Meaning |
 | --- | --- |
 | 0 | Valid preview, accepted job, authorized read/decision or complete selected scope; finding a rejection risk is not a command failure. |
 | 2 | Invalid input/limits or 409 changed hash/revision/privacy/preflight expiry; refresh/review input, no silent truncation. |
-| 3 | Retryable storage/queue/provider capacity or wait timeout; waiting timeout does not cancel or release holds. |
-| 4 | Identity/access/integrity, unsupported enabled capability, nonretryable provider/budget or publication failure without a safe report. Missing/inaccessible resources use uniform 404. |
+| 3 | Retryable storage/queue/provider capacity or wait timeout; waiting timeout does not cancel a job. |
+| 4 | Identity/access/integrity, unsupported enabled capability, nonretryable provider/resource-limit or publication failure without a safe report. Missing/inaccessible resources use uniform 404. |
 | 5 | Retained partial report with explicit unknown/uncovered items or failed independent batches; `ok=false`, `completion=partial`; report show/wait agree. |
 
 Deliberately unrequested scoring and unavailable competitor prices are declared scope
@@ -573,16 +573,18 @@ usage; their enablement does not widen the confirmed-draft job kinds.
 | Recommended bound | Enforcement |
 | --- | --- |
 | 20 files total, including tender and bid; PDF/DOCX only; 100 MiB/file, 500 MiB/submission; 1,000 combined pages | Check bounded upload and complete prepared page inventory. Apply lower deployment ceilings: current `Settings.max_upload_bytes` is 40 MiB, so 100 MiB is a proposed ceiling, not currently supported upload behavior. No ZIP, DOC, DOCM, arbitrary path/URL, password-protected or repaired PDF. |
-| 200 external dispatches/review including retries: LLM ≤100, OCR ≤60, visual ≤40 | Aggregate stage/child jobs to one run ceiling; inherited execution limits may be lower. Local free OCR separately ≤1,000 pages and remains accounted. Preparation cannot evade review limits via hidden paid extraction. |
+| 200 external dispatches/review including retries: LLM ≤100, OCR ≤60, visual ≤40 | Aggregate stage/child jobs to one run ceiling; inherited execution limits may be lower.
+Local free OCR separately ≤1,000 pages and remains accounted.|
 | 2,000 extracted obligations; 20 findings/obligation; 10,000 findings or required-location checks/run; 20 tender and 20 bid anchors/finding | Reject limit overflow, retain explicit incomplete coverage; do not discard low-confidence clauses to fit. |
 | 128 KiB mutation JSON; 1 MiB list/section output | Use bounded section pagination/continuations; reject oversized indivisible items. Provider serialized envelopes use separate adapter limits. |
 | PDF/page raster/process limits from existing settings; one active preparation/render per job | Preserve [PDF isolation](../notes/pdf-parsing.md), bounded Office conversion and cleanup; fail if an original page cannot be inspected within the active limits. No unsafe parent-process fallback. |
 
-Deterministic preflight uses available metadata and never consumes a run call. Retry
-counts/charges carry forward, and a paid continuation cannot reset the parent run cap.
+Deterministic preflight uses available metadata and never consumes a run call.
 Cache identity includes org/task/actor/submission/hash/date/slice/providers/privacy/
-rules/rubric; reuse only after fresh authorization. Partial reports are immutable
-terminal cache entries. A new deliberately scoped continuation records its parent
+rules/rubric; reuse only after fresh authorization.
+Partial reports are immutable
+terminal cache entries.
+A new deliberately scoped continuation records its parent
 and unfinished targets without overwriting history or claiming whole-run completeness.
 
 The module defines submissions/documents/pages, manifests and previews, review runs,
@@ -614,9 +616,9 @@ uploaded source branches with exclusive-kind CHECKs only where required. If shar
 Document/Chunk tables, all older APIs/jobs must reject uploaded-bid origin unless
 they enforce its stronger privacy policy.
 
-Reuse Job, UsageRecord, VendorCall, AuditLog and task events, not a new money ledger
-or queue. Disable new admissions and repair forward on rollback; preserve encrypted
-files, original reports, decisions and charges. Object storage and DB commit are not
+Reuse Job, UsageRecord, VendorCall, AuditLog and task events for durable resource attribution
+or queue.
+Object storage and DB commit are not
 atomic: publication failure exposes no successful artifact, and reconciliation must
 not delete an object with an ambiguous committed reference.
 
@@ -625,11 +627,13 @@ not delete an object with an ambiguous committed reference.
 Audit submission/preparation/review/report publication, human decisions, privacy/price
 grants/revocations, original/report link issuance and actual authorized byte delivery.
 Reuse fixed event prefixes `bid_review.*`; store org/task/object/job/run/actor IDs,
-hashes, counts, model/price revisions, fixed codes and times. Keep human reasons only
-in encrypted authorized history; audits carry hashes. No company names, per-item bid
+hashes, counts, model revisions, fixed codes and times.
+Keep human reasons only
+in encrypted authorized history; audits carry hashes.
+No company names, per-item bid
 text, prices, personal identifiers, raw prompts, QR/seal pixels, signed URLs or vendor
-errors enter operational logs, traces or events. Dry-run writes no audit. Replays
-return the same authorized receipt without duplicated decisions/charges.
+errors enter operational logs, traces or events.
+Dry-run writes no audit.
 
 | Failure | Required behavior |
 | --- | --- |
@@ -639,8 +643,8 @@ return the same authorized receipt without duplicated decisions/charges.
 | Redaction missing, privacy review stale, price page excluded, identity required but hidden | Block external dispatch for that scope; local/human work or explicit unknown. Never fall back to raw pages. |
 | Wrong org/task/source, changed membership or token | Uniform 404 or existing identity error before content disclosure; recheck each call, read and publication. |
 | Wrong/ambiguous/unsent quote, forged bounding box or changed image hash | Reject conclusion, retain fixed reason and unresolved coverage; no source repair or nearest-page substitution. |
-| Clef turned off or unavailable, quote absent, malformed probability or high-confidence error | No implicit fallback billing or final verdict; retain triage failure and route to the configured cited/human path within budget. |
-| Budget/call ceiling reached or later independent Provider batch fails | Stop new calls; retain safely validated partial coverage and full usage where permitted. Unknown sends keep holds. |
+| Clef turned off or unavailable, quote absent, malformed probability or high-confidence error | Retain triage failure and route to the configured cited/human path; no final verdict or implicit vendor switch. |
+| Resource/call ceiling reached or later independent Provider batch fails | Stop new calls; retain safely validated partial coverage and full usage where permitted. Unknown sends remain unresolved and block automatic resend. |
 | Cancellation, lease/input change, accounting mismatch or bound overrun | Hard publication fence; no partial-report bypass. Prior completed artifacts/history remain intact. |
 | Word render failure or stale decision snapshot | Console report remains available under access; artifact job fails, no partial Word; explicit retry/current snapshot creates a new artifact. |
 
@@ -655,10 +659,10 @@ per-item results into documentation, fixtures or shared verification artifacts.
 The supplied 2026-10-07 image experiment reports 11 redacted pages and 28/29 judgments:
 document type 10/11, certificate-or-not 9/9, QR present 5/5, and validity-covers-date
 4/4 including post-expiry negatives; approximately 1 second/page and 1.3–1.7k input
-tokens/image. The seal experiment compared 10 pages with seals (seal text blurred)
+tokens/image.
+The seal experiment compared 10 pages with seals (seal text blurred)
 and those pages with seals removed: 20/20, seal probability 0.91–0.99 and no-seal
-probability ≤0.03. These are supplied feasibility signals, not independently rerun
-measurements, general accuracy, calibrated confidence, pricing evidence or an SLA.
+probability ≤0.03.
 
 A 2026-10-09 rerun sent the same 20 pages as production presence derivatives
 (`presence-gaussian-v1`: whole page at most 256 px, Gaussian blur, text unreadable).
@@ -669,10 +673,11 @@ improve separation. The signature-ink question did not separate these pages and 
 weak triage. The same coverage limits below still apply.
 
 Faint/greyscale scans, partial/misplaced seals, wrong-company seals, required-position
-checks and seam seals are **not yet covered**. A page-level presence result does not
-measure end-to-end required-location recall. Freeze those cases in the acceptance set
-before default-on triage ships. Repeat identical requests to measure answer/token
-variation, but never charge from aggregate or nondeterministic token observations.
+checks and seam seals are **not yet covered**.
+A page-level presence result does not
+measure end-to-end required-location recall.
+Freeze those cases in the acceptance set
+before default-on triage ships.
 
 | Acceptance track | Required scenario and repeatable artifact |
 | --- | --- |
@@ -683,7 +688,7 @@ variation, but never charge from aggregate or nondeterministic token observation
 | Human-report benchmark | With separately authorized reference access, compare the generated report against the existing human review report for the reference bid. Freeze reviewer adjudication and matching criteria; publish only aggregate agreement on rejection items, high-risk defects and per-part score-range overlap/containment. Investigate unmatched human findings; do not treat a winning bid or human report as infallible ground truth. Owner-approved tolerances follow baseline measurement. |
 | Scope/scoring | Existing check/score continue to reject uploads. No competitor input → only technical/commercial estimate and null total; supplied prices still require complete formula/input authority. Ambiguous rubric/partial evidence never earns default marks. Compliance-only completion distinguishes intentionally unrequested scoring. |
 | Confidentiality and permissions | Two orgs and same-org wrong task for every route/table/source/job/history/download; no-context FORCE RLS; token projections, generic legacy-route bypass, live revocation, raw/cleared pixels, price grants, bid-derived names and sentinel secrets absent from all fake external requests/logs/artifacts. Human/worker/agent decisions rejected at API and DB boundaries. |
-| Accounting/preflight | No writes/calls on previews; expiry/hash/provider/privacy races; exact fixed Clef quote despite varied reported tokens; duplicate settlement, timeout holds, retries and shared call ceilings; LLM BYOK liability, finite budgets and partial exit 5. No actual Provider calls in CI. |
+| Accounting/preflight | No writes/calls on previews; expiry/hash/provider/privacy races; exact pinned Clef request plan despite varied reported tokens; duplicate usage recording, unresolved timeout outcomes, retries and shared call ceilings; LLM BYOK usage, finite call limits and partial exit 5. No actual Provider calls in CI. |
 | Citations/history/recovery | PDF and DOCX original/render mapping, absence anchors, changed hashes, joined/ambiguous quotes, boxes outside content, dismiss/reopen conflicts, immutable old Word snapshots; lease/cancel/orphan/render/storage failures and bounded pagination. |
 
 Before implementation, enumerate these failure scenarios and drive end-to-end
@@ -697,12 +702,9 @@ database, cryptographic-validator, visual-model or runtime acceptance.
 
 ## Phased slices
 
-1. Upload and immutable local preparation, privacy gates, signature checklist and
-   local PDF signature validation, rule/LLM compliance checks, append-only dismissal,
-   and the complete console/Word report, with Clef seal/signature presence, date-filled
-   and page-type triage on by default once fixed-call billing and the frozen triage
-   acceptance set pass. Scoring is explicitly unavailable; evidence review can be
-   human/local. The signing checklist must work without Clef.
+1. Scoring is explicitly unavailable; evidence review can be
+   human/local.
+The signing checklist must work without Clef.
 2. Confirmed rubric plus uploaded-evidence scoring, bounded supported local price
    formulas only after explicit opening inputs, and default-on Clef
    image-supports-claim triage after its benchmark gate. Retain all human evidence
@@ -722,12 +724,13 @@ safe review/job metadata without quotes or cleared text.
 
 The worker extracts tender obligations with verified original citations and
 classifies signing candidates, including unknown applicability and additional
-cited clauses. Required every-page or seam locations are expanded against the
-fixed bid inventory and remain unresolved. Price, mixed, image and uncertain
-pages cannot enter the external text snapshot. Missing preparation, authorization
-or provider configuration blocks admission. Shared task/prepaid accounting retains
-usage and unresolved holds; provider/budget stops retain explicit partial coverage,
-while cancellation, input/privacy changes and accounting failures fence publication.
+cited clauses.
+Required every-page or seam locations are expanded against the
+fixed bid inventory and remain unresolved.
+Price, mixed, image and uncertain
+pages cannot enter the external text snapshot.
+Missing preparation, authorization
+or provider configuration blocks admission.
 
 [Runtime schemas](../../server/app/schemas/bid_review_run.py) and
 [privacy schemas](../../server/app/schemas/bid_review_privacy.py) define this bounded
@@ -749,7 +752,7 @@ The same authorized review run now compares extracted obligations with sanitized
 bid pages. It retains response/deviation/missing/unknown outcomes, verified original
 offsets on both sides, separate searched-absence inventories, document-kind rules,
 local invalid/modified/non-signing signature rules and mandatory-response gaps.
-Budget, cancellation, authorization and call ceilings remain those of slice 3a.
+Resource limits, cancellation, authorization and call ceilings remain those of slice 3a.
 Preflight identifies exact first-stage quotes and an explicitly dependent compliance
 envelope; unresolved price-dependent and unsearched work remains unknown.
 
@@ -844,12 +847,12 @@ neither real-document privacy nor missing-mark recall. Artifacts belong under ig
 | First slice | Upload + local preparation + signature completeness including local PDF validation + default-on Clef presence/page-type triage + rule/LLM compliance + console/Word | Score and Clef image-supports-claim triage remain next-slice capabilities, visibly unavailable. |
 | Limits | 20 files, 100 MiB/file, 500 MiB/submission, 1,000 combined pages; lower deployment limits win; 200 external calls with 100/60/40 stage ceilings | Benchmark maximum accepted inputs before raising actual deployment settings. |
 | PDF validator/trust | **Approved:** `gmssl==3.2.2` for GM/T 0010 SM2/SM3; bounded strict DER; straightforward RSA/ECDSA through existing `cryptography`; pyHanko deferred | Platform operators upload public root/intermediate CA certificates on 信任根证书 under [ADR 0010](../adr/0010-offline-signature-trust.md). Pin each preparation to the enabled store hash; keep crypto, coverage, modification, certificate validity, trust, timestamp and revocation independent. No OCSP/CRL/network checks or automatic trust. |
-| Clef | **On by default** for every review once the platform adapter, gateway credentials and versioned fixed per-call sale price are configured; per-review opt-out in preflight; no initial BYOK | Missing configuration or a failed gateway check runs the review without Clef and reports triage unavailable; no dispatch until accounting and capability bounds pass; provider token telemetry never sets user charges. |
-| Clef transport | Only through an authenticated Cloudflare AI Gateway with log collection, log push, caching and gateway retries off and a rate limit set; unified billing; separate model and gateway credentials | A gateway in any other state blocks Clef; 429 is a retryable non-completion. |
+| Clef | On by default once platform adapter, credentials and capability configuration are ready; per-review opt-out in preflight; no initial BYOK. | Missing configuration or failed gateway checks leave Clef undispatched and report triage unavailable. Check image/context/call bounds before every dispatch. |
+| Clef transport | On by default once platform adapter, credentials and capability configuration are ready; per-review opt-out in preflight; no initial BYOK. | A gateway in any other state blocks Clef; 429 is a retryable non-completion. |
 | Confidentiality | Mandatory external redaction including bid-derived names and exact reviewed image derivatives | Local/human handling when necessary identity/value is masked. |
 | Price pages and opening data | Price pages excluded unless human task owner explicitly permits exact sanitized pages; opening prices processed locally | No full score or competitor comparison from missing/guessed input; no strategic pricing. |
 | Human authority | Raw files/reports restricted; responsible domain decides findings/evidence; token advisory grants require prior exact human outbound authorization | No token access through quotations, generic sources, jobs or report links. |
 | Reports | Common console/Word snapshot, advisory statement, unknowns and original machine conclusions retained | Human dismissal never overwrites history or silently changes scores. |
-| Preflight | Write-free, 15-minute actor-bound hash receipt, explicit submission and live per-call admission | No paid discovery on dry-run or automatic retries after changed inputs. |
+| Preflight | Write-free, 15-minute actor-bound hash receipt, explicit submission and live per-call admission | No external discovery during dry-run or automatic retry after changed input. |
 | Retention/deletion | Preserve encrypted originals/reports/decisions without automatic expiry for first slice; cleanup transient plaintext | Decide retention duration, org erasure, backups and provider retention before adding any purge promise or operation. |
 | Release metrics | Zero silent passes on curated critical missing-mark/wrong-model/value negatives; general thresholds after broader baseline and human-report comparison | Small feasibility samples cannot serve as release accuracy claims. |

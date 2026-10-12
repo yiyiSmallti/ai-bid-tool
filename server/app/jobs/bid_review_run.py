@@ -1,4 +1,4 @@
-"""Explicit paid review stages; every dispatch and publication repeats live privacy."""
+"""Explicit provider review stages; every dispatch and publication repeats live privacy."""
 
 from datetime import UTC, datetime
 from uuid import UUID, uuid4

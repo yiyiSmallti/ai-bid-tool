@@ -10,12 +10,12 @@ export const display = (value) => value === null || value === undefined ? "未�
 const errorMessages = {
   resource_inactive: "资源或所属产品已停用，不能新建或替换任务固定版本", product_inactive: "所属产品已停用，不能建立新关联或替换任务固定版本", lifecycle_conflict: "生命周期修订已变化，请核对新状态", affected_task_limit: "关联任务超过当前维护上限，资源修订未保存", management_result_too_large: "结果超过显示上限，请缩小查询范围", management_cursor_invalid: "分页已失效，请从第一页重新读取", management_cursor_expired: "分页已过期，请从第一页重新读取", management_query_timeout: "查询暂时超时，请主动重新读取",
   requirement_unconfirmed: "要求尚未确认，请先核对要求", requirement_invalidated: "要求确认已失效，请重新核对", review_changed: "要求修订已变化，请重新核对", manual_preview_changed: "补录来源或集合已变化，请重新核验", requirement_set_changed: "要求集合已变化，请重新读取", quote_not_at_position: "逐字引文不在所选位置", nonverbatim_quote: "请填写与原文完全相同的逐字引文", ambiguous_quote: "引文在该位置有多个匹配，请明确引用", unverified_location: "所选原文位置尚未核验",
-  cosign_required: "本项需要会签，请在详情中逐个职责签署", stale_round: "会签轮次已变化，请重新核对", stale_policy: "会签策略已变化，请重新核对", policy_conflict: "会签策略修订已变化，请重新核对", review_round_conflict: "会签轮次已变化，请重新核对", cosign_invalidated: "会签已失效，需要重新审阅", task_archived: "任务已归档，请先恢复任务", task_busy: "仍有作业或未确定费用，无法归档", member_has_assignments: "该成员仍有未交接的工作", event_cursor_expired: "进度游标已过期，需要重新读取", invalid_event_cursor: "进度游标无效，需要重新读取", board_cursor_expired: "看板分页已过期，需要重新读取", forbidden: "当前角色无权执行此操作", invalid_transition: "当前状态下不能执行此操作，请重新核对当前修订",
+  cosign_required: "本项需要会签，请在详情中逐个职责签署", stale_round: "会签轮次已变化，请重新核对", stale_policy: "会签策略已变化，请重新核对", policy_conflict: "会签策略修订已变化，请重新核对", review_round_conflict: "会签轮次已变化，请重新核对", cosign_invalidated: "会签已失效，需要重新审阅", task_archived: "任务已归档，请先恢复任务", task_busy: "仍有作业或未确定调用，无法归档", member_has_assignments: "该成员仍有未交接的工作", event_cursor_expired: "进度游标已过期，需要重新读取", invalid_event_cursor: "进度游标无效，需要重新读取", board_cursor_expired: "看板分页已过期，需要重新读取", forbidden: "当前角色无权执行此操作", invalid_transition: "当前状态下不能执行此操作，请重新核对当前修订",
   incomplete_response: "响应种类、正文、偏离和说明都需要填写，说明不能只写“满足”", missing_evidence: "证据响应至少需要关联一项材料才能确认",
   unexpected_evidence: "承诺不能关联证据材料", review_mismatch: "请逐项勾选本修订关联的全部材料", warning_review_required: "请勾选全部警示并填写处理理由",
   revision_conflict: "修订已被他人更新，请重新读取", stale_material: "所选材料已变化，需要重新核对", invalid_citation: "招标原文引用无效",
   needs_reconfirmation: "当前要求需要重新核对并确认", stale_card: "卡片需要按当前要求重新确认", not_parsed: "请先完成文档解析再抽取要求",
-  insufficient_balance: "余额不足，请联系单位管理员", generation_input_changed: "预检后输入、模型或价格已变化，请重新预检",
+  generation_input_changed: "预检后输入或模型已变化，请重新预检",
   generation_model_changed: "模型目录已变化，请重新预检", generation_rules_changed: "起草规则已变化，请重新预检", draft_input_changed: "输入已变化，请重新预检后提交",
   unsupported_reasoning: "所选推理档位不受支持", provider_unavailable: "模型服务不可用", invalid_document: "只支持可读取、未加密且在大小限制内的 PDF 或 DOCX",
   file_too_large: "文件超过上传大小限制", invalid_evidence_quote: "摘录没有逐字出现在所选材料位置", inactive_snapshot: "请先选择任务中的有效资源版本",
@@ -38,7 +38,7 @@ export const errorText = (error) => {
 };
 const warningTexts = {
   "Company metadata is a declaration; authenticity, performance and qualification have not been verified": "单位资料是自行声明，真实性、业绩和资质未经核验。",
-  "Cost estimate is unavailable without an approved provider.": "当前模型没有可用的计价信息，暂时无法预估抽取费用。",
+
   "The current model has no reasoning levels configured; the level was ignored.": "当前模型未登记推理档位，所选档位已忽略。",
 };
 export const warningText = (warning) => warningTexts[warning] ?? warning;

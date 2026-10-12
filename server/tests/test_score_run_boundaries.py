@@ -1,7 +1,7 @@
 """Score execution boundaries that complement the main worker acceptance chain.
 
-Failure inventory: a later provider batch can stop after earlier paid results;
-billing settlement can fail after a vendor response; a confirmed card can advance
+Failure inventory: a later provider batch can stop after earlier model results;
+usage persistence can fail after a vendor response; a confirmed card can advance
 past the revision fixed by a DraftRun; and an otherwise valid score token or foreign
 tenant can try to read or cancel another score job. These cases must respectively
 publish an explicit partial report, publish no report, reject the stale draft, and
@@ -14,11 +14,12 @@ from datetime import date
 from uuid import UUID
 
 import httpx
+from app.jobs.execution import JobExecution
 from app.models.entities import UsageRecord, VendorCall
 from app.models.score import ScoreReport
 from app.providers.base import ProviderFailure
 from app.providers.scoring import HTTPScoreProvider, score_provider
-from app.services import billing, score_execution, score_run_inputs, score_semantic
+from app.services import score_execution, score_run_inputs, score_semantic
 from app.services.auth import ROLE_SCOPES, Identity
 from sqlalchemy import func, select
 from test_card_generation import token_header
@@ -172,49 +173,6 @@ async def test_later_refused_batch_publishes_partial_report(score_case, monkeypa
     assert response.json()["data"]["report"]["completion"] == "partial"
 
 
-async def test_billing_charge_failure_is_visible_and_publishes_no_report(score_case, monkeypatch):
-    case = score_case
-    await seed_platform(
-        case["admin_engine"], case["app"].state.processor.settings, case["tenants"]["orgs"][0]
-    )
-    install_score_resolver(
-        monkeypatch,
-        platform_llm(case["app"].state.processor.settings, case["score_vendor"]),
-    )
-
-    async def fail_charge(*args, **kwargs):
-        raise ProviderFailure(
-            "Synthetic billing settlement failure", code="usage_accounting_failed"
-        )
-
-    monkeypatch.setattr(billing, "charge_usage", fail_charge)
-    preview = await preview_score(case)
-    accepted = await submit_score(case, preview)
-    assert accepted.status_code == 200, accepted.text
-    terminal = await finish_score(case, accepted.json()["data"])
-    job_id = UUID(terminal["id"])
-
-    assert terminal["status"] == "failed"
-    assert terminal["error"]["code"] == "usage_accounting_failed"
-    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
-        assert (
-            await session.scalar(
-                select(func.count()).select_from(ScoreReport).where(ScoreReport.job_id == job_id)
-            )
-            == 0
-        )
-        assert (
-            await session.scalar(
-                select(func.count()).select_from(UsageRecord).where(UsageRecord.job_id == job_id)
-            )
-            == 0
-        )
-        calls = list(
-            (await session.scalars(select(VendorCall).where(VendorCall.job_id == job_id))).all()
-        )
-        assert len(calls) == 1 and calls[0].state == "unknown"
-
-
 async def test_card_revision_makes_fixed_draft_stale_before_score_call(score_case):
     case = score_case
     preview = await preview_score(case)
@@ -304,22 +262,13 @@ async def test_score_context_limit_is_a_read_only_preview_blocker(score_case, mo
     vendor = ScoreVendor()
     install_score_resolver(
         monkeypatch,
-        semantic_llm(
-            case["tmp_path"],
-            vendor,
-            score_batch_chars=1000,
-            llm_concurrency=1,
-        ),
+        semantic_llm(case["tmp_path"], vendor, score_batch_chars=1000, llm_concurrency=1),
     )
     before = await counts(case)
-
     preview = await preview_score(case)
-
     assert preview["admission_blocker"] == "score_context_limit"
-    assert preview["cost_basis_reason"] == "context_limit"
     assert vendor.requests == []
     assert await counts(case) == before
-
     refused = await submit_score(case, preview)
     assert refused.status_code == 409, refused.text
     assert refused.json()["data"]["error"]["code"] == "score_context_limit"
@@ -394,3 +343,46 @@ async def test_confidential_fixed_section_identifier_blocks_without_call(score_c
     assert submitted.status_code == 409
     assert submitted.json()["data"]["error"]["code"] == "sensitive_report_identifier"
     assert not case["score_vendor"].requests
+
+
+async def test_usage_persistence_failure_is_visible_and_publishes_no_report(
+    score_case, monkeypatch
+):
+    case = score_case
+    await seed_platform(
+        case["admin_engine"], case["app"].state.processor.settings, case["tenants"]["orgs"][0]
+    )
+    install_score_resolver(
+        monkeypatch,
+        platform_llm(case["app"].state.processor.settings, case["score_vendor"]),
+    )
+
+    async def fail_usage(*args, **kwargs):
+        raise ProviderFailure("Synthetic usage persistence failure", code="usage_accounting_failed")
+
+    monkeypatch.setattr(JobExecution, "complete", fail_usage)
+    preview = await preview_score(case)
+    accepted = await submit_score(case, preview)
+    assert accepted.status_code == 200, accepted.text
+    terminal = await finish_score(case, accepted.json()["data"])
+    job_id = UUID(terminal["id"])
+
+    assert terminal["status"] == "failed"
+    assert terminal["error"]["code"] == "usage_accounting_failed"
+    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(ScoreReport).where(ScoreReport.job_id == job_id)
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(UsageRecord).where(UsageRecord.job_id == job_id)
+            )
+            == 0
+        )
+        calls = list(
+            (await session.scalars(select(VendorCall).where(VendorCall.job_id == job_id))).all()
+        )
+        assert len(calls) == 1 and calls[0].state == "unknown"

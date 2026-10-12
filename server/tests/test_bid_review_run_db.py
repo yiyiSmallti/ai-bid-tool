@@ -10,7 +10,6 @@ import asyncio
 import copy
 import json
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -58,7 +57,6 @@ from test_bid_review_upload_db import (
 from test_check_combined import install_resolver
 from test_confidential_values import add_field, set_value
 from test_provider_config import save as save_provider
-from test_task_budget_execution import set_limit
 from test_team_workflow_membership import add_member, person, workflow
 
 DATE = "2026-10-08"
@@ -207,8 +205,6 @@ async def review_llm(api, header, tmp_path, vendor):
         "llm_model": "synthetic-check-model",
         "llm_api_key": "synthetic-check-key",
         "llm_base_url": "https://semantic.example.test/v1",
-        "llm_input_usd_per_mtok": 1,
-        "llm_output_usd_per_mtok": 2,
         "llm_batch_chars": 100_000,
     }
     existing = (await api.get("/providers", headers=header, params={"history": True})).json()[
@@ -470,7 +466,7 @@ def artifact(tmp_path: Path, name: str, **payload):
     )
 
 
-async def test_authorized_sanitized_run_preview_worker_citations_and_budget(
+async def test_authorized_sanitized_run_preview_worker_citations_and_usage(
     api, headers, tenants, application, tmp_path, monkeypatch, caplog
 ):
     case = await review_case(api, headers, application, tenants, tmp_path, monkeypatch)
@@ -481,7 +477,7 @@ async def test_authorized_sanitized_run_preview_worker_citations_and_budget(
     assert_private_absent(case["cleared"])
     prices = [row for row in case["cleared"]["pages"] if row["price_page"]]
     assert prices and all(not row["outbound_eligible"] for row in prices)
-    assert receipt["budget"]["planned_calls"] > 0
+    assert receipt["preflight"]["planned_calls"] > 0
     assert case["vendor"].requests == []
     assert await counts(application, tenants["orgs"][0]) == before
     assert list(application.state.storage.root.rglob("*")) == storage_before
@@ -524,17 +520,13 @@ async def test_authorized_sanitized_run_preview_worker_citations_and_budget(
             ).all()
         )
         assert len(usages) == len(calls) == len(case["vendor"].requests)
-        assert all(row.charge == 0 and row.task_amount > 0 for row in usages)
         assert all(row.state == "completed" for row in calls)
-    budget = data(await api.get(f"/v4/tasks/{case['task']}/budget", headers=headers[0]))["budget"]
-    assert Decimal(budget["spent"]) > 0 and Decimal(budget["reserved"]) == 0
     artifact(
         tmp_path,
         "authorized",
         request_manifest=receipt["input"],
         requests=case["vendor"].requests,
         report=shown,
-        budget=budget,
     )
 
 
@@ -785,40 +777,6 @@ async def test_cancel_after_dispatch_retains_usage_but_publishes_no_review(
             == 1
         )
     artifact(tmp_path, "cancelled", job=finished, requests=vendor.requests)
-
-
-async def test_live_task_budget_stop_preserves_completed_call_and_partial_coverage(
-    api, headers, tenants, application, tmp_path, monkeypatch
-):
-    case = await review_case(api, headers, application, tenants, tmp_path, monkeypatch, pages=2)
-    receipt = data(await preview(api, headers[0], case))
-    accepted = data(await submit(api, headers[0], case, receipt))
-    original = JobExecution.admit
-    admissions = 0
-
-    async def exhausted(self, quote):
-        nonlocal admissions
-        admissions += 1
-        if admissions == 2:
-            await set_limit(api, headers[0], case["task"], "0.00014")
-        return await original(self, quote)
-
-    monkeypatch.setattr(JobExecution, "admit", exhausted)
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
-    assert len(case["vendor"].requests) == 1
-    shown = data(await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers[0]))
-    assert shown["run"]["completion"] == "partial" and shown["obligations"]
-    assert "task_budget_exceeded" in json.dumps(finished)
-    budget = data(await api.get(f"/v4/tasks/{case['task']}/budget", headers=headers[0]))["budget"]
-    assert Decimal(budget["spent"]) == Decimal("0.00014") and Decimal(budget["reserved"]) == 0
-    artifact(
-        tmp_path,
-        "budget-stop",
-        job=finished,
-        report=shown,
-        budget=budget,
-        requests=case["vendor"].requests,
-    )
 
 
 async def test_shared_call_ceiling_cannot_publish_complete_review(
@@ -1138,3 +1096,34 @@ async def test_token_executes_only_current_human_authorized_snapshot_and_cannot_
     assert SAFE_CLAUSE not in json.dumps([token_receipt, finished, report])
     assert_private_absent([token_receipt, finished, report, vendor.requests])
     artifact(tmp_path, "token-authorized", job=finished, report=report, requests=vendor.requests)
+
+
+async def test_call_limit_stop_preserves_completed_call_and_partial_coverage(
+    api, headers, tenants, application, tmp_path, monkeypatch
+):
+    case = await review_case(api, headers, application, tenants, tmp_path, monkeypatch, pages=2)
+    receipt = data(await preview(api, headers[0], case))
+    accepted = data(await submit(api, headers[0], case, receipt))
+    original = JobExecution.admit
+    admissions = 0
+
+    async def exhausted(self, quote):
+        nonlocal admissions
+        admissions += 1
+        if admissions == 2:
+            raise self.stop("job_call_limit_exceeded", "Synthetic call ceiling")
+        return await original(self, quote)
+
+    monkeypatch.setattr(JobExecution, "admit", exhausted)
+    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
+    assert len(case["vendor"].requests) == 1
+    shown = data(await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers[0]))
+    assert shown["run"]["completion"] == "partial" and shown["obligations"]
+    assert "job_call_limit_exceeded" in json.dumps(finished)
+    artifact(
+        tmp_path,
+        "call-limit-stop",
+        job=finished,
+        report=shown,
+        requests=case["vendor"].requests,
+    )

@@ -1,14 +1,13 @@
 """Privacy-gated uploaded tender extraction and signing confirmation contracts."""
 
 from datetime import date
-from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from app.schemas.budget_contracts import BudgetPreflightData
 from app.schemas.contracts import Contract
+from app.schemas.preflight_contracts import PreflightData
 from app.schemas.screenshot_contracts import Sha256
 
 
@@ -25,9 +24,6 @@ class BidReviewRequest(Contract):
     retry: bool = False
     expected_input_hash: Sha256 | None = None
     preflight_token: str | None = Field(default=None, min_length=1, max_length=4096, repr=False)
-    max_charge: (
-        Annotated[Decimal, Field(gt=0, max_digits=18, decimal_places=8, allow_inf_nan=False)] | None
-    ) = None
 
     @model_validator(mode="after")
     def explicit_submit(self):
@@ -41,8 +37,8 @@ class BidReviewRequest(Contract):
 class BidReviewPreview(Contract):
     dry_run: Literal[True] = True
     input: dict
-    budget: BudgetPreflightData
     expires_at: AwareDatetime
+    preflight: PreflightData
     preflight_token: str = Field(repr=False)
     preflight_ttl_seconds: Literal[900] = 900
     admission_blockers: list[str] = Field(default_factory=list)

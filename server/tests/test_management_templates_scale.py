@@ -132,7 +132,7 @@ async def test_fixed_scale_template_binding_reads_and_writes(
         "mode": "real_api",
         "scenario": "u01-template-binding-fixed-scale-v1",
         "status": "running",
-        "schema": "4.0",
+        "schema": "5.0",
         "fixture": {
             "orgs": 2,
             "roots_per_org": ROOTS,

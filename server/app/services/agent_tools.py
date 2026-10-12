@@ -3,7 +3,6 @@
 import hashlib
 import json
 from datetime import datetime
-from decimal import Decimal
 from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter, ValidationError
@@ -14,7 +13,6 @@ from app.models.agent import AgentJobLink
 from app.models.entities import Job, Requirement, VendorCall
 from app.models.response_cards import DraftRun, ResponseCard
 from app.schemas.agent_contracts import (
-    AgentLimits,
     AgentProvenance,
     AgentScope,
     AgentToolDefinition,
@@ -22,8 +20,8 @@ from app.schemas.agent_contracts import (
     ToolCall,
     ToolCommand,
 )
-from app.schemas.budget_contracts import BudgetPreflightData
 from app.schemas.contracts import CONTRACT_VERSION, Result
+from app.schemas.preflight_contracts import PreflightData
 from app.services import card_generation, drafts, jobs, requirements
 from app.services import response_cards as cards
 
@@ -310,36 +308,15 @@ async def link_child(session, actor, agent_session, step, job, *, cached):
 
 
 async def generation_preflight(session, actor, state, body, *, storage, llm, settings):
-    from app.jobs.execution import job_cost
-    from app.services.agent_limits import cost_view
-
-    limits = AgentLimits.model_validate(state.limits)
-    cost = await cost_view(session, state)
-    remaining = limits.max_platform_charge - cost.platform_charge - cost.reserved_platform_charge
-    cap = min(remaining, body.max_charge) if body.max_charge is not None else remaining
-    preview_body = body.model_copy(
-        update={"dry_run": True, "retry": False, "max_charge": cap if cap > 0 else None}
-    )
+    preview_body = body.model_copy(update={"dry_run": True, "retry": False})
     preview, _, warnings = await card_generation.submit_generation(
         session, actor, state.task_id, preview_body, storage, llm, settings
     )
-    prior, historical_charge = None, Decimal(0)
-    if body.retry:
-        prior = await prove_safe_retry(session, state, "card_generate", preview["input_hash"])
-        historical = await job_cost(session, prior.id, limits.billing_currency)
-        if historical["charge"] is None:
-            raise ServiceError(
-                "billing_bound_unavailable", "Historical retry cost is unresolved", 409, 4
-            )
-        historical_charge = Decimal(str(historical["charge"]))
-        cumulative_cap = historical_charge + remaining
-        cap = (
-            min(cumulative_cap, body.max_charge) if body.max_charge is not None else cumulative_cap
-        )
-        preview_body = preview_body.model_copy(update={"max_charge": cap if cap > 0 else None})
-        preview, _, warnings = await card_generation.submit_generation(
-            session, actor, state.task_id, preview_body, storage, llm, settings
-        )
+    prior = (
+        await prove_safe_retry(session, state, "card_generate", preview["input_hash"])
+        if body.retry
+        else None
+    )
     if body.expected_input_hash is not None and body.expected_input_hash != preview["input_hash"]:
         raise ServiceError("generation_input_changed", "Inputs changed; preflight again", 409, 2)
     if not preview["model_redaction_enabled"]:
@@ -349,82 +326,24 @@ async def generation_preflight(session, actor, state, body, *, storage, llm, set
     if body.dry_run:
         return preview, warnings, None, prior.id if prior else None
     try:
-        budget_contract = BudgetPreflightData.model_validate(preview.get("budget_preflight"))
+        contract = PreflightData.model_validate(preview.get("preflight"))
     except ValidationError:
         raise ServiceError(
-            "budget_dependency_unavailable", "Generation budget preflight is unavailable", 503, 3
+            "preflight_dependency_unavailable", "Generation preflight is unavailable", 503, 3
         ) from None
     if (
-        budget_contract.command != "card generate"
-        or budget_contract.task_id != state.task_id
-        or budget_contract.input_hash != preview["input_hash"]
+        contract.command != "card generate"
+        or contract.task_id != state.task_id
+        or contract.input_hash != preview["input_hash"]
     ):
         raise ServiceError(
-            "budget_dependency_unavailable",
-            "Generation budget preflight binding is invalid",
-            503,
-            3,
+            "preflight_dependency_unavailable", "Generation preflight binding is invalid", 503, 3
         )
-    if budget_contract.estimate.billing_currency != limits.billing_currency:
-        raise ServiceError(
-            "billing_currency_mismatch", "Generation billing currency changed", 409, 4
-        )
-    blocker = preview.get("admission_blocker")
-    budget = budget_contract.model_dump(mode="json")
-    budget_blocker = budget.get("admission_blocker")
-    if blocker or budget_blocker:
-        code = blocker or budget_blocker
-        assert isinstance(code, str)
-        raise ServiceError(code, "Generation preflight requires human action", 409, 2)
-    if budget.get("first_pass_fits") is False:
-        task_budget = budget.get("task_budget") or {}
-        amount = budget.get("estimate", {}).get("task_amount")
-        available = task_budget.get("available")
-        code = (
-            "task_budget_exceeded"
-            if (
-                amount is not None
-                and available is not None
-                and Decimal(str(amount)) > Decimal(str(available))
-            )
-            else "agent_platform_cost_limit"
-        )
-        raise ServiceError(code, "Generation preflight exceeds an available spending bound", 409, 2)
-    estimate = budget.get("estimate", {})
-    estimated_charge = estimate.get("charge", preview.get("estimated_charge"))
-    estimated_usd = estimate.get("usd", preview.get("estimated_cost", {}).get("usd"))
-    if (
-        estimated_charge is None
-        or estimated_usd is None
-        or cost.reserved_vendor_usd is None
-        or cost.cost.usd is None
-        or cost.unpriced_calls
-        or cost.unresolved_calls
-    ):
-        raise ServiceError(
-            "billing_bound_unavailable", "An enforceable generation cost bound is required", 409, 4
-        )
-    vendor_remaining = (
-        limits.max_vendor_usd - Decimal(str(cost.cost.usd)) - cost.reserved_vendor_usd
-    )
-    available_charge = max(min(remaining, cap - historical_charge), Decimal(0))
-    if (
-        Decimal(str(estimated_charge)) > available_charge
-        or Decimal(str(estimated_usd)) > vendor_remaining
-    ):
-        code = (
-            "agent_platform_cost_limit"
-            if Decimal(str(estimated_charge)) > available_charge
-            else "agent_vendor_cost_limit"
-        )
-        raise ServiceError(code, "Generation exceeds the remaining session cost bound", 409, 4)
+    blocker = preview.get("admission_blocker") or contract.admission_blocker
+    if blocker:
+        raise ServiceError(blocker, "Generation preflight requires human action", 409, 2)
     admitted = body.model_copy(
-        update={
-            "dry_run": False,
-            "retry": body.retry,
-            "expected_input_hash": preview["input_hash"],
-            "max_charge": cap if cap > 0 else None,
-        }
+        update={"dry_run": False, "retry": body.retry, "expected_input_hash": preview["input_hash"]}
     )
     return preview, warnings, admitted, prior.id if prior else None
 

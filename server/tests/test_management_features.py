@@ -521,7 +521,7 @@ async def test_input_unicode_cursor_and_envelope_bounds(api, headers):
     assert response.status_code == 413
     assert (
         await api.post(BASE.replace("/v4", "") + "/query", headers=headers[0], json={})
-    ).status_code == 404
+    ).status_code == 200
 
 
 async def test_page_adapter_refuses_final_envelope_overflow(api, headers, tenants):
@@ -534,7 +534,7 @@ async def test_page_adapter_refuses_final_envelope_overflow(api, headers, tenant
 
     page = Page[FeatureRow](data=page_response.json()["data"], items=page_response.json()["items"])
     with pytest.raises(ServiceError) as failure:
-        management_features.page_result("x" * (256 * 1024), page, "USD", 0)
+        management_features.page_result("x" * (256 * 1024), page, 0)
     assert failure.value.code == "management_result_too_large"
     assert ResourceQuery(limit=100).limit == 100
 

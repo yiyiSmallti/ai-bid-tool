@@ -1,11 +1,11 @@
 """Screenshot vision's real HTTP boundary, accounting order and safe proposal filtering.
 
 Failure modes covered here:
-- unverified or incomplete catalog image pricing cannot dispatch;
+- unverified or incomplete catalog image bounds cannot dispatch;
 - configured image count and pixel limits are enforced before admission;
-- image token reservations use the verified pixel rule rather than base64 length;
+- image token bounds use the verified pixel rule rather than base64 length;
 - server-owned catalog options never reach the vendor;
-- missing usage keeps the admission unknown, while malformed paid output is settled first;
+- missing usage keeps the admission unknown, while malformed model output is settled first;
 - unknown refs, unusable regions and invalid purpose fields are rejected without echoing them.
 """
 
@@ -15,7 +15,6 @@ import json
 import struct
 import zlib
 from copy import deepcopy
-from decimal import Decimal
 from uuid import uuid4
 
 import httpx
@@ -25,6 +24,7 @@ from app.providers.base import ProviderFailure
 from app.providers.calls import current_accounting
 from app.providers.llm import OpenAICompatibleExtractor
 from app.providers.screenshot_vision import VisionImage, analyze, preview
+from app.schemas.preflight_contracts import CallPlan
 from cryptography.fernet import Fernet
 
 MODEL = "synthetic-vision-model"
@@ -66,7 +66,6 @@ CAPABILITY = {
         "tokens_per_image": 256,
         "tokens_per_megapixel": 1024,
     },
-    "price_revision": "glm-vision-2026-10-01",
 }
 
 
@@ -122,7 +121,7 @@ class Accounting:
     def __init__(self):
         self.events: list[str] = []
         self.planned: list[int] = []
-        self.reservations: list[Decimal] = []
+        self.plans: list[CallPlan] = []
         self.completed = []
         self.unknown_calls = []
 
@@ -131,10 +130,8 @@ class Accounting:
         self.events.append("plan")
 
     async def admit(self, quote):
-        reserved_charge, platform_billed = quote.reserved_charge, quote.payer == "org_platform"
-        assert platform_billed is True
         self.events.append("admit")
-        self.reservations.append(reserved_charge)
+        self.plans.append(quote)
         return uuid4()
 
     async def complete(self, call_id, usage) -> None:
@@ -168,7 +165,6 @@ def provider(tmp_path, vendor: Vendor, capability=CAPABILITY, **settings_overrid
         settings,
         vendor.transport(),
         platform_model_id="catalog-vision",
-        sale_usd_per_mtok=(2.0, 8.0),
     )
 
 
@@ -215,9 +211,7 @@ async def test_analyze_sends_only_fixed_refs_png_and_vendor_options(tmp_path):
     vendor = Vendor(response(items))
     accounting = Accounting()
     vendor.events = accounting.events
-
     result = await run(provider(tmp_path, vendor), accounting)
-
     assert [proposal.purpose for proposal in result.proposals] == [
         "match_requirements",
         "propose_regions",
@@ -225,13 +219,11 @@ async def test_analyze_sends_only_fixed_refs_png_and_vendor_options(tmp_path):
     ]
     assert result.rejected == []
     assert result.usage and result.usage.tokens == 920
-    assert result.price_revision == CAPABILITY["price_revision"]
     assert accounting.planned == [1]
     assert accounting.events == ["plan", "admit", "http", "complete"]
-    billed = accounting.completed[0][1]
-    assert billed.image_count == 1
-    assert billed.image_price_revision == CAPABILITY["price_revision"]
-    assert billed.image_input_sha256 is not None and len(billed.image_input_sha256) == 64
+    recorded = accounting.completed[0][1]
+    assert recorded.image_count == 1
+    assert recorded.image_input_sha256 is not None and len(recorded.image_input_sha256) == 64
     [request] = vendor.requests
     body = json.loads(request.content)
     assert str(request.url) == "https://vision.example.test/v1/chat/completions"
@@ -254,14 +246,7 @@ async def test_analyze_sends_only_fixed_refs_png_and_vendor_options(tmp_path):
     assert base64.b64decode(image_part["url"].split(",", 1)[1]) == image().content
     assert set(
         body["response_format"]["json_schema"]["schema"]["$defs"]["_WireProposal"]["required"]
-    ) == {
-        "image_ref",
-        "requirement_ref",
-        "purpose",
-        "region",
-        "suggested_text",
-        "confidence",
-    }
+    ) == {"image_ref", "requirement_ref", "purpose", "region", "suggested_text", "confidence"}
 
 
 async def test_official_reasoning_copy_supplies_vision_capability(tmp_path):
@@ -279,10 +264,8 @@ async def test_official_reasoning_copy_supplies_vision_capability(tmp_path):
     base.default_reasoning = "high"
     selected = base.at_reasoning("high")
     accounting = Accounting()
-
     result = await run(selected, accounting)
-
-    assert result.price_revision == CAPABILITY["price_revision"]
+    assert result.usage and result.usage.tokens == 920
     assert selected.reasoning == "high"
     body = json.loads(vendor.requests[0].content)
     assert body["reasoning_effort"] == "high"
@@ -294,7 +277,6 @@ async def test_official_reasoning_copy_supplies_vision_capability(tmp_path):
     [
         None,
         CAPABILITY | {"verified": False},
-        {key: value for key, value in CAPABILITY.items() if key != "price_revision"},
         CAPABILITY
         | {
             "image_input_token_bound": {
@@ -316,9 +298,9 @@ async def test_missing_or_unverified_image_bounds_fail_before_dispatch(tmp_path,
     with pytest.raises(ProviderFailure) as caught:
         await run(provider(tmp_path, vendor, selected), accounting)
 
-    assert caught.value.code == "billing_bound_unavailable"
+    assert caught.value.code == "invalid_vision_configuration"
     assert vendor.requests == []
-    assert accounting.events == accounting.planned == accounting.reservations == []
+    assert accounting.events == accounting.planned == accounting.plans == []
 
 
 @pytest.mark.parametrize("limit", ["count", "pixels"])
@@ -341,7 +323,7 @@ async def test_catalog_image_limits_fail_before_admission(tmp_path, limit):
     assert accounting.events == []
 
 
-async def test_image_reservation_uses_pixels_not_base64_length(tmp_path):
+async def test_image_token_bounds_use_pixels_not_base64_length(tmp_path):
     vendor = Vendor(response([]), response([]))
     accounting = Accounting()
     adapter = provider(tmp_path, vendor)
@@ -352,31 +334,29 @@ async def test_image_reservation_uses_pixels_not_base64_length(tmp_path):
     await run(adapter, accounting, images=[plain])
     await run(adapter, accounting, images=[noisy])
 
-    assert accounting.reservations[0] == accounting.reservations[1]
+    assert (
+        accounting.plans[0].input_tokens_upper_bound == accounting.plans[1].input_tokens_upper_bound
+    )
+    assert (
+        accounting.plans[0].output_tokens_upper_bound
+        == accounting.plans[1].output_tokens_upper_bound
+    )
     assert len(vendor.requests[0].content) != len(vendor.requests[1].content)
-    assert accounting.reservations[0] > Decimal("0")
+    assert accounting.plans[0].input_tokens_upper_bound > 0
 
 
 def test_preview_builds_the_same_bound_without_http_or_admission(tmp_path):
     vendor = Vendor(response([]))
     adapter = provider(tmp_path, vendor)
-
     result = preview(
-        adapter,
-        [{"ref": "req-1", "text": "支持审计日志"}],
-        [image()],
-        ["match_requirements"],
+        adapter, [{"ref": "req-1", "text": "支持审计日志"}], [image()], ["match_requirements"]
     )
-
     assert result == {
-        "estimated_charge": result["estimated_charge"],
         "input_tokens": result["input_tokens"],
         "output_tokens": 2048,
-        "price_revision": CAPABILITY["price_revision"],
         "planned_calls": 1,
         "catalog_identity": adapter.version,
     }
-    assert result["estimated_charge"] > Decimal("0")
     assert result["input_tokens"] > 4096
     assert vendor.requests == []
 
@@ -463,7 +443,7 @@ async def test_unknown_and_out_of_content_refs_are_safely_rejected(tmp_path):
     assert "secret model output" not in safe_receipt
 
 
-async def test_malformed_paid_output_is_settled_before_parsing(tmp_path):
+async def test_malformed_model_output_is_recorded_before_parsing(tmp_path):
     vendor = Vendor(
         httpx.Response(
             200,

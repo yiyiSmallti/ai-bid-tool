@@ -40,7 +40,7 @@ def create_router(context, settings, storage, queue):
             command=command,
             data=data.model_dump(mode="json") if hasattr(data, "model_dump") else data,
             items=[item.model_dump(mode="json") for item in items or []],
-            cost=Cost(billing_currency=settings.billing_currency),
+            cost=Cost(),
         )
 
     @router.post("/tasks/{task_id}/bid-submissions", name="review_upload", response_model=Result)
@@ -75,7 +75,7 @@ def create_router(context, settings, storage, queue):
         data = await bid_review.prepare(ctx[0], ctx[1], task_id, body, queue, settings)
         response = result("review prepare", data)
         if isinstance(data, BidPreparePreview):
-            response.cost = data.budget.estimate
+            response.cost = data.preflight.estimate
         return response
 
     @router.get(
@@ -283,7 +283,7 @@ def create_router(context, settings, storage, queue):
         data = await bid_review_run.submit(ctx[0], ctx[1], task_id, body, queue, settings)
         response = result("review run", data)
         if isinstance(data, run_contracts.BidReviewPreview):
-            response.cost = data.budget.estimate
+            response.cost = data.preflight.estimate
         return response
 
     @router.get("/tasks/{task_id}/bid-reviews", response_model=Result)
@@ -361,7 +361,7 @@ def create_router(context, settings, storage, queue):
         data = await bid_review_report.submit(ctx[0], ctx[1], review_id, body, queue, settings)
         response = result("review report", data)
         if isinstance(data, report_contracts.BidReportRenderPreview):
-            response.cost = data.budget.estimate
+            response.cost = data.preflight.estimate
         return response
 
     @router.get("/bid-review-artifacts/{artifact_id}/download-link", response_model=Result)

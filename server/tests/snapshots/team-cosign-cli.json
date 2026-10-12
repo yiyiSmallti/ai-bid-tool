@@ -16,14 +16,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -45,14 +42,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -74,14 +68,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -110,14 +101,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -146,14 +134,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -232,14 +217,11 @@
     ],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -280,14 +262,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -332,14 +311,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -384,14 +360,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -453,14 +426,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -478,14 +448,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -503,14 +470,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -528,14 +492,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -553,14 +514,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -578,14 +536,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -603,14 +558,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -632,14 +584,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -661,14 +610,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -690,14 +636,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -726,14 +669,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -762,14 +702,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -848,14 +785,11 @@
     ],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -896,14 +830,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -948,14 +879,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -1000,14 +928,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -1069,14 +994,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -1094,14 +1016,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -1119,14 +1038,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -1144,14 +1060,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -1169,14 +1082,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -1194,14 +1104,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0
@@ -1219,14 +1126,11 @@
     "items": [],
     "warnings": [],
     "cost": {
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": 0.0,
-      "basis": "zero",
-      "charge": "0",
-      "billing_currency": "USD",
-      "task_amount": "0",
-      "unpriced_calls": 0,
+      "search_requests": 0,
+      "browser_units": 0,
       "unresolved_calls": 0
     },
     "duration_ms": 0

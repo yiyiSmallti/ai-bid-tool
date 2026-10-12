@@ -400,10 +400,11 @@ def test_requirement_schema_and_legacy_boundaries(capsys):
     from app.schemas.team_workflow import BoardData, BoardRow, TaskProgressData
 
     current = command_schema(cli.app)
-    legacy = command_schema(cli.app, "3.0")
+    with pytest.raises(ValueError, match="Only contract 5.0"):
+        command_schema(cli.app, "3.0")
     for name in PATHS:
         name = "req add" if name == "req add preview" else name
-        assert name in current["commands"] and name not in legacy["commands"]
+        assert name in current["commands"]
         invoke(capsys, ["--contract-version", "3.0", *COMMANDS[name]], 2)
     board = current["commands"]["task board"]
     assert board["output"] == BoardData.model_json_schema()
@@ -422,8 +423,6 @@ def test_requirement_schema_and_legacy_boundaries(capsys):
         progress["variants"]["requirement-review"]["output"]
         == schemas.RequirementProgressData.model_json_schema()
     )
-    assert "requirement-review" not in json.dumps(legacy)
-    assert '"requirement_review"' not in json.dumps(legacy)
     assert (
         current["commands"]["req add"]["variants"]["dry_run"]["input"]
         == schemas.ManualRequirementInput.model_json_schema()

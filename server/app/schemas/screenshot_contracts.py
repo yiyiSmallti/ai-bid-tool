@@ -1,7 +1,6 @@
 """Typed screenshot provenance, local privacy receipts and human decision inputs."""
 
 from datetime import UTC, datetime
-from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -443,13 +442,9 @@ class VendorJobPreview(Contract):
     outbound_image_hashes: list[Sha256]
     outbound_text_hashes: list[Sha256]
     catalog_identity: str
-    price_revision: str
     input_image_count: int = Field(ge=0)
     planned_calls: int = Field(ge=0)
     estimated_cost: Cost
-    estimated_charge: Decimal | None = Field(default=None, ge=0)
-    billing_currency: str
-    cost_basis: Literal["first_pass_upper_bound", "unknown"]
     admission_blocker: str | None
 
 
@@ -548,7 +543,4 @@ class ScreenshotDryRun(Contract):
     parent_rendition_id: UUID
     input_hash: Sha256
     estimated_cost: Cost
-    estimated_charge: Decimal
-    billing_currency: str
-    cost_basis: Literal["known"] = "known"
     estimated_duration_ms: int | None = Field(default=None, ge=0)

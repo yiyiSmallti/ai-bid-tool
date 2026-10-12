@@ -1,7 +1,7 @@
 {
   "status": "review_only_pending_human_approval",
   "runtime_registered": false,
-  "contract_version": "4.0",
+  "contract_version": "5.0",
   "limits": {
     "http_input_bytes": 131072,
     "renderer_json_bytes": 65536,
@@ -46,7 +46,7 @@
       "result_envelope": "#/schemas/Result",
       "data": "#/schemas/AnnotationPreflight",
       "items": [],
-      "cost_basis": "zero"
+      "usage": "zero"
     },
     "evidence stamp": {
       "arguments": {
@@ -62,7 +62,7 @@
       "result_envelope": "#/schemas/Result",
       "data": "#/schemas/AnnotationJobAccepted",
       "items": [],
-      "cost_basis": "zero on admission; actual zero on completed job",
+      "usage": "no provider calls on admission or completion",
       "wait_data": "#/schemas/AnnotationCandidateView"
     },
     "evidence annotation list": {
@@ -76,7 +76,7 @@
       "result_envelope": "#/schemas/Result",
       "data": "#/schemas/AnnotationListData",
       "items": "#/schemas/AnnotationCandidateView",
-      "cost_basis": "zero"
+      "usage": "zero"
     },
     "evidence annotation show": {
       "arguments": {
@@ -86,7 +86,7 @@
       "result_envelope": "#/schemas/Result",
       "data": "#/schemas/AnnotationShowData",
       "items": [],
-      "cost_basis": "zero"
+      "usage": "zero"
     },
     "evidence annotation preview": {
       "arguments": {
@@ -96,7 +96,7 @@
       "result_envelope": "#/schemas/Result",
       "data": "#/schemas/AnnotationPreviewLink",
       "items": [],
-      "cost_basis": "zero"
+      "usage": "zero"
     },
     "evidence annotation release retry": {
       "arguments": {
@@ -107,12 +107,12 @@
       "result_envelope": "#/schemas/Result",
       "data": "#/schemas/AnnotationJobAccepted",
       "items": [],
-      "cost_basis": "zero on admission; actual zero on completed job"
+      "usage": "no provider calls on admission or completion"
     },
     "evidence annotation releases": {
       "supports_json": true,
       "result_envelope": "#/schemas/Result",
-      "cost_basis": "zero",
+      "usage": "zero",
       "data": "#/schemas/AnnotationReleaseListData",
       "items": "#/schemas/AnnotationReleaseView",
       "arguments": {
@@ -124,7 +124,7 @@
     "evidence annotation release preview": {
       "supports_json": true,
       "result_envelope": "#/schemas/Result",
-      "cost_basis": "zero",
+      "usage": "zero",
       "data": "#/schemas/AnnotationPreviewLink",
       "items": [],
       "arguments": {
@@ -892,8 +892,8 @@
             }
           ]
         },
-        "budget_preflight": {
-          "$ref": "#/schemas/BudgetPreflightData"
+        "preflight": {
+          "$ref": "#/schemas/PreflightData"
         },
         "blocker_codes": {
           "items": {
@@ -923,7 +923,7 @@
         "input_hash",
         "manifest",
         "predicted_output",
-        "budget_preflight"
+        "preflight"
       ],
       "title": "AnnotationPreflight",
       "type": "object"
@@ -1582,7 +1582,7 @@
       "title": "ArchiveDescriptor",
       "type": "object"
     },
-    "BudgetCallQuote": {
+    "CallPlan": {
       "additionalProperties": false,
       "properties": {
         "capability": {
@@ -1595,16 +1595,6 @@
             "browser"
           ],
           "title": "Capability",
-          "type": "string"
-        },
-        "payer": {
-          "enum": [
-            "org_platform",
-            "org_direct",
-            "platform_absorbed",
-            "local_free"
-          ],
-          "title": "Payer",
           "type": "string"
         },
         "provider": {
@@ -1650,66 +1640,10 @@
           "default": null,
           "title": "Platform Model Id"
         },
-        "price_revision": {
-          "maxLength": 100,
-          "minLength": 1,
-          "title": "Price Revision",
-          "type": "string"
-        },
         "request_sha256": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Request Sha256",
           "type": "string"
-        },
-        "currency": {
-          "pattern": "^[A-Z]{3}$",
-          "title": "Currency",
-          "type": "string"
-        },
-        "reserved_charge": {
-          "anyOf": [
-            {
-              "minimum": 0.0,
-              "type": "number"
-            },
-            {
-              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-              "type": "string"
-            }
-          ],
-          "title": "Reserved Charge"
-        },
-        "reserved_task_amount": {
-          "anyOf": [
-            {
-              "minimum": 0.0,
-              "type": "number"
-            },
-            {
-              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Reserved Task Amount"
-        },
-        "vendor_usd_upper_bound": {
-          "anyOf": [
-            {
-              "minimum": 0.0,
-              "type": "number"
-            },
-            {
-              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Vendor Usd Upper Bound"
         },
         "input_tokens_upper_bound": {
           "default": 0,
@@ -1735,6 +1669,12 @@
           "title": "Search Requests",
           "type": "integer"
         },
+        "browser_units": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Browser Units",
+          "type": "integer"
+        },
         "image_count": {
           "default": 0,
           "maximum": 20,
@@ -1742,9 +1682,10 @@
           "title": "Image Count",
           "type": "integer"
         },
-        "image_price_revision": {
+        "image_input_sha256": {
           "anyOf": [
             {
+              "pattern": "^[0-9a-f]{64}$",
               "type": "string"
             },
             {
@@ -1752,336 +1693,17 @@
             }
           ],
           "default": null,
-          "title": "Image Price Revision"
-        },
-        "unknown_reason": {
-          "anyOf": [
-            {
-              "enum": [
-                "missing_price",
-                "currency_conversion_required",
-                "unbounded"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Unknown Reason"
+          "title": "Image Input Sha256"
         }
       },
       "required": [
         "capability",
-        "payer",
         "provider",
         "model",
         "version",
-        "price_revision",
-        "request_sha256",
-        "currency",
-        "reserved_charge",
-        "reserved_task_amount",
-        "vendor_usd_upper_bound"
+        "request_sha256"
       ],
-      "title": "BudgetCallQuote",
-      "type": "object"
-    },
-    "BudgetCost": {
-      "additionalProperties": false,
-      "properties": {
-        "llm_tokens": {
-          "default": 0,
-          "title": "Llm Tokens",
-          "type": "integer"
-        },
-        "ocr_pages": {
-          "default": 0,
-          "title": "Ocr Pages",
-          "type": "integer"
-        },
-        "usd": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": 0.0,
-          "title": "Usd"
-        },
-        "basis": {
-          "enum": [
-            "actual",
-            "first_pass_upper_bound",
-            "unknown",
-            "zero",
-            "cache_hit"
-          ],
-          "title": "Basis",
-          "type": "string"
-        },
-        "charge": {
-          "anyOf": [
-            {
-              "minimum": 0.0,
-              "type": "number"
-            },
-            {
-              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Charge"
-        },
-        "billing_currency": {
-          "pattern": "^[A-Z]{3}$",
-          "title": "Billing Currency",
-          "type": "string"
-        },
-        "task_amount": {
-          "anyOf": [
-            {
-              "minimum": 0.0,
-              "type": "number"
-            },
-            {
-              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Task Amount"
-        },
-        "unpriced_calls": {
-          "default": 0,
-          "minimum": 0,
-          "title": "Unpriced Calls",
-          "type": "integer"
-        },
-        "unresolved_calls": {
-          "default": 0,
-          "minimum": 0,
-          "title": "Unresolved Calls",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "basis",
-        "charge",
-        "billing_currency",
-        "task_amount"
-      ],
-      "title": "BudgetCost",
-      "type": "object"
-    },
-    "BudgetPreflightData": {
-      "additionalProperties": false,
-      "properties": {
-        "dry_run": {
-          "const": true,
-          "default": true,
-          "title": "Dry Run",
-          "type": "boolean"
-        },
-        "command": {
-          "title": "Command",
-          "type": "string"
-        },
-        "task_id": {
-          "anyOf": [
-            {
-              "format": "uuid",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Task Id"
-        },
-        "input_hash": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Input Hash",
-          "type": "string"
-        },
-        "as_of": {
-          "format": "date-time",
-          "title": "As Of",
-          "type": "string"
-        },
-        "task_budget": {
-          "anyOf": [
-            {
-              "$ref": "#/schemas/TaskBudgetView"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "planned_calls": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Planned Calls"
-        },
-        "maximum_calls": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Maximum Calls"
-        },
-        "estimate": {
-          "$ref": "#/schemas/BudgetCost"
-        },
-        "next_call": {
-          "anyOf": [
-            {
-              "$ref": "#/schemas/BudgetCallQuote"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "admission_blocker": {
-          "anyOf": [
-            {
-              "enum": [
-                "task_budget_exceeded",
-                "task_budget_unpriced",
-                "task_budget_currency_review_required",
-                "insufficient_balance",
-                "job_charge_limit_exceeded",
-                "job_call_limit_exceeded",
-                "spend_cap_reached",
-                "billing_price_unavailable",
-                "billing_currency_mismatch",
-                "provider_unavailable"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Admission Blocker"
-        },
-        "first_pass_fits": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "First Pass Fits"
-        },
-        "full_run_guaranteed": {
-          "const": false,
-          "default": false,
-          "title": "Full Run Guaranteed",
-          "type": "boolean"
-        },
-        "cached_job_id": {
-          "anyOf": [
-            {
-              "format": "uuid",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Cached Job Id"
-        },
-        "cached_result_cost": {
-          "anyOf": [
-            {
-              "$ref": "#/schemas/Cost"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "estimated_duration_ms": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Estimated Duration Ms"
-        },
-        "duration_basis": {
-          "default": "unknown",
-          "enum": [
-            "unknown",
-            "measured_profile"
-          ],
-          "title": "Duration Basis",
-          "type": "string"
-        },
-        "uncertainty": {
-          "items": {
-            "enum": [
-              "retry_or_split",
-              "dynamic_search",
-              "unknown_price",
-              "currency_conversion",
-              "history_incomplete",
-              "concurrent_spending",
-              "unresolved_usage"
-            ],
-            "type": "string"
-          },
-          "title": "Uncertainty",
-          "type": "array"
-        }
-      },
-      "required": [
-        "command",
-        "task_id",
-        "input_hash",
-        "as_of",
-        "task_budget",
-        "planned_calls",
-        "estimate",
-        "next_call",
-        "admission_blocker",
-        "first_pass_fits"
-      ],
-      "title": "BudgetPreflightData",
+      "title": "CallPlan",
       "type": "object"
     },
     "CardAction": {
@@ -2385,85 +2007,36 @@
     },
     "Cost": {
       "additionalProperties": false,
+      "description": "Provider usage counters; the envelope name is retained for CLI compatibility.",
       "properties": {
+        "calls": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Calls",
+          "type": "integer"
+        },
         "llm_tokens": {
           "default": 0,
+          "minimum": 0,
           "title": "Llm Tokens",
           "type": "integer"
         },
         "ocr_pages": {
           "default": 0,
+          "minimum": 0,
           "title": "Ocr Pages",
           "type": "integer"
         },
-        "usd": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": 0.0,
-          "title": "Usd"
-        },
-        "basis": {
-          "default": "zero",
-          "enum": [
-            "actual",
-            "first_pass_upper_bound",
-            "unknown",
-            "zero",
-            "cache_hit"
-          ],
-          "title": "Basis",
-          "type": "string"
-        },
-        "charge": {
-          "anyOf": [
-            {
-              "minimum": 0.0,
-              "type": "number"
-            },
-            {
-              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "0",
-          "title": "Charge"
-        },
-        "billing_currency": {
-          "default": "USD",
-          "pattern": "^[A-Z]{3}$",
-          "title": "Billing Currency",
-          "type": "string"
-        },
-        "task_amount": {
-          "anyOf": [
-            {
-              "minimum": 0.0,
-              "type": "number"
-            },
-            {
-              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "0",
-          "title": "Task Amount"
-        },
-        "unpriced_calls": {
+        "search_requests": {
           "default": 0,
           "minimum": 0,
-          "title": "Unpriced Calls",
+          "title": "Search Requests",
+          "type": "integer"
+        },
+        "browser_units": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Browser Units",
           "type": "integer"
         },
         "unresolved_calls": {
@@ -2723,6 +2296,168 @@
       "title": "PixelRect",
       "type": "object"
     },
+    "PreflightData": {
+      "additionalProperties": false,
+      "properties": {
+        "dry_run": {
+          "const": true,
+          "default": true,
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "command": {
+          "title": "Command",
+          "type": "string"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Task Id"
+        },
+        "input_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Hash",
+          "type": "string"
+        },
+        "as_of": {
+          "format": "date-time",
+          "title": "As Of",
+          "type": "string"
+        },
+        "planned_calls": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Planned Calls"
+        },
+        "maximum_calls": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Maximum Calls"
+        },
+        "estimate": {
+          "$ref": "#/schemas/Cost"
+        },
+        "next_call": {
+          "anyOf": [
+            {
+              "$ref": "#/schemas/CallPlan"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "admission_blocker": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Admission Blocker"
+        },
+        "full_run_guaranteed": {
+          "const": false,
+          "default": false,
+          "title": "Full Run Guaranteed",
+          "type": "boolean"
+        },
+        "cached_job_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Job Id"
+        },
+        "cached_result_cost": {
+          "anyOf": [
+            {
+              "$ref": "#/schemas/Cost"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "estimated_duration_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Duration Ms"
+        },
+        "duration_basis": {
+          "default": "unknown",
+          "enum": [
+            "unknown",
+            "measured_profile"
+          ],
+          "title": "Duration Basis",
+          "type": "string"
+        },
+        "uncertainty": {
+          "items": {
+            "enum": [
+              "retry_or_split",
+              "dynamic_search",
+              "unresolved_usage"
+            ],
+            "type": "string"
+          },
+          "title": "Uncertainty",
+          "type": "array"
+        }
+      },
+      "required": [
+        "command",
+        "task_id",
+        "input_hash",
+        "as_of",
+        "planned_calls",
+        "estimate"
+      ],
+      "title": "PreflightData",
+      "type": "object"
+    },
     "Result": {
       "additionalProperties": false,
       "properties": {
@@ -2789,132 +2524,6 @@
     "Revision": {
       "minimum": 1,
       "type": "integer"
-    },
-    "TaskBudgetView": {
-      "additionalProperties": false,
-      "properties": {
-        "org_id": {
-          "format": "uuid",
-          "title": "Org Id",
-          "type": "string"
-        },
-        "task_id": {
-          "format": "uuid",
-          "title": "Task Id",
-          "type": "string"
-        },
-        "revision": {
-          "minimum": 1,
-          "title": "Revision",
-          "type": "integer"
-        },
-        "limit": {
-          "anyOf": [
-            {
-              "minimum": 0.0,
-              "type": "number"
-            },
-            {
-              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Limit"
-        },
-        "currency": {
-          "pattern": "^[A-Z]{3}$",
-          "title": "Currency",
-          "type": "string"
-        },
-        "state": {
-          "enum": [
-            "active",
-            "currency_review_required"
-          ],
-          "title": "State",
-          "type": "string"
-        },
-        "spent": {
-          "anyOf": [
-            {
-              "minimum": 0.0,
-              "type": "number"
-            },
-            {
-              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-              "type": "string"
-            }
-          ],
-          "title": "Spent"
-        },
-        "reserved": {
-          "anyOf": [
-            {
-              "minimum": 0.0,
-              "type": "number"
-            },
-            {
-              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-              "type": "string"
-            }
-          ],
-          "title": "Reserved"
-        },
-        "available": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Available"
-        },
-        "unpriced_calls": {
-          "minimum": 0,
-          "title": "Unpriced Calls",
-          "type": "integer"
-        },
-        "unresolved_calls": {
-          "minimum": 0,
-          "title": "Unresolved Calls",
-          "type": "integer"
-        },
-        "history_complete": {
-          "title": "History Complete",
-          "type": "boolean"
-        },
-        "as_of": {
-          "format": "date-time",
-          "title": "As Of",
-          "type": "string"
-        }
-      },
-      "required": [
-        "org_id",
-        "task_id",
-        "revision",
-        "limit",
-        "currency",
-        "state",
-        "spent",
-        "reserved",
-        "available",
-        "unpriced_calls",
-        "unresolved_calls",
-        "history_complete",
-        "as_of"
-      ],
-      "title": "TaskBudgetView",
-      "type": "object"
     },
     "VendorAnnotationSource": {
       "additionalProperties": false,

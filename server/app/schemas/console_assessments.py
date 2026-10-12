@@ -7,7 +7,6 @@ from uuid import UUID
 from pydantic import AwareDatetime, Field, StringConstraints, model_validator
 
 from app.providers.base import CheckProvider as CheckProvider
-from app.schemas.budget_contracts import TaskBudgetView
 from app.schemas.check_contracts import (
     AssessmentJobAccepted,
     AssessmentListData,
@@ -17,9 +16,9 @@ from app.schemas.check_contracts import (
     CheckRequest,
     FindingDecisionRequest,
     FindingView,
-    Money,
     NonBlank,
     RiskLevel,
+    ScoreValue,
     Sha256,
 )
 from app.schemas.contracts import CONTRACT_VERSION, Contract, Cost, Location, Result
@@ -136,7 +135,6 @@ class AssessmentInputsData(Contract):
     current_draft: DraftChoice | None
     redaction_enabled: bool
     redaction_revision: Revision
-    task_budget: TaskBudgetView
     actions: list[ActionAvailability] = Field(max_length=3)
 
     @model_validator(mode="after")
@@ -397,11 +395,11 @@ class ScoreSummaryData(Contract):
     overall_aggregation: AggregationRule
     overall_aggregation_assessable: bool
     overall_rule_text: NonBlank | None
-    overall_cap: Money | None
-    assessed_subtotal: Money
+    overall_cap: ScoreValue | None
+    assessed_subtotal: ScoreValue
     total_status: Literal["estimated", "range_only", "unavailable"]
     possible_range: ScoreRange | None
-    estimated_total: Money | None
+    estimated_total: ScoreValue | None
 
     @model_validator(mode="after")
     def never_promote_a_subtotal_to_a_total(self) -> Self:

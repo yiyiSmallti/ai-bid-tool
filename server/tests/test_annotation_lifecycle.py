@@ -1,10 +1,10 @@
 """DB/API lifecycle failure inventory for the approved B05 job contract.
 
 Cancellation can be persisted while a renderer is blocked. Rendering timeout or
-attempt deadline must leave no material, billed call or changed card; explicit
+attempt deadline must leave no material, vendor call or changed card; explicit
 retry must retain the exact request/PNG bytes. Card revision, requirement meaning,
 source integrity and source selection changes between admission and publication
-must fence late output. Exhausted funds/budget must not charge or write on preview.
+must fence late output. Preview must not dispatch vendor calls or write usage.
 A token, reviewer/observer or wrong task/source must not create an annotation.
 These cases require an externally provisioned isolated PostgreSQL fixture; this
 module never starts or configures database or application services.
@@ -21,16 +21,7 @@ from uuid import UUID
 import pytest
 from annotation_test_renderer import FakeAnnotationRenderer, configure_renderer
 from app.models.annotations import AnnotationMaterial, AnnotationRelease, AnnotationRequest
-from app.models.entities import (
-    AuditLog,
-    BalanceEntry,
-    EvidenceSource,
-    Job,
-    OrgBalance,
-    TaskBudgetRevision,
-    UsageRecord,
-    VendorCall,
-)
+from app.models.entities import AuditLog, EvidenceSource, Job, UsageRecord, VendorCall
 from app.models.requirement_confirmation import RequirementReviewEvent
 from app.models.screenshots import ScreenshotAsset, ScreenshotPrivacyReview, ScreenshotRendition
 from app.models.team_workflow import TaskEvent
@@ -54,8 +45,6 @@ STATE_TABLES = (
     ScreenshotRendition,
     ScreenshotPrivacyReview,
     RequirementReviewEvent,
-    TaskBudgetRevision,
-    BalanceEntry,
     TaskEvent,
 )
 
@@ -124,8 +113,6 @@ async def state_snapshot(app, org_id):
             model.__tablename__: await session.scalar(select(func.count()).select_from(model))
             for model in STATE_TABLES
         }
-        balance = await session.get(OrgBalance, org_id)
-        counts["org_balance"] = str(balance.balance) if balance else None
         return counts
 
 
@@ -401,33 +388,10 @@ async def test_changed_inputs_during_render_discard_late_output(
             await asyncio.gather(worker, return_exceptions=True)
 
 
-async def test_zero_cost_preview_with_exhausted_budget_creates_no_state(
-    tenants, tmp_path, monkeypatch, admin_engine
-):
+async def test_local_preview_creates_no_state(tenants, tmp_path, monkeypatch, admin_engine):
     configure_renderer(monkeypatch)
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         task, card, _, _, target = await seed_annotation(api, app, headers[0], tmp_path)
-        budget = (await api.get(f"/v4/tasks/{task}/budget", headers=headers[0])).json()["data"][
-            "budget"
-        ]
-        changed = await api.put(
-            f"/v4/tasks/{task}/budget",
-            headers=headers[0],
-            json={
-                "expected_revision": budget["revision"],
-                "limit": "0",
-                "currency": "USD",
-                "reason": "Synthetic exhausted budget preview acceptance",
-            },
-        )
-        assert changed.status_code == 200, changed.text
-        with admin_engine.begin() as connection:
-            connection.execute(
-                text(
-                    "SELECT * FROM platform_adjust_balance(:org,'set',0,'Synthetic zero balance','acceptance','USD')"
-                ),
-                {"org": tenants["orgs"][0]},
-            )
         before = await state_snapshot(app, tenants["orgs"][0])
         queued_before = list(app.state.processor.queue.calls)
         response = await api.post(
@@ -437,23 +401,22 @@ async def test_zero_cost_preview_with_exhausted_budget_creates_no_state(
         )
         assert response.status_code == 200, response.text
         preview = response.json()["data"]
-        liability = preview["budget_preflight"]
+        liability = preview["preflight"]
         assert liability["planned_calls"] == 0 and liability["next_call"] is None
         assert liability["admission_blocker"] is None
         for key in (
-            "charge",
-            "task_amount",
-            "usd",
+            "calls",
             "llm_tokens",
             "ocr_pages",
-            "unpriced_calls",
+            "search_requests",
+            "browser_units",
             "unresolved_calls",
         ):
             assert float(liability["estimate"][key]) == 0
         assert await state_snapshot(app, tenants["orgs"][0]) == before
         assert app.state.processor.queue.calls == queued_before
         current = (await api.get(f"/cards/{card['id']}", headers=headers[0])).json()["data"]
-        assert current["revision"] == card["revision"] and not current["evidence"]
+        assert current["revision"] == card["revision"] and (not current["evidence"])
         await asyncio.to_thread(
             _record,
             "zero-cost-preview",
@@ -462,7 +425,7 @@ async def test_zero_cost_preview_with_exhausted_budget_creates_no_state(
                 "counts_before": before,
                 "counts_after": before,
                 "input_hash": preview["input_hash"],
-                "budget_preflight": liability,
+                "preflight": liability,
             },
         )
 

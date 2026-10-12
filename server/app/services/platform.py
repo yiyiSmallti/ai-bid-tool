@@ -7,7 +7,6 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, text, update
-from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
@@ -16,11 +15,9 @@ from app.core.errors import ServiceError, not_found
 from app.core.password_attempts import PasswordAttempts, invalid_login
 from app.core.security import TokenSigner, hash_password
 from app.core.totp import matching_counter
-from app.models.entities import PlatformAuditLog, PlatformCard, PlatformModel, User
+from app.models.entities import PlatformAuditLog, PlatformModel, User
 from app.providers.llm import HTTPExtractor, platform_llm
 from app.schemas.platform_contracts import (
-    PlatformBalanceAdjust,
-    PlatformCardCreate,
     PlatformModelSet,
 )
 from app.schemas.platform_credentials import CatalogResolveTarget, PlatformOperator
@@ -210,8 +207,6 @@ async def set_org_active(
 
 MODEL_FIELDS = (
     "id", "capability", "provider", "model", "base_url", "credential",
-    "vendor_input_usd_per_mtok", "vendor_output_usd_per_mtok",
-    "sale_input_per_mtok", "sale_output_per_mtok",
     "reasoning", "default_reasoning",
     "enabled", "revision", "updated_by", "updated_at",
 )  # fmt: skip
@@ -308,12 +303,14 @@ async def test_model(
     """Probe a fixed catalog identity through a tenant's taskless accounted job."""
     from app.models.entities import Job
     from app.providers.configured import model_identity
-    from app.schemas.budget_contracts import BudgetPlatformModelTest, BudgetProviderTest
-    from app.services import budget_preflight, provider_configs
+    from app.schemas.platform_contracts import PlatformModelTest
+    from app.schemas.provider_contracts import ProviderTest
+    from app.services import preflight as preflight_service
+    from app.services import provider_configs
     from app.services.auth import ROLE_SCOPES, Identity, membership, set_actor_context
     from app.services.drafts import digest
 
-    body = body or BudgetPlatformModelTest.model_validate({})
+    body = body or PlatformModelTest.model_validate({})
     async with db.transaction() as session:
         row = await session.get(PlatformModel, model_id)
         user = await session.scalar(
@@ -346,7 +343,7 @@ async def test_model(
             identity = Identity(user.id, body.test_org_id, ROLE_SCOPES[member.role], member.role)
             await provider_configs.require_access(session, identity, write=True)
         if body.dry_run:
-            data = await budget_preflight.attach(
+            data = await preflight_service.attach(
                 session,
                 {
                     "dry_run": True,
@@ -356,11 +353,9 @@ async def test_model(
                 command="platform model test",
                 task_id=None,
                 input_hash=digest({"model": model_identity(llm), "levels": names}),
-                currency=settings.billing_currency,
                 settings=settings,
                 quote_sources=quotes,
                 planned_calls=len(names),
-                check_balance=body.test_org_id is not None,
             )
             return data
         assert identity is not None
@@ -370,7 +365,7 @@ async def test_model(
             )
         await set_actor_context(session, identity)
         job = await provider_configs.submit_test(
-            session, identity, BudgetProviderTest(), llm, quick, probe_levels=names
+            session, identity, ProviderTest(), llm, quick, probe_levels=names
         )
         await session.commit()
     await processor(str(identity.org_id), str(job.id))
@@ -431,8 +426,6 @@ async def usage(
     totals = {
         "calls": sum(item["calls"] for item in items),
         "tokens": sum(item["tokens"] for item in items),
-        "vendor_usd": round(sum(item["vendor_usd"] for item in items), 8),
-        "charge": round(sum(item["charge"] for item in items), 8),
     }
     return {"from": first.isoformat()[:7], "to": last.isoformat()[:7], "totals": totals}, items
 
@@ -498,137 +491,3 @@ async def user_orgs(
             }
             for row in rows
         ]
-
-
-def card_view(row: PlatformCard) -> dict:
-    return {
-        "id": str(row.id),
-        "last4": row.last4,
-        "face_value": float(row.face_value),
-        "currency": row.currency,
-        "batch_id": str(row.batch_id),
-        "note": row.note,
-        "expires_at": row.expires_at.isoformat() if row.expires_at else None,
-        "status": row.status,
-        "expired": bool(row.expires_at and row.expires_at <= datetime.now(UTC)),
-        "created_by": row.created_by,
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        "redeemed_org_id": str(row.redeemed_org_id) if row.redeemed_org_id else None,
-        "redeemed_at": row.redeemed_at.isoformat() if row.redeemed_at else None,
-    }
-
-
-async def create_cards(
-    session: AsyncSession, actor: PlatformIdentity, body: PlatformCardCreate, currency: str
-) -> dict:
-    from app.services.billing import code_hash, generate_code
-
-    batch = uuid4()
-    cards = []
-    for _ in range(body.count):
-        code = generate_code()
-        row = PlatformCard(
-            id=uuid4(),
-            code_hash=code_hash(code),
-            last4=code[-4:],
-            face_value=body.face_value,
-            currency=currency,
-            batch_id=batch,
-            note=body.note,
-            expires_at=body.expires_at,
-            created_by=actor.email,
-        )
-        session.add(row)
-        cards.append({"id": str(row.id), "code": code, "last4": row.last4})
-    await session.flush()
-    audit(
-        session,
-        actor.email,
-        "platform.card.create",
-        "success",
-        str(batch),
-        {"count": body.count, "face_value": body.face_value, "currency": currency},
-    )
-    # The only time codes leave the server; the database keeps hashes.
-    return {
-        "batch_id": str(batch),
-        "count": body.count,
-        "face_value": body.face_value,
-        "currency": currency,
-        "expires_at": body.expires_at.isoformat() if body.expires_at else None,
-        "note": body.note,
-        "cards": cards,
-    }
-
-
-async def list_cards(
-    session: AsyncSession, batch_id: UUID | None, status: str | None, limit: int
-) -> list[dict]:
-    query = select(PlatformCard).order_by(PlatformCard.created_at.desc(), PlatformCard.id)
-    if batch_id is not None:
-        query = query.where(PlatformCard.batch_id == batch_id)
-    if status is not None:
-        query = query.where(PlatformCard.status == status)
-    return [card_view(row) for row in await session.scalars(query.limit(limit))]
-
-
-async def void_card(session: AsyncSession, actor: PlatformIdentity, card_id: UUID) -> dict:
-    row = await session.scalar(
-        select(PlatformCard).where(PlatformCard.id == card_id).with_for_update()
-    )
-    if row is None:
-        raise not_found()
-    if row.status != "active":
-        raise ServiceError("card_not_active", "Only an unused card can be voided", 409, 2)
-    row.status = "void"
-    await session.flush()
-    audit(session, actor.email, "platform.card.void", "success", str(card_id), {})
-    return card_view(row)
-
-
-async def adjust_balance(
-    session: AsyncSession,
-    actor: PlatformIdentity,
-    org_id: UUID,
-    body: PlatformBalanceAdjust,
-    currency: str,
-) -> dict:
-    try:
-        async with session.begin_nested():
-            row = (
-                await session.execute(
-                    text(
-                        "SELECT * FROM platform_adjust_balance(:org, :mode, CAST(:amount AS numeric), :reason, :actor, :currency)"
-                    ),
-                    {
-                        "org": org_id,
-                        "mode": body.mode,
-                        "amount": body.amount,
-                        "reason": body.reason,
-                        "actor": actor.email,
-                        "currency": currency,
-                    },
-                )
-            ).first()
-    except DBAPIError:
-        raise ServiceError(
-            "currency_mismatch", "The org balance uses another currency", 409, 4
-        ) from None
-    if row is None:
-        raise not_found()
-    data = {
-        "org_id": str(org_id),
-        "mode": body.mode,
-        "delta": float(row.delta),
-        "balance": float(row.balance),
-        "currency": currency,
-    }
-    audit(
-        session,
-        actor.email,
-        "platform.org.balance",
-        "success",
-        str(org_id),
-        {**data, "reason": body.reason, "amount": body.amount},
-    )
-    return data

@@ -2,8 +2,6 @@ import base64
 import binascii
 import json
 import os
-import re
-from decimal import Decimal
 from pathlib import Path
 from typing import Annotated
 
@@ -79,17 +77,12 @@ class Settings(PDFSettings):
     llm_json_mode: str = "json_schema"
     # JSON object merged into every model request, e.g. {"thinking": {"type": "disabled"}}.
     llm_request_options: str | None = None
-    llm_input_usd_per_mtok: float | None = None
-    llm_output_usd_per_mtok: float | None = None
     # Platform operators come from deployment config only, so the app cannot promote anyone.
     platform_admin_emails: str | None = None
     platform_totp_secrets: SecretStr | None = None
     platform_session_seconds: int = 1800
     org_signup_enabled: bool = False
-    # Sale prices, charges, balances and card values are all in this ISO 4217 currency.
-    billing_currency: str = "USD"
-    # Shared model-job guards; retries of the same job consume the same budget.
-    job_max_charge: Decimal = Field(default=Decimal("10"), gt=0, allow_inf_nan=False)
+    # Shared model-job call ceilings; retries of the same job count toward the same ceiling.
     job_max_vendor_calls: int = Field(default=64, ge=1)
     # Per first-pass batch; the call ceiling is the larger of this times the batches and the
     # fixed ceiling above.
@@ -180,14 +173,6 @@ class Settings(PDFSettings):
     def llm_backend(cls, value: str) -> str:
         if value not in {"disabled", "anthropic", "openai"}:
             raise ValueError("llm_provider must be disabled, anthropic or openai")
-        return value
-
-    @field_validator("billing_currency")
-    @classmethod
-    def currency_code(cls, value: str) -> str:
-        value = value.strip().upper()
-        if not re.fullmatch(r"[A-Z]{3}", value):
-            raise ValueError("billing_currency must be a three-letter ISO 4217 code")
         return value
 
     @field_validator("llm_json_mode")

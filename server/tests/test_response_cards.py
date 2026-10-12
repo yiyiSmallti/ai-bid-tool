@@ -145,7 +145,6 @@ class PhaseOneExtraction(FakeLLM):
                 version=self.version,
                 duration_ms=1,
                 tokens=10,
-                usd=0,
                 test_only=True,
             ),
         )
@@ -548,9 +547,12 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
         assert job["status"] == "succeeded"
         assert job["result"]["completion"] == "partial"
         assert job["result"]["cost"] == {
+            "calls": 0,
             "llm_tokens": 0,
             "ocr_pages": 0,
-            "usd": 0.0,
+            "search_requests": 0,
+            "browser_units": 0,
+            "unresolved_calls": 0,
         }
 
         shown_response = await api.get(f"/drafts/{job['result']['draft_id']}", headers=header)

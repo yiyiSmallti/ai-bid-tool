@@ -6,7 +6,7 @@ const id = "00000000-0000-0000-0000-000000000001";
 const secret = "synthetic-only-browser-key";
 const replacement = "synthetic-only-replacement-key";
 const output = resolve(process.env.E2E_OUTPUT ?? "../data/work/platform-credentials-validation/browser");
-const result = (command, data = {}, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: { llm_tokens: 0, ocr_pages: 0, usd: "0" }, duration_ms: 0 });
+const result = (command, data = {}, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: { calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 }, duration_ms: 0 });
 const view = () => ({ id, name: "main", purpose: "catalog_llm", provider: "anthropic", endpoint: "https://api.anthropic.com", revision: 1, secret_version: 1, state: "disabled", fingerprint: "sha256:aaaaaaaaaaaaaaaa", last_four: "-key", created_at: "2026-10-05T00:00:00Z", updated_at: "2026-10-05T00:00:00Z", updated_by: "ops@example.test", consumers: [{ kind: "catalog_model", model_id: "synthetic-model", model_revision: 1, enabled: true, default: true }] });
 
 // Optional built-app fixture keeps this suite executable without an API or preview process.
@@ -104,7 +104,7 @@ test("model selection lists matching active credentials", async ({ page }) => {
   const disabled = { ...active, id: "00000000-0000-0000-0000-000000000002", name: "disabled", state: "disabled" };
   const mismatched = { ...active, id: "00000000-0000-0000-0000-000000000003", name: "other_vendor", provider: "openai", endpoint: "https://other.example.test" };
   await page.route((url) => url.pathname.startsWith("/platform/credentials"), (route) => route.fulfill({ json: result("platform credential list", { next_after_name: null }, [active, disabled, mismatched]) }));
-  await page.route((url) => url.pathname === "/platform/models", (route) => route.fulfill({ json: result("platform model list", { currency: "USD" }, []) }));
+  await page.route((url) => url.pathname === "/platform/models", (route) => route.fulfill({ json: result("platform model list", { }, []) }));
   await page.goto("/app/platform/models");
   await page.getByRole("button", { name: "添加模型" }).click();
   await page.locator("[data-testid=model-credential-select]").click();
@@ -116,11 +116,11 @@ test("model selection lists matching active credentials", async ({ page }) => {
 test("removed credential permits only disabling the unchanged model", async ({ page }) => {
   await page.addInitScript(() => sessionStorage.setItem("bid.platform.session", "synthetic-session"));
   const removed = { ...view(), state: "removed" };
-  let model = { id: "synthetic-model", capability: "llm_extract", provider: "anthropic", model: "synthetic-model", base_url: null, credential: "main", vendor_input_usd_per_mtok: 1, vendor_output_usd_per_mtok: 2, sale_input_per_mtok: 3, sale_output_per_mtok: 4, default: true, enabled: true, reasoning: [], default_reasoning: null, revision: 1, updated_by: "ops@example.test", updated_at: "2026-10-05T00:00:00Z", credential_configured: false };
+  let model = { id: "synthetic-model", capability: "llm_extract", provider: "anthropic", model: "synthetic-model", base_url: null, credential: "main", default: true, enabled: true, reasoning: [], default_reasoning: null, revision: 1, updated_by: "ops@example.test", updated_at: "2026-10-05T00:00:00Z", credential_configured: false };
   let writes = 0;
   await page.route((url) => url.pathname.startsWith("/platform/credentials"), (route) => route.fulfill({ json: result("platform credential list", { next_after_name: null }, [removed]) }));
   await page.route((url) => url.pathname === "/platform/models", async (route) => {
-    if (route.request().method() === "GET") return route.fulfill({ json: result("platform model list", { currency: "USD" }, [model]) });
+    if (route.request().method() === "GET") return route.fulfill({ json: result("platform model list", { }, [model]) });
     const body = route.request().postDataJSON();
     const { revision, updated_by, updated_at, credential_configured, ...original } = model;
     expect(body).toEqual({ ...original, enabled: false, default: false, expected_revision: revision });

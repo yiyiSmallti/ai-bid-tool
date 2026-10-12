@@ -103,8 +103,8 @@ async def test_annotation_candidate_human_review_release_and_invalidation(
         monkeypatch.setattr(app.state.db, "transaction", non_utc_transaction)
         task, card, source, _, target = await seed_annotation(api, app, headers[0], tmp_path)
         preview, body, receipt = await preview_submit(api, headers[0], task, target)
-        assert preview["budget_preflight"]["planned_calls"] == 0
-        assert preview["budget_preflight"]["admission_blocker"] is None
+        assert preview["preflight"]["planned_calls"] == 0
+        assert preview["preflight"]["admission_blocker"] is None
         duplicate = await api.post(f"/v4/tasks/{task}/annotations", headers=headers[0], json=body)
         assert duplicate.json()["data"]["job_id"] == receipt["job_id"]
         assert duplicate.json()["data"]["duplicate"]

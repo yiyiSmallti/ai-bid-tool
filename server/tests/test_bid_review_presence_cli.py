@@ -107,7 +107,7 @@ def test_presence_http_transport_snapshots(monkeypatch, tmp_path, capsys):
         for name, command in commands.items():
             assert name in schemas
             code, value = invoke(["--mode", mode, *command], capsys)
-            assert code == 0
+            assert code == 0, value
             assert "Reviewed exact" not in json.dumps(value)
             actual[f"{mode}: {name}"] = value
     assert len(received) == 6

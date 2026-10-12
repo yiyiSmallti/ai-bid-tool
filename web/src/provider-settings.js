@@ -4,22 +4,18 @@ import { orgRequest } from "./org.js";
 export const providerPath = "/management/providers";
 const configFields = [
   "capability", "source", "platform_model_id", "provider", "model", "base_url",
-  "json_mode", "reasoning", "default_reasoning", "input_usd_per_mtok",
-  "output_usd_per_mtok", "expected_revision",
+  "json_mode", "reasoning", "default_reasoning", "expected_revision",
 ];
 const metadataFields = [
   "id", "org_id", "revision", "configuration", "provider", "model", "catalog_state",
   "credential_state", "updated_by", "updated_at", "revised_at", "revised_by",
-  "reasoning", "default_reasoning", "catalog_revision", "sale_input_per_mtok",
-  "sale_output_per_mtok",
+  "reasoning", "default_reasoning", "catalog_revision",
 ];
 const choiceFields = [
-  "id", "revision", "provider", "model", "sale_input_per_mtok",
-  "sale_output_per_mtok", "default", "reasoning", "default_reasoning",
+  "id", "revision", "provider", "model", "default", "reasoning", "default_reasoning",
 ];
 const settingsFields = [
-  "org_id", "capability", "effective_source", "current", "default_model",
-  "billing_currency", "reasoning", "actions", "connection_status",
+  "org_id", "capability", "effective_source", "current", "default_model", "reasoning", "actions", "connection_status",
 ];
 const levelFields = ["name", "label", "request_options", "effort", "batch_chars"];
 const actionReasons = ["role_required", "human_required", "provider_unavailable"];
@@ -31,7 +27,6 @@ const keys = (value, fields) => object(value) && Object.keys(value).length === f
 const bounded = (value, size) => new TextEncoder().encode(JSON.stringify(value)).length <= size;
 const time = value => typeof value === "string" && Number.isFinite(Date.parse(value)) && /(?:Z|[+-]\d{2}:\d{2})$/.test(value);
 const revision = value => Number.isInteger(value) && value > 0;
-const price = value => value === null || typeof value === "number" && Number.isFinite(value) && value >= 0;
 const model = value => typeof value === "string" && value.length > 0 && value.length <= 100;
 const provider = value => ["anthropic", "openai"].includes(value);
 const levelName = value => typeof value === "string" && /^[a-z0-9_-]{1,20}$/.test(value);
@@ -68,9 +63,8 @@ function editableReasoning(value) {
 
 export function checkModelChoice(value) {
   if (!keys(value, choiceFields) || !validCatalogId(value.id) || !revision(value.revision) ||
-    !provider(value.provider) || !model(value.model) || !price(value.sale_input_per_mtok) ||
-    value.sale_input_per_mtok === null || !price(value.sale_output_per_mtok) ||
-    value.sale_output_per_mtok === null || typeof value.default !== "boolean") invalid();
+    !provider(value.provider) || !model(value.model) ||
+     typeof value.default !== "boolean") invalid();
   choices(value.reasoning, value.default_reasoning);
   return value;
 }
@@ -80,7 +74,6 @@ export function checkProviderMetadata(value, id = null) {
     !provider(value.provider) || !model(value.model) || !validId(value.updated_by) ||
     !time(value.updated_at) || !time(value.revised_at) ||
     !(value.revised_by === null || validId(value.revised_by)) ||
-    !price(value.sale_input_per_mtok) || !price(value.sale_output_per_mtok) ||
     !(value.catalog_revision === null || revision(value.catalog_revision)) ||
     !bounded(value, 1024 * 1024)) invalid();
   const config = value.configuration;
@@ -90,22 +83,21 @@ export function checkProviderMetadata(value, id = null) {
   editableReasoning(config.reasoning);
   if (config.source === "platform") {
     if (!validCatalogId(config.platform_model_id) || config.provider !== null ||
-      config.model !== null || config.base_url !== null || config.input_usd_per_mtok !== null ||
-      config.output_usd_per_mtok !== null || config.default_reasoning !== null ||
+      config.model !== null || config.base_url !== null ||
+      config.default_reasoning !== null ||
       config.reasoning.length || !["enabled", "unavailable"].includes(value.catalog_state) ||
       value.credential_state !== "platform_managed") invalid();
   } else if (config.provider !== value.provider || config.model !== value.model ||
     config.platform_model_id !== null || value.catalog_state !== "not_applicable" ||
     value.credential_state !== "configured" || !safeEndpoint(config.base_url) ||
-    !price(config.input_usd_per_mtok) || !price(config.output_usd_per_mtok) ||
-    value.catalog_revision !== null || value.sale_input_per_mtok !== null || value.sale_output_per_mtok !== null) invalid();
+    value.catalog_revision !== null) invalid();
   choices(value.reasoning, value.default_reasoning);
   return value;
 }
 export function checkProviderSettings(value) {
   if (!keys(value, settingsFields) || value.org_id !== orgSession.get()?.orgId ||
     value.capability !== "llm_extract" || value.connection_status !== "not_checked" ||
-    !/^[A-Z]{3}$/.test(value.billing_currency) || !Array.isArray(value.actions) ||
+    !Array.isArray(value.actions) ||
     value.actions.length > 16 || !bounded(value, 1024 * 1024)) invalid();
   if (value.current !== null) checkProviderMetadata(value.current);
   if (value.default_model !== null) checkModelChoice(value.default_model);
@@ -134,7 +126,6 @@ export function checkProviderPage(response, kind) {
 export const blankProvider = () => ({
   source: "platform", platform_model_id: "", provider: "openai", model: "", base_url: "",
   json_mode: "json_schema", reasoning: [], default_reasoning: null,
-  input_usd_per_mtok: null, output_usd_per_mtok: null,
 });
 // Construct an input from named editable fields. Never spread a read projection.
 export function providerInput(form, expectedRevision) {
@@ -150,8 +141,6 @@ export function providerInput(form, expectedRevision) {
       effort: level.effort || null, batch_chars: level.batch_chars,
     })),
     default_reasoning: form.default_reasoning,
-    input_usd_per_mtok: form.input_usd_per_mtok === "" ? null : form.input_usd_per_mtok,
-    output_usd_per_mtok: form.output_usd_per_mtok === "" ? null : form.output_usd_per_mtok,
     expected_revision: expectedRevision,
   };
 }
@@ -175,7 +164,7 @@ export function providerReader() {
     const controller = new AbortController();
     channels.set(channel, controller);
     return new Promise((resolve, reject) => {
-      pending.push({ controller, resolve, reject, execute: () => orgRequest(method, path, body, { signal: controller.signal, contractVersion: 4 }) });
+      pending.push({ controller, resolve, reject, execute: () => orgRequest(method, path, body, { signal: controller.signal}) });
       pump();
     });
   }
@@ -193,7 +182,7 @@ export function providerError(error) {
     provider_key_required: "首次设置或更换供应商、端点需要输入新密钥。",
     forbidden: "当前身份无权维护配置。", human_required: "需要单位管理员本人登录。",
     invalid_input: "配置参数无效，请核对非密钥字段并重新输入新密钥。",
-    provider_unavailable: "模型服务不可用。", insufficient_balance: "余额不足，请充值后重新预检。",
+    provider_unavailable: "模型服务不可用。",
     management_cursor_invalid: "分页已失效，请从第一页读取。",
     management_cursor_expired: "分页已过期，请从第一页读取。",
     invalid_response: "模型元数据范围不符合契约。",

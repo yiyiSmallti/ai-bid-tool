@@ -2,15 +2,12 @@
   "local: review list": {
     "command": "review list",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "next_cursor": null,
@@ -43,15 +40,12 @@
   "local: review outbound authorize": {
     "command": "review outbound authorize",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "allow_external": true,
@@ -91,15 +85,12 @@
   "local: review outbound list": {
     "command": "review outbound list",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "next_cursor": null,
@@ -144,15 +135,12 @@
   "local: review outbound revoke": {
     "command": "review outbound revoke",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "allow_external": false,
@@ -192,15 +180,12 @@
   "local: review run": {
     "command": "review run",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "cached": false,
@@ -215,19 +200,24 @@
   "local: review run --dry-run": {
     "command": "review run",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "admission_blockers": [],
-      "budget": {
+      "dry_run": true,
+      "expires_at": "2026-10-08T00:15:00Z",
+      "external_price_pages": false,
+      "input": {
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "submission_id": "00000000-0000-4000-8000-000000000002",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      },
+      "preflight": {
         "admission_blocker": null,
         "as_of": "2026-10-08T00:00:00Z",
         "cached_job_id": null,
@@ -236,34 +226,21 @@
         "dry_run": true,
         "duration_basis": "unknown",
         "estimate": {
-          "basis": "zero",
-          "billing_currency": "USD",
-          "charge": "0",
+          "browser_units": 0,
+          "calls": 0,
           "llm_tokens": 0,
           "ocr_pages": 0,
-          "task_amount": "0",
-          "unpriced_calls": 0,
-          "unresolved_calls": 0,
-          "usd": 0.0
+          "search_requests": 0,
+          "unresolved_calls": 0
         },
         "estimated_duration_ms": null,
-        "first_pass_fits": true,
         "full_run_guaranteed": false,
         "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "maximum_calls": 1,
         "next_call": null,
         "planned_calls": 1,
-        "task_budget": null,
         "task_id": "00000000-0000-4000-8000-000000000001",
         "uncertainty": []
-      },
-      "dry_run": true,
-      "expires_at": "2026-10-08T00:15:00Z",
-      "external_price_pages": false,
-      "input": {
-        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "submission_id": "00000000-0000-4000-8000-000000000002",
-        "task_id": "00000000-0000-4000-8000-000000000001"
       },
       "preflight_token": "synthetic-review-receipt",
       "preflight_ttl_seconds": 900,
@@ -277,15 +254,12 @@
   "local: review run --wait": {
     "command": "review run",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "completion": "complete",
@@ -306,15 +280,12 @@
   "local: review run --wait partial": {
     "command": "review run",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "completion": "partial",
@@ -337,15 +308,12 @@
   "local: review show": {
     "command": "review show",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "next_cursor": null,
@@ -378,15 +346,12 @@
   "local: review show partial": {
     "command": "review show",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "next_cursor": null,
@@ -419,15 +384,12 @@
   "remote: review list": {
     "command": "review list",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "next_cursor": null,
@@ -460,15 +422,12 @@
   "remote: review outbound authorize": {
     "command": "review outbound authorize",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "allow_external": true,
@@ -508,15 +467,12 @@
   "remote: review outbound list": {
     "command": "review outbound list",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "next_cursor": null,
@@ -561,15 +517,12 @@
   "remote: review outbound revoke": {
     "command": "review outbound revoke",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "allow_external": false,
@@ -609,15 +562,12 @@
   "remote: review run": {
     "command": "review run",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "cached": false,
@@ -632,19 +582,24 @@
   "remote: review run --dry-run": {
     "command": "review run",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "admission_blockers": [],
-      "budget": {
+      "dry_run": true,
+      "expires_at": "2026-10-08T00:15:00Z",
+      "external_price_pages": false,
+      "input": {
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "submission_id": "00000000-0000-4000-8000-000000000002",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      },
+      "preflight": {
         "admission_blocker": null,
         "as_of": "2026-10-08T00:00:00Z",
         "cached_job_id": null,
@@ -653,34 +608,21 @@
         "dry_run": true,
         "duration_basis": "unknown",
         "estimate": {
-          "basis": "zero",
-          "billing_currency": "USD",
-          "charge": "0",
+          "browser_units": 0,
+          "calls": 0,
           "llm_tokens": 0,
           "ocr_pages": 0,
-          "task_amount": "0",
-          "unpriced_calls": 0,
-          "unresolved_calls": 0,
-          "usd": 0.0
+          "search_requests": 0,
+          "unresolved_calls": 0
         },
         "estimated_duration_ms": null,
-        "first_pass_fits": true,
         "full_run_guaranteed": false,
         "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "maximum_calls": 1,
         "next_call": null,
         "planned_calls": 1,
-        "task_budget": null,
         "task_id": "00000000-0000-4000-8000-000000000001",
         "uncertainty": []
-      },
-      "dry_run": true,
-      "expires_at": "2026-10-08T00:15:00Z",
-      "external_price_pages": false,
-      "input": {
-        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "submission_id": "00000000-0000-4000-8000-000000000002",
-        "task_id": "00000000-0000-4000-8000-000000000001"
       },
       "preflight_token": "synthetic-review-receipt",
       "preflight_ttl_seconds": 900,
@@ -694,15 +636,12 @@
   "remote: review run --wait": {
     "command": "review run",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "completion": "complete",
@@ -723,15 +662,12 @@
   "remote: review run --wait partial": {
     "command": "review run",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "completion": "partial",
@@ -754,15 +690,12 @@
   "remote: review show": {
     "command": "review show",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "next_cursor": null,
@@ -795,15 +728,12 @@
   "remote: review show partial": {
     "command": "review show",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "next_cursor": null,

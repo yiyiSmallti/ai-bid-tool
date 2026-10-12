@@ -10,10 +10,10 @@ const hash = "a".repeat(64), now = "2026-10-08T00:00:00Z";
 // Metadata-free JPEG generated locally by PyMuPDF. All fixture content is synthetic.
 const jpeg = Buffer.from("/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCgr/2wBDAQICAgICAgUDAwUKBwYHCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgr/wgARCAAgABgDAREAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAj/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAG/gAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAw/9oACAEBAAEFAk//xAAUEQEAAAAAAAAAAAAAAAAAAAAw/9oACAEDAQE/AU//xAAUEQEAAAAAAAAAAAAAAAAAAAAw/9oACAECAQE/AU//xAAUEAEAAAAAAAAAAAAAAAAAAAAw/9oACAEBAAY/Ak//xAAUEAEAAAAAAAAAAAAAAAAAAAAw/9oACAEBAAE/IU//2gAMAwEAAgADAAAAEAAAAAAP/8QAFBEBAAAAAAAAAAAAAAAAAAAAMP/aAAgBAwEBPxBP/8QAFBEBAAAAAAAAAAAAAAAAAAAAMP/aAAgBAgEBPxBP/8QAFBABAAAAAAAAAAAAAAAAAAAAMP/aAAgBAQABPxBP/9k=", "base64");
 const jpegHash = createHash("sha256").update(jpeg).digest("hex");
-const zero = { llm_tokens: 0, ocr_pages: 0, usd: 0, basis: "zero", charge: "0", billing_currency: "USD", task_amount: "0", unpriced_calls: 0, unresolved_calls: 0 };
+const zero = { calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 };
 const result = (command, data = {}, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: zero, duration_ms: 0 });
-const configured = () => ({ expected_revision: null, revision: 1, account_id: "b".repeat(32), gateway_id: "synthetic-clef", enabled: true, price_revision: 1, fixed_sale_price: "0.05", currency: "USD", platform_model_id: "bid-review-clef", workers_credential_id: ids.workers, gateway_credential_id: ids.gateway, workers_credential_revision: 1, gateway_credential_revision: 1, gateway_check: null, updated_at: now });
-const hardened = () => ({ gateway_id: "synthetic-clef", authentication: true, collect_logs: false, logpush: false, cache_ttl: 0, gateway_retries: false, rate_limit_requests: 200, rate_limit_seconds: 60, workers_ai_billing_mode: "unified", checked_at: now });
+const configured = () => ({ expected_revision: null, revision: 1, account_id: "b".repeat(32), gateway_id: "synthetic-clef", enabled: true, platform_model_id: "bid-review-clef", workers_credential_id: ids.workers, gateway_credential_id: ids.gateway, workers_credential_revision: 1, gateway_credential_revision: 1, gateway_check: null, updated_at: now });
+const hardened = () => ({ gateway_id: "synthetic-clef", authentication: true, collect_logs: false, logpush: false, cache_ttl: 0, gateway_retries: false, rate_limit_requests: 200, rate_limit_seconds: 60, checked_at: now });
 const reportSections = [["overall", "一、总体结论"], ["basic_information", "二、基本信息"], ["compliance", "三、废标判定"], ["signatures", "签章校验"], ["risks", "四、高风险缺陷"], ["scores", "五、得分预估"], ["evidence", "六、证据核对"], ["remediation", "七、补救清单"], ["methodology", "八、检验说明"]].map(([key, title]) => ({ key, title }));
 
 async function fixture(page, options = {}) {
@@ -29,10 +29,10 @@ async function fixture(page, options = {}) {
   }, { org: ids.org, platform: state.platform });
   const image = () => ({ id: ids.image, page_id: ids.page, page: 1, document_id: ids.bid, sha256: jpegHash, source_sha256: hash, width_px: 24, height_px: 32, size_bytes: jpeg.length, blur: { method: "gaussian", radius: 32 }, privacy_receipt_sha256: hash });
   const presence = () => ({ submission_id: ids.submission, source_review_id: state.prepared ? (state.newPreparation ? ids.triaged : ids.review) : null, manifest_sha256: state.prepared ? hash : null, expected_revision: state.revision + 1, expected_authorization_id: state.revision ? ids.grant : null, images: state.prepared ? [image()] : [], blockers: [], authorization_id: state.authorized ? ids.grant : null, current: state.authorized && !state.newPreparation, revocable_authorization: state.authorized ? { id: ids.grant, revision: state.revision, manifest_sha256: hash, image_ids: [ids.image], allow_external: true, purpose: "bid_review_presence" } : null, purpose: "bid_review_presence" });
-  const coverage = triaged => ({ clef: !triaged ? "unavailable" : !state.runEnabled ? "disabled" : state.unavailable ? "unavailable" : "triaged", clef_calls: triaged && state.runEnabled && !state.unavailable ? 1 : 0, clef_cost: triaged && state.runEnabled && !state.unavailable ? "0.05" : "0", clef_unvalidated_cases: ["faint", "greyscale", "partial", "wrong_company", "required_position", "seam"] });
+  const coverage = triaged => ({ clef: !triaged ? "unavailable" : !state.runEnabled ? "disabled" : state.unavailable ? "unavailable" : "triaged", clef_calls: triaged && state.runEnabled && !state.unavailable ? 1 : 0, clef_unvalidated_cases: ["faint", "greyscale", "partial", "wrong_company", "required_position", "seam"] });
   const run = id => ({ id, task_id: ids.task, submission_id: ids.submission, job_id: ids.job, status: "succeeded", completion: "partial", input_hash: hash, created_at: now, coverage: coverage(id === ids.triaged), uncovered_codes: ["signing_presence_unchecked"], advisory_only: true, validity: "current", review_slice: "compliance" });
   await page.route("**/*", async route => {
-    const req = route.request(), url = new URL(req.url()), path = url.pathname.replace(/^\/v4(?=\/)/, ""), method = req.method();
+    const req = route.request(), url = new URL(req.url()), path = url.pathname, method = req.method();
     if (url.origin !== origin) { state.unexpected.push(`${method} external-origin`); return route.abort(); }
     if (path.startsWith("/app/")) {
       const file = path.startsWith("/app/assets/") ? join(directory, "assets", basename(path)) : join(directory, "index.html");
@@ -47,7 +47,7 @@ async function fixture(page, options = {}) {
         response = result("platform credential list", { next_after_name: null }, [{ id: purpose === "clef_workers_ai" ? ids.workers : ids.gateway, name: purpose === "clef_workers_ai" ? "synthetic-workers" : "synthetic-gateway", purpose, provider: "cloudflare", state: "active", revision: 1 }]);
       } else if (path === "/platform/clef" && method === "GET") response = result("platform clef show", { config: state.config, blockers: state.config.gateway_check ? [] : ["clef_gateway_not_checked"] });
       else if (path === "/platform/clef" && method === "PUT") {
-        const body = req.postDataJSON(); expect(body).toEqual({ expected_revision: 1, account_id: "b".repeat(32), gateway_id: "synthetic-clef", enabled: true, price_revision: 2, fixed_sale_price: "0.07", currency: "USD", workers_credential_id: ids.workers, gateway_credential_id: ids.gateway });
+        const body = req.postDataJSON(); expect(body).toEqual({ expected_revision: 1, account_id: "b".repeat(32), gateway_id: "synthetic-clef", enabled: true, workers_credential_id: ids.workers, gateway_credential_id: ids.gateway });
         state.writes.push({ path, body }); state.config = { ...state.config, ...body, revision: 2, gateway_check: null }; response = result("platform clef set", { config: state.config, blockers: ["clef_gateway_not_checked"] });
       } else if (path === "/platform/clef/check" && method === "POST") {
         const body = req.postDataJSON(); expect(body).toEqual({ expected_revision: 2 }); state.writes.push({ path, body }); state.config.gateway_check = hardened(); response = result("platform clef check", { config: state.config, blockers: [] });
@@ -65,7 +65,7 @@ async function fixture(page, options = {}) {
         const body = req.postDataJSON(); expect(body.submission_id).toBe(ids.submission); expect(body.scope).toBe("uploaded_bid"); expect(body.review_slice).toBe("compliance"); expect(typeof body.clef_enabled).toBe("boolean");
         if (body.dry_run) {
           state.previews.push(body); const asOf = new Date(); const available = body.clef_enabled && state.authorized && !state.unavailable;
-          response = result("review run", { dry_run: true, input: { task_id: ids.task, submission_id: ids.submission, input_hash: hash, clef: { enabled: body.clef_enabled, available, blockers: body.clef_enabled && !available ? ["clef_presence_unavailable"] : [], planned_calls: available ? 1 : 0, fixed_sale_price: "0.05", currency: "USD", price_revision: "1", binding_sha256: hash, authorization_id: state.authorized ? ids.grant : null } }, expires_at: new Date(asOf.getTime() + 900000).toISOString(), preflight_token: "synthetic-clef-preflight", admission_blockers: [], uncovered_codes: available ? [] : ["signing_presence_unchecked"], budget: { planned_calls: available ? 2 : 1, input_hash: hash, estimate: { ...zero, charge: available ? "0.05" : "0" } } });
+          response = result("review run", { dry_run: true, input: { task_id: ids.task, submission_id: ids.submission, input_hash: hash, clef: { enabled: body.clef_enabled, available, blockers: body.clef_enabled && !available ? ["clef_presence_unavailable"] : [], planned_calls: available ? 1 : 0, binding_sha256: hash, authorization_id: state.authorized ? ids.grant : null } }, expires_at: new Date(asOf.getTime() + 900000).toISOString(), preflight_token: "synthetic-clef-preflight", admission_blockers: [], uncovered_codes: available ? [] : ["signing_presence_unchecked"], preflight: { planned_calls: available ? 2 : 1, input_hash: hash, estimate: { ...zero, } } });
         } else {
           expect(body.clef_enabled).toBe(state.previews.at(-1).clef_enabled); expect(body.preflight_token).toBe("synthetic-clef-preflight"); expect(body.expected_input_hash).toBe(hash); expect(body.request_id).toBe(state.previews.at(-1).request_id);
           state.writes.push({ path, body }); state.submitted = true; state.runEnabled = body.clef_enabled; response = result("review run", { job_id: ids.job, status: "queued", cached: false });
@@ -74,7 +74,7 @@ async function fixture(page, options = {}) {
       else if (path === `/bid-reviews/${ids.triaged}/reports` && method === "GET") response = result("review report list", { review_id: ids.triaged, task_id: ids.task, next_cursor: null }, []);
       else if (path === `/bid-reviews/${ids.triaged}/report` && method === "GET") {
         const section = url.searchParams.get("section"); expect(reportSections.map(row => row.key)).toContain(section); expect(url.searchParams.get("limit")).toBe("50");
-        const rows = section === "signatures" ? [{ kind: "signing_requirement", requirement: { applicability: "applies", mark_types: ["company_seal"], required_locations: [{ page: 1, status: "triage_absent", probability_yes: 0.03, presence_probabilities: { company_seal: 0.03, signature: 0.01 }, needs_human_confirmation: true }] } }, { kind: "notice", label: "Clef 初筛", text: "完成 1 次调用；固定调用费用 0.05 USD；需人工确认。" }] : section === "methodology" ? [{ kind: "notice", label: "Clef 验证范围", text: "浅色、灰度、部分印章、错误单位、指定位置及骑缝章尚未验证。返回 tokens 仅作遥测，使用固定每次调用售价。" }] : [{ kind: "notice", label: "辅助审查", text: "签章初筛结果须由人工确认。" }];
+        const rows = section === "signatures" ? [{ kind: "signing_requirement", requirement: { applicability: "applies", mark_types: ["company_seal"], required_locations: [{ page: 1, status: "triage_absent", probability_yes: 0.03, presence_probabilities: { company_seal: 0.03, signature: 0.01 }, needs_human_confirmation: true }] } }, { kind: "notice", label: "Clef 初筛", text: "完成 1 次调用；记录 1 次调用；需人工确认。" }] : section === "methodology" ? [{ kind: "notice", label: "Clef 验证范围", text: "浅色、灰度、部分印章、错误单位、指定位置及骑缝章尚未验证。返回 tokens 作为资源用量。" }] : [{ kind: "notice", label: "辅助审查", text: "签章初筛结果须由人工确认。" }];
         response = result("review report", { task_id: ids.task, review_id: ids.triaged, section, snapshot_id: null, input_hash: hash, report_input_hash: hash, decisions_snapshot_sha256: hash, current_decisions_snapshot_sha256: hash, projection: "protected", completion: "partial", sections: reportSections, advisory_statement: "评标委员会决定最终评审结果；本报告仅供辅助审查。", next_cursor: null, artifacts: [] }, rows);
       }
       else if ([`/bid-reviews/${ids.review}/findings`, `/bid-reviews/${ids.triaged}/findings`].includes(path) && method === "GET") response = result("review findings", { review_id: path.split("/")[2], input_hash: hash, validity: "current", next_cursor: null }, []);
@@ -88,7 +88,7 @@ async function fixture(page, options = {}) {
         const body = req.postDataJSON(); expect(body.expected_revision).toBe(state.revision + 1); expect(body.expected_authorization_id).toBe(state.revision ? ids.grant : null); expect(body.manifest_sha256).toBe(hash); expect(body.image_ids).toEqual([ids.image]); expect(body.privacy_reviewed).toBe(true); expect(body.reason).toBeTruthy(); expect(body).not.toHaveProperty("images");
         state.writes.push({ path, body }); state.authorized = body.allow_external; state.revision++; response = result("review presence authorize", { id: ids.grant, revision: state.revision, manifest_sha256: hash, image_ids: [ids.image], allow_external: body.allow_external, purpose: "bid_review_presence" });
       }
-      if (path.includes("bid-submissions") || path.includes("bid-reviews") || path.includes("bid-presence-images") || path.includes("/jobs/")) expect(url.pathname.startsWith("/v4/")).toBe(true);
+      if (path.includes("bid-submissions") || path.includes("bid-reviews") || path.includes("bid-presence-images") || path.includes("/jobs/")) expect(url.pathname.startsWith("/")).toBe(true);
     }
     if (!response) { state.unexpected.push(`${method} ${path}`); return route.abort(); }
     state.reads.push(`${method} ${path}`); return route.fulfill({ json: response });
@@ -115,20 +115,19 @@ async function authorize(page) {
   await expect(page.getByText("图片授权有效", { exact: true })).toBeVisible();
 }
 
-test("platform config pins fixed call price and independently checks gateway hardening", async ({ page }) => {
+test("platform config pins call configuration and independently checks gateway hardening", async ({ page }) => {
   const state = await fixture(page, { platform: true }); await page.goto("/app/platform/clef");
   await expect(page.getByRole("heading", { name: "Clef 初筛配置", exact: true })).toBeVisible();
-  await page.getByLabel("固定每次调用售价（USD）", { exact: true }).fill("0.07"); await page.getByRole("spinbutton", { name: "价格版本", exact: true }).fill("2");
   await page.getByRole("button", { name: "保存 Clef 配置", exact: true }).click(); await expect(page.getByText("Clef 配置已保存，请运行网关安全检查。", { exact: true })).toBeVisible();
   await expect(page.getByTestId("clef-gateway-check")).toHaveCount(0); await page.getByRole("button", { name: "检查 Clef 网关", exact: true }).click();
-  await expect(page.getByTestId("clef-gateway-check")).toContainText("200 次 / 60 秒"); await expect(page.getByTestId("clef-gateway-check")).toContainText("0.07 USD"); expect(state.writes).toHaveLength(2); await artifact(page, state, "01-platform-hardening");
+  await expect(page.getByTestId("clef-gateway-check")).toContainText("200 次 / 60 秒"); expect(state.writes).toHaveLength(2); await artifact(page, state, "01-platform-hardening");
 });
 
 test("human reviews exact derivative, default-on preview includes fixed quote, triage miss stays human", async ({ page }) => {
   const state = await fixture(page); await openImages(page); await authorize(page);
   await expect(page.getByRole("checkbox", { name: "使用 Clef 初筛（默认开启）", exact: true })).toBeChecked();
-  await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await expect(page.getByTestId("clef-preview")).toContainText("计划 1 次图片调用"); await expect(page.getByTestId("clef-preview")).toContainText("0.05 USD"); expect(state.previews[0].clef_enabled).toBe(true);
-  await page.getByText("确认费用与已授权文本，提交检验运行", { exact: true }).click(); await page.getByRole("button", { name: "提交检验运行", exact: true }).click();
+  await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await expect(page.getByTestId("clef-preview")).toContainText("计划 1 次图片调用"); expect(state.previews[0].clef_enabled).toBe(true);
+  await page.getByText("确认已授权文本与配置，提交检验运行", { exact: true }).click(); await page.getByRole("button", { name: "提交检验运行", exact: true }).click();
   await expect(page.getByTestId("signing-location")).toContainText("初筛未发现"); await expect(page.getByTestId("signing-location")).toContainText("存在概率 3.0%"); await expect(page.getByTestId("signing-location")).toContainText("需人工确认"); await expect(page.getByTestId("signing-location")).toContainText("须升级人工核对");
   await expect(page.getByTestId("clef-coverage")).toContainText("已完成初筛"); expect(state.writes.find(row => row.body.dry_run === false).body.clef_enabled).toBe(true);
   const saved = await page.evaluate(() => JSON.stringify({ ...sessionStorage, ...localStorage })); expect(saved).not.toContain("synthetic-clef-preflight"); expect(saved).not.toContain(jpegHash); await artifact(page, state, "02-authorized-triage");
@@ -139,14 +138,14 @@ test("opt-out invalidates preflight and stays disabled through submission", asyn
   await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await expect(page.getByTestId("review-preview")).toBeVisible();
   await page.locator(".el-checkbox").filter({ hasText: "使用 Clef 初筛（默认开启）" }).click(); await expect(page.getByRole("checkbox", { name: "使用 Clef 初筛（默认开启）", exact: true })).not.toBeChecked(); await expect(page.getByTestId("review-preview")).toHaveCount(0);
   await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await expect(page.getByTestId("clef-preview")).toContainText("本次已关闭"); await expect(page.getByTestId("clef-preview")).toContainText("计划 0 次图片调用");
-  await page.getByText("确认费用与已授权文本，提交检验运行", { exact: true }).click(); await page.getByRole("button", { name: "提交检验运行", exact: true }).click();
+  await page.getByText("确认已授权文本与配置，提交检验运行", { exact: true }).click(); await page.getByRole("button", { name: "提交检验运行", exact: true }).click();
   await expect(page.getByTestId("clef-coverage")).toContainText("本次已关闭"); expect(state.runEnabled).toBe(false); await artifact(page, state, "03-opt-out");
 });
 
 test("unavailable Clef preserves visible coverage and allows text review", async ({ page }) => {
   const state = await fixture(page, { unavailable: true }); await page.goto(`/app/org/tasks/${ids.task}/bid-submissions/${ids.submission}`);
   await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await expect(page.getByTestId("clef-preview")).toContainText("不可用，继续文本检验");
-  await page.getByText("确认费用与已授权文本，提交检验运行", { exact: true }).click(); await expect(page.getByRole("button", { name: "提交检验运行", exact: true })).toBeEnabled(); await page.getByRole("button", { name: "提交检验运行", exact: true }).click(); await expect(page.getByTestId("clef-coverage")).toContainText("不可用"); await artifact(page, state, "04-unavailable-coverage");
+  await page.getByText("确认已授权文本与配置，提交检验运行", { exact: true }).click(); await expect(page.getByRole("button", { name: "提交检验运行", exact: true })).toBeEnabled(); await page.getByRole("button", { name: "提交检验运行", exact: true }).click(); await expect(page.getByTestId("clef-coverage")).toContainText("不可用"); await artifact(page, state, "04-unavailable-coverage");
 });
 
 test("image authorization revocation invalidates run preflight and changed bytes never render", async ({ page }) => {
@@ -181,9 +180,9 @@ test("admin contributor can run review but cannot authorize presence images", as
   await artifact(page, state, "09-contributor-gate");
 });
 
-test("report preserves triage probabilities, manual escalation, fixed charge and unvalidated cases", async ({ page }) => {
+test("report preserves triage probabilities, manual escalation, usage counts and unvalidated cases", async ({ page }) => {
   const state = await fixture(page, { submitted: true, authorized: true, prepared: true }); await page.goto(`/app/org/tasks/${ids.task}/bid-reviews/${ids.triaged}/report`);
   const signatures = page.getByTestId("report-section-signatures"); await signatures.getByRole("button", { name: "查看本节", exact: true }).click();
-  await expect(signatures).toContainText("初筛未发现"); await expect(signatures).toContainText("存在概率 3.0%"); await expect(signatures).toContainText("需人工确认"); await expect(signatures).toContainText("固定调用费用 0.05 USD");
-  const methodology = page.getByTestId("report-section-methodology"); await methodology.getByRole("button", { name: "查看本节", exact: true }).click(); await expect(methodology).toContainText("浅色、灰度、部分印章、错误单位、指定位置及骑缝章尚未验证"); await expect(methodology).toContainText("返回 tokens 仅作遥测"); await artifact(page, state, "07-report-triage");
+  await expect(signatures).toContainText("初筛未发现"); await expect(signatures).toContainText("存在概率 3.0%"); await expect(signatures).toContainText("需人工确认"); await expect(signatures).toContainText("记录 1 次调用");
+  const methodology = page.getByTestId("report-section-methodology"); await methodology.getByRole("button", { name: "查看本节", exact: true }).click(); await expect(methodology).toContainText("浅色、灰度、部分印章、错误单位、指定位置及骑缝章尚未验证"); await expect(methodology).toContainText("返回 tokens 作为资源用量"); await artifact(page, state, "07-report-triage");
 });

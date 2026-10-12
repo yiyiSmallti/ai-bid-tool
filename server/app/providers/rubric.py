@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from decimal import Decimal
 from typing import TYPE_CHECKING, cast
 
 import httpx
@@ -12,9 +11,9 @@ import httpx
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.calls import current_accounting, plan_calls
 from app.providers.structured import json_call, json_request, strict_schema
-from app.schemas.budget_contracts import BudgetCallQuote
 from app.schemas.check_contracts import AssessmentFailure, OutboundContext
 from app.schemas.contracts import Contract, ProviderUsage
+from app.schemas.preflight_contracts import CallPlan
 from app.schemas.score_contracts import (
     RubricAnsweredBatch,
     RubricItemsRequest,
@@ -81,7 +80,7 @@ ITEMS_WIRE_SCHEMA = strict_schema(RubricItemsWireOutput)
 
 
 def request_body(llm: HTTPExtractor, request: RubricProviderRequest) -> dict:
-    """Build the exact stage-specific body shared by reservation and transport."""
+    """Build the exact stage-specific body shared by call planning and transport."""
     if isinstance(request, RubricItemsRequest):
         return json_request(
             llm,
@@ -144,9 +143,6 @@ class HTTPRubricProvider:
 
     def request_body(self, request: RubricProviderRequest) -> dict:
         return request_body(self.llm, request)
-
-    def reservation(self, request: RubricProviderRequest) -> Decimal:
-        return self.llm.reservation(self.request_body(request))
 
     @staticmethod
     def _validate_refs(request: RubricProviderRequest) -> None:
@@ -213,7 +209,7 @@ class HTTPRubricProvider:
             groups.append(subset(indexes))
         return groups
 
-    def preview_quotes(self, request: RubricProviderRequest) -> list[BudgetCallQuote]:
+    def preview_quotes(self, request: RubricProviderRequest) -> list[CallPlan]:
         """Read-only first-pass bounds; stage-two quotes are not dispatchable requests."""
         body = self.validate_request(request)
         groups = self.item_groups(request)
@@ -228,16 +224,6 @@ class HTTPRubricProvider:
             )
             for _ in groups
         ]
-
-    def preview_bounds(self, request: RubricProviderRequest) -> tuple[int, int, Decimal, Decimal]:
-        """Use the same per-call prices and rounding as the shared budget preview."""
-        quotes = self.preview_quotes(request)
-        return (
-            sum(quote.input_tokens_upper_bound for quote in quotes),
-            sum(quote.output_tokens_upper_bound for quote in quotes),
-            sum((quote.reserved_charge for quote in quotes), Decimal(0)),
-            quotes[0].reserved_charge,
-        )
 
     async def _call[T: Contract](
         self, client: httpx.AsyncClient, request: RubricProviderRequest, wire_type: type[T]
@@ -354,7 +340,7 @@ class HTTPRubricProvider:
             if isinstance(result, BaseException):
                 raise result
         # Report the admission/transport stop even if an earlier completed batch
-        # was malformed; its hard budget or attempt fence must stay explicit.
+        # was malformed; its call ceiling or attempt fence must stay explicit.
         primary_failures = stopping_failures or failures
         return RubricProviderResult(
             batches=[answered[index] for index in sorted(answered)],

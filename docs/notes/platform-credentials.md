@@ -37,9 +37,11 @@ online ciphertext and permanently retains the name as a tombstone.
 
 Catalog jobs pin model identity and revision, while search pins a service credential UUID.
 Adapters store references and resolve again immediately before every outbound attempt,
-including retries. Admission waits do not extend the lifetime of a prior key decision.
-A rejected credential before transport starts closes the unsent reservation. Completed
-result caches do not issue requests. No key, ciphertext or availability decision is cached
+including retries.
+Admission waits do not extend the lifetime of a prior key decision.
+Completed
+result caches do not issue requests.
+No key, ciphertext or availability decision is cached
 between calls, and failures never select an environment key or another provider.
 
 Import preflight is read-only. The trusted service compares the actual decrypted key;
@@ -65,8 +67,8 @@ The trusted maintenance caller verifies plaintext equivalence before invoking it
 
 ## Pitfalls
 
-- A metadata probe proves authentication only, not generation, balance or model access.
-  Unsupported means that no safe probe is implemented; it is never reported as passed.
+- A metadata probe proves authentication only, not generation or model access.
+- Unsupported means that no safe probe is implemented; it is never reported as passed.
 - A call already resolved and sent may complete after disable/remove. Emergency
   revocation also requires the vendor to revoke the old key.
 - A removed service may be replaced under a new name and UUID. Old queued jobs must be

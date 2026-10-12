@@ -27,11 +27,8 @@ from app.schemas.org_signup import (
     OrgApplicationReject,
 )
 from app.schemas.platform_contracts import (
-    CardRedeem,
     OrgLookup,
     PasswordSetup,
-    PlatformBalanceAdjust,
-    PlatformCardCreate,
     PlatformLogin,
     PlatformModelSet,
     PlatformOrgCreate,
@@ -64,10 +61,9 @@ from bid_cli.assessments import app as assessment_app
 from bid_cli.attachments import COMMAND_INPUTS as ATTACHMENT_COMMANDS
 from bid_cli.attachments import register as register_attachment_commands
 from bid_cli.bid_review import app as review_app
-from bid_cli.budget import register as register_budget_commands
 from bid_cli.check import app as check_app
 from bid_cli.check import check_job_exit
-from bid_cli.client import Client, State, new_output_path, save_download
+from bid_cli.client import Client, State
 from bid_cli.confidential import register as register_confidential_commands
 from bid_cli.export import app as export_app
 from bid_cli.management_bindings import register as register_management_binding_commands
@@ -144,7 +140,7 @@ JsonOption = Annotated[
     bool, typer.Option("--json", help="Emit the versioned machine-readable result")
 ]
 runtime: Client | None = None
-output_contract_version = "4.0"
+output_contract_version = "5.0"
 started = 0.0
 
 
@@ -158,12 +154,12 @@ def configure(
     mode: Annotated[str, typer.Option()] = "remote",
     server: Annotated[str, typer.Option()] = "http://127.0.0.1:8000",
     state: Annotated[Path, typer.Option()] = Path("data/cli-session.enc"),
-    contract_version: Annotated[str, typer.Option(help="4.0 or legacy 3.0")] = "4.0",
+    contract_version: Annotated[str, typer.Option(help="5.0")] = "5.0",
 ):
     global runtime, output_contract_version
     output_contract_version = contract_version
-    if contract_version not in {"3.0", "4.0"}:
-        raise ServiceError("invalid_input", "Contract version must be 3.0 or 4.0", 400, 2)
+    if contract_version not in {"5.0"}:
+        raise ServiceError("invalid_input", "Only contract 5.0 is supported", 400, 2)
     runtime = Client(mode, server, State(state))
     runtime.contract_version = contract_version
 
@@ -197,15 +193,8 @@ def emit(body: dict, command: str, as_json: bool, exit_code: int = 0):
             job_id=body["data"].get("job_id"),
         ).model_dump(mode="json")
     value = Result.model_validate(body)
-    from app.schemas.compatibility import legacy_projection
-
-    legacy = output_contract_version == "3.0"
     if as_json:
-        typer.echo(
-            json.dumps(legacy_projection(value.model_dump(mode="json")), ensure_ascii=False)
-            if legacy
-            else value.model_dump_json()
-        )
+        typer.echo(value.model_dump_json())
     elif value.ok:
         typer.echo(
             json.dumps(
@@ -271,22 +260,10 @@ def task_create(
     tender: Annotated[Path | None, typer.Option()] = None,
     tender_number: Annotated[str | None, typer.Option()] = None,
     deadline: Annotated[datetime | None, typer.Option(formats=["%Y-%m-%dT%H:%M:%S%z"])] = None,
-    budget_usd: Annotated[float | None, typer.Option()] = None,
-    budget: Annotated[str | None, typer.Option()] = None,
-    budget_currency: Annotated[str | None, typer.Option()] = None,
     json_output: JsonOption = False,
 ):
     if tender is not None and not tender.is_file():
         raise ServiceError("missing_file", "Upload file does not exist", 400, 2)
-    if (budget is None) != (budget_currency is None) or (
-        budget is not None and budget_usd is not None
-    ):
-        raise ServiceError(
-            "invalid_input",
-            "Use --budget and --budget-currency together; do not combine legacy --budget-usd",
-            400,
-            2,
-        )
     body = call(
         "POST",
         "/tasks",
@@ -294,12 +271,6 @@ def task_create(
             "name": name,
             "tender_number": tender_number,
             "deadline": deadline.isoformat() if deadline else None,
-            "budget_usd": budget_usd,
-            **(
-                {"budget": {"limit": budget, "currency": budget_currency}}
-                if budget is not None
-                else {}
-            ),
         },
     )
     if tender is not None:
@@ -1040,11 +1011,10 @@ async def wait_for_job(job_id: UUID, limit_seconds: float) -> dict:
 def partial_completion_exit(body: dict) -> int:
     data = body.get("data", {})
     result = data.get("result") if isinstance(data.get("result"), dict) else data
-    budget = result.get("budget") or {}
-    if result.get("completion") == "partial" or budget.get("completion") == "partial":
+    if result.get("completion") == "partial":
         body["ok"] = False
         return 5
-    if data.get("status") in {"failed", "cancelled"} or budget.get("completion") == "failed":
+    if data.get("status") in {"failed", "cancelled"}:
         body["ok"] = False
         error = data.get("error") or result.get("error") or {}
         return error.get("exit_code", 4)
@@ -1054,7 +1024,7 @@ def partial_completion_exit(body: dict) -> int:
 
 
 def merge_job_result(body: dict, terminal: dict) -> dict:
-    """Keep terminal accounting, budget diagnostics and domain items when waiting."""
+    """Keep terminal usage and domain items when waiting."""
     result = terminal["data"].get("result") or {}
     body["data"].update(result)
     body["data"]["status"] = terminal["data"]["status"]
@@ -1076,10 +1046,7 @@ def card_generate(
         str | None, typer.Option(help="One of the model's official reasoning levels")
     ] = None,
     expect_input_hash: Annotated[
-        str | None, typer.Option(help="input_hash from the dry run this paid run must match")
-    ] = None,
-    max_charge: Annotated[
-        str | None, typer.Option(help="Platform charge cap for this job, in billing currency")
+        str | None, typer.Option(help="input_hash from the dry run this run must match")
     ] = None,
     dry_run: Annotated[bool, typer.Option()] = False,
     retry: Annotated[bool, typer.Option()] = False,
@@ -1094,7 +1061,6 @@ def card_generate(
         dry_run=dry_run,
         retry=retry,
         expected_input_hash=expect_input_hash,
-        max_charge=max_charge,  # pyright: ignore[reportArgumentType]
     )
     body = call("POST", f"/tasks/{task}/cards/generations", json=request.model_dump(mode="json"))
     if wait and not dry_run:
@@ -1509,9 +1475,9 @@ def platform_model_test(
     dry_run: Annotated[bool, typer.Option()] = False,
     json_output: JsonOption = False,
 ):
-    from app.schemas.budget_contracts import BudgetPlatformModelTest
+    from app.schemas.platform_contracts import PlatformModelTest
 
-    request = BudgetPlatformModelTest(dry_run=dry_run, test_org_id=test_org)
+    request = PlatformModelTest(dry_run=dry_run, test_org_id=test_org)
     body = call(
         "POST",
         f"/platform/models/{model_id}/test",
@@ -1544,11 +1510,6 @@ def platform_audit(
     )
 
 
-platform_card_app, billing_app = typer.Typer(), typer.Typer()
-platform_app.add_typer(platform_card_app, name="card")
-app.add_typer(billing_app, name="billing")
-
-register_budget_commands(task_app, billing_app)
 register_org_member_commands(org_app)
 register_team_workflow_commands(task_app, card_app)
 register_management_product_commands(product_app)
@@ -1562,101 +1523,6 @@ register_management_provider_commands(provider_app)
 register_attachment_commands(resource_app, profile_app, task_app, evidence_app)
 register_requirement_confirmation_commands(req_app)
 register_annotation_commands(evidence_app)
-
-
-@platform_card_app.command("create")
-def platform_card_create(
-    count: Annotated[int, typer.Option(min=1, max=500)],
-    face_value: Annotated[float, typer.Option()],
-    output: Annotated[Path, typer.Option(help="New CSV file that receives the codes")],
-    expires_at: Annotated[datetime | None, typer.Option(formats=["%Y-%m-%dT%H:%M:%S%z"])] = None,
-    note: Annotated[str | None, typer.Option()] = None,
-    json_output: JsonOption = False,
-):
-    target = new_output_path(output)
-    body = PlatformCardCreate.model_validate(
-        {"count": count, "face_value": face_value, "expires_at": expires_at, "note": note}
-    )
-    result = call("POST", "/platform/cards", platform=True, json=body.model_dump(mode="json"))
-    cards = result["data"].pop("cards")
-    lines = ["code,last4,face_value,currency,batch_id,expires_at"] + [
-        ",".join(
-            [
-                card["code"],
-                card["last4"],
-                str(result["data"]["face_value"]),
-                result["data"]["currency"],
-                result["data"]["batch_id"],
-                result["data"]["expires_at"] or "",
-            ]
-        )
-        for card in cards
-    ]
-    # Codes go only to the new 0600 file, never to stdout or JSON.
-    save_download(target, ("\n".join(lines) + "\n").encode())
-    result["data"]["output_path"] = str(target)
-    emit(result, "platform card create", json_output)
-
-
-@platform_card_app.command("list")
-def platform_card_list(
-    batch: Annotated[UUID | None, typer.Option()] = None,
-    status: Annotated[str | None, typer.Option(help="active, redeemed or void")] = None,
-    limit: Annotated[int, typer.Option(min=1, max=1000)] = 200,
-    json_output: JsonOption = False,
-):
-    params: dict = {"limit": limit}
-    if batch:
-        params["batch_id"] = str(batch)
-    if status:
-        params["status"] = status
-    emit(
-        call("GET", "/platform/cards", platform=True, params=params),
-        "platform card list",
-        json_output,
-    )
-
-
-@platform_card_app.command("void")
-def platform_card_void(
-    card_id: Annotated[UUID, typer.Option("--id")], json_output: JsonOption = False
-):
-    emit(
-        call("POST", f"/platform/cards/{card_id}/void", platform=True),
-        "platform card void",
-        json_output,
-    )
-
-
-@platform_org_app.command("balance")
-def platform_org_balance(
-    org_id: Annotated[UUID, typer.Option("--id")],
-    reason: Annotated[str, typer.Option()],
-    add: Annotated[float | None, typer.Option("--add")] = None,
-    set_to: Annotated[float | None, typer.Option("--set")] = None,
-    json_output: JsonOption = False,
-):
-    if (add is None) == (set_to is None):
-        raise ServiceError("invalid_input", "Give exactly one of --add or --set", 400, 2)
-    mode, amount = ("add", add) if add is not None else ("set", set_to)
-    body = PlatformBalanceAdjust.model_validate({"mode": mode, "amount": amount, "reason": reason})
-    emit(
-        call("POST", f"/platform/orgs/{org_id}/balance", platform=True, json=body.model_dump()),
-        "platform org balance",
-        json_output,
-    )
-
-
-@billing_app.command("balance")
-def billing_balance(json_output: JsonOption = False):
-    emit(call("GET", "/billing"), "billing balance", json_output)
-
-
-@billing_app.command("redeem")
-def billing_redeem(json_output: JsonOption = False):
-    # The card code comes from the environment so it never appears in argv.
-    body = CardRedeem.model_validate({"code": env_secret("BID_CARD_CODE", "card_code")})
-    emit(call("POST", "/billing/redeem", json=body.model_dump()), "billing redeem", json_output)
 
 
 @auth_app.command("orgs")
@@ -1736,63 +1602,10 @@ def command_name(arguments: list[str]) -> str:
 def main(args: list[str] | None = None):
     global started, runtime, output_contract_version
     runtime = None
-    output_contract_version = "4.0"
+    output_contract_version = "5.0"
     started = time.monotonic()
     arguments = list(sys.argv[1:] if args is None else args)
     try:
-        version = next(
-            (item.split("=", 1)[1] for item in arguments if item.startswith("--contract-version=")),
-            None,
-        )
-        if "--contract-version" in arguments:
-            index = arguments.index("--contract-version")
-            if index + 1 < len(arguments):
-                version = arguments[index + 1]
-        if version == "3.0":
-            output_contract_version = "3.0"
-            from app.schemas.compatibility import NEW_COMMANDS
-
-            from bid_cli.management_bindings import COMMAND_INPUTS as MANAGEMENT_BINDING_COMMANDS
-            from bid_cli.management_certificates import (
-                COMMAND_INPUTS as MANAGEMENT_CERTIFICATE_COMMANDS,
-            )
-            from bid_cli.management_confidential import (
-                COMMAND_INPUTS as MANAGEMENT_CONFIDENTIAL_COMMANDS,
-            )
-            from bid_cli.management_features import COMMAND_INPUTS as MANAGEMENT_FEATURE_COMMANDS
-            from bid_cli.management_memory import COMMAND_INPUTS as MANAGEMENT_MEMORY_COMMANDS
-            from bid_cli.management_products import COMMAND_INPUTS as MANAGEMENT_PRODUCT_COMMANDS
-            from bid_cli.management_profiles import COMMAND_INPUTS as MANAGEMENT_PROFILE_COMMANDS
-            from bid_cli.management_providers import COMMAND_INPUTS as MANAGEMENT_PROVIDER_COMMANDS
-            from bid_cli.management_templates import COMMAND_INPUTS as MANAGEMENT_TEMPLATE_COMMANDS
-
-            name = command_name(arguments)
-            if (
-                name in NEW_COMMANDS
-                or name == "evidence stamp"
-                or name.startswith("evidence annotation ")
-                or name in MANAGEMENT_PRODUCT_COMMANDS
-                or name in MANAGEMENT_FEATURE_COMMANDS
-                or name in MANAGEMENT_TEMPLATE_COMMANDS
-                or name in MANAGEMENT_BINDING_COMMANDS
-                or name in MANAGEMENT_CERTIFICATE_COMMANDS
-                or name in MANAGEMENT_PROFILE_COMMANDS
-                or name in ATTACHMENT_COMMANDS
-                or name in MANAGEMENT_MEMORY_COMMANDS
-                or name in MANAGEMENT_PROVIDER_COMMANDS
-                or name in MANAGEMENT_CONFIDENTIAL_COMMANDS
-                or name.startswith("assessment ")
-                or name.startswith("review ")
-                or name.startswith("org member ")
-                or "--view" in arguments
-                or any(argument.startswith("--view=") for argument in arguments)
-                or any(
-                    argument.split("=", 1)[0] in {"--budget", "--budget-currency", "--test-org"}
-                    for argument in arguments
-                )
-                or (name in {"provider test", "platform model test"} and "--dry-run" in arguments)
-            ):
-                raise ServiceError("invalid_input", "This command requires contract 4.0", 400, 2)
         app(args=arguments, standalone_mode=False)
     except ServiceError as exc:
         data: dict = {

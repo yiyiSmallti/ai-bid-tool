@@ -20,9 +20,7 @@ creation, and nothing in the product can add a second person. Task membership
 (`/tasks/{task_id}/members`) assigns existing org members to tasks; it cannot create them.
 
 In scope: list members, add a member by email with a role, issue a one-time invitation
-link, change a role, deactivate and reactivate, and audit. Excluded: email delivery,
-SSO/OIDC, self-service join requests, seat limits or billing per seat, transferring an
-org, deleting users, and changing the four built-in roles or their scopes.
+link, change a role, deactivate and reactivate, and audit.
 
 ## Verified code foundations
 
@@ -112,4 +110,4 @@ and that RLS keeps another org's members invisible.
 | Last admin | At least one active admin always | An org cannot lock itself out. |
 | Deactivation | Blocks access and revokes this org's API tokens; history kept; reversible | No deletion of users or attribution. |
 | Visibility | Admins see full member records; other roles see active members' emails and roles | Task assignment keeps working for owners who are not admins. |
-| Seats | No limit | Billing per seat would need its own contract. |
+| Seats | No limit | Membership policy is independent of resource usage |

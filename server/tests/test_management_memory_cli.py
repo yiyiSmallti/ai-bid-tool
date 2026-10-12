@@ -12,7 +12,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from app.schemas.contracts import Cost, LegacyCost, Result
+from app.schemas.contracts import Cost, Result
 from bid_cli import main as cli
 from bid_cli.client import Client
 
@@ -70,7 +70,7 @@ def invoke(capsys, args, exit_code=0):
         cli.main([*args, "--json"])
     body = json.loads(capsys.readouterr().out)
     assert set(body) == {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}
-    cost_model = LegacyCost if "3.0" in args else Cost
+    cost_model = Cost
     assert body["cost"] == cost_model().model_dump(mode="json")
     body["duration_ms"] = 0
     return body
@@ -206,7 +206,7 @@ def test_memory_browse_invalid_input_and_legacy_send_no_request(monkeypatch, cap
     invoke(capsys, ["memory", "browse"], 2)
     invoke(capsys, ["memory", "browse", "--input", str(tmp_path / "missing.json")], 2)
     body = invoke(capsys, ["--contract-version", "3.0", "memory", "browse"], 2)
-    assert body["data"]["error"]["message"] == "This command requires contract 4.0"
+    assert body["data"]["error"]["message"] == "Only contract 5.0 is supported"
     assert calls == []
 
 
@@ -247,9 +247,8 @@ def test_memory_browse_schema_snapshot_and_legacy_preservation(monkeypatch, caps
     assert "MemoryView" in json.dumps(entry["items"])
     snapshot = json.loads((Path(__file__).with_name("snapshots") / "cli-v1.json").read_text())
     assert entry == snapshot["schema"]["data"]["commands"]["memory browse"]
-    legacy = invoke(capsys, ["--contract-version", "3.0", "schema"])
-    assert "memory browse" not in legacy["data"]["commands"]
-    assert "memory list" in legacy["data"]["commands"]
+    rejected = invoke(capsys, ["--contract-version", "3.0", "schema"], 2)
+    assert rejected["data"]["error"]["code"] == "invalid_input"
     calls = []
 
     def call(method, path, **kwargs):

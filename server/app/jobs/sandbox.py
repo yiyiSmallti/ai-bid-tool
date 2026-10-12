@@ -282,7 +282,10 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
                 )
                 current.result = {
                     "sandbox_run_id": str(run.id),
-                    "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0},
+                    "cost": {
+                        "llm_tokens": 0,
+                        "ocr_pages": 0,
+                    },
                 }
                 await session.flush()
                 # Parent source_pdf precedes page children in the fixed artifact order.
@@ -433,7 +436,7 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
                 reason_code=error_code,
                 denied_count=len(broker.denials),
             )
-    # The failure state is committed after activate() exits; attach its budget
+    # The failure state is committed after activate() exits; attach its cumulative usage
     # receipt now. finalize_result() fences cancelled or superseded attempts.
     if execution is not None:
         await execution.finalize_result()

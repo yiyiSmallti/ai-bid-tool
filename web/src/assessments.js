@@ -8,11 +8,6 @@ export const stateLabels = { current: "当前有效", stale: "已过期", comple
 const errors = {
   requirement_unconfirmed: "评分来源要求尚未确认，请核对要求并重新读取评分条件", requirement_invalidated: "评分来源要求确认已失效，请重新核对要求并刷新评分条件", review_changed: "要求审阅修订已变化，请重新读取并核对来源后再明确提交",
   redaction_required: "尚未开启外发遮挡，请由管理员或投标专员处理后重新预览",
-  insufficient_balance: "余额不足，暂不能提交；请联系管理员补充余额",
-  task_budget_exceeded: "任务预算不足，请联系管理员或投标专员调整预算后重新预览",
-  task_budget_unpriced: "任务存在未定价用量，请联系管理员核对计价后重新预览",
-  task_budget_currency_review_required: "任务预算币种需要管理员核对",
-  job_max_charge_exceeded: "本次作业费用上限不足，请核对后重新预览",
   check_stale_draft: "初稿已过期，请重新组表并预览", score_stale_draft: "初稿已过期，请重新组表并预览",
   check_input_changed: "初稿内容或设置已变化，请重新组表并预览", score_input_changed: "初稿或评分规则已变化，请重新预览评分",
   rubric_input_changed: "评分要求或设置已变化，请重新预览", score_rubric_unconfirmed: "请先完成所选评分规则的审核清单",
@@ -22,27 +17,16 @@ const errors = {
   invalid_transition: "当前状态不能执行此操作，请核对当前修订", queue_unavailable: "任务已保存，等待重新调度",
   assessment_entry_too_large: "此条记录超过当前显示上限，详情暂不可用", invalid_cursor: "分页已失效，请返回第一页",
   forbidden: "当前角色无权执行此操作", human_required: "此操作需要职责负责人本人登录",
-  spend_cap_below_first_call: "费用上限不足以覆盖首次调用，请核对后提高上限并重新预览",
-  job_charge_limit_exceeded: "本次作业超过平台单作业上限，请联系管理员核对",
-  billing_currency_mismatch: "计费币种不一致，请联系管理员核对",
   rubric_context_limit: "完整评分表超出模型上下文上限，请联系管理员选择支持该范围的模型",
   sensitive_scoring_source: "评分原文包含需要保护的内容，请联系职责负责人核对外发范围",
   empty_scoring_requirements: "所选提取结果没有评分要求，请核对提取范围",
-  unknown_price: "模型价格未知，请联系管理员配置后重新预览", unsupported_reasoning: "模型不支持所选推理档位，请核对配置",
+  unsupported_reasoning: "模型不支持所选推理档位，请核对配置",
   provider_unavailable: "模型服务不可用，请联系管理员核对配置", context_limit_exceeded: "输入超过模型上下文上限，请核对输入或模型配置",
   no_scoring_requirements: "所选提取结果没有评分要求，请核对提取范围",
 };
 export const assessmentError = (exc) => exc?.status === 404 ? "记录不存在或无权查看" : `${errors[exc?.code] ?? "操作未完成，请核对输入或重新读取"}${exc?.code ? `（${exc.code}）` : ""}`;
 export const codeText = (code) => errors[code] ?? `请核对服务状态（${code}）`;
 export const enc = encodeURIComponent;
-export function suggestedCap(value) {
-  if (value == null || !/^\d+(?:\.\d+)?$/.test(String(value))) return "";
-  const [whole, fraction = ""] = String(value).split(".");
-  let cents = BigInt(whole) * 100n + BigInt((fraction + "00").slice(0, 2));
-  if (/[1-9]/.test(fraction.slice(2))) cents++;
-  if (cents === 0n) cents = 1n;
-  return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
-}
 export function queryPath(path, values) {
   const query = new URLSearchParams(Object.entries(values).filter(([, value]) => value !== "" && value != null));
   return `${path}?${query}`;

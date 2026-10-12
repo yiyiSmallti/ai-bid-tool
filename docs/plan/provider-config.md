@@ -8,14 +8,13 @@ Status: **backend, CLI and llm_extract org model-settings page implemented; inte
 
 ## Delivery scope
 
-- Org administrators select a platform catalog model or configure a BYOK Anthropic/OpenAI-compatible model. BYOK declares provider, model, HTTPS base URL, JSON mode, official reasoning levels, and optional unit cost prices.
+- Org administrators select a platform catalog model or configure a BYOK Anthropic/OpenAI-compatible model.
 - Extraction and response card (响应卡) drafting share `llm_extract` configuration, admission, and immediate usage accounting.
 - Configuration uses immutable revisions and `expected_revision` to prevent concurrent overwrites while retaining historical job references.
 - The server encrypts keys with independent `BID_SECRETS_KEY`; responses show only the last four characters. CLI reads keys from `BID_PROVIDER_KEY` or a current-user-owned `--key-file` with mode 0600.
 - `provider set/list/history/test` API and CLI; tests use synthetic connection-check content without tender documents (招标文件).
-- DeepSeek balance queries, BYOK quota-error guidance, and this system's actual recorded tokens and estimated cost for the current UTC month.
 
-Exclude task-level model overrides, OCR/vision/search configuration, key-rotation tools, and monthly vendor budget limits.
+Exclude task-level model overrides, OCR/vision/search configuration, key-rotation tools, .
 
 ## Inputs and outputs
 
@@ -23,19 +22,18 @@ The authoritative models are `ProviderConfigInput`, `ProviderConfigSet`, `Provid
 
 | Command | Route | Permission and behavior |
 | --- | --- | --- |
-| `bid provider list` | `GET /providers` | `provider:read`; selectable catalog, effective revision, live balance, current-month usage |
-| `bid provider history` | `GET /providers?history=true` | `provider:read`; all revisions and monthly usage by revision; no historical-key balance queries |
+| `bid provider list` | `GET /providers` | All roles with provider:read; current configuration, catalog and recorded month usage. |
+| `bid provider history` | `GET /providers?history=true` | All roles with provider:read; immutable historical metadata without provider requests. |
 | `bid provider set --input FILE [--key-file FILE]` | `POST /providers` | Human admin `provider:write`; append a revision; conflicts return 409 |
 | `bid provider test --capability llm_extract [--reasoning LEVEL]` | `POST /providers/test` | Human admin `provider:write`; perform one admitted/accounted probe call and wait for the result |
 
-All commands retain Result's seven-field structure and register in `bid schema`. Test failures return `ok=false`, safe errors, job ID, and accounted charges; CLI uses the error's specified exit code. Insufficient permissions return 403; cross-org identities and objects remain uniformly invisible.
+All commands retain Result's seven-field structure and register in `bid schema`.
+Insufficient permissions return 403; cross-org identities and objects remain uniformly invisible.
 
 ## Decisions
 
 | Question | Decision |
 | --- | --- |
-| Payment | Reuse [prepaid billing](../notes/prepaid-billing.md): precheck platform calls at submission, reserve before each call, charge immediately when usage arrives |
-| BYOK limits | Platform `charge=0`, no prepaid-balance check; still count toward cumulative job call limits, retain admission/usage records; optional vendor costs are not platform charges |
 | Model resolution order | Latest org revision → enabled platform-default model → unconfigured; API/worker no longer use `BID_LLM_*` as implicit model fallback; standalone adapter/eval settings were permitted by this contract, then superseded by [ADR 0006](../adr/0006-platform-credentials.md) |
 | Capability name | Keep `llm_extract` for both extraction and model card drafting; no separate drafting configuration |
 | Reasoning levels | Reuse platform `ReasoningLevel` and request-option validation; default level must exist; adapter output limits cannot be overridden |
@@ -44,8 +42,7 @@ All commands retain Result's seven-field structure and register in `bid schema`.
 | Omitted key | Only BYOK updates with the same provider and base URL can reuse and re-encrypt the old key. First configuration, provider changes, and endpoint changes require a key |
 | Effective configuration | Latest revision per capability is effective; selecting a platform model also creates an org revision. No history deletion or reset to automatically follow platform defaults |
 | Test jobs | `provider_test` has no task/document, still uses Processor/JobExecution; no retries or business material; every explicit test is a new job |
-| Balance queries | Only known base URLs on DeepSeek's official HTTPS host query `/user/balance`, without redirects. Other providers show unsupported; query failures do not block extraction |
-| Monthly usage | UTC month, aggregate this system's records across all configurations and per revision. Missing prices yield null cost and an unpriced-call count, never fabricated zero |
+| Monthly usage | UTC month; aggregate recorded calls, tokens, pages and requests by configuration and org. No vendor-wide consumption claim. |
 | Historical credentials | Ciphertext binds org/revision; retain keys needed for historical calls. Losing the independent encryption key fails explicitly, without another key/model fallback |
 
 ## Data and permission boundaries
@@ -63,7 +60,6 @@ All existing roles may use `provider:read`, and API tokens may receive it. Only 
 3. Human admins, other roles, and token permissions; the database rejects illegal configuration writes and token scopes.
 4. Revision conflicts, immutable history, queued jobs bound to old revisions, and new caches after updates.
 5. Encryption/context binding, private CLI files, and no plaintext keys in outputs/errors.
-6. BYOK zero platform charges/no prepaid checks, with call limits and immediate accounting; platform calls retain balance constraints.
-7. No retry for quota errors; guidance follows the payer. DeepSeek balance response types are strictly checked and redirects are not followed.
+6. No retry for quota errors; guidance follows the configured provider.
 
 Migration, FORCE RLS, and the database flow from API to processor require the maintainer's isolated PostgreSQL test instance. Nondatabase checks cannot replace these acceptance checks; the original implementation report recorded a sandbox connection limitation rather than a database-test pass.

@@ -21,15 +21,7 @@ import pytest
 from app.core.config import Settings
 from app.jobs.execution import JobExecution
 from app.models.check import CheckFinding, CheckFindingCitation, CheckItem, CheckRun
-from app.models.entities import (
-    AuditLog,
-    BalanceEntry,
-    Job,
-    OrgBalance,
-    PlatformModel,
-    UsageRecord,
-    VendorCall,
-)
+from app.models.entities import AuditLog, Job, PlatformModel, UsageRecord, VendorCall
 from app.providers.llm import OpenAICompatibleExtractor
 from app.schemas.contracts import ProviderUsage
 from app.schemas.platform_credentials import CatalogResolveTarget
@@ -163,7 +155,6 @@ def semantic_llm(
     *,
     org_owned: bool = True,
     platform_model_id: str | None = None,
-    sale: tuple[float, float] | None = None,
     **changes,
 ):
     values = {
@@ -172,8 +163,6 @@ def semantic_llm(
         "llm_model": "synthetic-check-model",
         "llm_api_key": "synthetic-check-key",
         "llm_base_url": "https://semantic.example.test/v1",
-        "llm_input_usd_per_mtok": 1,
-        "llm_output_usd_per_mtok": 2,
         "llm_batch_chars": 100_000,
     }
     settings = Settings(**(values | changes))
@@ -182,7 +171,6 @@ def semantic_llm(
         httpx.MockTransport(vendor),
         org_owned=org_owned,
         platform_model_id=platform_model_id,
-        sale_usd_per_mtok=sale,
     )
 
 
@@ -205,21 +193,12 @@ async def seed_platform(
                 model="synthetic-check-model",
                 base_url="https://semantic.example.test/v1",
                 credential="synthetic",
-                vendor_input_usd_per_mtok=1,
-                vendor_output_usd_per_mtok=2,
-                sale_input_per_mtok=2,
-                sale_output_per_mtok=3,
                 is_default=True,
                 enabled=True,
                 reasoning=[],
                 default_reasoning=None,
                 revision=1,
                 updated_by="synthetic@example.test",
-            )
-        )
-        connection.execute(
-            OrgBalance.__table__.insert().values(
-                org_id=org_id, currency="USD", balance=Decimal("10")
             )
         )
 
@@ -230,7 +209,6 @@ def platform_llm(settings: Settings, vendor: SemanticVendor, model_id: str = "se
         vendor,
         org_owned=False,
         platform_model_id=model_id,
-        sale=(2, 3),
         llm_api_key=None,
     )
     llm.model_revision = 1
@@ -255,14 +233,12 @@ async def combined_counts(case) -> dict[str, int | Decimal | None]:
                 AuditLog,
                 UsageRecord,
                 VendorCall,
-                BalanceEntry,
                 CheckRun,
                 CheckItem,
                 CheckFinding,
                 CheckFindingCitation,
             )
         }
-        counts["org_balance"] = await session.scalar(select(OrgBalance.balance))
         return counts
 
 
@@ -403,13 +379,7 @@ async def test_combined_scope_only_sends_confirmed_responses(
         monkeypatch,
         semantic_llm(tmp_path, vendor)
         if response
-        else semantic_llm(
-            tmp_path,
-            vendor,
-            org_owned=False,
-            llm_input_usd_per_mtok=None,
-            llm_output_usd_per_mtok=None,
-        ),
+        else semantic_llm(tmp_path, vendor, org_owned=False),
     )
     plans = []
     original_plan = JobExecution.plan
@@ -425,10 +395,14 @@ async def test_combined_scope_only_sends_confirmed_responses(
     assert preview["selected_item_ids"] == [row["id"] for row in case["requirements"]]
     assert vendor.requests == []
     if not response:
-        assert preview["estimated_cost"] == {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0}
-        assert preview["estimated_charge"] == "0"
-        assert preview["cost_basis"] == "known"
-        assert preview["cost_basis_reason"] == "no_model_calls"
+        assert preview["estimated_cost"] == {
+            "calls": 0,
+            "llm_tokens": 0,
+            "ocr_pages": 0,
+            "search_requests": 0,
+            "browser_units": 0,
+            "unresolved_calls": 0,
+        }
     queued = await submit_combined(case, preview)
     assert queued.status_code == 200, queued.text
     terminal = await run_combined(case, queued.json()["data"])
@@ -452,7 +426,6 @@ async def test_combined_scope_only_sends_confirmed_responses(
             assert row["semantic_outcome"] is None and row["semantic_reason_code"] is None
             assert row["semantic_citations"] == []
     assert any(row["code"] == "mandatory_response_missing" for row in shown.json()["items"])
-    # The job plans the whole first pass; the provider re-plans per call and plan() keeps the maximum.
     assert plans[0] == max(plans) == int(response)
     assert len(vendor.requests) == len(result["usage_record_ids"]) == int(response)
     if response:
@@ -567,7 +540,7 @@ async def test_combined_old_pending_scope_requires_new_preview(
     assert terminal["error"]["code"] == "check_input_changed"
     assert vendor.requests == []
     after = await combined_counts(case)
-    for key in ("vendor_calls", "usage_records", "balance_entries", "org_balance"):
+    for key in ("vendor_calls", "usage_records"):
         assert after[key] == before[key], key
     async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
         assert await session.scalar(select(func.count()).select_from(CheckRun)) == 0
@@ -589,14 +562,8 @@ async def test_combined_old_pending_scope_requires_new_preview(
                 "prerequisite_call_ids": [str(call.id) for call in prerequisite_calls],
                 "error_code": terminal["error"]["code"],
                 "vendor_requests": vendor.requests,
-                "before": {
-                    key: str(before[key])
-                    for key in ("vendor_calls", "usage_records", "balance_entries", "org_balance")
-                },
-                "after": {
-                    key: str(after[key])
-                    for key in ("vendor_calls", "usage_records", "balance_entries", "org_balance")
-                },
+                "before": {key: str(before[key]) for key in ("vendor_calls", "usage_records")},
+                "after": {key: str(after[key]) for key in ("vendor_calls", "usage_records")},
             },
             indent=2,
         )
@@ -611,28 +578,21 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
     vendor = SemanticVendor()
     llm = semantic_llm(tmp_path, vendor)
     llm.reasoning_levels = {
-        "high": {
-            "label": "Synthetic high",
-            "request_options": {"reasoning_effort": "high"},
-        }
+        "high": {"label": "Synthetic high", "request_options": {"reasoning_effort": "high"}}
     }
     llm.default_reasoning = "high"
     install_resolver(monkeypatch, llm)
     before = await combined_counts(case)
-
     response, preview = await combined_preview(case, reasoning="high")
     assert response.status_code == 200, response.text
     after_preview = await combined_counts(case)
     assert after_preview == before
-    assert before["org_balance"] is None and after_preview["org_balance"] is None
     assert vendor.requests == []
     assert preview["mode"] == "combined"
     assert preview["semantic_items"] == 2
     assert preview["admission_blocker"] is None
     assert preview["provider_source"] == "org"
-    assert preview["estimated_charge"] == "0"
     assert preview["reasoning"] == "high"
-
     mismatch = await case["api"].post(
         f"/tasks/{case['task']}/checks",
         headers=case["header"],
@@ -646,19 +606,14 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
     assert mismatch.status_code == 409
     assert mismatch.json()["data"]["error"]["code"] == "check_input_changed"
     assert await combined_counts(case) == before
-
     queued = await submit_combined(case, preview, reasoning="high")
     assert queued.status_code == 200, queued.text
     terminal = await run_combined(case, queued.json()["data"])
     assert terminal["status"] == "succeeded", terminal
     result = terminal["result"]
     assert result["completion"] == "partial"
-    # Only the mapped certificate's unknown dates keep this report partial.
-    # A no-risk semantic result cannot complete an unknown deterministic check.
     assert result["unassessed_requirements"] == 1
     assert len(result["usage_record_ids"]) == len(vendor.requests) == 1
-    assert Decimal(result["charge"]) == 0
-
     shown = await case["api"].get(f"/checks/{result['report_id']}", headers=case["header"])
     assert shown.status_code == 200, shown.text
     coverage = shown.json()["data"]["coverage"]
@@ -680,8 +635,8 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
     assert any(
         rule["code"] == "certificate_date_unknown"
         and rule["outcome"] == "unknown"
-        and rule["reason_code"] == "declared_dates_unknown"
-        and rule["task_certificate_id"] == case["unknown_certificate"]["id"]
+        and (rule["reason_code"] == "declared_dates_unknown")
+        and (rule["task_certificate_id"] == case["unknown_certificate"]["id"])
         for rule in commercial["rules"]
     )
     assert (
@@ -698,7 +653,7 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
     assert all(
         row["semantic_outcome"] is None
         and row["semantic_reason_code"] is None
-        and row["semantic_citations"] == []
+        and (row["semantic_citations"] == [])
         for row in deterministic
     )
     assert (
@@ -713,7 +668,7 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
             ).all()
         )
         assert len(usage) == 1
-        assert usage[0].charge == 0 and usage[0].platform_model_id is None
+        assert usage[0].platform_model_id is None
         stored = await session.get(CheckRun, UUID(result["report_id"]))
         assert stored is not None
         fixed_manifest = stored.input_manifest
@@ -727,7 +682,6 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
         "cached": True,
     }
     assert len(vendor.requests) == request_count
-
     artifact = write_combined_artifact(tmp_path, fixed_manifest, shown.json(), vendor.requests)
     artifact_files = {
         artifact / "input-manifest.json",
@@ -742,7 +696,6 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
     assert case["header"]["Authorization"] not in artifact_text
     assert case["header"]["Authorization"].removeprefix("Bearer ") not in artifact_text
     assert case["task"] in artifact_text and result["report_id"] in artifact_text
-
     cli_settings = Settings(data_dir=tmp_path)
     monkeypatch.setenv("BID_SESSION", case["header"]["Authorization"].removeprefix("Bearer "))
     monkeypatch.setenv("BID_ORG", case["header"]["X-Org-Id"])
@@ -776,8 +729,7 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
         assert run_body["data"]["input"]["input_hash"] == preview["input"]["input_hash"]
         assert run_body["data"]["mode"] == "combined"
         show_code, show_body = await asyncio.to_thread(
-            invoke_live_cli,
-            [*common, "check", "show", "--id", result["report_id"]],
+            invoke_live_cli, [*common, "check", "show", "--id", result["report_id"]]
         )
         assert show_code == 5, show_body
         assert show_body["data"]["report"]["mode"] == "combined"
@@ -813,10 +765,9 @@ async def test_combined_requires_redaction_without_calls_or_writes(
     "replacement",
     [
         {"llm_model": "synthetic-check-model-v2"},
-        {"llm_input_usd_per_mtok": 9},
     ],
 )
-async def test_combined_preview_rejects_model_or_price_identity_change(
+async def test_combined_preview_rejects_model_identity_change(
     check_case, tmp_path, monkeypatch, replacement
 ):
     case = check_case
@@ -919,7 +870,7 @@ async def test_combined_later_batch_failure_keeps_one_bill_and_partial_report(
 
 
 @pytest.mark.parametrize("failure", ["refused", "truncated"])
-async def test_combined_platform_call_cap_and_failure_settle_exactly_once(
+async def test_combined_platform_failure_settles_exactly_once(
     check_case, tenants, tmp_path, monkeypatch, admin_engine, failure
 ):
     case = check_case
@@ -932,25 +883,11 @@ async def test_combined_platform_call_cap_and_failure_settle_exactly_once(
         monkeypatch, platform_llm(case["app"].state.processor.settings, vendor, model_id)
     )
     before = await combined_counts(case)
-
-    response, capped = await combined_preview(case, max_charge="0.00000001")
-    assert response.status_code == 200, response.text
-    assert capped["admission_blocker"] == "spend_cap_below_first_call"
-    after_capped_preview = await combined_counts(case)
-    assert before["org_balance"] == after_capped_preview["org_balance"] == Decimal("10")
-    assert vendor.requests == [] and after_capped_preview == before
-    denied = await submit_combined(case, capped, max_charge="0.00000001")
-    assert denied.status_code in {400, 402, 409}
-    assert denied.json()["data"]["error"]["code"] in {
-        "spend_cap_below_first_call",
-        "spend_cap_reached",
-    }
-    assert vendor.requests == [] and await combined_counts(case) == before
-
-    response, preview = await combined_preview(case, max_charge="5")
+    response, preview = await combined_preview(case)
     assert response.status_code == 200, response.text
     assert preview["admission_blocker"] is None
-    queued = await submit_combined(case, preview, max_charge="5")
+    assert await combined_counts(case) == before and vendor.requests == []
+    queued = await submit_combined(case, preview)
     assert queued.status_code == 200, queued.text
     terminal = await run_combined(case, queued.json()["data"])
     assert terminal["status"] == "succeeded", terminal
@@ -967,21 +904,10 @@ async def test_combined_platform_call_cap_and_failure_settle_exactly_once(
         calls = list(
             (await session.scalars(select(VendorCall).where(VendorCall.job_id == job_id))).all()
         )
-        entries = list(
-            (
-                await session.scalars(
-                    select(BalanceEntry).where(BalanceEntry.usage_record_id == usage[0].id)
-                )
-            ).all()
-        )
-        balance = await session.get(OrgBalance, tenants["orgs"][0])
-        assert len(usage) == len(calls) == len(entries) == 1
-        assert usage[0].charge > 0 and calls[0].charge == usage[0].charge
-        assert entries[0].amount == -usage[0].charge
-        assert balance is not None and balance.balance == Decimal("10") - usage[0].charge
+        assert len(usage) == len(calls) == 1
         job = await session.get(Job, job_id)
         assert job is not None and job.run_id is not None
-        run_id, call_id, balance_after = job.run_id, calls[0].id, balance.balance
+        run_id, call_id = job.run_id, calls[0].id
         replay = ProviderUsage(
             **{key: getattr(usage[0], key) for key in ProviderUsage.model_fields}
         )
@@ -1000,19 +926,9 @@ async def test_combined_platform_call_cap_and_failure_settle_exactly_once(
             )
             == 1
         )
-        assert (
-            await session.scalar(
-                select(func.count())
-                .select_from(BalanceEntry)
-                .where(BalanceEntry.org_id == tenants["orgs"][0])
-            )
-            == 1
-        )
-        balance = await session.get(OrgBalance, tenants["orgs"][0])
-        assert balance is not None and balance.balance == balance_after
 
 
-async def test_combined_hard_stop_overrides_budget_stop_and_blocks_publication(
+async def test_combined_hard_stop_overrides_call_limit_and_blocks_publication(
     check_case, tenants, tmp_path, monkeypatch
 ):
     case = check_case
@@ -1024,11 +940,11 @@ async def test_combined_hard_stop_overrides_budget_stop_and_blocks_publication(
     assert queued.status_code == 200, queued.text
     job_id = UUID(queued.json()["data"]["job_id"])
 
-    async def hard_after_budget(self, quote):
-        self.stop("spend_cap_reached", "Synthetic budget stop")
+    async def hard_after_call_limit(self, quote):
+        self.stop("job_call_limit_exceeded", "Synthetic call ceiling")
         raise self.stop("job_heartbeat_failed", "Synthetic heartbeat failure")
 
-    monkeypatch.setattr(JobExecution, "admit", hard_after_budget)
+    monkeypatch.setattr(JobExecution, "admit", hard_after_call_limit)
     terminal = await run_combined(case, queued.json()["data"])
     assert terminal["status"] == "failed", terminal
     assert terminal["error"]["code"] == "job_heartbeat_failed"
@@ -1048,41 +964,25 @@ async def test_combined_hard_stop_overrides_budget_stop_and_blocks_publication(
         )
 
 
-@pytest.mark.parametrize(
-    "guard,reason",
-    [
-        ("balance", "insufficient_balance"),
-        ("job_cap", "job_charge_limit_exceeded"),
-    ],
-)
 async def test_combined_per_call_admission_stop_after_submit_publishes_fixed_partial(
-    check_case, tenants, tmp_path, monkeypatch, admin_engine, guard, reason
+    check_case, tenants, tmp_path, monkeypatch, admin_engine
 ):
     case = check_case
     await seed_platform(admin_engine, case["app"].state.processor.settings, tenants["orgs"][0])
     vendor = SemanticVendor()
     install_resolver(monkeypatch, platform_llm(case["app"].state.processor.settings, vendor))
-    response, preview = await combined_preview(case, max_charge="5")
+    response, preview = await combined_preview(case)
     assert response.status_code == 200, response.text
     assert preview["admission_blocker"] is None
-    queued = await submit_combined(case, preview, max_charge="5")
+    queued = await submit_combined(case, preview)
     assert queued.status_code == 200, queued.text
     job_id = UUID(queued.json()["data"]["job_id"])
-    if guard == "balance":
-        with admin_engine.begin() as connection:
-            connection.execute(
-                OrgBalance.__table__.update()
-                .where(OrgBalance.org_id == tenants["orgs"][0])
-                .values(balance=0)
-            )
-    else:
-        monkeypatch.setattr(
-            case["app"].state.processor,
-            "settings",
-            case["app"].state.processor.settings.model_copy(
-                update={"job_max_charge": Decimal("0.00000001")}
-            ),
-        )
+    reason = "job_call_limit_exceeded"
+
+    async def stop_at_call_limit(execution, plan):
+        raise execution.stop(reason, "Synthetic call ceiling")
+
+    monkeypatch.setattr(JobExecution, "admit", stop_at_call_limit)
     terminal = await run_combined(case, queued.json()["data"])
     assert terminal["status"] == "succeeded", terminal
     result = terminal["result"]
@@ -1183,7 +1083,7 @@ async def test_combined_accounting_failure_marks_call_unknown_and_blocks_publica
         calls = list(
             (await session.scalars(select(VendorCall).where(VendorCall.job_id == job_id))).all()
         )
-        assert len(calls) == 1 and calls[0].state == "unknown" and calls[0].charge is None
+        assert len(calls) == 1 and calls[0].state == "unknown"
         assert (
             await session.scalar(
                 select(func.count()).select_from(UsageRecord).where(UsageRecord.job_id == job_id)

@@ -1,7 +1,6 @@
 """Contracts for reviewed response cards and deterministic draft assembly."""
 
 from datetime import datetime
-from decimal import Decimal
 from typing import Annotated, Literal, cast
 from uuid import UUID
 
@@ -210,9 +209,8 @@ class CardGenerateRequest(_TrimmedContract):
     reasoning: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,20}$")
     dry_run: bool = False
     retry: bool = False
-    # A paid run binds the previewed input/model/price hash and a per-job charge cap.
+    # Bind submission to the previewed input and model identity.
     expected_input_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    max_charge: Decimal | None = Field(default=None, gt=0, max_digits=18, decimal_places=8)
 
     @field_validator("requirement_ids")
     @classmethod
@@ -239,14 +237,9 @@ class CardGeneratePreview(_TrimmedContract):
     redaction_rule_version: str
     redacted_counts: dict[str, int]
     estimated_cost: Cost
-    estimated_charge: Decimal | None = Field(default=None, ge=0)
-    billing_currency: str = Field(min_length=3, max_length=3)
-    cost_basis: Literal["known", "unknown"]
-    cost_basis_reason: str
     estimate_kind: Literal["first_pass_upper_bound"] = "first_pass_upper_bound"
     admission_blocker: str | None = None
     estimated_duration_ms: int | None = Field(default=None, ge=0)
-    max_charge: Decimal | None = None
 
     @model_validator(mode="after")
     def preview_collections_are_consistent(self):
@@ -256,8 +249,6 @@ class CardGeneratePreview(_TrimmedContract):
             raise ValueError("selected and skipped requirements must be disjoint")
         if any(count < 0 for count in self.redacted_counts.values()):
             raise ValueError("redacted counts cannot be negative")
-        if self.cost_basis == "unknown" and self.estimated_charge is not None:
-            raise ValueError("unknown cost cannot include an estimated charge")
         return self
 
 
@@ -270,8 +261,6 @@ class CardGenerateResult(_TrimmedContract):
     rejected_references: dict[UUID, list[str]]
     needs_material: list[UUID]
     usage_record_ids: list[UUID]
-    charge: Decimal | None = Field(default=None, ge=0)
-    billing_currency: str = Field(min_length=3, max_length=3)
     stop_reason: str | None = None
 
 

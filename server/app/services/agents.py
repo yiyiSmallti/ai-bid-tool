@@ -45,7 +45,8 @@ from app.schemas.agent_contracts import (
     ToolDecision,
 )
 from app.schemas.contracts import Cost, Result
-from app.services import budget_preflight, budgets, confidential, redaction
+from app.services import confidential, redaction
+from app.services import preflight as preflight_service
 from app.services.auth import AGENT_SCOPES, ROLE_SCOPES, membership, set_actor_context
 from app.services.response_cards import access, generation_materials_stale, linked_evidence
 from app.services.task_workflow import access as task_access
@@ -89,6 +90,50 @@ def seal(settings, row_id, org_id, session_id, payload) -> str:
     )
 
 
+def current_receipt(payload):
+    """Read old sealed contracts without changing their authenticated stored form."""
+    if isinstance(payload, list):
+        return [current_receipt(item) for item in payload]
+    if not isinstance(payload, dict):
+        return payload
+    retired = {
+        "usd",
+        "charge",
+        "task_amount",
+        "payer",
+        "billing_currency",
+        "currency",
+        "platform_charge",
+        "reserved_platform_charge",
+        "reserved_vendor_usd",
+        "unpriced_calls",
+        "max_vendor_usd",
+        "max_platform_charge",
+        "budget_ref",
+        "max_charge",
+        "estimated_charge",
+        "cost_basis",
+        "cost_basis_reason",
+        "budget",
+        "budget_revision",
+        "reserved_charge",
+        "reserved_task_amount",
+        "price_revision",
+        "image_price_revision",
+        "vendor_usd_upper_bound",
+        "task_amount_upper_bound",
+        "platform_charge_upper_bound",
+        "unknown_reason",
+    }
+    cleaned = {key: current_receipt(value) for key, value in payload.items() if key not in retired}
+    # Cost's old certainty metadata describes money pricing, not observed usage.
+    if "llm_tokens" in cleaned and "ocr_pages" in cleaned:
+        cleaned.pop("basis", None)
+    if cleaned.get("kind") == "budget":
+        cleaned["kind"] = "recovery"
+    return cleaned
+
+
 def unseal(settings, row_id, org_id, session_id, ciphertext):
     try:
         envelope = json.loads(Secrets.for_data(settings).decrypt(ciphertext))
@@ -99,7 +144,7 @@ def unseal(settings, row_id, org_id, session_id, ciphertext):
             != (1, str(row_id), str(org_id), str(session_id))
         ):
             raise ValueError("Invalid binding")
-        return envelope["payload"]
+        return current_receipt(envelope["payload"])
     except (InvalidToken, ValueError, TypeError, KeyError):
         raise ServiceError(
             "agent_receipt_unreadable", "Stored agent content cannot be read", 503, 4
@@ -147,7 +192,7 @@ async def owned(session, actor, session_id, *, lock=False):
         target = await session.scalar(query)
         if target is None:
             raise not_found()
-        # Admission and settlement take Task before AgentSession before balance.
+        # Admission and usage recording lock Task before AgentSession.
         await session.scalar(select(Task).where(Task.id == target.task_id).with_for_update())
     row = await session.scalar(query.with_for_update() if lock else query)
     if row is None:
@@ -191,16 +236,28 @@ async def mutation(session, row, command, *, job_id=None, message_id=None, pendi
         ok=True,
         command=command,
         data=data.model_dump(mode="json"),
-        cost=Cost(billing_currency=view.cost.billing_currency),
+        cost=Cost(),
     )
 
 
-def replay(settings, record, session_id, ciphertext, request_hash, stored_hash):
+async def replay(session, settings, record, session_id, ciphertext, request_hash, stored_hash):
     if request_hash != stored_hash:
         fail("agent_idempotency_conflict", "Idempotency key was used for different input")
     result = Result.model_validate(
         unseal(settings, record.id, record.org_id, session_id, ciphertext)
     )
+    saved_session = result.data.get("session")
+    if isinstance(saved_session, dict):
+        from app.services.agent_limits import cost_view
+
+        row = (
+            record
+            if isinstance(record, AgentSession)
+            else await session.get(AgentSession, session_id)
+        )
+        if row is None or row.org_id != record.org_id:
+            raise not_found()
+        saved_session["cost"] = (await cost_view(session, row)).model_dump(mode="json")
     result.data["deduplicated"] = True
     return result
 
@@ -340,18 +397,6 @@ async def card_review_refs(session, row, resource_ids=None):
     return refs
 
 
-async def budget_fact_ref(session, row, question_ref, settings):
-    task = await session.get(Task, row.task_id)
-    if task is None:
-        raise not_found()
-    fact = await budgets.view(session, task, settings.billing_currency)
-    return {
-        "contract": "docs/plan/budget.md",
-        "question_ref": str(question_ref),
-        "revision_ref": str(fact.revision),
-    }
-
-
 async def pause(
     session,
     row,
@@ -361,7 +406,6 @@ async def pause(
     step=None,
     action=None,
     resource_ids=None,
-    budget_ref=None,
     input_refs=None,
 ):
     from app.services.agent_limits import active_used
@@ -376,15 +420,6 @@ async def pause(
     if action == "review_cards" and not refs:
         refs = await card_review_refs(session, row, resources)
         resources = [ref["id"] for ref in refs]
-    if kind == "budget" and budget_ref is None:
-        budget_job_id = (
-            step.child_job_id if step is not None and step.child_job_id else row.current_job_id
-        )
-        if budget_job_id is None:
-            fail("agent_budget_dependency_unavailable", "The existing budget job is unavailable")
-        budget_ref = await budget_fact_ref(session, row, f"job:{budget_job_id}:budget", settings)
-        if not refs and step is not None:
-            refs = step.input_refs
     sent = await redact_text(session, row, question, settings, limit=2000)
     timestamp = await now(session)
     record = AgentPause(
@@ -398,7 +433,6 @@ async def pause(
         question_enc=seal(settings, record_id, row.org_id, row.id, {"question": question}),
         action=action,
         resource_ids=resources,
-        budget_ref=budget_ref,
         input_refs=refs,
         input_sha256=digest(refs),
         created_at=timestamp,
@@ -442,29 +476,19 @@ async def _preview(session, actor, row, principal, message, settings, llm):
         quotes = [reasoning_provider(llm).quote(request)]
     except ProviderFailure as error:
         blockers.append(error.code)
-    attached = await budget_preflight.attach(
+    attached = await preflight_service.attach(
         session,
         {},
         command="agent start",
         task_id=row.task_id,
         input_hash=row.input_sha256,
-        currency=row.limits["billing_currency"],
         settings=settings,
         quotes=quotes,
         planned_calls=1,
-        max_charge=Decimal(row.limits["max_platform_charge"]),
     )
-    preflight = attached["budget_preflight"]
+    preflight = attached["preflight"]
     if preflight["admission_blocker"]:
         blockers.append(preflight["admission_blocker"])
-    if quotes:
-        quote = quotes[0]
-        if quote.vendor_usd_upper_bound is None:
-            blockers.append("billing_price_unavailable")
-        elif quote.vendor_usd_upper_bound > Decimal(row.limits["max_vendor_usd"]):
-            blockers.append("agent_vendor_cost_limit")
-        if quote.currency != row.limits["billing_currency"]:
-            blockers.append("billing_currency_mismatch")
     estimate = Cost.model_validate(
         {key: value for key, value in preflight["estimate"].items() if key in Cost.model_fields}
     )
@@ -484,8 +508,8 @@ async def _preview(session, actor, row, principal, message, settings, llm):
 
 
 async def resume_preflight(session, row, actor, settings):
-    """An opaque budget answer cannot bypass the existing call admission facts."""
-    from app.jobs.agent import BUDGET_STOPS, decision_request
+    """Revalidate configuration and fixed inputs before resuming."""
+    from app.jobs.agent import CONFIGURATION_STOPS, decision_request
     from app.services import drafts
     from app.services.agent_limits import enforce
     from app.services.agent_tools import generation_preflight, validate_call
@@ -502,7 +526,8 @@ async def resume_preflight(session, row, actor, settings):
     call = None
     if last is not None:
         if last.kind == "tool" and (
-            last.state == "planned" or (last.state == "failed" and last.error_code in BUDGET_STOPS)
+            last.state == "planned"
+            or (last.state == "failed" and last.error_code in CONFIGURATION_STOPS)
         ):
             call = TypeAdapter(ToolCall).validate_python(
                 unseal(settings, last.id, row.org_id, row.id, last.arguments_enc)
@@ -524,7 +549,7 @@ async def resume_preflight(session, row, actor, settings):
             if isinstance(decision.action, ToolDecision):
                 call = decision.action.call
         elif last.state == "waiting_job":
-            # Reconciliation is a database read; its next charge is admitted by
+            # Reconciliation is a database read; its next call is admitted by
             # the child worker if needed, rather than an unrelated model quote.
             return
     if call is not None and last is not None:
@@ -557,19 +582,17 @@ async def resume_preflight(session, row, actor, settings):
     request = await decision_request(session, row, uuid4(), settings, actor=actor)
     quote = reasoning_provider(llm).quote(request)
     await enforce(session, row, settings, quote)
-    attached = await budget_preflight.attach(
+    attached = await preflight_service.attach(
         session,
         {},
         command="agent resume",
         task_id=row.task_id,
         input_hash=row.input_sha256,
-        currency=row.limits["billing_currency"],
         settings=settings,
         quotes=[quote],
         planned_calls=1,
-        max_charge=Decimal(row.limits["max_platform_charge"]),
     )
-    blocker = attached["budget_preflight"]["admission_blocker"]
+    blocker = attached["preflight"]["admission_blocker"]
     if blocker is not None:
         fail(blocker, "Current call admission still requires intervention")
 
@@ -591,7 +614,8 @@ async def start(session, identity, task_id, body, settings, queue):
         )
     )
     if existing is not None and not body.dry_run:
-        return replay(
+        return await replay(
+            session,
             settings,
             existing,
             existing.id,
@@ -813,8 +837,14 @@ async def message(session, identity, session_id, body, settings):
         )
     )
     if existing is not None:
-        return replay(
-            settings, existing, row.id, existing.receipt_enc, request_hash, existing.request_sha256
+        return await replay(
+            session,
+            settings,
+            existing,
+            row.id,
+            existing.receipt_enc,
+            request_hash,
+            existing.request_sha256,
         )
     revision(row, body.expected_revision)
     if row.state != "paused":
@@ -840,8 +870,14 @@ async def cancel(session, identity, session_id, body, settings):
     actor = await bind_owner(session, actor, row)
     request_hash = digest(body)
     if row.cancel_idempotency_key == body.idempotency_key:
-        return replay(
-            settings, row, row.id, row.cancel_receipt_enc, request_hash, row.cancel_request_sha256
+        return await replay(
+            session,
+            settings,
+            row,
+            row.id,
+            row.cancel_receipt_enc,
+            request_hash,
+            row.cancel_request_sha256,
         )
     revision(row, body.expected_revision)
     if row.state in TERMINAL:
@@ -899,8 +935,14 @@ async def resume(session, identity, session_id, body, settings, queue):
         )
     )
     if previous is not None:
-        return replay(
-            settings, previous, row.id, previous.receipt_enc, request_hash, previous.request_sha256
+        return await replay(
+            session,
+            settings,
+            previous,
+            row.id,
+            previous.receipt_enc,
+            request_hash,
+            previous.request_sha256,
         )
     revision(row, body.expected_revision)
     if row.state != "paused" or row.pause_id != body.pause_id:
@@ -920,21 +962,6 @@ async def resume(session, identity, session_id, body, settings, queue):
         set(principal.scopes) & set(principal.initial_grants) & actor.scopes & AGENT_SCOPES
     )
     principal.authority_expires_at = min(actor.session_expires_at, timestamp + timedelta(hours=8))
-    if pending.kind == "budget":
-        if body.budget_ref is None:
-            fail(
-                "agent_budget_reference_required", "Resolve the existing budget intervention first"
-            )
-        if pending.budget_ref is None:
-            fail(
-                "agent_budget_dependency_unavailable",
-                "The saved budget intervention is unavailable",
-            )
-        current = await budget_fact_ref(session, row, pending.budget_ref["question_ref"], settings)
-        if body.budget_ref.model_dump(mode="json") != current:
-            fail("agent_budget_reference_stale", "Budget reference does not match current facts")
-    elif body.budget_ref is not None:
-        fail("agent_budget_reference_unexpected", "This pause has no budget intervention")
     try:
         admitted = await enforce(session, row, settings)
         await resume_preflight(session, row, admitted, settings)

@@ -62,7 +62,7 @@ The following paths describe the integration baseline, not implementation of thi
 | `assemble`, `current_draft_inputs` in [drafts.py](../../server/app/services/drafts.py); `fixed_rows`, `snapshot` in [score_run_inputs.py](../../server/app/services/score_run_inputs.py); `accept_batch` in [score_semantic.py](../../server/app/services/score_semantic.py) | Assembly partitions every requirement into a response, comply-only (须遵守), or gap (缺口). Scoring uses fixed inputs and guards `negative_deviation_conflict`; an assessment cannot grant full marks or silently remove a requirement. |
 | `build_manifest`, `fresh_manifest`, `release`, `download_gate` in [exports.py](../../server/app/services/exports.py) | Export revalidates approvals and input freshness; negative deviation requires acknowledgment rather than blanket prohibition. Final sections (正式件) block simulated materials; review copies (审阅件) retain their acknowledgment policy. |
 | `Identity`, `SCOPES`, `HUMAN_ONLY_SCOPES` in [auth.py](../../server/app/services/auth.py); `live_actor`, `access` in [task_workflow.py](../../server/app/services/task_workflow.py); `sign`, `apply_eligibility`, `manifest_fields` in [task_cosign.py](../../server/app/services/task_cosign.py) | Live task/domain authority and complete/current co-sign consumption predicates already exist. Org admin alone is not technical-review authority. A summary saying complete is not an approval predicate. |
-| `CONTRACT_VERSION`, `Result`, `Cost` in [contracts.py](../../server/app/schemas/contracts.py); `BudgetJobResult` in [budget_contracts.py](../../server/app/schemas/budget_contracts.py) | Task-budget work is merged: Result 4.0 retains seven envelope keys and detailed cost fields. B03 reuses these types, not older cost examples in the design. |
+| `CONTRACT_VERSION`, `Result`, `Cost` in [contracts.py](../../server/app/schemas/contracts.py); `PreflightData` in [preflight_contracts.py](../../server/app/schemas/preflight_contracts.py) |B03 reuses these types, not older cost examples in the design. |
 
 The [design's example](../design.md#data-model) uses `tech_param`, `param/op/value/unit`
 and an Evidence verdict of `satisfied`. Runtime `Category` uses `technical`, `substantive`,
@@ -78,8 +78,7 @@ snippets cannot supply parameter facts or conversions.
 One active task, explicit extraction scope and lot, pinned declared product/feature,
 and already captured genuine product material support the complete path below.
 
-1. Select at most 100 requirement/resource pairs. Show current B02 review, selected
-   model/revision, owner and missing inputs before any paid call.
+1. Select at most 100 requirement/resource pairs.
 2. Propose typed conditions for literal clauses such as `内存≥64GB`,
    `端口数不少于24个`, `工作温度覆盖-10℃至50℃`, and `支持IPv4和IPv6`.
    Validate every field against its literal Source; preserve unsupported or ambiguous
@@ -339,14 +338,15 @@ as authorization by a client.
 | Reviewed rule release | Retain pinned historic release; expose recompute available. Explicit task adoption creates new assessment inputs and requires re-review. A revoked unsafe rule release blocks acceptance/consumption immediately without rewriting history. |
 | Membership/domain/co-sign policy changes or task archival | Re-evaluate live acceptance and consumption. Loss of authorized signers cannot be overridden by cached success; archived tasks allow authorized history reads only. |
 
-Jobs capture expected input hash under task lock; recheck live authorization and all
-pins at publication and before each paid call. No publication against changed inputs:
-return `parameter_inputs_changed` with recoverable receipts and accounted cost. Use
+No publication against changed inputs:
+return `parameter_inputs_changed` with recoverable receipts and accounted cost.
+Use
 `JobExecution` run IDs, cancellation and recovery rather than a second queue.
 Extraction cache keys include full source hashes, registry/grammar version, prompt/model
 and redaction policy; deterministic comparison keys include exact condition/facts/rules.
 Cached computation may save cost; human receipts and task eligibility are never cached
-across changed input/review epochs. Emit durable task events in the same transaction as
+across changed input/review epochs.
+Emit durable task events in the same transaction as
 decision/invalidation; consumers revalidate even if SSE delivery or an invalidation
 worker is delayed.
 
@@ -407,7 +407,7 @@ Recommended migration sequence:
    such cards; retain the compatible gate or disable those writes. Never drop receipts
    or silently treat a B03-bound card as an old unbound card. Repair forward.
 
-## HTTP, CLI and Result 4.0
+## HTTP, CLI and Result 5.0
 
 All routes below are proposed relative to the same API prefix as existing routes.
 `org_id`, actor, approval state and rule release come from live server context; write
@@ -418,13 +418,13 @@ JSON payload file; missing input fails immediately.
 
 | HTTP route | CLI | Request → Result `data` / `items` |
 | --- | --- | --- |
-| `POST /tasks/{task}/parameters/extractions` | `bid parameter extract --task ID --input FILE [--dry-run] [--wait] --json` | `ExtractionRequest` → `BudgetPreflightData` or `JobAccepted` / `[]`; terminal `RunSummary` / `TargetReceipt[]`. |
+| `POST /tasks/{task}/parameters/extractions` | `bid parameter extract --task ID --input FILE [--dry-run] [--wait] --json` | `ExtractionRequest` → `PreflightData` or `JobAccepted` / `[]`; terminal `RunSummary` / `TargetReceipt[]`. |
 | `GET /tasks/{task}/requirements/{req}/parameter-condition` | `bid parameter condition show --task ID --requirement ID --json` | → `ConditionView` / `[]`. |
 | `PUT /tasks/{task}/requirements/{req}/parameter-condition` | `bid parameter condition propose --task ID --requirement ID --input FILE --json` | `ConditionCreate` → new unconfirmed `ConditionView` / `[]`; not original requirement editing. |
 | `POST /tasks/{task}/parameter-conditions/{id}/decisions` | `bid parameter condition decide --task ID --condition ID --input FILE --json` | `Decision` → `ConditionView` / `[]`; human only. |
 | `POST /tasks/{task}/parameter-fact-sets` | `bid parameter facts create --task ID --input FILE --json` | `FactSetCreate` → `FactSetView` / `[]`; checked source proposals, no acceptance. |
 | `GET /tasks/{task}/parameter-fact-sets/{id}` | `bid parameter facts show --task ID --facts ID --json` | → `FactSetView` / `[]`. |
-| `POST /tasks/{task}/parameter-assessments` | `bid parameter assess --task ID --input FILE [--dry-run] [--wait] --json` | `RunRequest` → `BudgetPreflightData` or `JobAccepted` / `[]`; terminal `RunSummary` / `TargetReceipt[]`. |
+| `POST /tasks/{task}/parameter-assessments` | `bid parameter assess --task ID --input FILE [--dry-run] [--wait] --json` | `RunRequest` → `PreflightData` or `JobAccepted` / `[]`; terminal `RunSummary` / `TargetReceipt[]`. |
 | `GET /tasks/{task}/parameter-assessments` | `bid parameter list --task ID --extraction-job ID [--verdict V] [--review-state S] [--requirement ID] [--limit N] [--cursor C] --json` | `AssessmentQuery` → `PageData` / `AssessmentView[]`. |
 | `GET /tasks/{task}/parameter-assessments/{id}` | `bid parameter show --task ID --assessment ID --json` | → `AssessmentView` / `[]`. |
 | `GET /tasks/{task}/parameter-assessments/{id}/history` | `bid parameter history --task ID --assessment ID [--cursor C] [--limit N] --json` | `PageQuery` → `PageData` / `AuditEvent[]`, including linked condition/fact decisions. |
@@ -461,31 +461,28 @@ Example successful submission (IDs are illustrative, not fixture business data):
   },
   "items": [],
   "warnings": [],
-  "cost": {
-    "llm_tokens": 0,
-    "ocr_pages": 0,
-    "usd": 0.0,
-    "basis": "zero",
-    "charge": "0",
-    "billing_currency": "USD",
-    "task_amount": "0",
-    "unpriced_calls": 0,
-    "unresolved_calls": 0
-  },
+  "cost": {"calls": 0, "llm_tokens": 0, "ocr_pages": 0, "search_requests": 0, "browser_units": 0, "unresolved_calls": 0},
   "duration_ms": 8
 }
 ```
 
-This is the current `Result` envelope, not an invented `Result4` type. `data` is the
+This is the current `Result` envelope, not an invented `Result4` type.
+`data` is the
 JSON-mode projection of the table's Pydantic model; list rows belong in `items`, not a
-second unbounded nested list. Cost is required in snapshots even when all values are
-zero. Deterministic assessment has zero provider calls and local zero cost. Extraction
-uses `BudgetProviderUsage`, `budget_preflight.estimate_quotes/attach`, and
-`JobExecution.admit`; every actual call is priced/accounted even if its output is
-rejected. Unknown prices use `basis=unknown` and null amounts, never false zero. Dry-run
-makes no call/write/reservation. Cached results report current operation cost separately
-from historical generation cost. Terminal partial/failed jobs retain `BudgetJobResult`
-published/remaining/usage and human intervention, without automatic budget escalation.
+second unbounded nested list.
+Cost is required in snapshots even when all values are
+zero.
+Deterministic assessment has zero provider calls and local zero cost.
+Extraction
+uses `ProviderUsage`, `preflight.estimate`, and
+`JobExecution.admit`; every actual call has durable usage recorded even if its output is
+rejected.
+Uncertain dispatched usage increments `unresolved_calls`; it never becomes a
+false completed zero-use call.
+Cached results report current operation cost separately
+from historical generation cost.
+Terminal partial/failed jobs retain published/remaining/usage details
+and human intervention, without automatically increasing resource limits.
 
 | Exit | Meaning for B03 |
 | --- | --- |
@@ -513,11 +510,13 @@ or retry already published items silently.
 | Response approval/co-sign/export | Existing scopes | Preserve `evidence:confirm`, `card:cosign`, review-domain roles and `export`, plus live B02/assessment gates. No new export permission. |
 
 Add `parameter:confirm` to `HUMAN_ONLY_SCOPES` and database token-scope denial constraints;
-it is never in token-issuable `SCOPES`. Tokens never receive any human-only scope,
+it is never in token-issuable `SCOPES`.
+Tokens never receive any human-only scope,
 `evidence:confirm` or `export`, including through task ownership, delegation or internal
-agents. Token run jobs recheck issuer/task grants at dispatch, each paid call and
-publication; revocation stops further work. UI capability hints are explanations, not
-authorization. Workers cannot impersonate a session to accept their outputs.
+agents.
+UI capability hints are explanations, not
+authorization.
+Workers cannot impersonate a session to accept their outputs.
 
 Audit condition proposals/revisions/decisions, source/fact-set creation, comparison
 submission/completion/failure, exact human acceptance/reject/reopen, invalidation and
@@ -541,8 +540,7 @@ Bounded reads are a contract, not a UI pagination hint:
   oversized target with a receipt rather than storing a result that cannot be reviewed.
 - Request bodies cap at 1 MiB; at most 100 selected targets per job, 16 atoms per
   requirement, 64 facts per set, eight product citations per atom, 20,000 characters
-  per quote. Provider batches cap at 20 requirements and 64 KiB serialized text;
-  oversize single candidates return `parameter_input_too_large` before billing.
+  per quote.
 - Local archived-text projection caps at 8 MiB UTF-8 text and 5000 blocks per archive,
   with bounded streaming input and the existing archive limits. It fails explicitly
   rather than truncating a source while claiming complete fact verification.
@@ -581,7 +579,7 @@ defaults to meets. Confirmation names exactly what is being accepted and separat
 shows B02, response/Evidence and co-sign blockers. Comparison reruns do not tick any of
 those checkboxes.
 
-Batch extraction/assessment starts with selected count, missing inputs and budget
+Batch extraction/assessment starts with selected count, missing inputs and resource estimates
 preview. Progress keeps successful, ambiguous, unknown and failed targets distinguishable.
 No implicit “confirm all” or cross-domain approval is introduced. After accepted
 assessment attachment, link to the existing card review, assembly, check, scoring and
@@ -594,12 +592,12 @@ source/history views, without disabled controls suggesting they can grant approv
 | Failure | Required behavior |
 | --- | --- |
 | Literal citation absent, repeated occurrence unresolved or page/block mismatch | Reject verification with per-target reason; preserve original requirement and B02 state; repair through authorized source workflow. |
-| Number/operator/scope absent from exact quote, model invents conversion or drops negation/★ | Reject unsupported typed candidate or persist explicit ambiguity; never publish a conclusive assessment. Preserve paid-call usage. |
+| Number/operator/scope absent from exact quote, model invents conversion or drops negation/★ | Reject unsupported typed candidate or persist explicit ambiguity; never publish a conclusive assessment.|
 | Missing fact, incomplete archive, unverified declared feature, simulated resource or prototype-only support | Unknown with source/material action; no zero/default value or automatic negative deviation. |
 | Dimension mismatch, ambiguous alias, contradictory source or unsupported tolerance | Ambiguous with literal supporting spans and technical owner; no widening retry/prompt to force success. |
 | Revision changes between preview, worker and confirmation | 409 `parameter_inputs_changed`; retain historical computation, require fresh preview/review. No partial update of confirmation/bindings. |
 | Lost membership, wrong review domain, archived task or token confirmation | Deny on server and transaction boundary; 404 for invisible objects, 403 for forbidden visible actions. Recovery reads remain subject to visibility. |
-| Provider budget/call cap/cancellation after some targets | Persist exact published/remaining receipts and all admitted usage; partial exit 5, no fabricated missing results or automatic budget increase. |
+| Provider failure/call cap/cancellation after some targets | Persist exact published/remaining receipts and all admitted usage; partial exit 5, no fabricated missing results or automatic resource-limit increase. |
 | Database/source storage failure or queue replay | Retry only classified transient failures through existing job recovery; idempotent fixed-input publication and unique run/target keys prevent duplicate decisions. |
 | Oversized data, excessive facts/conflicts or expired cursor | Explicit input/size/cursor error with narrower selection guidance; never silently clip evidence or cross-task results. |
 | Accepted assessment conflicts with proposed response deviation | Keep the comparison and block contradictory attached acceptance; revise inputs or reopen/detach with human reason and full response review. |
@@ -619,7 +617,7 @@ the comparator are prescribed.
 | Two-org HTTP/job isolation | For **each route in the HTTP table**, A against B and A against a nonexistent parent both return 404, including cursor/history/source/facts/card/job children. Revoke token/membership between submit and publication; check no B data enters Provider input, caches, SSE or error details. |
 | Real workflow gates | Human with technical task authority accepts B02/condition/result separately, attaches a card, completes Evidence and required co-sign, assembles and exports. Negative cases cover every missing gate, wrong role, token scope issuance/request, stale source/pin/rules, a changed-back revision, simulated/prototype declarations and contradictory card. Reopen/reject recovery remains usable. |
 | Parameter end-to-end vectors | Run source → condition → facts → assessment through actual API with fake model proposals: Chinese inequalities/negation/full-width digits, 64 GB/64 GiB, 23/24 ports, exact boundaries, negative temperature, open/closed ranges, all/any sets, per-port versus total, installed versus maximum, explicit tolerance, unsupported/ambiguous statements, missing or conflicting facts, ★ preservation and quote-matched-but-semantically-wrong proposals. |
-| CLI snapshots | Snapshot `--json` for **every listed command**, dry-run/job wait, page/cursor, human denial, stale gate, retryable/nonretryable/partial outcomes and Result 4.0 costs. Import schema discovery and ensure no unregistered command or older cost projection is advertised as B03. Snapshot decimal strings, both source sides and empty-result pages. |
+| CLI snapshots | Snapshot `--json` for **every listed command**, dry-run/job wait, page/cursor, human denial, stale gate, retryable/nonretryable/partial outcomes and Result 5.0 costs. Import schema discovery and ensure no unregistered command or older cost projection is advertised as B03. Snapshot decimal strings, both source sides and empty-result pages. |
 | Browser end-to-end | Two humans with distinct required review domains and a read-only user exercise next-owner assignment, source inspection, ambiguity correction, card attachment, co-sign, negative-deviation acknowledgment and export. Replace the product pin during an open review and test SSE reconnect/stale refresh. Retain a redacted Playwright trace and assertions tied to immutable IDs, not screenshots alone. |
 | Boundedness/concurrency | Seed enough data to cross each page/batch/quote/byte/manifest bound. Assert SQL bounded reads, no N+1 source loading, correct UTF-8 envelope shrinking, cursor forward progress, timeout mapping and changed-input publication rejection. Queue replay and cancellation retain cost and one receipt per target. |
 
@@ -670,7 +668,7 @@ The owner approved every recommended default; implementation follows these decis
 | Legacy `Requirement.condition` | Preserve as historical free JSON; typed sidecar with explicit source/B02 bindings. | Avoids retroactive approval and a breaking extraction contract. |
 | GB/GiB and conversion authority | Exact SI/binary distinctions in reviewed immutable releases; ambiguous source spelling goes to human. | Reproducible comparisons without model or memory guesses. |
 | Tolerance | No implicit tolerance; only cited absolute/percent numeric equality in v1. | Prevents an apparent match created by relaxing the tender. |
-| Fact extraction | Human/source-checked fact entry and local archive text parsing initially; LLM proposes tender conditions only. | Keeps the first slice auditable and budget behavior understandable; future automated product extraction can reuse facts. |
+| Fact extraction | Human/source-checked fact entry and local archive text parsing initially; LLM proposes tender conditions only. | Keeps the first slice auditable and resource limits understandable; future automated product extraction can reuse facts. |
 | Product/feature proof | Exact task pin and applicable genuine source; declaration, simulated proposal and prototype alone yield unknown. | Prevents implementation-state or simulation markers being laundered into proof. |
 | Human authority | Technical review-domain humans decide typed meaning/result; B02 and response/co-sign gates remain independent. | Gives a visible responsible owner without granting technical authority to every admin. |
 | Require B03 for every response? | No; explicit optional attachment, then strict freshness and contradiction gates. | Preserves valid manual work while making machine-supported claims auditable. |
