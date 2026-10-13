@@ -6,7 +6,8 @@ kind: howto
 
 Run the test suite against a disposable PostgreSQL instance, provision a
 development database, and start the API, worker, and containers. The CLI
-workflows are in [cli.md](cli.md).
+workflows are in [cli.md](cli.md); the local macOS app procedure is in
+[Build and launch the macOS developer app](desktop-development.md).
 
 ## Prerequisites
 
