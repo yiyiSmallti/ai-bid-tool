@@ -27,7 +27,6 @@ def revision_data(row: ProductRevision) -> dict:
 def snapshot_data(row: TaskResource, revision: ProductRevision) -> dict:
     return TaskProductSnapshot(
         id=row.id,
-        org_id=row.org_id,
         task_id=row.task_id,
         product_revision_id=revision.id,
         revision=revision.revision,

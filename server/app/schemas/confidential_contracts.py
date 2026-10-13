@@ -9,7 +9,7 @@ from pydantic import Field, field_validator, model_validator
 from app.schemas.contracts import Contract
 
 ConfidentialKind = Literal["amount", "contact", "identity", "bank_account", "other"]
-ConfidentialScope = Literal["org", "task"]
+ConfidentialScope = Literal["library", "task"]
 KEY_PATTERN = r"^[a-z][a-z0-9_]{1,47}$"
 
 
@@ -46,7 +46,7 @@ class ConfidentialFieldUpdate(Contract):
 
 class ConfidentialValueSet(Contract):
     value: str = Field(min_length=1, max_length=2000)
-    # Required for a task-scope field, refused for an org-scope one.
+    # Required for a task-scope field, refused for an library-scope one.
     task_id: UUID | None = None
 
     _value = field_validator("value")(_nonblank)
@@ -65,7 +65,7 @@ class ConfidentialFieldView(Contract):
 
 
 class ConfidentialValueView(Contract):
-    """One field's current value for the org or a task, never the value itself."""
+    """One field's current value for the library or a task, never the value itself."""
 
     field_id: UUID
     key: str
@@ -78,7 +78,7 @@ class ConfidentialValueView(Contract):
     value_id: UUID | None
     version: int | None
     tail: str | None
-    set_by: UUID | None
+
     set_at: datetime | None
 
 

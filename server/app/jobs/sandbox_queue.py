@@ -1,4 +1,4 @@
-"""Bounded dispatch retries while an organization waits for a sandbox slot."""
+"""Bounded dispatch retries while a job waits for a sandbox slot."""
 
 import procrastinate
 
@@ -9,10 +9,10 @@ def register_sandbox_task(app: procrastinate.App, processor):
     @app.task(
         name="bid.sandbox", queue="bid", retry=procrastinate.RetryStrategy(max_attempts=125, wait=5)
     )
-    async def process(org_id: str, job_id: str):
+    async def process(job_id: str):
         active = processor()
         if active is None:
             raise RuntimeError("Worker processor is not configured")
-        await active(org_id, job_id)
+        await active(job_id)
 
     return process

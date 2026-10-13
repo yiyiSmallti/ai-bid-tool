@@ -2,12 +2,13 @@
 import {computed,onMounted,onUnmounted,ref,watch} from 'vue';
 import {onBeforeRouteLeave,onBeforeRouteUpdate,useRoute} from 'vue-router';
 import QualificationEditor from './QualificationEditor.vue';
-import {confirmAction,errorText,formatTime,orgRequest} from '../org.js';
-import {blankQualification,checkQualificationPage,checkQualificationRevision,qualificationData,qualificationKinds,qualificationMaintainer,qualificationPath,rememberQualificationCursor,validId} from '../qualifications.js';
+import {confirmAction,errorText,formatTime} from '../org.js';
+import {request} from '../api.js';
+import {blankQualification,checkQualificationPage,checkQualificationRevision,qualificationData,qualificationKinds,qualificationPath,rememberQualificationCursor,validId} from '../qualifications.js';
 const props=defineProps({kind:{type:String,required:true},reader:{type:Object,required:true}}),route=useRoute();
 const label=qualificationKinds[props.kind].label,channel=`list-${props.kind}`;
 const search=ref(''),state=ref('active'),rows=ref([]),meta=ref(null),cursor=ref(null),previous=ref([]),error=ref(''),loading=ref(false),busy=ref(false),editing=ref(false),form=ref(blankQualification(props.kind)),receipt=ref(null),fields=ref([]),revoked=ref(false);
-const writable=computed(()=>!revoked.value&&qualificationMaintainer()),dirty=computed(()=>editing.value&&JSON.stringify(form.value)!==JSON.stringify(blankQualification(props.kind)));
+const writable=computed(()=>!revoked.value),dirty=computed(()=>editing.value&&JSON.stringify(form.value)!==JSON.stringify(blankQualification(props.kind)));
 const taskId=computed(()=>validId(route.query.task)?route.query.task:null);let timer=null,generation=0,stopped=false;
 function link(row){return {path:`/org/${props.kind}/${row.ref.resource_id}`,query:{revision:String(row.revision),...(taskId.value?{task:taskId.value}:{})}};}
 async function load(next=null){if(stopped)return;const run=++generation;props.reader.cancel(channel);loading.value=true;error.value='';rows.value=[];meta.value=null;cursor.value=next;
@@ -20,14 +21,14 @@ function next(){if(!meta.value?.has_more)return;rememberQualificationCursor(prev
 function back(){if(previous.value.length)load(previous.value.pop());}
 async function start(){editing.value=true;receipt.value=null;if(props.kind==='profiles')try{const result=await props.reader.read(`fields-${props.kind}`,'GET','/confidential-fields');if(stopped)return;fields.value=result.items.map(({key,label,scope})=>({key,label,scope}));}catch(exc){if([401,403,404].includes(exc.status))clear(false);if(exc.name!=='AbortError')error.value=errorText(exc);}}
 async function cancel(){if(dirty.value&&!await confirmAction(`放弃未保存的${label}内容？`,'放弃未保存编辑','放弃编辑'))return;editing.value=false;form.value=blankQualification(props.kind);fields.value=[];}
-async function save(){if(!writable.value||busy.value||stopped)return;busy.value=true;error.value='';
- try{const result=await orgRequest('POST',`/resources/${props.kind}`,{data:qualificationData(props.kind,form.value)},{});if(stopped)return;receipt.value=checkQualificationRevision(result.data,props.kind);editing.value=false;form.value=blankQualification(props.kind);fields.value=[];resetList();}catch(exc){if([401,403,404].includes(exc.status))clear(false);error.value=!exc.status?'保存结果尚未确定，请重新读取资料列表核对后再主动决定；不会自动重试。':errorText(exc);}finally{busy.value=false;}}
-function clear(reset=true){loading.value=false;stopped=true;revoked.value=true;generation++;clearTimeout(timer);props.reader.cancel(channel);props.reader.cancel(`fields-${props.kind}`);rows.value=[];meta.value=null;form.value=blankQualification(props.kind);fields.value=[];editing.value=false;receipt.value=null;search.value='';if(reset)error.value=`单位会话已改变，请重新打开${label}列表`;}
+async function save(){if(busy.value||stopped)return;busy.value=true;error.value='';
+ try{const result=await request('POST',`/resources/${props.kind}`,{data:qualificationData(props.kind,form.value)},{});if(stopped)return;receipt.value=checkQualificationRevision(result.data,props.kind);editing.value=false;form.value=blankQualification(props.kind);fields.value=[];resetList();}catch(exc){if([401,403,404].includes(exc.status))clear(false);error.value=!exc.status?'保存结果尚未确定，请重新读取资料列表核对后再主动决定；不会自动重试。':errorText(exc);}finally{busy.value=false;}}
+function clear(reset=true){loading.value=false;stopped=true;revoked.value=true;generation++;clearTimeout(timer);props.reader.cancel(channel);props.reader.cancel(`fields-${props.kind}`);rows.value=[];meta.value=null;form.value=blankQualification(props.kind);fields.value=[];editing.value=false;receipt.value=null;search.value='';if(reset)error.value=`会话已变化，请重新打开${label}列表`;}
 function beforeUnload(event){if(dirty.value){event.preventDefault();event.returnValue='';}}
 const canLeave=async()=>!dirty.value||await confirmAction(`放弃未保存的${label}内容？`,'放弃未保存编辑','放弃编辑');
 onBeforeRouteLeave(canLeave);onBeforeRouteUpdate(canLeave);
-onMounted(()=>{load();window.addEventListener('bid:org-reset',clear);window.addEventListener('beforeunload',beforeUnload);});
-onUnmounted(()=>{stopped=true;generation++;clearTimeout(timer);props.reader.cancel(channel);props.reader.cancel(`fields-${props.kind}`);window.removeEventListener('bid:org-reset',clear);window.removeEventListener('beforeunload',beforeUnload);});
+onMounted(()=>{load();window.addEventListener('bid:session-reset',clear);window.addEventListener('beforeunload',beforeUnload);});
+onUnmounted(()=>{stopped=true;generation++;clearTimeout(timer);props.reader.cancel(channel);props.reader.cancel(`fields-${props.kind}`);window.removeEventListener('bid:session-reset',clear);window.removeEventListener('beforeunload',beforeUnload);});
 </script>
 <template>
  <el-card shadow="never" class="section" :data-testid="`${kind}-list`">
@@ -40,7 +41,7 @@ onUnmounted(()=>{stopped=true;generation++;clearTimeout(timer);props.reader.canc
   <p v-if="loading" role="status">正在读取{{label}}…</p>
   <!-- Keep the table mounted so rows=[] clears its store; column teardown can
        rearm layout callbacks that retain an unmounted table's previous page. -->
-  <el-table v-show="!loading&&rows.length" :data="rows" row-key="revision_id" :aria-label="`${label}列表`"><el-table-column :label="`${label} / 修订`" min-width="200"><template #default="{row}"><RouterLink :to="link(row)">{{row.name}}</RouterLink><p class="hint">内容修订 {{row.revision}} · 自行声明</p></template></el-table-column><el-table-column label="生命周期" width="110"><template #default="{row}"><el-tag :type="row.lifecycle.state==='active'?'success':'info'">{{row.lifecycle.state==='active'?'可用':'已停用'}}</el-tag></template></el-table-column><el-table-column label="最近修订" min-width="210"><template #default="{row}">{{formatTime(row.revised_at)}}<p class="hint">修订者：{{row.revised_by??'未知'}}</p></template></el-table-column><el-table-column label="下一步" width="150"><template #default="{row}"><RouterLink :to="link(row)">{{kind==='certificates'?'查看修订与原件':'查看修订'}}</RouterLink></template></el-table-column></el-table>
+  <el-table v-show="!loading&&rows.length" :data="rows" row-key="revision_id" :aria-label="`${label}列表`"><el-table-column :label="`${label} / 修订`" min-width="200"><template #default="{row}"><RouterLink :to="link(row)">{{row.name}}</RouterLink><p class="hint">内容修订 {{row.revision}} · 自行声明</p></template></el-table-column><el-table-column label="生命周期" width="110"><template #default="{row}"><el-tag :type="row.lifecycle.state==='active'?'success':'info'">{{row.lifecycle.state==='active'?'可用':'已停用'}}</el-tag></template></el-table-column><el-table-column label="最近修订" min-width="210"><template #default="{row}">{{formatTime(row.revised_at)}}</template></el-table-column><el-table-column label="下一步" width="150"><template #default="{row}"><RouterLink :to="link(row)">{{kind==='certificates'?'查看修订与原件':'查看修订'}}</RouterLink></template></el-table-column></el-table>
   <el-empty v-if="!loading&&meta&&!error&&!rows.length" :description="`没有符合条件的${label}`"/>
   <div class="actions"><el-button :disabled="loading||!previous.length" @click="back">上一页{{label}}</el-button><el-button :disabled="loading||!meta?.has_more" @click="next">下一页{{label}}</el-button><span v-if="meta" class="hint">本页 {{meta.returned}} 项 · 读取时间 {{formatTime(meta.as_of)}}；分页反映各页读取时的当前状态。</span></div>
  </el-card>

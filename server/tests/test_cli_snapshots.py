@@ -7,15 +7,21 @@ import bid_cli.export as export_cli
 from app.schemas.contracts import Cost, Result
 from bid_cli.client import Client
 from bid_cli.main import main
-from cryptography.fernet import Fernet
 
 IDENTIFIER = "00000000-0000-0000-0000-000000000001"
 IDENTIFIER_2 = "00000000-0000-0000-0000-000000000002"
 IDENTIFIER_3 = "00000000-0000-0000-0000-000000000003"
 IDENTIFIER_4 = "00000000-0000-0000-0000-000000000004"
+TASK = {
+    "id": IDENTIFIER,
+    "name": "Synthetic task",
+    "tender_number": "SYNTHETIC-001",
+    "deadline": "2027-01-02T03:04:05Z",
+    "model_redaction_enabled": True,
+    "model_redaction_revision": 1,
+}
 PRODUCT = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "product_id": IDENTIFIER,
     "revision": 1,
     "data": {
@@ -29,7 +35,6 @@ PRODUCT = {
 }
 SELECTION = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "product_revision_id": IDENTIFIER,
     "revision": 1,
@@ -38,7 +43,6 @@ SELECTION = {
 }
 FEATURE = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "feature_id": IDENTIFIER,
     "revision": 1,
     "data": {
@@ -50,7 +54,6 @@ FEATURE = {
 }
 FEATURE_SELECTION = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "feature_revision_id": IDENTIFIER,
     "revision": 1,
@@ -61,7 +64,6 @@ FEATURE_WARNINGS = ["Implementation status is a declaration; evidence has not be
 
 CERTIFICATE = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "certificate_id": IDENTIFIER,
     "revision": 1,
     "data": {
@@ -74,7 +76,6 @@ CERTIFICATE = {
 }
 CERTIFICATE_SELECTION = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "certificate_revision_id": IDENTIFIER,
     "revision": 1,
@@ -87,7 +88,6 @@ CERTIFICATE_WARNINGS = [
 
 PROFILE = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "profile_id": IDENTIFIER,
     "revision": 1,
     "data": {
@@ -99,7 +99,6 @@ PROFILE = {
 }
 PROFILE_SELECTION = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "profile_revision_id": IDENTIFIER,
     "revision": 1,
@@ -113,7 +112,6 @@ PROFILE_WARNINGS = [
 
 TEMPLATE = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "template_id": IDENTIFIER,
     "revision": 1,
     "data": {"name": "Synthetic template", "project_types": None, "chapters": None},
@@ -126,7 +124,6 @@ TEMPLATE = {
 }
 TEMPLATE_SELECTION = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "template_revision_id": IDENTIFIER,
     "revision": 1,
@@ -169,7 +166,6 @@ EXPORT_SECTIONS = [
 ]
 EXPORT_BINDING = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "template_revision_id": IDENTIFIER,
     "template_sha256": "b" * 64,
     "binding_hash": "c" * 64,
@@ -177,12 +173,10 @@ EXPORT_BINDING = {
     "adapter_version": "docx-export-v1",
     "sections": EXPORT_SECTIONS,
     "current": True,
-    "reviewed_by": IDENTIFIER,
     "reviewed_at": "2026-10-01T00:00:00Z",
 }
 EXPORT_RUN = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "draft_id": IDENTIFIER,
     "render_job_id": IDENTIFIER_2,
@@ -207,7 +201,6 @@ EXPORT_PROVENANCE = {
     "renderer_profile": "docx-export-v3",
     "input_hash": "a" * 64,
     "manifest_hash": "b" * 64,
-    "released_by": IDENTIFIER,
     "released_at": "2026-10-01T00:00:00Z",
     "items": [
         {
@@ -215,9 +208,7 @@ EXPORT_PROVENANCE = {
             "number": 1,
             "requirement_id": IDENTIFIER,
             "card_revision_id": IDENTIFIER,
-            "confirmed_by": IDENTIFIER,
             "confirmed_at": "2026-10-01T00:00:00Z",
-            "disposition_by": None,
             "disposition_at": None,
             "quote_sha256": "c" * 64,
             "evidence": [
@@ -227,7 +218,6 @@ EXPORT_PROVENANCE = {
                     "material_kind": "user_supplied_pdf_page",
                     "selection_id": IDENTIFIER,
                     "resource_revision_id": IDENTIFIER,
-                    "confirmed_by": IDENTIFIER,
                     "confirmed_at": "2026-10-01T00:00:00Z",
                 }
             ],
@@ -252,7 +242,6 @@ EXPORT_PROVENANCE = {
 }
 EXPORT_VIEW = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "run_id": IDENTIFIER,
     "draft_id": IDENTIFIER,
@@ -265,7 +254,6 @@ EXPORT_VIEW = {
     "input_hash": "e" * 64,
     "manifest_hash": "f" * 64,
     "file": EXPORT_FILE,
-    "released_by": IDENTIFIER,
     "released_at": "2026-10-01T00:00:00Z",
     "issues": [],
     "invalidated_requirement_ids": [],
@@ -304,7 +292,6 @@ async def fake_export_download(self, export_id, output):
 
 SCAN = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "certificate_id": IDENTIFIER,
     "certificate_revision_id": IDENTIFIER,
     "revision": 2,
@@ -344,7 +331,6 @@ async def fake_scan_download(self, revision_id, output):
 
 SOURCE = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "task_certificate_id": IDENTIFIER,
     "certificate_id": IDENTIFIER,
@@ -364,10 +350,8 @@ SOURCE = {
         "height_px": 1,
     },
     "rendered_at": "2026-10-01T00:00:00Z",
-    "created_by": IDENTIFIER,
     "active_selection": True,
     "status": "unconfirmed_source",
-    "confirmed_by": None,
     "eligible_for_draft_export": False,
 }
 SOURCE_WARNINGS = [
@@ -390,7 +374,6 @@ SANDBOX_ARTIFACT = {
 }
 SANDBOX_RUN = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "job_id": IDENTIFIER,
     "purpose": "prototype_offline",
@@ -416,7 +399,6 @@ CLAUSE = {
 }
 EVIDENCE = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "card_id": IDENTIFIER_2,
     "input": {
@@ -430,13 +412,11 @@ EVIDENCE = {
     "material_kind": "declaration",
     "quote_check": "exact_field_match",
     "source_archive": None,
-    "confirmed_by": IDENTIFIER,
     "confirmed_at": "2026-10-01T00:00:00+00:00",
     "active_selection": True,
 }
 CARD = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "extraction_job_id": IDENTIFIER,
     "requirement_id": IDENTIFIER,
@@ -445,7 +425,6 @@ CARD = {
     "state": "draft",
     "review_domain": "technical",
     "disposition": "respond",
-    "disposition_by": IDENTIFIER,
     "disposition_at": "2026-10-01T00:00:00+00:00",
     "suggested_disposition": None,
     "origin": "human",
@@ -461,7 +440,6 @@ CARD = {
         "evidence": [],
     },
     "evidence": [],
-    "confirmed_by": None,
     "confirmed_at": None,
     "reason": None,
     "reviewed_warning_codes": [],
@@ -470,7 +448,6 @@ CARD = {
 }
 DRAFT = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "extraction_job_id": IDENTIFIER,
     "generation_job_id": IDENTIFIER,
@@ -522,7 +499,6 @@ DRAFT = {
             "card_revision_id": IDENTIFIER_3,
             "tender_clause": CLAUSE,
             "location_label": "Page 1",
-            "disposition_by": IDENTIFIER,
             "disposition_at": "2026-10-01T00:00:00+00:00",
         }
     ],
@@ -565,14 +541,6 @@ async def fake_sandbox_download(self, artifact_id, output):
     ).model_dump(mode="json")
 
 
-PLATFORM_ORG = {
-    "id": IDENTIFIER,
-    "name": "Synthetic tenant",
-    "active": True,
-    "created_at": "2026-10-01T00:00:00+00:00",
-    "member_count": 1,
-    "admin_emails": ["boss@example.test"],
-}
 PLATFORM_MODEL = {
     "id": "opus-standard",
     "capability": "llm_extract",
@@ -586,27 +554,6 @@ PLATFORM_MODEL = {
     "updated_at": "2026-10-01T00:00:00+00:00",
     "default": True,
     "credential_configured": True,
-}
-PLATFORM_USAGE = {
-    "org_id": IDENTIFIER,
-    "org_name": "Synthetic tenant",
-    "month": "2026-10-01",
-    "provider": "anthropic",
-    "model": "claude-opus-5-5",
-    "calls": 1,
-    "tokens": 10,
-    "input_tokens": 8,
-    "output_tokens": 2,
-    "ocr_pages": 0,
-}
-PLATFORM_AUDIT = {
-    "id": IDENTIFIER,
-    "created_at": "2026-10-01T00:00:00+00:00",
-    "actor_email": "ops@example.test",
-    "action": "platform.login",
-    "object_id": None,
-    "outcome": "success",
-    "details": {"totp_counter": 1},
 }
 
 
@@ -633,7 +580,6 @@ CONFIDENTIAL_VALUE = {
     "value_id": IDENTIFIER_2,
     "version": 1,
     "tail": None,
-    "set_by": IDENTIFIER,
     "set_at": "2026-10-01T00:00:00+00:00",
 }
 
@@ -641,11 +587,7 @@ CONFIDENTIAL_VALUE = {
 async def fake_request(self, method, path, **kwargs):
     # Contract fixtures only: no real service, provider or user data is involved.
     data, items, warnings = {}, [], []
-    if path == "/auth/login":
-        data = {"session": "synthetic-fixture-session", "org_id": IDENTIFIER, "expires_in": 3600}
-    elif path == "/org/current":
-        data = {"org_id": IDENTIFIER, "role": "admin"}
-    elif path == "/confidential-fields":
+    if path == "/confidential-fields":
         if method == "POST":
             assert kwargs["json"] == {
                 "key": "bid_total",
@@ -669,108 +611,6 @@ async def fake_request(self, method, path, **kwargs):
     elif path == "/confidential-values":
         data = {"task_id": IDENTIFIER, "missing": 0}
         items = [CONFIDENTIAL_VALUE]
-    elif path == "/platform/auth/login":
-        data = {
-            "session": "synthetic-fixture-session",
-            "email": "ops@example.test",
-            "expires_in": 1800,
-        }
-    elif path == "/platform/operators":
-        assert method == "GET" and kwargs["platform"] is True
-        items = [
-            {
-                "email": "ops@example.test",
-                "has_account": True,
-                "factor_source": "database",
-                "enrolled_at": "2026-10-08T00:00:00Z",
-                "enrolled_by": "link",
-            }
-        ]
-    elif path == "/platform/org-applications":
-        assert kwargs["platform"] is True
-        assert kwargs["params"] == {"status": "pending", "limit": 50}
-        items = [
-            {
-                "id": IDENTIFIER,
-                "status": "pending",
-                "org_name": "Synthetic applicant org",
-                "contact_name": "Applicant",
-                "email": "applicant@example.test",
-                "phone": None,
-                "note": None,
-                "created_at": "2026-10-07T00:00:00Z",
-                "expires_at": "2026-11-06T00:00:00Z",
-                "existing_user": False,
-                "source_submissions_24h": 1,
-                "decided_at": None,
-                "decided_by": None,
-                "decision_reason": None,
-                "org_id": None,
-                "admin_user_id": None,
-                "user_created": None,
-                "attached_existing_user": None,
-            }
-        ]
-    elif path == f"/platform/org-applications/{IDENTIFIER}/approve":
-        assert kwargs["platform"] is True
-        assert kwargs["json"] == {"org_name": "Corrected org", "attach_existing_user": True}
-        data = {
-            "application_id": IDENTIFIER,
-            "status": "approved",
-            "org_id": IDENTIFIER_2,
-            "admin_user_id": IDENTIFIER_3,
-            "user_created": False,
-            "attached_existing_user": True,
-        }
-    elif path == f"/platform/org-applications/{IDENTIFIER}/reject":
-        assert kwargs["platform"] is True
-        assert kwargs["json"] == {"reason": "Unable to verify applicant"}
-        data = {
-            "application_id": IDENTIFIER,
-            "status": "rejected",
-            "org_id": None,
-            "admin_user_id": None,
-            "user_created": None,
-            "attached_existing_user": None,
-        }
-    elif path == "/platform/orgs" and method == "POST":
-        data = {
-            "org_id": IDENTIFIER,
-            "admin_user_id": IDENTIFIER,
-            "admin_email": "boss@example.test",
-            "user_created": True,
-            "setup_url": "/app/setup-password#token=synthetic-fixture-link",
-            "setup_expires_in": 86400,
-        }
-    elif path == "/platform/orgs":
-        items = [PLATFORM_ORG]
-    elif path.endswith("/active"):
-        data = {"org_id": IDENTIFIER, "active": False}
-    elif path == "/platform/models":
-        if method == "POST":
-            data = PLATFORM_MODEL
-        else:
-            items = [PLATFORM_MODEL]
-    elif path.startswith("/platform/models/"):
-        data = {"model_id": "opus-standard", "passed": True, "items": 1, "usage": {"tokens": 10}}
-    elif path == "/platform/usage":
-        data = {
-            "from": "2026-10",
-            "to": "2026-10",
-            "totals": {
-                "calls": 1,
-                "tokens": 10,
-            },
-        }
-        items = [PLATFORM_USAGE]
-    elif path == "/platform/audit":
-        items = [PLATFORM_AUDIT]
-    elif path == "/auth/setup-password":
-        data = {"password_set": True}
-    elif path == "/auth/orgs":
-        items = [
-            {"org_id": IDENTIFIER, "name": "Synthetic tenant", "role": "admin", "active": True}
-        ]
     elif path.endswith("/sandbox-runs"):
         if method == "POST":
             submit = kwargs.get("json") or json.loads(kwargs["data"]["submit"])
@@ -800,9 +640,9 @@ async def fake_request(self, method, path, **kwargs):
     elif path.startswith("/sandbox-runs/"):
         data = SANDBOX_RUN
     elif path == "/tasks" and method == "POST":
-        data = {"id": IDENTIFIER, "name": "Synthetic task", "org_id": IDENTIFIER}
+        data = TASK
     elif path == "/tasks":
-        items = [{"id": IDENTIFIER, "name": "Synthetic task", "org_id": IDENTIFIER}]
+        items = [TASK]
     elif path == "/export-template-bindings":
         if method == "POST":
             data = EXPORT_BINDING
@@ -825,7 +665,6 @@ async def fake_request(self, method, path, **kwargs):
             "task_id": IDENTIFIER,
             "revision": 2,
             "model_redaction_enabled": False,
-            "changed_by": IDENTIFIER,
         }
     elif path.endswith("/cards/dispositions"):
         data = {"correlation_id": IDENTIFIER, "updated": 1}
@@ -1145,8 +984,6 @@ async def fake_request(self, method, path, **kwargs):
 
 
 def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, pdf_bytes):
-    monkeypatch.setenv("BID_CLI_KEY", Fernet.generate_key().decode())
-    monkeypatch.setenv("BID_PASSWORD", "synthetic-test-password")
     monkeypatch.setattr(Client, "request", fake_request)
     monkeypatch.setattr(Client, "download_template", fake_download)
     monkeypatch.setattr(Client, "download_certificate_file", fake_scan_download)
@@ -1313,12 +1150,9 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
             }
         )
     )
-    monkeypatch.setenv("BID_SETUP_TOKEN", "synthetic-fixture-link")
     monkeypatch.setenv("BID_CARD_CODE", "SYNT-HETI-CFIX-TURE")
-    common = ["--state", str(tmp_path / "session.enc")]
+    common = []
     commands = {
-        "login": ["login", "--email", "synthetic@example.test", "--org", IDENTIFIER],
-        "org use": ["org", "use", IDENTIFIER],
         "task create": ["task", "create", "--name", "Synthetic task"],
         "task list": ["task", "list"],
         "sandbox render": [
@@ -1593,23 +1427,6 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
             "--output",
             str(tmp_path / "source.png"),
         ],
-        "platform login": ["platform", "login", "--email", "ops@example.test", "--totp", "123456"],
-        "platform org list": ["platform", "org", "list"],
-        "platform operator list": ["platform", "operator", "list"],
-        "platform org application list": ["platform", "org", "application", "list"],
-        "platform org application approve": ["platform", "org", "application", "approve", IDENTIFIER, "--org-name", "Corrected org", "--attach-existing-user"],
-        "platform org application reject": ["platform", "org", "application", "reject", IDENTIFIER, "--reason", "Unable to verify applicant"],
-        "platform org create": [
-            "platform", "org", "create", "--name", "Synthetic tenant", "--admin-email", "boss@example.test",
-        ],
-        "platform org set-active": ["platform", "org", "set-active", "--id", IDENTIFIER, "--inactive"],
-        "platform model list": ["platform", "model", "list"],
-        "platform model set": ["platform", "model", "set", "--input", str(platform_model_input)],
-        "platform model test": ["platform", "model", "test", "--id", "opus-standard", "--test-org", IDENTIFIER],
-        "platform usage": ["platform", "usage", "--from", "2026-10", "--to", "2026-10"],
-        "platform audit": ["platform", "audit", "--limit", "5"],
-        "auth setup-password": ["auth", "setup-password"],
-        "auth orgs": ["auth", "orgs", "--email", "boss@example.test"],
         "confidential field add": [
             "confidential", "field", "add", "--key", "bid_total", "--label", "投标总价",
             "--kind", "amount", "--scope", "task",
@@ -1649,8 +1466,8 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
             assert name not in partial_commands
         body = json.loads(capsys.readouterr().out)
         body["duration_ms"] = 0
-        if "encrypted_token_file" in body["data"]:
-            body["data"]["encrypted_token_file"] = "<encrypted-token-file>"
+        if "token_file" in body["data"]:
+            body["data"]["token_file"] = "<token-file>"
         if "output_path" in body["data"]:
             body["data"]["output_path"] = "<download-output>"
         assert "synthetic-fixture-token" not in json.dumps(body)
@@ -1658,6 +1475,9 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         assert "synthetic-fixture-session" not in json.dumps(body)
         assert "Synthetic value" not in json.dumps(body)
         actual[name] = body
+    (tmp_path / "cli-actual.json").write_text(
+        json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    )
     snapshot = Path(__file__).with_name("snapshots") / "cli-v1.json"
     import os
 

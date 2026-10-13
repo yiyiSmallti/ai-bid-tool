@@ -1,4 +1,4 @@
-"""Migration, no-balance provider execution, tenant isolation and durable call admission.
+"""Migration, no-balance provider execution, durable call admission.
 
 Failure cases are enumerated before implementation in
 ``data/work/remove-billing/failure-modes.md``. These tests use the normal migrated
@@ -23,6 +23,7 @@ REMOVED_TABLES = (
     "org_balances",
     "balance_entries",
     "platform_cards",
+    "platform_models",
     "task_budget_revisions",
     "org_balance_notices",
 )
@@ -47,18 +48,12 @@ REMOVED_COLUMNS = {
         "price_revision",
         "quote",
     },
-    "platform_models": {
-        "vendor_input_usd_per_mtok",
-        "vendor_output_usd_per_mtok",
-        "sale_input_per_mtok",
-        "sale_output_per_mtok",
-    },
     "jobs": {"vendor_cost_history_complete"},
     "agent_pauses": {"budget_ref"},
 }
 
 
-def test_upgrade_head_removes_money_preserves_isolation(admin_engine):
+def test_upgrade_head_removes_money_preserves_guards(admin_engine):
     # admin_engine calls prepare_database -> alembic upgrade head.
     with admin_engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
@@ -99,7 +94,7 @@ def test_upgrade_head_removes_money_preserves_isolation(admin_engine):
                     "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE oid=to_regclass(:table)"
                 ),
                 {"table": f"public.{table}"},
-            ).one() == (True, True)
+            ).one() == (False, False)
         assert (
             connection.scalar(
                 text(
@@ -118,8 +113,8 @@ def test_upgrade_head_removes_money_preserves_isolation(admin_engine):
         )
 
 
-async def test_platform_job_without_balance_retains_usage_and_call_guards(
-    tenants, tmp_path, pdf_bytes
+async def test_provider_job_without_balance_retains_usage_and_call_guards(
+    database, tmp_path, pdf_bytes
 ):
     requests = []
 
@@ -128,28 +123,17 @@ async def test_platform_job_without_balance_retains_usage_and_call_guards(
         return anthropic_reply([])
 
     settings = settings_for(tmp_path, "anthropic", llm_concurrency=1)
-    llm = AnthropicExtractor(
-        settings, httpx.MockTransport(vendor), platform_model_id="no-balance-test"
-    )
+    llm = AnthropicExtractor(settings, httpx.MockTransport(vendor))
     app = await credential_app(settings, llm=llm, queue=FakeQueue())
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         _, parsed = await run_job(api, app, header, document, "parse")
         assert parsed["status"] == "succeeded"
         _, result = await run_job(api, app, header, document, "extract")
         assert result["status"] == "succeeded", result
         assert requests
-        org = tenants["orgs"][0]
-        async with app.state.db.transaction(org) as session:
-            usages = list(
-                (
-                    await session.scalars(
-                        select(UsageRecord).where(
-                            UsageRecord.platform_model_id == "no-balance-test"
-                        )
-                    )
-                ).all()
-            )
+        async with app.state.db.transaction() as session:
+            usages = list((await session.scalars(select(UsageRecord))).all())
             assert usages and sum(u.tokens for u in usages) > 0
             calls = list(
                 (
@@ -161,19 +145,13 @@ async def test_platform_job_without_balance_retains_usage_and_call_guards(
             assert len(calls) == len(usages) and all(c.state == "completed" for c in calls)
             call = calls[0]
             call_id, job_id = call.id, call.job_id
-        async with app.state.db.transaction(tenants["orgs"][1]) as session:
-            assert await session.scalar(select(VendorCall).where(VendorCall.id == call_id)) is None
-            assert (
-                await session.scalar(select(UsageRecord).where(UsageRecord.call_id == call_id))
-                is None
-            )
         # A completed call cannot be reopened, and a finished job cannot admit a new call.
         for statement in (
             "UPDATE vendor_calls SET state='pending' WHERE id=:id",
-            "INSERT INTO vendor_calls(id,org_id,job_id,run_id,task_id,capability,request_sha256,provider_identity) SELECT gen_random_uuid(),org_id,job_id,run_id,task_id,capability,request_sha256,provider_identity FROM vendor_calls WHERE id=:id",
+            "INSERT INTO vendor_calls(id,job_id,run_id,task_id,capability,request_sha256,provider_identity) SELECT gen_random_uuid(),job_id,run_id,task_id,capability,request_sha256,provider_identity FROM vendor_calls WHERE id=:id",
         ):
             try:
-                async with app.state.db.transaction(org) as session:
+                async with app.state.db.transaction() as session:
                     await session.execute(text(statement), {"id": call_id})
             except DBAPIError:
                 pass
@@ -191,7 +169,6 @@ async def test_platform_job_without_balance_retains_usage_and_call_guards(
                     "call_ids": [str(c.id) for c in calls],
                     "tokens": sum(u.tokens for u in usages),
                     "vendor_requests": len(requests),
-                    "tenant_isolation": True,
                     "completion_immutable": True,
                     "stale_lease_rejected": True,
                 },

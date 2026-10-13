@@ -7,29 +7,19 @@ status: "Implemented; a subset of development-node isolation acceptance has pass
 
 Status: **Implemented; the runsc isolation acceptance subset on the macOS development node has passed, with full attack/proxy acceptance still pending**. Covers [roadmap](roadmap.md#coverage-matrix-providers-memory-dashboard-agent-and-cli) P03 Browser and A01, initially serving B06 prototype rendering and B04 web/white-paper capture. The contract below defines proposed implementation boundaries using recommended options; technical dependencies, limits and product choices reside in [Decisions](#decisions) and do not authorize deployment.
 
-## Implementation scope and resolved decisions
+## Installation boundary
 
-| Scope | Status | Implementation and boundaries |
-| --- | --- | --- |
-| Typed API/CLI, fixed inputs, jobs and archives | Implemented | Entrypoints/permissions/source relationships: [sandbox-execution.md](../notes/sandbox-execution.md); PostgreSQL tests cover DB gates |
-| Network-free execution, independent validation/cleanup | Runtime adapters implemented; real acceptance pending | Docker CLI backend/fake test backend; disabled by default. Test switches/deployment preparation: [runtime guide](../guides/sandbox-runtime.md) |
-| Vendor (厂家) broker/source receipts | Implemented | Exact URL allowlist, pinned IP/TLS, persistent single-node quotas, rejection digests/archives; [sandbox-fetch.md](../notes/sandbox-fetch.md) |
-| Control channel | Implemented; actual-node acceptance pending | Local multi-UID Unix sockets; remote TLS 1.3 mutual certificate verification, hostname checking and bilateral leaf-certificate fingerprint pinning. Certificates never enter containers |
-| Real isolation/attack acceptance | Partially passed | Rootful Docker + runsc business-mode pipeline in the development VM, file/secret boundaries, zero network outbound including positive controls, CPU loops, memory bombs, caller disconnects/supervisor-restart reclamation passed via [sandbox_colima_acceptance.py](../../scripts/sandbox_colima_acceptance.py). Real vendor pages/white-paper PDFs passed capture/ingestion under development open policies. Proxy attack/defense (item 5) passed against real loopback TLS synthetic sources, including forged supervisor fetch frames, via [sandbox_proxy_acceptance.py](../../scripts/sandbox_proxy_acceptance.py); kernel egress filtering/real DNS on proxy nodes were excluded. Two-org interfaces (item 2) and running cancellation/worker SIGKILL lifecycle injections (item 7) passed on development with two synthetic orgs via [sandbox_two_org_acceptance.py](../../scripts/sandbox_two_org_acceptance.py). Lease-expiration takeover, database/control-network disconnection, storage/archive failure injections remain pending |
-| Runtime combination | Decided | Rootful Docker + runsc inside a dedicated VM without host mounts/business credentials; runsc cannot use `--ignore-cgroups`/`--rootless`. Rootless is for runc synthetic mode only; [Decisions](#decisions) |
-| Evidence/Card, generation models, agent orchestration | Not implemented in this slice; follow adjacent contracts | This stream renders already-generated HTML and provides raw public-source artifacts, without human confirmation (人工确认) |
-
-Decisions narrowed during implementation:
-
-- The first allowlist implementation supports exact canonical URLs only, a conservative subset of approved path ranges. Maintainers can select new submission policies using the file's active revision; adding revisions does not automatically revoke old ones.
-- Fixed container CPU cap is lowered to 1 vCPU, with a shorter group hard deadline/low quota period preventing terminal-sampling intervals from adding cumulative CPU budget. Metering precision/daemon termination latency still need real acceptance.
-- supplied HTML keeps generation job/provider/model null; first delivery rejects caller-declared generation models. Future internal composition separately integrates verified generation-job relationships.
-- Post-error cleanup confirmation uses supervisor-bound receipts; later reclamation appends audit without rewriting original failures. Incomplete metering after interruption consumes the remaining upper-bound budget rather than restoring full allowance.
-- Playwright is installed only in the fixed isolated image. PNG/PDF validation reuses PyMuPDF without new browser/image-decoding paths in business workers. Image/Colima/Docker/runsc/service preparation is documented as steps, not deployment actions executed in this branch.
+[ADR 0012](../adr/0012-single-user-installation.md) defines one local installation
+for one human. Sandbox submissions use installation authentication and scoped
+agent tokens. Runtime containment, human evidence gates, provider metering and
+all resource limits remain required. The authoritative structures are
+[sandbox_contracts.py](../../server/app/schemas/sandbox_contracts.py),
+[sandbox models](../../server/app/models/sandbox.py) and the
+[baseline schema](../../server/migrations/baseline/10_tables.sql).
 
 ## Goals and boundaries
 
-Create an enforceably terminable, disposable execution environment where malicious LLM-generated single-page HTML, vendor pages and white papers can consume only approved resources/read only explicitly delivered inputs. Validate artifacts through controlled egress before org (organization/tenant, 单位) storage, retaining source/process/actual-byte hashes.
+Create an enforceably terminable, disposable execution environment where malicious LLM-generated single-page HTML, vendor pages and white papers can consume only approved resources/read only explicitly delivered inputs. Validate artifacts through controlled egress before installation storage, retaining source/process/actual-byte hashes.
 
 | Use case | Initial inputs and artifacts | Network/business boundary |
 | --- | --- | --- |
@@ -40,7 +30,7 @@ Create an enforceably terminable, disposable execution environment where malicio
 
 Initial delivery ends at downloadable/verifiable **raw, unconfirmed input artifacts** and reusable BrowserProvider/sandbox boundaries. Generation models, search URL discovery, visual judgment and Evidence/Card source binding belong to later contracts; sandbox completion does not establish all B04/B06/A01 delivery. Prototype input is existing HTML without implicit LLM calls; future `ui mock` may compose generation/rendering while retaining separate usage/source records.
 
-Org, credential and human gates follow [agent.md](../../agent.md#hard-rules-must-never-be-violated). Evidence (证据)/response (响应) review domains (职责) follow [ADR 0005](../adr/0005-human-confirmed-responses.md) and [response-card mechanisms](../notes/response-cards.md). Sandbox/broker/worker/internal or external agents cannot fill `Evidence.confirmed_by`, modify confirmed content or export. Successful source capture is not authenticity certification.
+Installation authentication, credential and human gates follow [ADR 0012](../adr/0012-single-user-installation.md). Evidence (证据)/response (响应) review domains (职责) follow [ADR 0005](../adr/0005-human-confirmed-responses.md) and [response-card mechanisms](../notes/response-cards.md). Sandbox/broker/worker/internal or external agents cannot set `Evidence.confirmed_at`, modify confirmed content or export. Successful source capture is not authenticity certification.
 
 Prototype screenshots carry no watermark, burned-in label, fixed footer or visible “设计原型” marker; this applies to images/previews/thumbnails/derivatives/draft/export. `origin=prototype`, generation model, HTML hash/render manifest are internal provenance only, never visible content. Generic-rule links do not restore old labeling requirements.
 
@@ -63,7 +53,7 @@ The trusted computing base includes API authorization/storage services, fixed-pr
 
 ```mermaid
 flowchart LR
-    A[API and org-context Job worker] --> B[Authorized inputs and run scheduling]
+    A[API and Job worker] --> B[Authorized inputs and run scheduling]
     B --> C[Independent execution-node supervisor]
     C --> D[Disposable network-free browser or PDF sandbox]
     D -->|Bounded fetch requests| C
@@ -71,12 +61,12 @@ flowchart LR
     P -->|Allowed HTTPS sources| W[Public vendor pages and white papers]
     D -->|Bounded artifact bytes| V[Independent format and integrity validation]
     V --> B
-    B -->|Reauthorization and verification| S[Org encrypted storage and source records]
+    B -->|Reauthorization and verification| S[Installation encrypted storage and source records]
 ```
 
 API/workers retain DB/storage capability on the trusted side. Execution nodes mount none of those services' directories and hold no DB connection strings, storage master credentials, encryption master keys, model keys or user tokens. After authorization, workers deliver selected plaintext through bounded streams, not signed object-storage links. Plaintext is visible only in this run's isolated temporary memory/volumes; explicit delivery does not permit sandbox ID-based material retrieval.
 
-Schedulers accept only verified internal descriptors bound to `org/job/attempt/input_hash/profile`, never caller images/mounts/environment/commands/devices/network modes. Node-control credentials stay in supervisor, not sandbox environment. Control channels have separate mutual authentication/fixed protocols; sandboxes cannot access scheduling/queue/DB/business APIs. Container daemon/socket is execution-node administration only, not mounted into API, ordinary workers or sandbox, nor shared with business Compose networks.
+Schedulers accept only verified internal descriptors bound to `job/attempt/input_hash/profile`, never caller images/mounts/environment/commands/devices/network modes. Node-control credentials stay in supervisor, not sandbox environment. Control channels have separate mutual authentication/fixed protocols; sandboxes cannot access scheduling/queue/DB/business APIs. Container daemon/socket is execution-node administration only, not mounted into API, ordinary workers or sandbox, nor shared with business Compose networks.
 
 ### Runtime-enforced restrictions
 
@@ -108,7 +98,7 @@ Before issuing actual requests, brokers must:
 4. At most 5 redirects, each policy-approved. HTTPS-to-HTTP downgrade, bad certificates, login/CAPTCHA/unsupported content/redirect exhaustion cannot become successful evidence. No automatic login/CAPTCHA bypass/consent-purchase forms. Script/main-navigation requests share broker/byte budgets.
 5. Bound request/response deadlines/counts/compressed and decompressed bytes. Reject endless chunks/compression bombs/excessive Content-Length and stop streams/runs at limits, not after download. Retain only approved headers such as Content-Type/Length/ETag/Last-Modified; discard Set-Cookie, no cookie jar.
 
-Approved websites can observe broker egress IP/public paths/timing; no promise of zero metadata disclosure. Vendor sandbox receives only public URL/render options, not tender documents (招标文件), prototypes/org names/materials. Internal run linkage is not sent to vendors. Even malicious allowed domains cannot obtain undelivered materials. Policy changes/revocation stop new fetches under old policy without cached-authorization continuation.
+Approved websites can observe broker egress IP/public paths/timing; no promise of zero metadata disclosure. Vendor sandbox receives only public URL/render options, not tender documents (招标文件), prototypes/private materials. Internal run linkage is not sent to vendors. Even malicious allowed domains cannot obtain undelivered materials. Policy changes/revocation stop new fetches under old policy without cached-authorization continuation.
 
 ## Resource limits and disposable lifecycle
 
@@ -128,21 +118,21 @@ These are approved server-profile maxima; deployment may lower them and callers 
 
 cgroup/runtime enforces CPU quotas/memory/processes; external supervisor meters/stops cumulative CPU/wall time. Stream ingress enforces file/network/protocol bounds; validate declared image dimensions/decoding memory/actual encoded size. `asyncio.wait_for` or killing only a browser while descendants survive is insufficient. [Docker resource constraints](https://docs.docker.com/engine/containers/resource_constraints/) describe explicit container limits; table values are project recommendations requiring actual Chromium/PDF-chain acceptance.
 
-Recommend at most 2 concurrent runs/20 queued per org, 4 concurrent per node lowered by reserved-memory capacity; broker at most 2 connections per origin/60 requests per org per minute. Fair scheduling prevents monopolization. Persistent runs/leases/broker counts enforce limits, not one-worker counters. Queues over 10 minutes fail retryably without sandbox allocation. Jobs across retries get at most 3 new instances without resetting model call limits. Execution limits are nonretryable input/resource failures, never automatic larger-machine loops.
+Recommend at most 2 concurrent runs/20 queued per installation, 4 concurrent per node lowered by reserved-memory capacity; broker at most 2 connections per origin/60 requests per installation per minute. Fair scheduling prevents monopolization. Persistent runs/leases/broker counts enforce limits, not one-worker counters. Queues over 10 minutes fail retryably without sandbox allocation. Jobs across retries get at most 3 new instances without resetting model call limits. Execution limits are nonretryable input/resource failures, never automatic larger-machine loops.
 
 Lifecycle requires observable termination/cleanup:
 
-1. Worker acquires lease/rechecks member/task/source permissions/fixed inputs/policy/resource gates, submitting unique `(org_id, job_id, attempt_id)` descriptors. Supervisor creates an execution group idempotently, with at most one render/validate instance per phase; duplicate dispatch cannot add another. Register persistent local inventory/hard expiry before execution. Sequential phases share cumulative CPU/wall/output budget and peak memory cannot exceed profile; validation gains no fresh budget.
+1. Worker acquires lease/rechecks token/task/source permissions/fixed inputs/policy/resource gates, submitting unique `(job_id, attempt_id)` descriptors. Supervisor creates an execution group idempotently, with at most one render/validate instance per phase; duplicate dispatch cannot add another. Register persistent local inventory/hard expiry before execution. Sequential phases share cumulative CPU/wall/output budget and peak memory cannot exceed profile; validation gains no fresh budget.
 2. Create new instances/private temporary storage/clean browser contexts, starting after read-only stream hash checks. Never reuse cookie/cache/service worker/memory snapshot/input volume/business-data image layers.
 3. Completion/cancellation/lease loss/heartbeat failure/overflow/any fault closes fetch/result ingress first, revokes broker capability, then terminates the entire process/cgroup/VM. Wall deadline is independent of DB heartbeats, expiring even after worker SIGKILL/control disconnect/database outage.
-4. Confirm process/network reclamation within 10 seconds; remove volumes/profiles/shm/input/output/destroy single-run keys. Persistent reaper checks orphans every 60 seconds. Host restart cleans old instances before accepting work. Unconfirmed cleanup marks cleanup_pending, quarantines node capacity and alerts; residue cannot serve the next org.
+4. Confirm process/network reclamation within 10 seconds; remove volumes/profiles/shm/input/output/destroy single-run keys. Persistent reaper checks orphans every 60 seconds. Host restart cleans old instances before accepting work. Unconfirmed cleanup marks cleanup_pending, quarantines node capacity and alerts; residue cannot serve the next run.
 5. Successful candidates archive only after complete validation/cleanup/current-attempt/authorization rechecks.
 Cleanup failure may retain trusted-side encrypted isolated candidates for recovery without download.
 Temporary cleanup never deletes historical evidence/usage/audit.
 
 ## Artifact egress, storage and provenance
 
-Sandboxes have no business-storage write rights. Drivers emit only fixed-frame `ordinal/kind/length` and byte streams, without host paths/object keys/org/confirmers/signed URLs/shell fields. Supervisor receives a fixed artifact set within total budget, recomputing SHA-256; sandbox-declared hashes/sources/success are unverified. No recursive output copying or host unpacking of sandbox tar/zip; reject symlink/hardlink/devices/path traversal/duplicate ordinals/oversized frames/extra files/MIME disguise.
+Sandboxes have no business-storage write rights. Drivers emit only fixed-frame `ordinal/kind/length` and byte streams, without host paths/object keys/actor decisions/signed URLs/shell fields. Supervisor receives a fixed artifact set within total budget, recomputing SHA-256; sandbox-declared hashes/sources/success are unverified. No recursive output copying or host unpacking of sandbox tar/zip; reject symlink/hardlink/devices/path traversal/duplicate ordinals/oversized frames/extra files/MIME disguise.
 
 Untrusted PNG/PDF decode/validation executes in separate network-free resource-limited validation instances, never API/worker processes. Validators run fixed parsers/checkers, not source HTML/JS. Trusted receivers verify headers/length/manifest relationships/final hashes. Rendering/validation instances are independently reclaimed; both count toward limits/cost. Vendor screenshots do not redraw text/numbers/seals; source/original/derivative relationships remain internal metadata.
 
@@ -162,34 +152,39 @@ Prototype input HTML/rendered DOM/all derivatives retain internal origin=prototy
 
 Trusted provenance manifests retain at least:
 
-- `org/task/document/extraction_job`, fixed feature/product selection/revision/input source type. Future model-generated HTML links internal job/usage/actual provider/model/output hash; otherwise supplied_html with unknown model null, never caller-declared model/time as server proof. Both retain origin=prototype.
+- `task/document/extraction_job`, fixed feature/product selection/revision/input source type. Future model-generated HTML links internal job/usage/actual provider/model/output hash; otherwise supplied_html with unknown model null, never caller-declared model/time as server proof. Both retain origin=prototype.
 - Input/canonical request hashes, run/attempt, image digest/runtime/browser/PDF/font/driver/profile/policy versions; viewport/DPR/wait conditions/PDF pages/artifact roles.
 - Source/final URLs/redirect chain, broker UTC fetch start/end/status/allowed headers/raw response SHA-256, render time/final PNG/DOM/PDF/archive SHA-256 hashes/bytes, parent transformations/plan hashes. Credential-free exact URLs stay authorized; lists expose origin/source field/URL hashes only.
 - Trusted supervisor resource/termination/cleanup receipts and distinction between broker observations/browser declarations. Page dates are not capture times; hashes prove neither vendor authenticity nor absence of browser vulnerabilities.
 
 Canonical request hashes use validated JSON/explicit defaults/sorted keys/compact separators/ensure_ascii=true/UTC/no trailing newline, preserving meaningful array order. File hashes cover actual plaintext only, never circular self-hashes. Dynamic times/animation/data mean identical inputs promise fixed render configuration/input binding, not identical PNG hashes across machines/browser versions/live websites.
 
-Trusted keys are `org/{org_id}/sandbox-inputs/{input_id}/{sha256}` and `org/{org_id}/sandbox-artifacts/{run_id}/{attempt_id}/{artifact_id}/{sha256}`, using existing Storage encryption/key binding; no arbitrary read/write paths. Write verified immutable objects first, then short-transaction recheck/metadata/audit. Failures may leave encrypted orphans, never downloadable partial sources. Recommend 24-hour retention then no-reference checks for candidate-specific orphan cleanup, never other business prefixes; long-lived archived-source retention/deletion is separate.
+Trusted keys are `sandbox-inputs/{input_id}/{sha256}` and `sandbox-artifacts/{run_id}/{attempt_id}/{artifact_id}/{sha256}`, using existing Storage encryption/key binding; no arbitrary read/write paths. Write verified immutable objects first, then short-transaction recheck/metadata/audit. Failures may leave encrypted orphans, never downloadable partial sources. Recommend 24-hour retention then no-reference checks for candidate-specific orphan cleanup, never other business prefixes; long-lived archived-source retention/deletion is separate.
 
-Only 300-second signatures binding org/artifact/hash/dedicated kind. Issuance/actual download recheck identity/membership/task/source read rights/selection/policy. New revisions do not automatically revoke old policies; explicit revocation stops new old-artifact downloads. HTML/PDF/archives use attachment/nosniff, originals application/octet-stream rather than application-origin text/html. Credential-free means files cannot obtain app credentials, while downloads remain authenticated. Prototype/web previews return verified PNG only. Clients reject third-party redirects, verify lengths/hashes and atomically write new files, rejecting overwrite/symlink/path replacement. Job queries expose no input bodies/internal keys/signatures; prototype download is not business export authorization.
+Only 300-second signatures binding artifact/hash/dedicated kind. Issuance/actual download recheck identity/token/task/source read rights/selection/policy. New revisions do not automatically revoke old policies; explicit revocation stops new old-artifact downloads. HTML/PDF/archives use attachment/nosniff, originals application/octet-stream rather than application-origin text/html. Credential-free means files cannot obtain app credentials, while downloads remain authenticated. Prototype/web previews return verified PNG only. Clients reject third-party redirects, verify lengths/hashes and atomically write new files, rejecting overwrite/symlink/path replacement. Job queries expose no input bodies/internal keys/signatures; prototype download is not business export authorization.
 
-## Proposed data models and org isolation
+## Data models and actor gates
 
-Every table requires **NOT NULL `org_id`**, `UNIQUE(org_id,id)`, ENABLE/**FORCE RLS**, policies with USING/WITH CHECK, no access without context. Runtime roles are non-owners without SUPERUSER/BYPASSRLS, cannot change policies/history. Future migrations jointly deliver composite foreign keys/two-org acceptance. Sandboxes have no DB role; RLS does not justify DB access.
+The baseline defines `sandbox_inputs`, `sandbox_runs`, `sandbox_attempts`,
+`sandbox_artifacts` and `sandbox_fetch_receipts`. Task/document/extraction and
+fixed feature/product selections remain enforceable parent bindings. Runs retain
+`actor_kind`, optional `token_id`, scope snapshots, request and policy hashes;
+there is no `org_id` or human user identifier.
 
-| Table | Key fields and constraints |
-| --- | --- |
-| `sandbox_inputs` | `task_id, document_id, extraction_job_id, purpose`; prototype fixes `task_feature_id/feature_revision_id/html_sha256/size_bytes/object_key`, optional service-verified generation_job_id; capture fixes `task_resource_id/product_revision_id/source_field/source_url_sha256/encrypted_source_url`. Append-only/exclusive branches; fixed revisions resolve URLs |
-| `sandbox_runs` | `input_id, task_id, job_id, request_hash, profile, policy_revision, runtime_profile_digest, requested_by, actor_kind, token_id?, requested_at, capture_key?`; immutable fixed-request/authorization snapshots, same-org unique idempotency keys, no confirmer/export fields |
-| `sandbox_attempts` | `sandbox_run_id, job_id, attempt_id, instance_group_ref_hash, started_at, ended_at, termination_code, cleanup_state, metrics`; unique `(org_id,job_id,attempt_id)`; retain render/validate digests/metrics without resetting group limits; service-validated supervisor receipts alone advance state, final metrics immutable, later cleanup appends audit |
-| `sandbox_artifacts` | `sandbox_run_id, attempt_record_id, input_id, task_id, kind, ordinal, parent_artifact_id?, plaintext_sha256, size_bytes, media_type, object_key, created_at, provenance_manifest_hash`; PNG dimensions/PDF page/transform, internal origin. Unconfirmed inputs at completion, Evidence linkage/state owned by screenshots.md/cards; same-attempt/kind/ordinal unique, no rebinding/overwrite |
-| `sandbox_fetch_receipts` | `sandbox_run_id, attempt_record_id, request_ordinal, parent_redirect_id?, url_sha256, encrypted_request_metadata, response_sha256?, response_bytes, status_code?, decision_code, policy_revision, started_at, ended_at, bundle_artifact_id?`; trusted broker, safe rejection digests only, optional composite link to this capture_archive with response hashes/ordinals matching fixed entries |
+`jobs.run_id` is the attempt ID, distinct from `sandbox_runs.id`. Trusted receipts
+must match job, attempt, input hash and runtime profile. Only one complete artifact
+set may publish per attempt. Partial files, mismatched receipts, expired workers
+and cancelled jobs cannot publish success. Artifacts never become confirmed
+Evidence merely because capture completes.
 
-Parent/input/run/attempt/job/task/Document/extraction job/TaskFeature/FeatureRevision/TaskResource/ProductRevision/ApiToken/optional generation job all use org_id composite foreign keys. Membership references `(memberships.org_id,user_id)`; global User existence alone is insufficient. Add missing parent unique keys with migrations. Task-containing unique/FKs/DB consistency enforce one task across Document/successful extraction/selection/input/run/artifacts; JSON manifests do not replace enforceable relationships.
+Inputs, runs and receipts are append-only. Attempts permit one terminal update;
+completion checks require matching live execution and atomic artifact/receipt
+insertion. Publication rechecks current token authority, selection, policy and
+lease. Changed inputs require a new submission. Retained historical archives may
+show inactive selections; their download and consumption remain blocked.
 
-Call `jobs.run_id` attempt_id consistently, distinct from stable sandbox_runs.id. Receipts must match org/job/attempt/input_hash/profile, not UUID alone. At most one publishable complete artifact set per attempt; partial files/mismatched receipts/old attempts/post-cancellation results cannot archive as success. Parent chains stay same-task/source, never substitute another org/source PNG.
-
-Fixed inputs/source history are append-only; only restricted services transition run/cleanup state, no public PATCH. Publish rechecks initiator Membership, token expiry/current scope intersection, selection/policy/lease. Selection/policy/input changes require new submissions, not edited snapshots. Metadata for old archives may show selection_active=false under current permissions, but redownload is rejected and consumption eligibility is not restored.
+The runtime role cannot change tables or disable triggers. Storage keys use
+`sandbox-inputs/` and `sandbox-artifacts/` with bounded signed downloads.
 
 ## Draft Pydantic and Provider contract
 
@@ -304,7 +299,6 @@ class SandboxProvenance(Contract):
 
 class SandboxRunView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     job_id: UUID
     purpose: Purpose
@@ -340,13 +334,13 @@ SandboxProvenance is typed internal-manifest data, not preview labels or draft/e
 
 provenance_manifest/request manifests are each at most 4 MiB. All manifest/archive overhead/validation output count toward total output. Mandatory manifests bind other descriptors; their own descriptors reference the same DB-stored manifest hash without JSON self-reference. state=succeeded requires cleanup_state=complete, no block and all required artifacts; other states expose no candidate artifacts.
 
-Prototype multipart accepts bounded html stream plus SandboxSubmit JSON; capture accepts JSON only, never HTML uploads. Servers recompute length/hash; prototype HTML must be valid UTF-8. Clients cannot choose org/actor/generation job/profile/policy/source URL/environment/scripts/storage keys. Only future trusted internal composition supplies generation-job links. dry_run forbids retry; actual submission requires matching preflight expected_request_hash, and preflight invents no run/artifact IDs.
+Prototype multipart accepts bounded html stream plus SandboxSubmit JSON; capture accepts JSON only, never HTML uploads. Servers recompute length/hash; prototype HTML must be valid UTF-8. Clients cannot choose actor/generation job/profile/policy/source URL/environment/scripts/storage keys. Only future trusted internal composition supplies generation-job links. dry_run forbids retry; actual submission requires matching preflight expected_request_hash, and preflight invents no run/artifact IDs.
 
-capture_key is an explicit capture intent supplied by callers/reused on network retries; same key/different parameters conflicts. New capture of current web content needs a new key, without permanently reusing the first URL screenshot or fetching again on client resend. Prototype idempotency covers org/initiator/HTML-selection hashes/viewport/profile. Retry only permits failed/cancelled same-fixed runs after cleanup, without changing original inputs/cumulative budgets.
+capture_key is an explicit capture intent supplied by callers/reused on network retries; same key/different parameters conflicts. New capture of current web content needs a new key, without permanently reusing the first URL screenshot or fetching again on client resend. Prototype idempotency covers actor/token/HTML-selection hashes/viewport/profile. Retry only permits failed/cancelled same-fixed runs after cleanup, without changing original inputs/cumulative budgets.
 
 Proposed internal interfaces are `BrowserProvider.render_prototype(authorized_input, profile)` / `BrowserProvider.capture(authorized_source, profile)`, returning bounded artifact streams/typed receipts; `SandboxExecutor.execute(run_descriptor, input_streams)` runs one instance. cancel(instance_ref)/reap() affect supervisor-owned instances only. Adapters live in server/app/providers/, services depend only on protocols and binary bytes never enter Result/base64 JSON. Trusted services alone construct authorized inputs/broker policies/control contexts; public models cannot directly become internal descriptors.
 
-BrowserProvider receipts submit candidates/browser versions/observations/termination reasons only. Brokers record source URLs/time/response hashes, supervisors resource use, business services org/task/confirmation state, without mutual overwrites. Adapter failures use [`ProviderFailure`](../../server/app/providers/base.py) and fixed safe codes only.
+BrowserProvider receipts submit candidates/browser versions/observations/termination reasons only. Brokers record source URLs/time/response hashes, supervisors resource use, business services task/confirmation state, without mutual overwrites. Adapter failures use [`ProviderFailure`](../../server/app/providers/base.py) and fixed safe codes only.
 
 ## CLI/API and identity
 
@@ -356,14 +350,14 @@ Recommend two explicit-purpose sandbox commands for initial consumers, later reu
 | --- | --- | --- |
 | `bid sandbox render --task T --html FILE --input PLAN.json [--dry-run] [--retry] [--wait] --json` | `POST /tasks/{T}/sandbox-runs`, multipart | PrototypeSpec only; SandboxPreview / SandboxRunView |
 | `bid sandbox capture --task T --input PLAN.json [--dry-run] [--retry] [--wait] --json` | Same path, JSON | VendorSpec only; SandboxPreview / SandboxRunView |
-| `bid sandbox list --task T --json` | `GET /tasks/{T}/sandbox-runs` | Paginated org-task run list |
+| `bid sandbox list --task T --json` | `GET /tasks/{T}/sandbox-runs` | Paginated task run list |
 | `bid sandbox show --id R --json` | `GET /sandbox-runs/{R}` | Run/cleanup/artifact descriptors/redacted issues |
 | `bid sandbox download --artifact A --output NEW --json` | `GET /sandbox-artifacts/{A}/download-link`, then authorized download route | SandboxDownloadLink → verified SandboxDownloadReceipt |
 | `bid job status/wait/cancel J --json` | Existing job routes | Status/cancellation/cost without private-input disclosure or sandbox-permission bypass |
 
-Proposed new scopes sandbox:render/capture/read: first two for valid admin/bidder/technical, viewer read only. Also require task:read, fixed feature/product resource:read and selected extraction job:read; cancellation adds job:cancel. Tokens may explicitly request these scopes intersected with current member roles, without automatic expansion of old tokens. Built-in agents retain agent identity and execute a subset of initiator-current scopes, never impersonate session.
+Scopes sandbox:render/capture/read distinguish execution from reads. Also require task:read, fixed feature/product resource:read and selected extraction job:read; cancellation adds job:cancel. Tokens explicitly request these scopes and remain bound by their live scope and expiry checks. Built-in agents retain principal/session attribution and cannot impersonate a human session.
 
-Missing/cross-org/unauthorized resources uniformly return 404; missing authentication 401/action permission 403. Recheck membership/token before/after execution. Platform operators gain no org-source access. Policy maintenance is outside these scopes, with no agent policy-change/intranet-self-grant route. Local CLI uses local PG/RLS/services/isolated execution nodes, never direct host-browser fallback.
+Missing/cross-task/unauthorized resources uniformly return 404; missing authentication 401/action permission 403. Recheck token authority before/after execution. Policy maintenance is outside these scopes, with no agent policy-change/intranet-self-grant route. Local CLI uses local PostgreSQL/actor gates/services/isolated execution nodes, never direct host-browser fallback.
 
 Result has exactly **`ok`, `command`, `data`, `items`, `warnings`, `cost`, `duration_ms`**.
 Details/submission/download receipts use data/items=[]; lists use items with pagination scope only in data.
@@ -400,7 +394,7 @@ Missing required entry pages/archives or resource-limit violations fail the enti
 
 Add jobs.kind=sandbox_render/sandbox_capture without changing existing kinds. Retain [`Job`](../../server/app/models/entities.py) non-null document_id, resolving the actual tender Document from explicit same-task successful extraction. Feature/product selections must belong to the task. No initial tender-free playground, fabricated Document or white paper in a tender-document FK. Generic document-free agent jobs need a separate Job-relationship contract before any nullable relaxation.
 
-Reuse [background jobs](../notes/background-jobs.md): commit business jobs before dispatch, locked claiming/org context/independent heartbeat/leases/run_id/cancellation. Network/render/storage I/O holds no long business locks; short final transactions recheck fixed inputs/current permissions/attempt. Old attempts may settle real cost but cannot publish, overwrite new state or undo cancellation. Persistent instance IDs/supervisor deadlines bound duplicate dispatch/worker crashes/temporary DB outages without unmanaged long-lived browsers.
+Reuse [background jobs](../notes/background-jobs.md): commit business jobs before dispatch, locked claiming/independent heartbeat/leases/run_id/cancellation. Network/render/storage I/O holds no long business locks; short final transactions recheck fixed inputs/current permissions/attempt. Old attempts may settle real cost but cannot publish, overwrite new state or undo cancellation. Persistent instance IDs/supervisor deadlines bound duplicate dispatch/worker crashes/temporary DB outages without unmanaged long-lived browsers.
 
 | Work | Admission/accounting |
 | --- | --- |
@@ -421,14 +415,14 @@ These are proposed architectures/validation conditions, not machine-installation
 
 | Option | macOS development | Linux production and cost |
 | --- | --- | --- |
-| Separate ordinary container + Playwright | Dedicated Linux VM can validate network-free inputs/outputs/limits, without shared host directories | Shares host kernel; Docker container alone is not the final multi-tenant untrusted-execution boundary |
+| Separate ordinary container + Playwright | Dedicated Linux VM can validate network-free inputs/outputs/limits, without shared host directories | Shares host kernel; Docker container alone is not the final untrusted-execution boundary |
 | gVisor runsc + disposable browser container | Dedicated Linux VM uses production profile, first validating architecture/browser compatibility | Recommended first choice; user-space application kernel reduces host interfaces/retains OCI, with syscall/performance costs |
 | Firecracker microVM + jailer | Requires Linux/KVM, not native macOS; validate on dedicated Linux development nodes where available | Separate guest kernel/run; manage kernels/root disks/network/jailer/cleanup/scheduling with larger operations scope |
 | Commercial remote browser | Avoids local browser installation | Not initially selected; separate isolation/residency/retention/credential/network/cost-bound review, not mere URL replacement |
 
 See [gVisor architecture](https://gvisor.dev/docs/) and [production guide](https://gvisor.dev/docs/user_guide/production/). Recommend dedicated Linux runsc nodes without DB/API/business-intranet access. Images carry browsers; boundaries include runtime/host permissions/broker/resource caps. Failed isolation acceptance for CPU architecture/Chromium sandbox/runsc combinations keeps the feature disabled pending revised approval, never ordinary-runc fallback or disabled browser sandbox.
 
-Recommend dedicated Colima/Linux VM on macOS without home/project/other host mounts, bounded streams for I/O. Ordinary OCI development profiles allow synthetic content only with explicit weaker guarantees; real untrusted input requires accepted runsc VM/profile or dedicated Linux nodes. Tool selection leaves local PG/RLS contracts intact and cannot connect everyday browser sessions.
+Recommend dedicated Colima/Linux VM on macOS without home/project/other host mounts, bounded streams for I/O. Ordinary OCI development profiles allow synthetic content only with explicit weaker guarantees; real untrusted input requires accepted runsc VM/profile or dedicated Linux nodes. Tool selection leaves local PostgreSQL/actor gates contracts intact and cannot connect everyday browser sessions.
 
 [Playwright Docker documentation](https://playwright.dev/docs/docker) says released images target testing/development and are not directly secure sandboxes for untrusted sites. Its convenience root/host-IPC/capability settings cannot be copied here. Build fixed non-root runners, validate Chromium sandbox/private shm. [Firecracker requirements](https://github.com/firecracker-microvm/firecracker/blob/main/docs/getting-started.md)/[jailer boundary](https://github.com/firecracker-microvm/firecracker/blob/main/docs/jailer.md) inform later separate-guest-kernel options. Select by identical attack/termination/reclamation/throughput tests, not startup-speed marketing. gVisor/Firecracker are substantial dependencies prepared for implementation/deployment only after contract approval; this document installs/configures nothing.
 
@@ -442,7 +436,7 @@ Every new allowed tool declares read sets/external side effects/network policy/o
 
 ## Audit and abuse response
 
-Reuse org audit_logs; proposed events are sandbox.submitted/started/completed/failed/cancelled, sandbox.network_denied/resource_limit/cleanup_failed/reaped, sandbox.artifact_download_link_issued/download_served. Retain actual actor_kind/user/token/org/task/job/run/attempt, input/file/policy/profile hashes, fixed reason codes/metrics/correlation IDs. Sandboxes cannot write broker receipts/business-success audits. Successful archives/audit share transactions; failures/rejections have failure events; cleanup retries append, never rewrite earlier cleanup as successful.
+Reuse audit_logs; proposed events are sandbox.submitted/started/completed/failed/cancelled, sandbox.network_denied/resource_limit/cleanup_failed/reaped, sandbox.artifact_download_link_issued/download_served. Retain actual actor_kind/token/task/job/run/attempt, input/file/policy/profile hashes, fixed reason codes/metrics/correlation IDs. Sandboxes cannot write broker receipts/business-success audits. Successful archives/audit share transactions; failures/rejections have failure events; cleanup retries append, never rewrite earlier cleanup as successful.
 
 Ordinary logs/audit/cost/errors/task lists contain no raw HTML/JS/page/model outputs/full URL queries/fetch headers/Cookies/Authorization/credentials/quoted prices/identity-card numbers/bank accounts/signatures. Console/exception text is attacker-controlled; default to counts/hashes/types, and diagnostic bounds do not permit raw logs. Detection uses synthetic canaries, never real secret exposure in test output.
 
@@ -451,25 +445,25 @@ Ordinary logs/audit/cost/errors/task lists contain no raw HTML/JS/page/model out
 | HTML/page prompt injection to read keys/confirm Evidence/export | Page instructions grant no tool permission; no sensitive inputs/credentials/business network, later brokers reject unauthorized actions |
 | fetch/image/font/DNS/WebRTC/allowed-domain query exfiltration | No prototype network; broker independently checks origin/path/query/method, records digests and never sends violating requests |
 | Private/metadata SSRF, redirect, DNS rebinding | Resolution-to-connection/every-hop rechecks plus network prohibition; immediate failure without bypass retries |
-| Fork bombs/JS loops/Wasm mining/huge canvas-DOM-PDF | Hard CPU/pids/memory/pixel/deadline caps; external supervisor kills whole instance while other orgs continue |
+| Fork bombs/JS loops/Wasm mining/huge canvas-DOM-PDF | Hard CPU/pids/memory/pixel/deadline caps; external supervisor kills whole instance while other runs continue |
 | Page-forged images/receipts/paths/confirmation fields | Fixed frames/Schema/trusted sources/hash-relationship checks; page text is not vendor-parameter authenticity certification |
-| Residual processes/cache/temp files crossing orgs | Disposable instances/volumes, confirmed cleanup/restart reaper; uncleared nodes reject new tasks |
+| Residual processes/cache/temp files crossing runs | Disposable instances/volumes, confirmed cleanup/restart reaper; uncleared nodes reject new tasks |
 | Malicious PNG/archive attacks, downloaded HTML storage XSS | Isolated validation decoding/fixed archiver/attachment-nosniff; main site never executes untrusted content |
-| Excess rendering/same-URL concurrency/endless retries | Org/node/origin quotas/cross-attempt caps; original model-admission ledger remains, no cross-org cache |
+| Excess rendering/same-URL concurrency/endless retries | Installation/node/origin quotas/cross-attempt caps; original model-admission ledger remains, no cross-task cache |
 
 ## End-to-end acceptance after approval
 
 Recommend Schema/authorization/relationship constraints → offline rendering/integrity → broker/public web-PDF → job recovery/resource metering → download/isolation attacks. Each uses actual CLI/API/queue workers/runtime/storage; mock SandboxExecutor/plans cannot prove isolation. Complete acceptance remains here; implemented/pending scope is in [Implementation scope and resolved decisions](#implementation-scope-and-resolved-decisions).
 
 1. **Initial entrypoints/artifacts**: synthetic tasks/successful extraction/fixed feature-product revisions use actual render/capture/worker/download, verify PNG/DOM/PDF/internal manifests. Prototype origin/model linkage/source HTML/rendered DOM hashes are separate/correct; web sources/redirects match broker bytes. Multi-page PDF yields only specified real pages with verifiable count/pixels; missing pages/hash mismatch cannot archive partial success.
-2. **Two-org DB/interfaces**: A/B table/endpoint/job/parent/URL receipt/download tests give 404 for cross-org/unknown resources, no context means no reads/writes. Restricted roles reject cross-org FKs, same-org mixed task/extraction/product-feature revisions, historical changes/forged confirmation. Lists/statistics leak no other-org existence, beyond SELECT-only checks.
-3. **Files/secrets**: distinct canaries in isolated host/other-org/unselected same-org materials. Attack HTML/images attempt /proc environments, host mounts/symlinks/traversal/daemon-SSH sockets/devices/runtime/outside files without canary reads. Sandbox lacks DB/model/storage credentials/business-service access; control API/CDP is unavailable to sandbox/public.
+2. **Database/interfaces**: Test endpoint/job/parent/URL receipt/download bindings across tasks and unknown resources. Runtime roles reject mixed task/extraction/product-feature revisions, immutable history changes and forged confirmation. Actorless and stale-worker writes cannot publish trusted results.
+3. **Files/secrets**: distinct canaries in isolated host/unselected task materials. Attack HTML/images attempt /proc environments, host mounts/symlinks/traversal/daemon-SSH sockets/devices/runtime/outside files without canary reads. Sandbox lacks DB/model/storage credentials/business-service access; control API/CDP is unavailable to sandbox/public.
 4. **Network-free prototypes**: actively attempt HTTP(S)/fetch/sendBeacon/img-CSS-font/DNS/WebSocket/WebRTC/service worker/popups/file URLs/IPv4-IPv6 raw sockets. Packet counts outside namespaces/synthetic receivers prove zero outbound packets; console errors are insufficient.
 5. **Proxy attack/defense**: controlled sources cover allowed domains/malicious query-path/userinfo/encoded IP/private-metadata/mixed A-AAAA/rebinding/cross-domain-downgrade/endless redirects/TLS errors/Cookies/POST/compression bombs/endless chunks. Only approved requests reach synthetic targets; forbidden targets get none. Actual connections cannot be replaced by second resolution. Direct forged fetch messages also fail, beyond ordinary Playwright requests.
-6. **Quotas/resource exhaustion**: JS/Wasm loops/process-bomb images/huge canvas-DOM/malformed-oversized PDF/stdout floods/endless downloads-frames trigger every cap. Measure CPU/RSS/pids/disk/network/wall; stop all processes at limits while normal org B jobs finish. Exhaustion cannot merely transfer into trusted API/workers/brokers.
+6. **Quotas/resource exhaustion**: JS/Wasm loops/process-bomb images/huge canvas-DOM/malformed-oversized PDF/stdout floods/endless downloads-frames trigger every cap. Measure CPU/RSS/pids/disk/network/wall; stop all processes at limits while other jobs finish. Exhaustion cannot merely transfer into trusted API/workers/brokers.
 7. **Lifecycle disruption**: inject running cancellation/lease expiry-takeover/worker SIGKILL/supervisor restart/DB-control disconnect/storage-archive failures. Hard deadlines act independently, no old-attempt publication, duplicate dispatch means one instance/phase, cumulative phase caps/10-second cleanup/60-second orphan checks hold. Unconfirmed cleanup stops node admissions/downloads; next instance cannot see prior canary/cookie/cache/temp volume/memory snapshot.
-8. **Output/browser reexecution**: forged kind/size/hash, duplicate ordinals/excess artifacts/archive traversal/MIME confusion/PNG bombs reject. Downloaded malicious HTML/PDF/archives cannot execute at app origin/access app Cookies; storage holds org-encrypted bytes only without public permanent URLs.
-9. **Human gates/revocation**: token/agent/worker confirmation/protected-card reopen/export attempts reject. Handoff to screenshots.md permits prototype Evidence like real screenshots with one human keep/replace before final export; vendor pages/PDFs become evidence via card confirmation. Positive consumption acceptance belongs to screenshots.md. Sandbox checks source/hash handoff/no delegated decisions, not blanket prototype rejection. Disable membership/revoke tokens/replace selection-policy before queue/execution/download; old signatures/jobs cannot bypass.
+8. **Output/browser reexecution**: forged kind/size/hash, duplicate ordinals/excess artifacts/archive traversal/MIME confusion/PNG bombs reject. Downloaded malicious HTML/PDF/archives cannot execute at app origin/access app Cookies; storage holds installation-encrypted bytes only without public permanent URLs.
+9. **Human gates/revocation**: token/agent/worker confirmation/protected-card reopen/export attempts reject. Handoff to screenshots.md permits prototype Evidence like real screenshots with one human keep/replace before final export; vendor pages/PDFs become evidence via card confirmation. Positive consumption acceptance belongs to screenshots.md. Sandbox checks source/hash handoff/no delegated decisions, not blanket prototype rejection. Revoke tokens/replace selection-policy before queue/execution/download; old signatures/jobs cannot bypass.
 10. **Cost/idempotency**: local zero calls/empty UsageRecord, measured resources/no duplicate upstream costs.
 Same capture_key never refetches; new key does. dry-run has zero network/execution/persistent writes.
 11. **Contracts/repeatable artifacts**: verify both CLI modes' seven keys/all applicable codes/schema/redacted errors/atomic downloads; no initial partial scenario or invented exit 5. Save repeatable synthetic inputs/attacks/commands/policy-image digests/artifact hashes/screenshots/proxy decisions/outside packet counts/resource peaks/before-after inventories/JUnit-machine results to independent artifacts/temporary acceptance directories, not docs. Clearly mark pass/fail/skipped; missing-runtime skips cannot prove production isolation.
@@ -497,10 +491,10 @@ Unlabeled prototypes and evidence-use ownership by screenshots.md are settled pr
 | Runtime combination | ① Dedicated VM rootful Docker + runsc; ② rootless Docker + runc; ③ rootless Docker + runsc ignoring cgroups | **①** (approved after 2026-10-03 testing): rootless gVisor cannot enforce cgroups; ③ allowed 300 MiB allocation in a 64 MiB container. ② loses gVisor kernel isolation, synthetic development only. ① root daemon stays VM-local with no host mounts/business credentials; supervisor rejects rootless/cgroup-ignoring runsc |
 | macOS development | ① Dedicated mount-free Linux VM, accepted runsc for real inputs; ② dedicated Linux execution node | **①** for offline work; incompatible architecture/browser uses ②, never host-browser fallback |
 | Capture network | ① Network-free sandbox/bounded fetch broker; ② private sandbox connecting explicit HTTP proxy only | **①**, no direct route even after interception bypass; ② requires CONNECT/TLS/direct-route-prevention acceptance without weaker URL policies |
-| Allowlist maintenance | ① Trusted-maintainer versioned policies; ② human org admins within platform bounds | **①**, no policy-edit scope; ② needs separate config/composite-constraint/audit contract; agents cannot expand either |
+| Allowlist maintenance | ① Trusted-maintainer versioned policies; ② the installation human | **①**, no policy-edit scope; ② needs separate config/composite-constraint/audit contract; agents cannot expand either |
 | Archive default | ① manifest, explicit bundle; ② mandatory all allowed bodies; ③ later redacted HAR | **①**, traceability/storage control; ② aids offline verification at more storage; ③ declares omitted fields, never complete sessions |
-| Initial limits | ① Table's 1/2 GiB, 60/120 seconds, 64/128 MiB output, 2 concurrent/org; ② lower trial profile | **①** acceptance maxima, reducible after tests; both hard-terminate without silent downsampling/omission/resource expansion |
-| Sources/tasks | ① Successful extraction/fixed product-feature selection required; ② tender-free playground too | **①**, Job.document_id/tenant relationships without placeholders; ② requires generic-job/input-ownership contract first |
+| Initial limits | ① Table's 1/2 GiB, 60/120 seconds, 64/128 MiB output, 2 concurrent/installation; ② lower trial profile | **①** acceptance maxima, reducible after tests; both hard-terminate without silent downsampling/omission/resource expansion |
+| Sources/tasks | ① Successful extraction/fixed product-feature selection required; ② tender-free playground too | **①**, Job.document_id/task relationships without placeholders; ② requires generic-job/input-ownership contract first |
 | Resource usage | Record browser units, requests and duration with model call counts | Use the shared six-field resource contract; local supervisor measurements remain distinct from provider usage. |
 | Cleanup/orphans | ① 10-second cleanup/60-second inspection/trusted unreferenced encrypted candidates 24 hours; ② shorter candidate retention | Option ①; historical archives are excluded and cleanup failure stops node work. |
 | Prototype/web HTML display | ① PNG preview/untrusted attachment download; ② isolated-origin interaction now | **①**, no main-site reexecution; ② requires origin/CSP/permissions/redispatch acceptance. Both keep source internal/screenshots.md use unchanged |

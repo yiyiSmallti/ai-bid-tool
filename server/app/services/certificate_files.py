@@ -211,7 +211,6 @@ def file_data(
 ) -> dict:
     return CertificateFileRevision(
         id=row.id,
-        org_id=row.org_id,
         certificate_id=row.certificate_id,
         certificate_revision_id=revision.id,
         revision=revision.revision,
@@ -273,21 +272,18 @@ async def create_file(
         raise not_found()
     revision = CertificateRevision(
         id=uuid4(),
-        org_id=actor.org_id,
         certificate_id=certificate_id,
         revision=certificate.current_revision + 1,
         data=body.data.model_dump(mode="json"),
     )
     row = CertificateFile(
         id=uuid4(),
-        org_id=actor.org_id,
         certificate_id=certificate_id,
         certificate_revision_id=revision.id,
-        created_by=actor.user_id,
         file=descriptor.model_dump(mode="json"),
-        storage_key=f"org/{actor.org_id}/certificate/{certificate_id}/{revision.id}/{descriptor.sha256}.pdf",
+        storage_key=f"certificate/{certificate_id}/{revision.id}/{descriptor.sha256}.pdf",
     )
-    await storage.put(actor.org_id, row.storage_key, content)
+    await storage.put(row.storage_key, content)
     session.add(revision)
     await session.flush()
     session.add(row)
@@ -296,14 +292,13 @@ async def create_file(
     for part, part_content in parts:
         record = CertificateFilePart(
             id=uuid4(),
-            org_id=actor.org_id,
             certificate_id=certificate_id,
             certificate_revision_id=revision.id,
             certificate_file_id=row.id,
-            storage_key=f"org/{actor.org_id}/certificate/{certificate_id}/{revision.id}/parts/{part['ordinal']}-{part['sha256']}",
+            storage_key=f"certificate/{certificate_id}/{revision.id}/parts/{part['ordinal']}-{part['sha256']}",
             **part,
         )
-        await storage.put(actor.org_id, record.storage_key, part_content)
+        await storage.put(record.storage_key, part_content)
         session.add(record)
         stored.append(record)
     await session.flush()
@@ -332,7 +327,6 @@ async def require_file(session: AsyncSession, actor: Identity, revision_id: UUID
             .join(
                 CertificateRevision,
                 and_(
-                    CertificateRevision.org_id == CertificateFile.org_id,
                     CertificateRevision.id == CertificateFile.certificate_revision_id,
                 ),
             )
@@ -382,14 +376,12 @@ async def list_files(
         .join(
             CertificateRevision,
             and_(
-                CertificateRevision.org_id == CertificateFile.org_id,
                 CertificateRevision.id == CertificateFile.certificate_revision_id,
             ),
         )
         .join(
             Certificate,
             and_(
-                Certificate.org_id == CertificateRevision.org_id,
                 Certificate.id == CertificateRevision.certificate_id,
             ),
         )
@@ -429,14 +421,12 @@ async def list_task_files(
             .join(
                 CertificateRevision,
                 and_(
-                    TaskCertificate.org_id == CertificateRevision.org_id,
                     TaskCertificate.certificate_revision_id == CertificateRevision.id,
                 ),
             )
             .outerjoin(
                 CertificateFile,
                 and_(
-                    CertificateFile.org_id == CertificateRevision.org_id,
                     CertificateFile.certificate_revision_id == CertificateRevision.id,
                 ),
             )
@@ -468,7 +458,7 @@ async def read_revision(
 ):
     row, _ = await require_file(session, actor, revision_id)
     descriptor = CertificateScanFile.model_validate(row.file)
-    content = await storage.read(actor.org_id, row.storage_key)
+    content = await storage.read(row.storage_key)
     if (
         len(content) != descriptor.size_bytes
         or hashlib.sha256(content).hexdigest() != descriptor.sha256

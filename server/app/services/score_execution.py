@@ -95,7 +95,7 @@ async def prepare(session, fixed, llm, requested_reasoning, settings):
         "model": model_identity(llm),
         "provider_options": score_generation.provider_options(llm),
         "reasoning": reasoning,
-        "provider_source": "org" if getattr(llm, "org_owned", False) else "platform",
+        "provider_source": "local",
     }
     fields, library = await score_generation.secret_library(session, fixed.task.id, settings)
     outbound = score_semantic.build_outbound(fixed.secret, fields, library)
@@ -143,7 +143,6 @@ def assessment_input(manifest, input_hash):
             **{
                 key: manifest[key]
                 for key in (
-                    "org_id",
                     "task_id",
                     "draft_id",
                     "extraction_job_id",
@@ -232,7 +231,6 @@ async def _submit_score(session, actor, task_id, body, settings, storage):
                 {
                     "provider_config_id": getattr(llm, "provider_config_id", None),
                     "provider_source": fixed.manifest["provider_source"],
-                    "platform_model_id": model.get("platform_model_id"),
                     "model_revision": model.get("model_revision"),
                     "model": model["model"],
                     "reasoning": fixed.manifest["reasoning"],
@@ -272,9 +270,7 @@ async def _submit_score(session, actor, task_id, body, settings, storage):
     cache_key = drafts.digest(
         {
             "kind": "score",
-            "org_id": str(actor.org_id),
             "task_id": str(task_id),
-            "actor_user_id": str(actor.user_id),
             "actor_token_id": str(actor.token_id) if actor.token_id else None,
             "actor_kind": actor.actor_kind,
             "input_hash": fixed.input_hash,
@@ -292,7 +288,6 @@ async def _submit_score(session, actor, task_id, body, settings, storage):
             )
         job = Job(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task_id,
             document_id=fixed.document.id,
             kind="score",
@@ -308,7 +303,6 @@ async def _submit_score(session, actor, task_id, body, settings, storage):
                     "encrypted_input": Secrets.for_data(settings).encrypt(
                         json.dumps(safe_input(fixed), ensure_ascii=False)
                     ),
-                    "actor_user_id": str(actor.user_id),
                     "actor_token_id": str(actor.token_id) if actor.token_id else None,
                     "actor_kind": actor.actor_kind,
                     "scopes": sorted(actor.scopes),
@@ -405,7 +399,6 @@ async def publish(session, actor, job, fixed, evaluated, settings, stop_reason=N
     limitations = list(dict.fromkeys([*fixed.limitations, *summary.pop("limitations", [])]))
     run = ScoreReport(
         id=uuid4(),
-        org_id=job.org_id,
         task_id=job.task_id,
         job_id=job.id,
         run_id=job.run_id,
@@ -428,7 +421,6 @@ async def publish(session, actor, job, fixed, evaluated, settings, stop_reason=N
         limitations=limitations,
         summary=summary,
         sections=sections,
-        actor_user_id=actor.user_id,
         actor_token_id=actor.token_id,
         actor_kind="worker",
     )
@@ -440,7 +432,6 @@ async def publish(session, actor, job, fixed, evaluated, settings, stop_reason=N
         item = jsonable_encoder(item, custom_encoder={Decimal: str})
         row = ScoreReportItem(
             id=uuid4(),
-            org_id=job.org_id,
             task_id=job.task_id,
             report_id=run.id,
             draft_id=run.draft_id,
@@ -471,7 +462,6 @@ async def publish(session, actor, job, fixed, evaluated, settings, stop_reason=N
             session.add(
                 ScoreReportItemResponse(
                     id=uuid4(),
-                    org_id=job.org_id,
                     task_id=job.task_id,
                     report_id=run.id,
                     score_item_id=row.id,
@@ -500,7 +490,6 @@ async def publish(session, actor, job, fixed, evaluated, settings, stop_reason=N
             session.add(
                 ScoreItemCitation(
                     id=uuid4(),
-                    org_id=job.org_id,
                     task_id=job.task_id,
                     report_id=run.id,
                     score_item_id=row.id,
@@ -599,7 +588,6 @@ async def run_view(session, actor, run, settings):
     return ScoreRunView.model_validate(
         {
             "id": run.id,
-            "org_id": run.org_id,
             "task_id": run.task_id,
             "job_id": run.job_id,
             "run_id": run.run_id,
@@ -684,7 +672,6 @@ async def show_score(session, actor, task_id, report_id, settings, storage):
                     key: getattr(row, key)
                     for key in (
                         "id",
-                        "org_id",
                         "task_id",
                         "report_id",
                         "rubric_item_id",
@@ -723,7 +710,6 @@ async def list_scores(session, actor, task_id, settings, storage, *, limit=50, c
         cards.fail("invalid_input", "Limit must be between 1 and 200")
     binding = {
         "kind": "score_cursor",
-        "org_id": str(actor.org_id),
         "task_id": str(task_id),
         "sort": "created_at_id_asc",
     }
@@ -736,7 +722,7 @@ async def list_scores(session, actor, task_id, settings, storage, *, limit=50, c
             anchor = (datetime.fromisoformat(payload["created_at"]), UUID(payload["id"]))
         except (ServiceError, ValueError, KeyError, TypeError):
             cards.fail("invalid_cursor", "Cursor does not match this authorized query")
-    conditions = [ScoreReport.task_id == task_id, ScoreReport.org_id == actor.org_id]
+    conditions = [ScoreReport.task_id == task_id]
     for manifest in await session.scalars(select(ScoreReport.input_manifest).where(*conditions)):
         await score_run_inputs.require_dependencies(session, actor, task_id, manifest)
     total = (

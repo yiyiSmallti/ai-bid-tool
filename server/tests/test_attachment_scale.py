@@ -2,9 +2,9 @@
 
 Failure inventory: scanning immutable history for current browse/detail; one review
 or author query per row; offset/COUNT pagination; ciphertext or storage reads for
-safe metadata; cross-org continuations; unrestricted revision-list nesting; one
+safe metadata; actor-bound continuations; unrestricted revision-list nesting; one
 indivisible response exceeding the 1 MiB output cap. The seed preserves all real
-migration gates and uses two orgs, 10,000 roots and 100,000 revisions/files per org.
+migration gates and uses 10,000 roots and 100,000 revisions/files.
 """
 
 import hashlib
@@ -30,11 +30,11 @@ SAMPLES = 20
 OUTPUT = Path(__file__).resolve().parents[2] / "data/work/attachment-archive-acceptance/scale"
 
 
-def stable_id(org, kind, n, revision=None):
-    return str(UUID(hashlib.md5(f"{org}/{kind}/{n}/{revision}".encode()).hexdigest()))
+def stable_id(kind, n, revision=None):
+    return str(UUID(hashlib.md5(f"{kind}/{n}/{revision}".encode()).hexdigest()))
 
 
-def seed(admin_engine, tenants, settings, pdf_bytes):
+def seed(admin_engine, database, settings, pdf_bytes):
     """Bulk owner fixture; real AFTER/FK/CHECK gates stay enabled during every insert."""
     crypto = Secrets.for_data(settings)
     sha = hashlib.sha256(pdf_bytes).hexdigest()
@@ -46,158 +46,144 @@ def seed(admin_engine, tenants, settings, pdf_bytes):
         ).encode()
     ).hexdigest()
     with admin_engine.begin() as connection:
-        for org, user in zip(tenants["orgs"], tenants["users"], strict=True):
-            connection.execute(
-                text(
-                    "SELECT set_config('app.current_org',:org,true),set_config('app.actor_user_id',:actor,true),set_config('app.actor_kind','session',true),set_config('app.actor_token_id','',true)"
-                ),
-                {"org": str(org), "actor": str(user)},
+        connection.execute(
+            text(
+                "SELECT set_config('app.actor_kind','session',true),set_config('app.actor_token_id','',true)"
             )
-            root_rows = [{"id": stable_id(org, "root", n), "n": n} for n in range(1, ROOTS + 1)]
-            connection.execute(
-                text(
-                    "INSERT INTO attachment_archives(id,org_id,current_revision,state_version,active,custodian_user_id,reviewer_user_id,created_by,created_at) "
-                    "SELECT id::uuid,:org,1,1,true,:actor,:actor,:actor,TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second' "
-                    "FROM jsonb_to_recordset(CAST(:rows AS jsonb)) AS x(id text,n int)"
-                ),
-                {"org": org, "actor": user, "rows": json.dumps(root_rows)},
-            )
-            for version in range(1, REVISIONS + 1):
-                if version > 1:
-                    connection.execute(
-                        text(
-                            "UPDATE attachment_archives SET current_revision=current_revision+1,state_version=state_version+1 WHERE org_id=:org"
+        )
+        root_rows = [{"id": stable_id("root", n), "n": n} for n in range(1, ROOTS + 1)]
+        connection.execute(
+            text(
+                "INSERT INTO attachment_archives(id,current_revision,state_version,active,created_at) "
+                "SELECT id::uuid,1,1,true,TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second' "
+                "FROM jsonb_to_recordset(CAST(:rows AS jsonb)) AS x(id text,n int)"
+            ),
+            {"rows": json.dumps(root_rows)},
+        )
+        for version in range(1, REVISIONS + 1):
+            if version > 1:
+                connection.execute(
+                    text(
+                        "UPDATE attachment_archives SET current_revision=current_revision+1,state_version=state_version+1"
+                    ),
+                )
+            rows = []
+            for n in range(1, ROOTS + 1):
+                revision_id, file_id = (
+                    stable_id("revision", n, version),
+                    stable_id("file", n, version),
+                )
+                rows.append(
+                    {
+                        "revision_id": revision_id,
+                        "file_id": file_id,
+                        "root": stable_id("root", n),
+                        "n": n,
+                        "label": crypto.encrypt(
+                            json.dumps(
+                                {
+                                    "id": revision_id,
+                                    "value": "Synthetic scale archive",
+                                }
+                            )
                         ),
-                        {"org": org},
-                    )
-                rows = []
-                for n in range(1, ROOTS + 1):
-                    revision_id, file_id = (
-                        stable_id(org, "revision", n, version),
-                        stable_id(org, "file", n, version),
-                    )
-                    rows.append(
-                        {
-                            "revision_id": revision_id,
-                            "file_id": file_id,
-                            "root": stable_id(org, "root", n),
-                            "n": n,
-                            "label": crypto.encrypt(
-                                json.dumps(
-                                    {
-                                        "org_id": str(org),
-                                        "id": revision_id,
-                                        "value": "Synthetic scale archive",
-                                    }
-                                )
-                            ),
-                            "upload_name": crypto.encrypt(
-                                json.dumps(
-                                    {"org_id": str(org), "id": file_id, "value": "synthetic.pdf"}
-                                )
-                            ),
-                            "request": stable_id(org, "request", n, version),
-                        }
-                    )
-                parameters = {
-                    "org": org,
-                    "actor": user,
-                    "version": version,
-                    "rows": json.dumps(rows),
+                        "upload_name": crypto.encrypt(
+                            json.dumps({"id": file_id, "value": "synthetic.pdf"})
+                        ),
+                        "request": stable_id("request", n, version),
+                    }
+                )
+            parameters = {
+                "version": version,
+                "rows": json.dumps(rows),
+                "sha": sha,
+                "meta": metadata_hash,
+                "size": len(pdf_bytes),
+            }
+            connection.execute(
+                text(
+                    "INSERT INTO attachment_revisions(id,attachment_id,revision,kind,label_encrypted,metadata_sha256,request_id,payload_hash,created_at) "
+                    "SELECT revision_id::uuid,root::uuid,:version,'contract',label,:meta,request::uuid,:sha,"
+                    "TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second'+:version*interval '1 microsecond' "
+                    "FROM jsonb_to_recordset(CAST(:rows AS jsonb)) AS x(revision_id text,root text,label text,request text,n int)"
+                ),
+                parameters,
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO attachment_files(id,attachment_id,attachment_revision_id,file,storage_key,upload_name_encrypted) "
+                    "SELECT file_id::uuid,root::uuid,revision_id::uuid,"
+                    "jsonb_build_object('name','attachment-'||revision_id||'.pdf','media_type','application/pdf','sha256',CAST(:sha AS text),'size_bytes',CAST(:size AS bigint),'page_count',2),"
+                    "'attachment/'||root||'/'||revision_id||'/'||:sha||'.pdf',upload_name "
+                    "FROM jsonb_to_recordset(CAST(:rows AS jsonb)) AS x(file_id text,revision_id text,root text,upload_name text)"
+                ),
+                parameters,
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO audit_logs(id,actor_kind,action,object_id,details,created_at) "
+                    "SELECT request::uuid,'session',CASE WHEN :version=1 THEN 'attachment.create' ELSE 'attachment.revise' END,root::uuid,"
+                    "jsonb_build_object('new_revision_id',revision_id,'revision',CAST(:version AS integer),'request_id',request,'payload_hash',CAST(:sha AS text)),"
+                    "TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second'+:version*interval '1 microsecond' "
+                    "FROM jsonb_to_recordset(CAST(:rows AS jsonb)) AS x(request text,revision_id text,root text,n int)"
+                ),
+                parameters,
+            )
+        prior = None
+        for decision_number in range(1, REVIEW_HISTORY + 1):
+            review_id = stable_id("review", 1, decision_number)
+            approve = decision_number % 2 == 1
+            connection.execute(
+                text("UPDATE attachment_archives SET state_version=state_version+1 WHERE id=:root"),
+                {"root": stable_id("root", 1)},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO attachment_reviews(id,attachment_id,attachment_revision_id,file_id,"
+                    "original_sha256,metadata_sha256,prior_review_id,decision,reason,reviewed_at,request_id,payload_hash,created_at) "
+                    "VALUES(:id,:root,:revision,:file,:sha,:meta,:prior,:decision,:reason,"
+                    "TIMESTAMPTZ '2026-01-02T00:00:00Z'+:n*interval '1 microsecond',:request,:sha,"
+                    "TIMESTAMPTZ '2026-01-02T00:00:00Z'+:n*interval '1 microsecond')"
+                ),
+                {
+                    "id": review_id,
+                    "root": stable_id("root", 1),
+                    "revision": stable_id("revision", 1, REVISIONS),
+                    "file": stable_id("file", 1, REVISIONS),
                     "sha": sha,
                     "meta": metadata_hash,
-                    "size": len(pdf_bytes),
-                }
-                connection.execute(
-                    text(
-                        "INSERT INTO attachment_revisions(id,org_id,attachment_id,revision,kind,label_encrypted,metadata_sha256,created_by,request_id,payload_hash,created_at) "
-                        "SELECT revision_id::uuid,:org,root::uuid,:version,'contract',label,:meta,:actor,request::uuid,:sha,"
-                        "TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second'+:version*interval '1 microsecond' "
-                        "FROM jsonb_to_recordset(CAST(:rows AS jsonb)) AS x(revision_id text,root text,label text,request text,n int)"
-                    ),
-                    parameters,
-                )
-                connection.execute(
-                    text(
-                        "INSERT INTO attachment_files(id,org_id,attachment_id,attachment_revision_id,created_by,file,storage_key,upload_name_encrypted) "
-                        "SELECT file_id::uuid,:org,root::uuid,revision_id::uuid,:actor,"
-                        "jsonb_build_object('name','attachment-'||revision_id||'.pdf','media_type','application/pdf','sha256',CAST(:sha AS text),'size_bytes',CAST(:size AS bigint),'page_count',2),"
-                        "'org/'||CAST(:org AS text)||'/attachment/'||root||'/'||revision_id||'/'||:sha||'.pdf',upload_name "
-                        "FROM jsonb_to_recordset(CAST(:rows AS jsonb)) AS x(file_id text,revision_id text,root text,upload_name text)"
-                    ),
-                    parameters,
-                )
-                connection.execute(
-                    text(
-                        "INSERT INTO audit_logs(id,org_id,actor_user_id,action,object_id,details,created_at) "
-                        "SELECT request::uuid,:org,:actor,CASE WHEN :version=1 THEN 'attachment.create' ELSE 'attachment.revise' END,root::uuid,"
-                        "jsonb_build_object('new_revision_id',revision_id,'revision',CAST(:version AS integer),'request_id',request,'payload_hash',CAST(:sha AS text)),"
-                        "TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second'+:version*interval '1 microsecond' "
-                        "FROM jsonb_to_recordset(CAST(:rows AS jsonb)) AS x(request text,revision_id text,root text,n int)"
-                    ),
-                    parameters,
-                )
-            prior = None
-            for decision_number in range(1, REVIEW_HISTORY + 1):
-                review_id = stable_id(org, "review", 1, decision_number)
-                approve = decision_number % 2 == 1
-                connection.execute(
-                    text(
-                        "UPDATE attachment_archives SET state_version=state_version+1 WHERE org_id=:org AND id=:root"
-                    ),
-                    {"org": org, "root": stable_id(org, "root", 1)},
-                )
-                connection.execute(
-                    text(
-                        "INSERT INTO attachment_reviews(id,org_id,attachment_id,attachment_revision_id,file_id,"
-                        "original_sha256,metadata_sha256,prior_review_id,decision,reason,reviewed_by,reviewed_at,request_id,payload_hash,created_at) "
-                        "VALUES(:id,:org,:root,:revision,:file,:sha,:meta,:prior,:decision,:reason,:actor,"
-                        "TIMESTAMPTZ '2026-01-02T00:00:00Z'+:n*interval '1 microsecond',:request,:sha,"
-                        "TIMESTAMPTZ '2026-01-02T00:00:00Z'+:n*interval '1 microsecond')"
-                    ),
-                    {
-                        "id": review_id,
-                        "org": org,
-                        "root": stable_id(org, "root", 1),
-                        "revision": stable_id(org, "revision", 1, REVISIONS),
-                        "file": stable_id(org, "file", 1, REVISIONS),
-                        "sha": sha,
-                        "meta": metadata_hash,
-                        "prior": prior,
-                        "actor": user,
-                        "n": decision_number,
-                        "decision": "approve" if approve else "revoke",
-                        "reason": "accepted_for_internal_use" if approve else "withdrawn_by_org",
-                        "request": stable_id(org, "review-request", 1, decision_number),
-                    },
-                )
-                prior = review_id
+                    "prior": prior,
+                    "n": decision_number,
+                    "decision": "approve" if approve else "revoke",
+                    "reason": "accepted_for_internal_use" if approve else "superseded",
+                    "request": stable_id("review-request", 1, decision_number),
+                },
+            )
+            prior = review_id
         for table in (
             "attachment_archives",
             "attachment_revisions",
             "attachment_files",
             "attachment_reviews",
             "audit_logs",
-            "memberships",
         ):
             connection.execute(text(f"ANALYZE {table}"))
 
 
 @pytest.mark.latency
 async def test_fixed_scale_bounded_metadata_and_exact_history(
-    api, headers, tenants, application, admin_engine, pdf_bytes, monkeypatch
+    api, headers, database, application, admin_engine, pdf_bytes, monkeypatch
 ):
-    seed(admin_engine, tenants, application.state.processor.settings, pdf_bytes)
+    seed(admin_engine, database, application.state.processor.settings, pdf_bytes)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     receipt = {
         "scenario": "attachment-fixed-scale-v1",
         "mode": "real_api",
         "status": "running",
         "fixture": {
-            "orgs": 2,
-            "roots_per_org": ROOTS,
-            "revisions_per_org": ROOTS * REVISIONS,
-            "files_per_org": ROOTS * REVISIONS,
+            "roots": ROOTS,
+            "revisions": ROOTS * REVISIONS,
+            "files": ROOTS * REVISIONS,
             "reviews_on_first_current_revision": REVIEW_HISTORY,
         },
         "fixture_pdf_sha256": hashlib.sha256(pdf_bytes).hexdigest(),
@@ -217,7 +203,7 @@ async def test_fixed_scale_bounded_metadata_and_exact_history(
     engine = application.state.db.engine
     event.listen(engine.sync_engine, "before_cursor_execute", capture)
     try:
-        first = await api.get(BASE, headers=headers[0], params={"limit": 50})
+        first = await api.get(BASE, headers=headers, params={"limit": 50})
         assert first.status_code == 200, first.text
         root = first.json()["items"][0]["id"]
         cases = [
@@ -229,18 +215,18 @@ async def test_fixed_scale_bounded_metadata_and_exact_history(
             ("history", f"{BASE}/{root}/revisions", {"limit": 5}),
             (
                 "reviews",
-                f"{BASE}/revisions/{stable_id(tenants['orgs'][0], 'revision', 1, REVISIONS)}/reviews",
+                f"{BASE}/revisions/{stable_id('revision', 1, REVISIONS)}/reviews",
                 {"limit": 25},
             ),
         ]
         for name, path, params in cases:
-            await api.get(path, headers=headers[0], params=params)
+            await api.get(path, headers=headers, params=params)
             timings, sizes, selects, control_counts = [], [], [], []
             queries = []
             for _ in range(SAMPLES):
                 captured.clear()
                 started = perf_counter()
-                response = await api.get(path, headers=headers[0], params=params)
+                response = await api.get(path, headers=headers, params=params)
                 timings.append((perf_counter() - started) * 1000)
                 assert response.status_code == 200, response.text
                 value = response.json()
@@ -248,14 +234,12 @@ async def test_fixed_scale_bounded_metadata_and_exact_history(
                 if name != "show":
                     assert len(value["items"]) <= params.get("limit", 50)
                     assert value["data"]["limit"] == params.get("limit", 50)
-                    assert all(row["org_id"] == headers[0]["X-Org-Id"] for row in value["items"])
                     if name != "reviews":
                         assert all(
-                            row["revised_at"] and row["revised_by"] == str(tenants["users"][0])
-                            for row in value["items"]
+                            row["revised_at"] and "revised_by" not in row for row in value["items"]
                         )
                 if name == "show":
-                    assert value["data"]["attachment"]["revised_by"] == str(tenants["users"][0])
+                    assert "revised_by" not in value["data"]["attachment"]
                 assert "label" not in json.dumps(value) and "storage_key" not in json.dumps(value)
                 sizes.append(len(response.content))
                 queries = list(captured)
@@ -270,7 +254,7 @@ async def test_fixed_scale_bounded_metadata_and_exact_history(
                 assert len(read_sql) <= 12, f"{name}: N+1 SELECT statements: {len(read_sql)}"
                 assert all("OFFSET" not in statement.upper() for statement, _ in read_sql)
             plans = []
-            async with application.state.db.transaction(tenants["orgs"][0]) as session:
+            async with application.state.db.transaction() as session:
                 connection = await session.connection()
                 for statement, parameters in queries:
                     if not statement.lstrip().upper().startswith("SELECT") or not any(
@@ -320,19 +304,7 @@ async def test_fixed_scale_bounded_metadata_and_exact_history(
                     "plans": plans,
                 }
             )
-        other = await api.get(BASE, headers=headers[1], params={"limit": 50})
-        assert other.status_code == 200
-        assert not {row["id"] for row in first.json()["items"]} & {
-            row["id"] for row in other.json()["items"]
-        }
-        assert (
-            await api.get(
-                BASE,
-                headers=headers[1],
-                params={"limit": 50, "cursor": first.json()["data"]["next_cursor"]},
-            )
-        ).status_code in {404, 409}
-        assert (await api.get(BASE, headers=headers[0], params={"limit": 101})).status_code == 422
+        assert (await api.get(BASE, headers=headers, params={"limit": 101})).status_code == 422
         receipt["status"] = "passed"
     finally:
         event.remove(engine.sync_engine, "before_cursor_execute", capture)

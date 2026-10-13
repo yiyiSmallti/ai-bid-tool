@@ -18,8 +18,8 @@ class Queue:
         self.calls = []
         self.fail = False
 
-    async def enqueue(self, org_id: str, job_id: str):
-        self.calls.append((org_id, job_id))
+    async def enqueue(self, job_id: str):
+        self.calls.append(job_id)
         if self.fail:
             raise OSError("synthetic queue failure")
         return 7
@@ -27,7 +27,7 @@ class Queue:
 
 class Database:
     @asynccontextmanager
-    async def transaction(self, org_id):
+    async def transaction(self):
         yield self
 
     async def get(self, model, key):
@@ -59,16 +59,11 @@ def interface(monkeypatch):
         calls.append(("run", task_id, body))
         if not body.dry_run:
             job = QueuedJob()
-            return {
-                "job_id": str(job.id),
-                "status": job.status,
-                "cached": False,
-            }, job
+            return ({"job_id": str(job.id), "status": job.status, "cached": False}, job)
         return (
             {
                 "dry_run": True,
                 "input": {
-                    "org_id": actor.org_id,
                     "task_id": task_id,
                     "draft_id": body.draft_id,
                     "extraction_job_id": IDENTIFIER,
@@ -85,7 +80,6 @@ def interface(monkeypatch):
                 "estimated_duration_ms": None,
                 "provider_config_id": None,
                 "provider_source": None,
-                "platform_model_id": None,
                 "model_revision": None,
                 "model": None,
                 "reasoning": None,
@@ -106,54 +100,48 @@ def interface(monkeypatch):
 
     async def listing(session, actor, task_id, storage, settings, *, cursor=None, limit=50):
         calls.append(("list", cursor, limit))
-        return {"task_id": str(task_id), "total": 0, "next_cursor": None}, []
+        return ({"task_id": str(task_id), "total": 0, "next_cursor": None}, [])
 
     async def showing(session, actor, report_id, storage, settings):
         calls.append(("show", report_id))
-        return {
-            "report": {
-                "completion": "partial",
-                "validity": "stale",
-                "limitations": ["confirmed_draft_only"],
+        return (
+            {
+                "report": {
+                    "completion": "partial",
+                    "validity": "stale",
+                    "limitations": ["confirmed_draft_only"],
+                },
+                "coverage": [],
+                "certificates": [],
             },
-            "coverage": [],
-            "certificates": [],
-        }, [{"id": str(IDENTIFIER_2)}]
+            [{"id": str(IDENTIFIER_2)}],
+        )
 
     async def deciding(session, actor, report_id, finding_id, body, storage, settings):
         calls.append(("decide", report_id, finding_id, body))
         return {"finding": {"id": str(finding_id)}, "decision": {"action": body.action}}
 
     async def history(
-        session,
-        actor,
-        report_id,
-        finding_id,
-        storage,
-        settings,
-        *,
-        cursor=None,
-        limit=50,
+        session, actor, report_id, finding_id, storage, settings, *, cursor=None, limit=50
     ):
         calls.append(("history", cursor, limit))
-        return {"task_id": str(IDENTIFIER), "total": 0, "next_cursor": None}, []
+        return ({"task_id": str(IDENTIFIER), "total": 0, "next_cursor": None}, [])
 
     monkeypatch.setattr(check, "submit_check", submit)
     monkeypatch.setattr(check, "list_checks", listing)
     monkeypatch.setattr(check, "show_check", showing)
     monkeypatch.setattr(check, "decide_finding", deciding)
     monkeypatch.setattr(check, "decision_history", history)
-
-    actor = type("Actor", (), {"org_id": IDENTIFIER})()
+    actor = type("Actor", (), {})()
     session = Session()
 
     async def context():
-        yield session, actor
+        yield (session, actor)
 
     queue = Queue()
     app = FastAPI()
     app.include_router(create_router(context, Database(), object(), queue, object()))
-    return app, calls, queue, session
+    return (app, calls, queue, session)
 
 
 async def test_check_http_routes_wrap_data_items_pagination_and_partial(interface):
@@ -163,11 +151,7 @@ async def test_check_http_routes_wrap_data_items_pagination_and_partial(interfac
     ) as api:
         run = await api.post(
             f"/tasks/{IDENTIFIER}/checks",
-            json={
-                "draft_id": str(IDENTIFIER_2),
-                "assessment_date": "2026-10-04",
-                "dry_run": True,
-            },
+            json={"draft_id": str(IDENTIFIER_2), "assessment_date": "2026-10-04", "dry_run": True},
         )
         listing = await api.get(
             f"/tasks/{IDENTIFIER}/checks", params={"cursor": "opaque", "limit": 25}
@@ -186,7 +170,6 @@ async def test_check_http_routes_wrap_data_items_pagination_and_partial(interfac
             f"/checks/{IDENTIFIER}/findings/{IDENTIFIER_2}/decisions",
             params={"cursor": "opaque", "limit": 10},
         )
-
     for response in (run, listing, shown, decided, history):
         assert response.status_code == 200, response.text
         assert set(response.json()) == {
@@ -241,7 +224,7 @@ async def test_check_submission_commits_before_queue_dispatch(interface):
         "cached": False,
     }
     assert session.commits == 1
-    assert queue.calls == [(str(IDENTIFIER), str(IDENTIFIER))]
+    assert queue.calls == [str(IDENTIFIER)]
 
 
 async def test_check_queue_failure_returns_durable_job_id(interface):
@@ -271,4 +254,4 @@ async def test_check_queue_failure_returns_durable_job_id(interface):
         "job_id": str(IDENTIFIER),
     }
     assert session.commits == 1
-    assert queue.calls == [(str(IDENTIFIER), str(IDENTIFIER))]
+    assert queue.calls == [str(IDENTIFIER)]

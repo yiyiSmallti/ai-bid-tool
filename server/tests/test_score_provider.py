@@ -40,16 +40,13 @@ STRUCTURE_HASH = "a" * 64
 
 
 class Accounting:
-    def __init__(
-        self, *, platform_billed=False, block_after=None, block_code="job_call_limit_exceeded"
-    ) -> None:
+    def __init__(self, *, block_after=None, block_code="job_call_limit_exceeded") -> None:
         self.planned: list[int] = []
         self.plans: list[CallPlan] = []
         self.quotes: list[CallPlan] = []
         self.completed = []
         self.unknown_calls = []
         self.not_sent_calls = []
-        self.platform_billed = platform_billed
         self.block_after = block_after
         self.block_code = block_code
 
@@ -173,13 +170,15 @@ def response(content, *, finish_reason="stop", model="synthetic-rubric"):
     )
 
 
-def adapter(tmp_path, replies, sent, *, handler=None, platform=False, **options):
+def adapter(tmp_path, replies, sent, *, handler=None, **options):
+
     def transport(http_request: httpx.Request) -> httpx.Response:
         sent.append(json.loads(http_request.content))
         return response(replies.pop(0))
 
     settings = Settings(
         data_dir=tmp_path,
+        access_key="synthetic-check-access-key-with-32-characters",
         database_url="postgresql+psycopg://unused/unused",
         encryption_key=Fernet.generate_key().decode(),
         token_key=Fernet.generate_key().decode(),
@@ -191,12 +190,7 @@ def adapter(tmp_path, replies, sent, *, handler=None, platform=False, **options)
         llm_max_output_tokens=4096,
         **options,
     )
-    llm = OpenAICompatibleExtractor(
-        settings,
-        httpx.MockTransport(handler or transport),
-        org_owned=not platform,
-        platform_model_id="synthetic-platform" if platform else None,
-    )
+    llm = OpenAICompatibleExtractor(settings, httpx.MockTransport(handler or transport))
     return HTTPRubricProvider(llm)
 
 
@@ -211,7 +205,6 @@ async def test_two_stage_rubric_sends_fixed_refs_and_accounts_each_call(tmp_path
         result = await provider.extract_items(items_request())
     finally:
         current_accounting.reset(token)
-
     assert structure.failure is result.failure is None
     assert len(result.batches) == 1
     assert result.batches[0].requested_requirement_ids == [REQ_1, REQ_2]
@@ -324,19 +317,11 @@ async def test_items_invalid_batch_is_missing_and_later_batches_finish_without_r
         sent.append(json.loads(http_request.content))
         if len(sent) == 2:
             return response(
-                "{broken",
-                finish_reason="length" if failure_kind == "truncated" else "stop",
+                "{broken", finish_reason="length" if failure_kind == "truncated" else "stop"
             )
         return response(items_wire([UUID(int=len(sent))]))
 
-    provider = adapter(
-        tmp_path,
-        [],
-        sent,
-        handler=handler,
-        llm_batch_chars=1000,
-        llm_concurrency=1,
-    )
+    provider = adapter(tmp_path, [], sent, handler=handler, llm_batch_chars=1000, llm_concurrency=1)
     accounting = Accounting()
     token = current_accounting.set(accounting)
     try:
@@ -398,15 +383,13 @@ async def test_rubric_job_exposes_actionable_truncation_after_accounting(
     fixed = SimpleNamespace(secret={"outbound": {}}, extraction=SimpleNamespace(id=uuid4()))
 
     class Execution:
-        org_id = uuid4()
         run_id = uuid4()
         settings = provider.llm.settings
         stopped = None
         db = None
 
         @asynccontextmanager
-        async def transaction(self, org_id):
-            assert org_id == self.org_id
+        async def transaction(self):
             yield object()
 
         async def owned_job(self, session):
@@ -416,13 +399,13 @@ async def test_rubric_job_exposes_actionable_truncation_after_accounting(
     execution.db = execution
 
     async def snapshot(*args):
-        return fixed, provider.llm
+        return (fixed, provider.llm)
 
     async def access(*args):
         return object()
 
     async def library(*args):
-        return None, {}
+        return (None, {})
 
     async def noop(*args):
         pass
@@ -562,7 +545,7 @@ async def test_request_limit_counts_messages_schema_and_options_before_admission
             assert result.batches == result.usages == []
     finally:
         current_accounting.reset(token)
-    assert not sent and not accounting.plans
+    assert not sent and (not accounting.plans)
 
 
 async def test_oversized_item_batch_is_missing_while_an_independent_batch_completes(tmp_path):
@@ -658,7 +641,7 @@ async def test_invalid_request_never_calls_model(tmp_path, invalid):
     finally:
         current_accounting.reset(token)
     assert blocked.value.code == "invalid_rubric_request"
-    assert not sent and not accounting.plans
+    assert not sent and (not accounting.plans)
 
 
 async def test_preview_is_call_free_and_conservatively_bounds_actual_tokens(tmp_path):
@@ -667,7 +650,6 @@ async def test_preview_is_call_free_and_conservatively_bounds_actual_tokens(tmp_
         tmp_path,
         [structure_wire(), items_wire([REQ_1]), items_wire([REQ_2]), items_wire([UUID(int=3)])],
         sent,
-        platform=True,
         llm_batch_chars=1000,
     )
     whole = request(3, padding=650)
@@ -680,7 +662,7 @@ async def test_preview_is_call_free_and_conservatively_bounds_actual_tokens(tmp_
     assert input_bound == plans[0].input_tokens_upper_bound + 3 * (
         2 * provider.llm.settings.rubric_max_request_bytes + 4096
     )
-    accounting = Accounting(platform_billed=True)
+    accounting = Accounting()
     token = current_accounting.set(accounting)
     try:
         structure = await provider.extract_structure(whole)
@@ -708,9 +690,8 @@ async def test_unknown_item_ids_are_preserved_for_service_rejection(tmp_path):
     assert result.batches[0].output.items[0].requirement_id == UUID(int=999)
 
 
-@pytest.mark.parametrize("platform", [False, True])
 async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounting(
-    tmp_path, monkeypatch, platform
+    tmp_path, monkeypatch
 ):
     from app.models.entities import Document, Job, Task, UsageRecord
     from app.services import score_generation, score_inputs
@@ -721,13 +702,12 @@ async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounti
         tmp_path,
         [structure_wire(), items_wire([REQ_1]), items_wire([REQ_2]), items_wire([UUID(int=3)])],
         sent,
-        platform=platform,
         llm_batch_chars=1000,
     )
     whole = request(3, padding=650)
     first = provider.llm.quote(provider.validate_request(whole))
-    actor = Identity(uuid4(), uuid4(), {"score:rubric:generate"}, "bidder")
-    task = Task(id=uuid4(), org_id=actor.org_id)
+    actor = Identity({"score:rubric:generate"})
+    task = Task(id=uuid4())
     extraction = Job(id=uuid4())
     document = Document(id=uuid4())
     fixed = score_inputs.RubricSnapshot(
@@ -737,14 +717,13 @@ async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounti
         requirements=[],
         input_hash="b" * 64,
         manifest={
-            "org_id": str(actor.org_id),
             "task_id": str(task.id),
             "extraction_job_id": str(extraction.id),
             "document_id": str(document.id),
             "model_redaction_enabled": True,
             "model_redaction_revision": 1,
             "redaction_rule_version": "synthetic-redaction",
-            "provider_source": "platform" if platform else "org",
+            "provider_source": "local",
             "model": {"model": provider.model},
             "reasoning": None,
             "requirements": [entry.model_dump(mode="json") for entry in whole.requirements],
@@ -819,7 +798,7 @@ async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounti
     assert preflight["admission_blocker"] is None
     assert preflight["next_call"] == first.model_dump(mode="json")
     assert preflight["estimate"]["llm_tokens"] == preview["estimated_cost"]["llm_tokens"]
-    accounting = Accounting(platform_billed=platform)
+    accounting = Accounting()
     token = current_accounting.set(accounting)
     try:
         structure = await provider.extract_structure(whole)
@@ -837,9 +816,7 @@ async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounti
     cache_key = score_generation.drafts.digest(
         {
             "kind": "score_rubric",
-            "org_id": str(actor.org_id),
             "task_id": str(task.id),
-            "actor_user_id": str(actor.user_id),
             "actor_token_id": None,
             "actor_kind": "session",
             "input_hash": fixed.input_hash,

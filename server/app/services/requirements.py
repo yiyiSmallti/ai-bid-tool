@@ -54,8 +54,8 @@ async def list_requirements(
     pairs = (
         await session.execute(
             select(Requirement, Chunk, Job.reasoning)
-            .join(Chunk, (Chunk.org_id == Requirement.org_id) & (Chunk.id == Requirement.chunk_id))
-            .join(Job, (Job.org_id == Requirement.org_id) & (Job.id == Requirement.job_id))
+            .join(Chunk, (Chunk.id == Requirement.chunk_id))
+            .join(Job, (Job.id == Requirement.job_id))
             .where(Requirement.task_id == task_id, Requirement.job_id.in_(jobs))
         )
     ).all()

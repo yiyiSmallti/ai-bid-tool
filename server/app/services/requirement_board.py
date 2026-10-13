@@ -15,63 +15,15 @@ from app.schemas.requirement_confirmation import (
     RequirementBoardOverlay,
     RequirementProgressData,
 )
-from app.schemas.team_workflow import BoardCounts, BoardData, BoardQuery, TaskProgressData
+from app.schemas.task_board import BoardCounts, BoardData, BoardQuery, TaskProgressData
 from app.services import requirement_confirmation, requirement_consumption, task_board
 
 
-def actor_hint(actor, workflow, member, people, assignment, citation_valid):
-    available = {
-        person.user_id: person
-        for person in people
-        if person.can_confirm_requirement and (citation_valid or person.role == "admin")
-    }
-    assignee = assignment.assignee_user_id if assignment else None
-    user_id, basis = (
-        (assignee, "assignee")
-        if assignee in available
-        else (workflow.owner_user_id, "owner")
-        if workflow.owner_user_id in available
-        else (
-            workflow.owner_user_id
-            if any(p.user_id == workflow.owner_user_id for p in people)
-            else None,
-            "owner_recovery",
-        )
-    )
+def actor_hint(actor, citation_valid):
     action = "confirm_requirement" if citation_valid else "repair_requirement"
-    can_act = (
-        actor.actor_kind == "session"
-        and actor.token_id is None
-        and actor.user_id in available
-        and "req:confirm" in actor.scopes
-        and member is not None
-        and member.role in {"owner", "contributor"}
-    )
-    if basis == "owner_recovery":
-        action = "assign"
-        can_act = (
-            actor.actor_kind == "session"
-            and actor.token_id is None
-            and actor.role == "admin"
-            and "task:members:write" in actor.scopes
-        )
-    elif not citation_valid:
-        can_act = (
-            can_act
-            and actor.role == "admin"
-            and {"req:extract", "evidence:confirm"} <= actor.scopes
-        )
-    if workflow.state == "archived":
-        action = "unarchive"
-        can_act = (
-            actor.actor_kind == "session"
-            and actor.token_id is None
-            and "task:archive" in actor.scopes
-            and (actor.user_id == workflow.owner_user_id or actor.role == "admin")
-        )
-    return RequirementActorHint(
-        user_id=user_id, basis=basis, action=action, can_current_actor_act=can_act
-    )
+    required = {"req:confirm"} if citation_valid else {"req:extract", "evidence:confirm"}
+    can_act = actor.actor_kind == "session" and actor.token_id is None and required <= actor.scopes
+    return RequirementActorHint(action=action, can_current_actor_act=can_act)
 
 
 async def activity(session, actor, task_id, extraction_id):
@@ -84,12 +36,8 @@ async def activity(session, actor, task_id, extraction_id):
     )
     rows = await session.execute(
         select(AuditLog, Requirement.job_id)
-        .join(
-            Requirement,
-            (Requirement.org_id == AuditLog.org_id) & (Requirement.id == AuditLog.object_id),
-        )
+        .join(Requirement, Requirement.id == AuditLog.object_id)
         .where(
-            AuditLog.org_id == actor.org_id,
             Requirement.task_id == task_id,
             Requirement.job_id == extraction_id,
             AuditLog.action.in_(actions),
@@ -100,7 +48,6 @@ async def activity(session, actor, task_id, extraction_id):
     return [
         RequirementActivityView(
             id=row.id,
-            actor_user_id=row.actor_user_id,
             action=row.action,
             requirement_id=row.object_id,
             extraction_job_id=job_id,
@@ -136,9 +83,7 @@ async def board(session, actor, task_id, query, storage, settings):
                 bucket="requirement_review" if reason else row.bucket,
                 next_action=hint.action
                 if hint and hint.action in {"confirm_requirement", "repair_requirement"}
-                else "unarchive"
-                if hint and hint.action == "unarchive"
-                else "assign"
+                else "view"
                 if hint
                 else row.next_actions[0].code,
                 next_actor=hint,
@@ -151,7 +96,7 @@ async def board(session, actor, task_id, query, storage, settings):
 
     def matches(row):
         overlay = overlays[row.requirement_id]
-        ordinary = query.model_copy(update={"bucket": None, "blocker": None, "mine": False})
+        ordinary = query.model_copy(update={"bucket": None, "blocker": None})
         return (
             task_board.matches(row, ordinary, actor)
             and (query.bucket is None or overlay.bucket == query.bucket)
@@ -160,26 +105,17 @@ async def board(session, actor, task_id, query, storage, settings):
                 or query.blocker in overlay.blockers
                 or query.blocker in row.blockers
             )
-            and (
-                not query.mine
-                or row.owner_user_id == actor.user_id
-                or row.requirement_id in inputs["mentioned"]
-                or overlay.next_actor is not None
-                and overlay.next_actor.can_current_actor_act
-                or task_board.matches(row, ordinary.model_copy(update={"mine": True}), actor)
-            )
         )
 
     matching = [row for row in inputs["rows"] if matches(row)]
     digest = task_board.query_hash(query)
-    workflow, watermark = inputs["workflow"], inputs["watermark"]
+    watermark = inputs["watermark"]
     day = legacy.as_of.date().isoformat()
     key = (
         task_board.validate_page(
             query.cursor,
             actor,
             task_id,
-            workflow,
             settings,
             watermark.last_seq,
             purpose="requirement-board",
@@ -197,7 +133,6 @@ async def board(session, actor, task_id, query, storage, settings):
         task_board.page_cursor(
             actor,
             task_id,
-            workflow,
             settings,
             watermark.last_seq,
             purpose="requirement-board",

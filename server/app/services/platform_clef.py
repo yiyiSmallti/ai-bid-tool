@@ -1,4 +1,4 @@
-"""Platform-only Clef configuration and live, purpose-bound credential fences."""
+"""Local Clef configuration and live, purpose-bound credential fences."""
 
 import json
 from datetime import UTC, datetime
@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.core.credential_db import get_connections
+from app.core.db import Database
 from app.core.errors import ServiceError
 from app.schemas.clef import (
     ClefCheckRequest,
@@ -18,8 +18,9 @@ from app.schemas.clef import (
     ClefSettingsData,
     ClefSettingsSet,
 )
-from app.schemas.platform_credentials import PlatformOperator, ServiceResolveTarget
-from app.services.platform_credentials import PlatformCredentialResolver, require_operator
+from app.schemas.platform_credentials import ServiceResolveTarget
+from app.services.auth import Identity, set_actor_context
+from app.services.platform_credentials import PlatformCredentialResolver, require_human
 
 
 async def _config(session: AsyncSession) -> ClefPlatformConfig | None:
@@ -27,8 +28,8 @@ async def _config(session: AsyncSession) -> ClefPlatformConfig | None:
     return None if value is None else ClefPlatformConfig.model_validate(value)
 
 
-async def _readiness(settings: Settings, config: ClefPlatformConfig) -> list[str]:
-    resolver = PlatformCredentialResolver(settings)
+async def _readiness(settings: Settings, db: Database, config: ClefPlatformConfig) -> list[str]:
+    resolver = PlatformCredentialResolver(settings, db)
     blockers = []
     targets = (
         (
@@ -56,13 +57,13 @@ async def _readiness(settings: Settings, config: ClefPlatformConfig) -> list[str
     return sorted(set(blockers))
 
 
-async def resolve(session: AsyncSession, settings: Settings) -> ClefResolution:
+async def resolve(session: AsyncSession, settings: Settings, db: Database) -> ClefResolution:
     """Write-free preflight snapshot; inability to resolve never authorizes dispatch."""
     try:
         config = await _config(session)
         if config is None:
             return ClefResolution(None, ["clef_unconfigured"])
-        blockers = await _readiness(settings, config)
+        blockers = await _readiness(settings, db, config)
         if not config.enabled:
             blockers.append("clef_disabled")
         if config.gateway_check is None or config.gateway_check.gateway_id != config.gateway_id:
@@ -76,9 +77,9 @@ async def resolve(session: AsyncSession, settings: Settings) -> ClefResolution:
         return ClefResolution(None, ["clef_configuration_unavailable"])
 
 
-async def resolve_credentials(settings: Settings, config: ClefPlatformConfig):
-    """Decrypt both active platform secrets immediately before the one admitted call."""
-    resolver = PlatformCredentialResolver(settings)
+async def resolve_credentials(settings: Settings, db: Database, config: ClefPlatformConfig):
+    """Decrypt both active local service secrets immediately before the one admitted call."""
+    resolver = PlatformCredentialResolver(settings, db)
     workers = await resolver.resolve_for_call(
         ServiceResolveTarget(service="clef_workers_ai", credential_id=config.workers_credential_id)
     )
@@ -100,36 +101,36 @@ async def resolve_credentials(settings: Settings, config: ClefPlatformConfig):
 
 
 class PlatformClefService:
-    def __init__(self, settings: Settings, *, checker=None):
-        self.settings = settings
-        self.connections = get_connections(settings)
+    def __init__(self, settings: Settings, db: Database, *, checker=None):
+        self.settings, self.db = settings, db
         if checker is None:
             from app.providers.clef_gateway import HTTPGatewayChecker
 
             checker = HTTPGatewayChecker()
         self.checker = checker
 
-    async def show(self, actor: PlatformOperator) -> ClefSettingsData:
-        require_operator(actor)
-        async with self.connections.management.transaction() as connection:
+    async def show(self, actor: Identity) -> ClefSettingsData:
+        require_human(actor, "clef:manage")
+        async with self.db.transaction() as connection:
             value = await connection.scalar(text("SELECT public.platform_clef_read()"))
         config = None if value is None else ClefPlatformConfig.model_validate(value)
         if config is None:
             return ClefSettingsData(blockers=["clef_unconfigured"])
-        blockers = await _readiness(self.settings, config)
+        blockers = await _readiness(self.settings, self.db, config)
         if not config.enabled:
             blockers.append("clef_disabled")
         if config.gateway_check is None:
             blockers.append("clef_gateway_unchecked")
         return ClefSettingsData(config=config, blockers=sorted(set(blockers)))
 
-    async def _manage(self, actor: PlatformOperator, action: str, body: dict) -> ClefPlatformConfig:
-        require_operator(actor)
+    async def _manage(self, actor: Identity, action: str, body: dict) -> ClefPlatformConfig:
+        require_human(actor, "clef:manage")
         try:
-            async with self.connections.management.transaction() as connection:
+            async with self.db.transaction() as connection:
+                await set_actor_context(connection, actor)
                 value = await connection.scalar(
-                    text("SELECT public.platform_clef_manage(:action,:actor,CAST(:body AS jsonb))"),
-                    {"action": action, "actor": actor.email, "body": json.dumps(body)},
+                    text("SELECT public.platform_clef_manage(:action,CAST(:body AS jsonb))"),
+                    {"action": action, "body": json.dumps(body)},
                 )
             return ClefPlatformConfig.model_validate(value)
         except SQLAlchemyError as exc:
@@ -147,15 +148,15 @@ class PlatformClefService:
                 "clef_configuration_unavailable", "Clef settings could not be saved", 503, 3
             ) from None
 
-    async def set(self, actor: PlatformOperator, body: ClefSettingsSet) -> ClefSettingsData:
+    async def set(self, actor: Identity, body: ClefSettingsSet) -> ClefSettingsData:
         config = await self._manage(actor, "set", body.model_dump(mode="json"))
-        blockers = await _readiness(self.settings, config)
+        blockers = await _readiness(self.settings, self.db, config)
         if not config.enabled:
             blockers.append("clef_disabled")
         blockers.append("clef_gateway_unchecked")
         return ClefSettingsData(config=config, blockers=sorted(set(blockers)))
 
-    async def check(self, actor: PlatformOperator, body: ClefCheckRequest) -> ClefSettingsData:
+    async def check(self, actor: Identity, body: ClefCheckRequest) -> ClefSettingsData:
         current = await self.show(actor)
         config = current.config
         if config is None or config.revision != body.expected_revision:
@@ -164,7 +165,7 @@ class PlatformClefService:
             )
         receipt, check_error = None, None
         try:
-            _, gateway = await resolve_credentials(self.settings, config)
+            _, gateway = await resolve_credentials(self.settings, self.db, config)
             receipt = await self.checker.check(config, gateway)
         except ServiceError as exc:
             check_error = exc.code
@@ -177,7 +178,7 @@ class PlatformClefService:
                 "check_error": check_error,
             },
         )
-        blockers = await _readiness(self.settings, updated)
+        blockers = await _readiness(self.settings, self.db, updated)
         if not updated.enabled:
             blockers.append("clef_disabled")
         if check_error:

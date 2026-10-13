@@ -129,9 +129,8 @@ async def verify(session, actor, task_id, source):
     row = (
         await session.execute(
             select(Chunk, Document)
-            .join(Document, (Document.org_id == Chunk.org_id) & (Document.id == Chunk.document_id))
+            .join(Document, (Document.id == Chunk.document_id))
             .where(
-                Chunk.org_id == actor.org_id,
                 Chunk.task_id == task_id,
                 Chunk.id == source.chunk_id,
                 Document.task_id == task_id,
@@ -162,7 +161,6 @@ def review_hash(req, pin):
     return digest(
         dict(
             version="requirement-review-v1",
-            org_id=str(req.org_id),
             task_id=str(req.task_id),
             extraction_job_id=str(req.job_id),
             requirement_id=str(req.id),
@@ -178,7 +176,6 @@ class EffectiveReview:
     revision: int
     review_hash: str
     source_pin: VerifiedRequirementSource | None
-    confirmed_by_user_id: UUID | None = None
     confirmed_at: object = None
     stored: RequirementReview | None = None
 
@@ -210,8 +207,7 @@ async def effective_reviews(session, requirements, *, citation_validity=None):
                 select(Requirement, RequirementReview)
                 .outerjoin(
                     RequirementReview,
-                    (RequirementReview.org_id == Requirement.org_id)
-                    & (RequirementReview.requirement_id == Requirement.id),
+                    (RequirementReview.requirement_id == Requirement.id),
                 )
                 .where(Requirement.id.in_(ids))
                 .execution_options(populate_existing=True)
@@ -226,9 +222,7 @@ async def effective_reviews(session, requirements, *, citation_validity=None):
         (
             await session.execute(
                 select(Chunk, Document)
-                .outerjoin(
-                    Document, (Document.org_id == Chunk.org_id) & (Document.id == Chunk.document_id)
-                )
+                .outerjoin(Document, (Document.id == Chunk.document_id))
                 .where(Chunk.id.in_({r.chunk_id for r in requirements}))
                 .execution_options(populate_existing=True)
             )
@@ -244,8 +238,7 @@ async def effective_reviews(session, requirements, *, citation_validity=None):
         if (
             not chunk
             or not document
-            or (chunk.org_id, chunk.task_id, chunk.document_id)
-            != (req.org_id, req.task_id, req.document_id)
+            or (chunk.task_id, chunk.document_id) != (req.task_id, req.document_id)
             or document.task_id != req.task_id
         ):
             pins[req.id] = None
@@ -299,7 +292,6 @@ async def effective_reviews(session, requirements, *, citation_validity=None):
             old.revision if old else 1,
             current_hash,
             pin,
-            old.confirmed_by_user_id if old and state == "confirmed" else None,
             old.confirmed_at if old and state == "confirmed" else None,
             old,
         )
@@ -373,7 +365,7 @@ class GraphSession:
 
 
 def graph(*, quote="原文 ‘引用’：≥１６ GB", word=False, text=None):
-    org, task, job, document_id, chunk_id, requirement_id = [uid(i) for i in range(1, 7)]
+    task, job, document_id, chunk_id, requirement_id = [uid(i) for i in range(2, 7)]
     location = (
         {
             "block_id": "p1",
@@ -391,7 +383,6 @@ def graph(*, quote="原文 ‘引用’：≥１６ GB", word=False, text=None):
     located = text if text is not None else f"合成说明。\n{quote}\n结束。"
     chunk = SimpleNamespace(
         id=chunk_id,
-        org_id=org,
         task_id=task,
         document_id=document_id,
         text=located,
@@ -400,10 +391,9 @@ def graph(*, quote="原文 ‘引用’：≥１６ GB", word=False, text=None):
         page=None if word else 1,
         citation_verified=True,
     )
-    document = SimpleNamespace(id=document_id, org_id=org, task_id=task, sha256="a" * 64)
+    document = SimpleNamespace(id=document_id, task_id=task, sha256="a" * 64)
     requirement = SimpleNamespace(
         id=requirement_id,
-        org_id=org,
         task_id=task,
         job_id=job,
         document_id=document_id,
@@ -430,7 +420,6 @@ def saved_review(requirement, chunk, document, *, state="confirmed", revision=2)
         state=state,
         review_hash=review_hash(requirement, pin),
         source_pin=pin.model_dump(mode="json") if pin else None,
-        confirmed_by_user_id=uid(10) if state == "confirmed" else None,
         confirmed_at=WHEN if state == "confirmed" else None,
     )
 
@@ -441,7 +430,6 @@ def view(review):
         "revision": review.revision,
         "review_hash": review.review_hash,
         "source_pin": review.source_pin.model_dump(mode="json") if review.source_pin else None,
-        "confirmed_by_user_id": review.confirmed_by_user_id,
         "confirmed_at": review.confirmed_at,
         "confirmed": review.confirmed,
         "citation_valid": review.citation_valid,
@@ -457,7 +445,6 @@ def state_view(review):
             "revision",
             "citation_valid",
             "confirmed",
-            "confirmed_by_user_id",
             "confirmed_at",
             "stored",
         )
@@ -631,7 +618,7 @@ async def test_raw_graph_differences_do_not_keep_or_revive_confirmation(word, mu
 async def test_permanent_invalidated_state_stays_invalidated_after_change_back(word):
     requirement, chunk, document = graph(word=word)
     old = saved_review(requirement, chunk, document)
-    old.state, old.confirmed_by_user_id, old.confirmed_at = "invalidated", None, None
+    old.state, old.confirmed_at = "invalidated", None
     inputs = ([requirement], [old], [chunk], [document])
     expected = await effective_reviews(GraphSession(*inputs), [requirement])
     actual = await production.effective_reviews(GraphSession(*inputs), [requirement])

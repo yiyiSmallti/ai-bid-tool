@@ -1,24 +1,17 @@
 <script setup>
 import { ArrowRight, Close, Download, Refresh, Tickets, View } from "@element-plus/icons-vue";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { actorKinds, confirmAction, simulatedSelections, deviations, display, dispositions, domains, downloadOriginal, eligibilities, errorText, formatTime, label, locationLabel, materialKinds, mine, orgAccess, orgRequest, quoteChecks, responseKinds, states, statusTag } from "../org.js";
-import { useProvidedTaskAuthority, canEditTask, canReviewTask } from "../task-authority.js";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { request } from "../api.js";
+import { actorKinds, confirmAction, simulatedSelections, deviations, display, dispositions, domains, downloadOriginal, eligibilities, errorText, formatTime, label, locationLabel, materialKinds, quoteChecks, responseKinds, states, statusTag } from "../org.js";
 import DocumentPreview from "./DocumentPreview.vue";
 import MaterialPanel from "./MaterialPanel.vue";
 import SecretTextEditor from "./SecretTextEditor.vue";
 import SourcePreview from "./SourcePreview.vue";
-import TaskCollaboration from "./TaskCollaboration.vue";
-import CoSignPanel from "./CoSignPanel.vue";
 const props = defineProps({ row: Object, taskId: String, jobId: String, documentName: String, annotationCandidate: {type: Object, default: null} });
 const emit = defineEmits(["updated", "dirty", "next", "close", "materials", "denied"]);
 const annotationObservation=ref(""), annotationAdded=ref(false);
 function addAnnotation(){const candidate=props.annotationCandidate;if(!candidate||!editable.value||!annotationObservation.value.trim()||annotationAdded.value)return;if(candidate.manifest.target.card_id!==card.value?.id||candidate.task_id!==props.taskId||candidate.manifest.target.extraction_job_id!==props.jobId){error.value="标注候选与响应卡不匹配";return;}const mapping=candidate.rendering.canvas.mapping;content.value.response_kind="evidence";add({kind:"image_region",asset_id:candidate.asset_id,rendition_id:candidate.rendition_id,expected_image_sha256:candidate.rendering.image.sha256,region:{x:0,y:0,width:mapping.content_width,height:mapping.content_height},claim_scope:"document_excerpt",visual_observation:annotationObservation.value.trim()});annotationAdded.value=true;}
-const cosign = ref(null), cosignPolicy = ref(null), cosignReview = ref(null), cosignDirty = ref(false);
-const tab = ref("response"), discussionOpened = ref(false), discussionDirty = ref(false);
-function reportDirty(){emit("dirty", dirty.value || discussionDirty.value || cosignDirty.value);}
-watch(discussionDirty, reportDirty);
-watch(cosignDirty, reportDirty);
-watch(tab, value => {if(value === "discussion") discussionOpened.value = true;});
+function reportDirty(){emit("dirty", dirty.value);}
 const card = ref(null), content = ref(emptyContent()), baseline = ref(""), ready = ref(false), busy = ref(false), error = ref(""), notice = ref("");
 const savedMemoryJobs = ref([]);
 const reviewed = ref([]), warnings = ref([]), reason = ref(""), domain = ref("technical"), history = ref(null), sourceChunk = ref(null);
@@ -26,18 +19,12 @@ const conflict = ref(null), conflictOpen = ref(false), heading = ref(null), kind
 simulatedSelections(props.taskId).then((value) => { marks.value = value; }).catch(() => {});
 // Confidential fields the response may name; the export fills their values.
 const secretFields = ref([]);
-orgRequest("GET", "/confidential-fields").then((result) => { secretFields.value = result.items; }).catch(() => {});
+request("GET", "/confidential-fields").then((result) => { secretFields.value = result.items; }).catch(() => {});
 const masked = (value) => /\[REDACTED_[A-Z_]+\]/.test(value ?? "");
 let active = true;
 const dirty = computed(() => ready.value && JSON.stringify(content.value) !== baseline.value);
 const displayedSource = computed(() => card.value?.source ?? props.row.source);
-const authority = useProvidedTaskAuthority();
-const writable = computed(() => canEditTask(authority.value) && orgAccess.role && orgAccess.role !== "viewer");
-const editable = computed(() => ready.value && writable.value && !conflict.value && !dispositionReview.value && (!card.value || (["draft", "rejected", "needs_material"].includes(card.value.state) && card.value.disposition !== "comply_only")));
-const canSignReview = computed(() => cosignPolicy.value?.required_domains.some(domain => canReviewTask(authority.value, domain) && mine(domain)));
-const dispositionReview = computed(() => cosignReview.value?.round?.purpose === "disposition" && cosignReview.value.round.state === "open");
-const multiDomain = computed(() => (cosignPolicy.value?.required_domains.length ?? 0) > 1);
-const canDecide = computed(() => card.value && canReviewTask(authority.value, card.value.review_domain) && mine(card.value.review_domain));
+const editable = computed(() => ready.value && !conflict.value && (!card.value || (["draft", "rejected", "needs_material"].includes(card.value.state) && card.value.disposition !== "comply_only")));
 const requirementBlocker = computed(() => ["requirement_unconfirmed", "requirement_invalidated"].includes(card.value?.eligibility) ? label(eligibilities, card.value.eligibility) : "");
 const invalid = computed(() => ["requirement_unconfirmed", "requirement_invalidated", "stale_material", "invalid_citation", "needs_reconfirmation"].includes(card.value?.eligibility));
 const completeResponse = computed(() => card.value && ["response_kind", "response_text", "deviation", "deviation_note"].every(key => typeof card.value.content[key] === "string" && card.value.content[key].trim()) && card.value.content.deviation_note.trim() !== "满足");
@@ -45,7 +32,6 @@ const completeResponse = computed(() => card.value && ["response_kind", "respons
 const confirmBlocker = computed(() => {
   if (!card.value) return "";
   if (requirementBlocker.value) return `${requirementBlocker.value}，请先核对并确认要求`;
-  if (!cosignPolicy.value) return "会签策略尚未读取，请重新核对";
   if (dirty.value) return "有未保存的编辑，请先保存并重新提交审阅";
   if (conflict.value) return "修订已变化，请先处理修订冲突";
   if (invalid.value) return `${label(eligibilities, card.value.eligibility)}，不能确认`;
@@ -60,7 +46,6 @@ const confirmBlocker = computed(() => {
 const confirmReady = computed(() => !confirmBlocker.value);
 function emptyContent() { return { response_kind: "commitment", response_text: "", deviation: "none", deviation_note: "", evidence: [] }; }
 function clearReview() { reviewed.value = []; warnings.value = []; }
-watch(() => authority.value?.workflow.access_epoch, clearReview);
 function install(value) {
   annotationAdded.value=false; annotationObservation.value="";
   card.value = value; content.value = value ? JSON.parse(JSON.stringify(value.content)) : emptyContent();
@@ -95,26 +80,25 @@ async function refresh(manual = false) {
   if (!card.value) return;
   const hadTicks = reviewed.value.length + warnings.value.length > 0;
   try {
-    const fresh = verifyCard((await orgRequest("GET", `/cards/${card.value.id}`)).data);
+    const fresh = verifyCard((await request("GET", `/cards/${card.value.id}`)).data);
     if (!active) return;
     if (fresh.revision !== card.value.revision || fresh.eligibility !== card.value.eligibility || JSON.stringify(fresh.warning_codes) !== JSON.stringify(card.value.warning_codes)) showConflict(fresh);
     else { card.value = fresh; clearReview(); if (manual || hadTicks) notice.value = "已重新核对当前修订；请重新勾选本次审阅项。"; }
-    await cosign.value?.refresh();
   } catch (exc) { error.value = errorText(exc); clearReview(); }
 }
 async function recoverConflict(exc) {
   clearReview();
   if (exc.status === 409) {
     const fresh = card.value
-      ? verifyCard((await orgRequest("GET", `/cards/${card.value.id}`)).data)
-      : (await orgRequest("GET", `/tasks/${props.taskId}/cards?job=${props.jobId}`)).items.find(slot => slot.requirement_id === props.row.id)?.card;
+      ? verifyCard((await request("GET", `/cards/${card.value.id}`)).data)
+      : (await request("GET", `/tasks/${props.taskId}/cards?job=${props.jobId}`)).items.find(slot => slot.requirement_id === props.row.id)?.card;
     if (fresh) showConflict(fresh);
   }
 }
 async function write(path, method, body) {
   busy.value = true; error.value = ""; notice.value = "";
   try {
-    const result = await orgRequest(method, path, body);
+    const result = await request(method, path, body);
     if (!active) return;
     const value = verifyCard(result.data); install(value); emit("updated", value); savedMemoryJobs.value = result.warnings.filter(warning => /^memory_candidate_dispatch_pending:[0-9a-f-]{36}$/i.test(warning)).map(warning => warning.split(":")[1]); notice.value = savedMemoryJobs.value.length ? "人工卡片决定已保存；候选记忆作业已保存，派发暂未完成。请在反馈队列主动恢复原作业。" : "操作成功";
     window.dispatchEvent(new CustomEvent("bid:task-cards-changed", { detail: { taskId: props.taskId } }));
@@ -139,22 +123,22 @@ async function action(action) {
   await write(`/cards/${card.value.id}/actions`, "POST", body);
 }
 function classify() { if (!reason.value.trim()) { error.value = "分类必须填写原因"; return; } return write(`/cards/${card.value.id}/classification`, "POST", { expected_revision: card.value.revision, review_domain: domain.value, reason: reason.value }); }
-async function readHistory() { try { history.value = (await orgRequest("GET", `/cards/${card.value.id}?history=true`)).data.history; } catch (exc) { error.value = errorText(exc); } }
+async function readHistory() { try { history.value = (await request("GET", `/cards/${card.value.id}?history=true`)).data.history; } catch (exc) { error.value = errorText(exc); } }
 async function source() {
-  try { const chunks = (await orgRequest("GET", `/documents/${displayedSource.value.document_id}/chunks`)).items; sourceChunk.value = chunks.find(chunk => chunk.id === displayedSource.value.chunk_id); if (!sourceChunk.value) throw new Error("所指原文块不可访问"); }
+  try { const chunks = (await request("GET", `/documents/${displayedSource.value.document_id}/chunks`)).items; sourceChunk.value = chunks.find(chunk => chunk.id === displayedSource.value.chunk_id); if (!sourceChunk.value) throw new Error("所指原文块不可访问"); }
   catch (exc) { error.value = errorText(exc); }
 }
 async function download() { try { await downloadOriginal(`/documents/${displayedSource.value.document_id}/download-link`, props.documentName); } catch (exc) { error.value = errorText(exc); } }
 function useServer() { install(conflict.value); conflict.value = null; conflictOpen.value = false; error.value = ""; emit("updated", card.value); }
 function materialChanged() { clearReview(); emit("materials"); refresh(); }
-function beforeUnload(event) { if (dirty.value || discussionDirty.value || cosignDirty.value) { event.preventDefault(); event.returnValue = ""; } }
+function beforeUnload(event) { if (dirty.value) { event.preventDefault(); event.returnValue = ""; } }
 function focus() { if (!document.hidden && ready.value && card.value && !busy.value && !conflict.value) refresh(); }
 window.addEventListener("beforeunload", beforeUnload);
 document.addEventListener("visibilitychange", focus);
 onBeforeUnmount(() => { active = false; window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("visibilitychange", focus); });
 onMounted(async () => {
   try {
-    const value = props.row.card ? verifyCard((await orgRequest("GET", `/cards/${props.row.card.id}`)).data) : null;
+    const value = props.row.card ? verifyCard((await request("GET", `/cards/${props.row.card.id}`)).data) : null;
     if (active) { install(value); heading.value?.focus(); }
   } catch (exc) { error.value = errorText(exc); }
 });
@@ -163,12 +147,9 @@ onMounted(async () => {
   <section aria-label="要求审阅详情" class="editor">
     <header class="editor-head">
       <h3 ref="heading" tabindex="-1">要求审阅详情</h3>
-      <div class="head-actions"><el-button size="small" :icon="Close" @click="emit('close')">返回要求列表</el-button><el-button size="small" type="primary" plain :icon="ArrowRight" @click="emit('next')">下一条待我审阅</el-button></div>
+      <div class="head-actions"><el-button size="small" :icon="Close" @click="emit('close')">返回要求列表</el-button><el-button size="small" type="primary" plain :icon="ArrowRight" @click="emit('next')">下一条待审阅</el-button></div>
     </header>
     <div class="editor-body">
-      <el-tabs v-if="card" v-model="tab" aria-label="审阅详情内容"><el-tab-pane label="原文、材料与响应" name="response" /><el-tab-pane label="讨论" name="discussion" /></el-tabs>
-      <TaskCollaboration v-if="card && discussionOpened" v-show="tab === 'discussion'" :task-id="taskId" :job-id="jobId" :row="{requirement_id:row.id,card_id:card.id,card_revision:card.revision}" discussion-only @dirty="discussionDirty=$event" @denied="emit('denied',$event)" />
-      <div v-show="tab === 'response'">
       <RouterLink :to="`/org/tasks/${taskId}/requirements?job=${jobId}&requirement=${row.id}`">核对当前要求确认与决策历史</RouterLink><p v-if="requirementBlocker" class="notice warning">{{requirementBlocker}}；可准备响应，接受响应前须先确认要求。</p>
       <p class="req-title">{{ props.row.text }}</p>
       <h4>招标原文</h4>
@@ -185,14 +166,14 @@ onMounted(async () => {
         <div class="status-box">
           <div class="status-row"><span class="tag" :class="statusTag[card?.state ?? 'missing_card']">状态：{{ states[card?.state ?? "missing_card"] }}</span><span class="tag">资格：{{ label(eligibilities, card?.eligibility ?? "missing_card") }}</span><span class="tag">修订 {{ card?.revision ?? "未建卡" }}</span><span v-if="content.deviation === 'negative'" class="tag danger">负偏离</span></div>
           <dl class="kv">
-            <dt>审阅职责</dt><dd>{{ label(domains, card?.review_domain, "待单位管理员分类") }}</dd>
+            <dt>审阅职责</dt><dd>{{ label(domains, card?.review_domain, "待分类") }}</dd>
             <dt>处置</dt><dd>{{ label(dispositions, card?.disposition, "尚未决定") }}</dd>
             <dt>模型建议</dt><dd>{{ label(dispositions, card?.suggested_disposition, "无") }}</dd>
             <template v-if="card?.reason"><dt>最近操作原因</dt><dd>{{ card.reason }}</dd></template>
           </dl>
         </div>
         <p v-if="card?.review_hint === 'needs_material'" class="notice warning">模型提示需要补充材料，这还不是人工的“需补材料”决定。</p>
-        <p v-if="invalid" class="notice danger">当前来源或材料已失效：{{ label(eligibilities, card.eligibility) }}。请重新核对；引用修复由单位管理员处理。</p>
+        <p v-if="invalid" class="notice danger">当前来源或材料已失效：{{ label(eligibilities, card.eligibility) }}。请重新核对；引用修复在要求核对页处理。</p>
 
         <h4>本修订实际链接材料</h4>
         <el-card v-for="(evidence, index) in card?.evidence ?? []" :key="evidence.id" shadow="never" class="evidence">
@@ -201,7 +182,7 @@ onMounted(async () => {
           <blockquote class="quote">{{ evidence.input.quote ?? evidence.input.visual_observation }}</blockquote>
           <DocumentPreview v-if="evidence.input.kind==='image_region'" :source="{kind:'screenshot_rendition',assetId:evidence.input.asset_id,renditionId:evidence.input.rendition_id,expectedHash:evidence.input.expected_image_sha256}" name="响应卡实际材料图" label="核对关联图片" />
           <SourcePreview v-if="evidence.source_archive" :source="evidence.source_archive" />
-          <label v-if="canSignReview && card.state === 'pending_review' && !dispositionReview" class="check"><input v-model="reviewed" type="checkbox" :value="evidence.id" :disabled="dirty || invalid || !!conflict" />已逐项核对材料 {{ index + 1 }}</label>
+          <label v-if="card.state === 'pending_review'" class="check"><input v-model="reviewed" type="checkbox" :value="evidence.id" :disabled="dirty || invalid || !!conflict" />已逐项核对材料 {{ index + 1 }}</label>
         </el-card>
         <p v-if="!card?.evidence.length" class="hint">本修订没有 Evidence。承诺不构成证明材料。</p>
 
@@ -230,42 +211,39 @@ onMounted(async () => {
         <MaterialPanel :task-id="taskId" :editable="editable && content.response_kind === 'evidence'" @add="add" @changed="materialChanged" />
 
         <h4>警示与人工操作</h4>
-        <div v-for="code in card?.warning_codes ?? []" :key="code" class="warning-item"><p class="notice warning">{{ code }}</p><label v-if="canSignReview && (card.state === 'pending_review' || dispositionReview)" class="check"><input v-model="warnings" type="checkbox" :value="code" :disabled="dirty || invalid || !!conflict" />已核对警示 {{ code }}</label></div>
-        <template v-if="(writable || canDecide || canSignReview) && card">
+        <div v-for="code in card?.warning_codes ?? []" :key="code" class="warning-item"><p class="notice warning">{{ code }}</p><label v-if="card.state === 'pending_review'" class="check"><input v-model="warnings" type="checkbox" :value="code" :disabled="dirty || invalid || !!conflict" />已核对警示 {{ code }}</label></div>
+        <template v-if="card">
           <el-form label-position="top" @submit.prevent>
             <el-form-item label="操作原因 / 警示处理理由"><el-input v-model="reason" type="textarea" maxlength="10000" :autosize="{ minRows: 2, maxRows: 6 }" placeholder="驳回、需补材料、撤回、重开和分类都需要填写原因" /></el-form-item>
           </el-form>
-          <div v-if="writable && orgAccess.role === 'admin' && card.state === 'draft' && !card.review_domain" class="actions classify">
+          <div v-if="card.state === 'draft' && !card.review_domain" class="actions classify">
             <el-select v-model="domain" aria-label="指定审阅职责" class="domain-select"><el-option value="technical" label="技术" /><el-option value="commercial" label="商务 / 资格" /></el-select>
             <el-button :disabled="busy || dirty || !!conflict" @click="classify">分类并记录理由</el-button>
           </div>
           <div v-if="card.disposition !== 'comply_only'" class="decision-bar">
           <div class="actions decision">
-            <el-button v-if="writable && card.state === 'draft'" type="primary" :disabled="busy || dirty || !!conflict || dispositionReview" @click="action('submit')">提交审阅</el-button>
-            <el-button v-if="writable && card.state === 'pending_review'" :disabled="busy || !!conflict" @click="action('withdraw')">撤回</el-button>
-            <template v-if="canDecide && card.state === 'pending_review'">
-              <el-button v-if="!multiDomain" type="success" :disabled="busy || !confirmReady" aria-describedby="confirm-blocker" @click="action('confirm')">确认响应</el-button>
+            <el-button v-if="card.state === 'draft'" type="primary" :disabled="busy || dirty || !!conflict" @click="action('submit')">提交审阅</el-button>
+            <el-button v-if="card.state === 'pending_review'" :disabled="busy || !!conflict" @click="action('withdraw')">撤回</el-button>
+            <template v-if="card.state === 'pending_review'">
+              <el-button type="success" :disabled="busy || !confirmReady" aria-describedby="confirm-blocker" @click="action('confirm')">确认响应</el-button>
               <el-button type="danger" plain :disabled="busy || !!conflict" @click="action('reject')">驳回</el-button>
               <el-button type="warning" plain :disabled="busy || !!conflict" @click="action('needs_material')">需补材料</el-button>
             </template>
-            <el-button v-if="canDecide && card.state === 'confirmed'" :disabled="busy || !!conflict" @click="action('reopen')">重开</el-button>
+            <el-button v-if="card.state === 'confirmed'" :disabled="busy || !!conflict" @click="action('reopen')">重开</el-button>
           </div>
-          <p v-if="canDecide && !multiDomain && card.state === 'pending_review' && confirmBlocker" id="confirm-blocker" class="hint blocker">暂不能确认：{{ confirmBlocker }}</p>
+          <p v-if="card.state === 'pending_review' && confirmBlocker" id="confirm-blocker" class="hint blocker">暂不能确认：{{ confirmBlocker }}</p>
           </div>
-          <p v-if="dispositionReview" class="hint">当前有待完成的处置会签；请先完成本轮处置，响应编辑与提交暂不可用。</p>
-          <p v-if="card.disposition === 'comply_only'" class="hint">已决定“仅需遵守”，这张卡片不再逐项响应；由负责的审核人改回“逐项响应”后才能编辑。</p>
+          <p v-if="card.disposition === 'comply_only'" class="hint">已决定“仅需遵守”，这张卡片不再逐项响应；改回“逐项响应”后才能编辑。</p>
         </template>
-        <CoSignPanel ref="cosign" :task-id="taskId" :job-id="jobId" :requirement-id="row.id" :card="card" :reviewed="reviewed" :warnings="warnings" :reason="reason" :requirement-blocker="requirementBlocker" :confirm-blocker="confirmBlocker" :dirty="dirty" :conflict="!!conflict" @policy="cosignPolicy=$event" @review="cosignReview=$event" @clear-review="clearReview" @dirty="cosignDirty=$event" @updated="install($event); emit('updated',$event)" @refresh-card="refresh()" @denied="emit('denied',$event)" />
-        <p v-if="card?.confirmed_by" class="hint">确认人 {{ card.confirmed_by }} · {{ formatTime(card.confirmed_at) }}</p>
+        <p v-if="card?.confirmed_at" class="hint">确认于 {{ formatTime(card.confirmed_at) }}</p>
         <div v-if="card" class="actions"><el-button size="small" :icon="Refresh" @click="refresh(true)">重新核对当前修订</el-button><el-button size="small" :icon="Tickets" @click="readHistory">读取修订历史</el-button></div>
         <el-timeline v-if="history" class="history" aria-label="不可变修订历史">
           <el-timeline-item v-for="revision in history" :key="revision.revision_id" :timestamp="`修订 ${revision.revision} · ${states[revision.state] ?? revision.state} · ${label(actorKinds, revision.actor_kind)}`" placement="top">
-            <p class="hint">原因 {{ display(revision.reason) }} · 确认 {{ display(revision.confirmed_by) }} / {{ revision.confirmed_at ? formatTime(revision.confirmed_at) : "未知" }}</p>
+            <p class="hint">原因 {{ display(revision.reason) }} · 确认于 {{ revision.confirmed_at ? formatTime(revision.confirmed_at) : "未确认" }}</p>
             <details><summary>修订内容</summary><pre>{{ display(revision.content) }}</pre></details>
           </el-timeline-item>
         </el-timeline>
       </template>
-      </div>
     </div>
     <el-dialog v-model="conflictOpen" title="修订冲突" width="860px" append-to-body>
       <template v-if="conflict">

@@ -1,4 +1,4 @@
-"""Offline public CA admission and snapshots through fixed restricted functions."""
+"""Offline public CA settings and pinned validation snapshots."""
 
 import asyncio
 from contextlib import asynccontextmanager
@@ -20,7 +20,9 @@ from app.schemas.bid_signature import (
     TrustAnchorPreview,
     TrustAnchorView,
 )
+from app.services.auth import Identity, set_actor_context
 from app.services.bid_pdf_signatures import parse_certificate
+from app.services.platform_credentials import require_human
 
 
 async def get_snapshot(session: AsyncSession) -> dict[str, Any]:
@@ -29,9 +31,6 @@ async def get_snapshot(session: AsyncSession) -> dict[str, Any]:
     if not isinstance(value, dict) or set(value) != {"sha256", "anchors"}:
         raise ServiceError("trust_store_unavailable", "Offline trust store is unavailable", 503, 3)
     return value
-
-
-enabled_snapshot = get_snapshot
 
 
 class PlatformTrustAnchorService:
@@ -112,25 +111,29 @@ class PlatformTrustAnchorService:
             rows = await session.scalar(text("SELECT public.platform_trust_anchor_list()"))
         return [TrustAnchorView.model_validate(row) for row in rows]
 
-    async def add(self, actor_email: str, data: bytes, label: str) -> TrustAnchorAddResult:
+    async def add(self, actor: Identity, data: bytes, label: str) -> TrustAnchorAddResult:
+        require_human(actor, "trust-anchor:manage")
         view, der = await self.parse(data, label)
         params = view.model_dump(exclude={"is_ca"})
-        params |= {"der": der, "actor": actor_email}
+        params |= {"der": der}
         async with self.transaction() as session:
+            await set_actor_context(session, actor)
             row = await session.scalar(
                 text(
                     "SELECT public.platform_trust_anchor_add(:label,:der,:fingerprint_sha256,"
-                    ":subject,:issuer,:not_before,:not_after,:actor)"
+                    ":subject,:issuer,:not_before,:not_after)"
                 ),
                 params,
             )
         return TrustAnchorAddResult.model_validate(row)
 
-    async def disable(self, actor_email: str, anchor_id: UUID) -> TrustAnchorView:
+    async def disable(self, actor: Identity, anchor_id: UUID) -> TrustAnchorView:
+        require_human(actor, "trust-anchor:manage")
         async with self.transaction() as session:
+            await set_actor_context(session, actor)
             row = await session.scalar(
-                text("SELECT public.platform_trust_anchor_disable(:id,:actor)"),
-                {"id": anchor_id, "actor": actor_email},
+                text("SELECT public.platform_trust_anchor_disable(:id)"),
+                {"id": anchor_id},
             )
             if row is None:
                 raise not_found()

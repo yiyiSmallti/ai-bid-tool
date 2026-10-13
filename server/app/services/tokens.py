@@ -36,8 +36,6 @@ async def create_token(
     secret = "bid_" + secrets.token_urlsafe(32)
     token = ApiToken(
         id=uuid4(),
-        org_id=identity.org_id,
-        user_id=identity.user_id,
         name=body.name,
         scopes=sorted(set(body.scopes)),
         expires_at=body.expires_at,

@@ -9,7 +9,6 @@ stream exceeds descriptor or hash; output overwrites a retained local artifact.
 import hashlib
 import json
 from contextlib import asynccontextmanager
-from pathlib import Path
 from uuid import UUID
 
 import httpx
@@ -19,6 +18,7 @@ from app.schemas.contracts import Result
 from bid_cli import main as cli
 from bid_cli.attachments import COMMAND_INPUTS, download, validated
 from bid_cli.schema import command_schema
+from pydantic import TypeAdapter
 
 ID = "00000000-0000-4000-8000-000000000001"
 RAW = b"%PDF-1.7\nsynthetic-only"
@@ -27,18 +27,14 @@ WHEN = "2026-10-06T00:00:00Z"
 READINESS = {
     "blockers": ["archive_review_pending"],
     "next_action": "review_uploaded_file",
-    "responsible_user_id": ID,
 }
 ROW = {
     "id": ID,
-    "org_id": ID,
     "current_revision_id": ID,
     "current_revision": 1,
     "state_version": 1,
     "kind": "contract",
     "active": True,
-    "custodian_user_id": ID,
-    "reviewer_user_id": ID,
     "review_state": "pending",
     "latest_review_id": None,
     "created_at": WHEN,
@@ -53,7 +49,6 @@ FILE = {
 }
 REVISION = {
     "id": ID,
-    "org_id": ID,
     "attachment_id": ID,
     "revision": 1,
     "file_id": ID,
@@ -64,7 +59,6 @@ REVISION = {
     "size_bytes": len(RAW),
     "review_state": "pending",
     "latest_review_id": None,
-    "created_by": ID,
     "created_at": WHEN,
     "metadata": {"kind": "contract", "label": "Synthetic"},
     "original": FILE,
@@ -76,14 +70,15 @@ def envelope(command, data, items=()):
     return Result(ok=True, command=command, data=data, items=list(items)).model_dump(mode="json")
 
 
-def test_discovery_exact_result4_commands_and_schema_snapshot():
+def test_discovery_exact_result4_commands_and_metadata_schema():
     schema = command_schema(cli.app)
-    snapshot = json.loads(Path("server/tests/snapshots/cli-v1.json").read_text())["schema"]["data"][
-        "commands"
-    ]
-    assert len(COMMAND_INPUTS) == 25
+    assert len(COMMAND_INPUTS) == 24
+    assert "resource attachment assign" not in schema["commands"]
     for name in COMMAND_INPUTS:
-        assert schema["commands"][name] == snapshot[name]
+        model = COMMAND_INPUTS[name]
+        assert schema["commands"][name]["input"] == (
+            TypeAdapter(model).json_schema() if model else None
+        )
         assert schema["commands"][name]["cli_parameters"]
         with pytest.raises(ValueError, match="Only contract 5.0"):
             command_schema(cli.app, "3.0")
@@ -172,7 +167,7 @@ def test_legacy_attachment_rejected_before_transport(monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["data"]["code"] == "invalid_input"
 
 
-def test_upload_transmits_unchanged_pdf_and_explicit_reviewer(monkeypatch, capsys, tmp_path):
+def test_upload_transmits_unchanged_pdf_and_explicit_metadata(monkeypatch, capsys, tmp_path):
     content = tmp_path / "original.pdf"
     content.write_bytes(RAW)
     meta = tmp_path / "input.json"
@@ -181,7 +176,6 @@ def test_upload_transmits_unchanged_pdf_and_explicit_reviewer(monkeypatch, capsy
             {
                 "request_id": ID,
                 "metadata": {"kind": "contract", "label": "Synthetic"},
-                "reviewer_user_id": ID,
             }
         )
     )
@@ -189,7 +183,12 @@ def test_upload_transmits_unchanged_pdf_and_explicit_reviewer(monkeypatch, capsy
     def call(method, path, **kwargs):
         assert method == "POST" and path == "/resources/attachments"
         assert kwargs["files"] == [("files", ("original.pdf", RAW, "application/pdf"))]
-        assert json.loads(kwargs["data"]["metadata"])["reviewer_user_id"] == ID
+        assert json.loads(kwargs["data"]["metadata"]) == {
+            "request_id": ID,
+            "metadata": {"kind": "contract", "label": "Synthetic"},
+            "parts": [],
+            "dry_run": False,
+        }
         return envelope(
             "resource attachment upload",
             {
@@ -214,11 +213,7 @@ def test_upload_transmits_unchanged_pdf_and_explicit_reviewer(monkeypatch, capsy
 class FakeDownload:
     def __init__(self, content=RAW, url=None, status=200):
         self.content, self.url, self.status = content, url, status
-        self.state = self
         self.requests = []
-
-    def load(self):
-        return {"session": "synthetic", "org_id": ID}
 
     async def request(self, method, path):
         self.requests.append(path)
@@ -238,7 +233,8 @@ class FakeDownload:
     async def transport(self):
         def handle(request):
             assert request.url.path == f"/v4/resources/attachments/revisions/{ID}/file/download"
-            assert request.headers["X-Org-Id"] == ID
+            assert request.headers["Authorization"] == "Bearer synthetic-installation-access-key"
+            assert "X-Org-Id" not in request.headers
             return httpx.Response(self.status, content=self.content)
 
         async with httpx.AsyncClient(
@@ -247,7 +243,8 @@ class FakeDownload:
             yield client
 
 
-async def test_authenticated_checksum_download_preserves_exact_bytes(tmp_path):
+async def test_authenticated_checksum_download_preserves_exact_bytes(tmp_path, monkeypatch):
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-installation-access-key")
     output = tmp_path / "download.pdf"
     body = await download(FakeDownload(), UUID(ID), output, None)
     assert output.read_bytes() == RAW
@@ -270,7 +267,8 @@ async def test_authenticated_checksum_download_preserves_exact_bytes(tmp_path):
         ({"status": 302}, "download_unavailable"),
     ],
 )
-async def test_download_failure_writes_no_local_file(tmp_path, kwargs, code):
+async def test_download_failure_writes_no_local_file(tmp_path, kwargs, code, monkeypatch):
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-installation-access-key")
     output = tmp_path / "download.pdf"
     with pytest.raises(ServiceError) as exc:
         await download(FakeDownload(**kwargs), UUID(ID), output, None)

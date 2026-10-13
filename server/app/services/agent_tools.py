@@ -92,8 +92,6 @@ class CommandToolProvider:
         timestamp = await self.session.scalar(select(func.clock_timestamp()))
         if (
             context.principal.id != self.state.principal_id
-            or context.principal.org_id != self.state.org_id
-            or context.principal.user_id != self.state.owner_user_id
             or context.session_id != self.state.id
             or context.task_id != self.state.task_id
             or context.extraction_job_id != self.state.extraction_job_id
@@ -139,7 +137,6 @@ def schema_digest(tool_definitions: list[AgentToolDefinition]) -> str:
 def same_parent(row, state, *, extraction=False) -> bool:
     return (
         row is not None
-        and row.org_id == state.org_id
         and row.task_id == state.task_id
         and (not extraction or row.extraction_job_id == state.extraction_job_id)
     )
@@ -151,14 +148,11 @@ async def validate_call(session, actor, agent_session, step, call):
     if (
         actor.actor_kind != "agent"
         or actor.token_id is not None
-        or actor.org_id != agent_session.org_id
-        or actor.user_id != agent_session.owner_user_id
         or actor.principal_id != agent_session.principal_id
         or actor.session_id != agent_session.id
         or actor.step_id != step.id
         or actor.invocation_id != step.invocation_id
         or step.session_id != agent_session.id
-        or step.org_id != agent_session.org_id
         or step.task_id != agent_session.task_id
         or step.document_id != agent_session.document_id
     ):
@@ -231,7 +225,7 @@ async def prove_safe_retry(session, agent_session, kind, input_hash):
                 select(Job)
                 .join(
                     AgentJobLink,
-                    (AgentJobLink.org_id == Job.org_id) & (AgentJobLink.job_id == Job.id),
+                    AgentJobLink.job_id == Job.id,
                 )
                 .where(
                     AgentJobLink.session_id == agent_session.id,
@@ -293,7 +287,6 @@ async def link_child(session, actor, agent_session, step, job, *, cached):
         )
     link = AgentJobLink(
         id=uuid4(),
-        org_id=actor.org_id,
         session_id=agent_session.id,
         task_id=agent_session.task_id,
         document_id=agent_session.document_id,
@@ -439,9 +432,7 @@ async def invoke(
     if child is not None:
         link = await link_child(session, actor, agent_session, step, child, cached=cached)
         if link.owned and child.status == "queued" and child.queue_id is None:
-            child.queue_id = await queue.enqueue_in_transaction(
-                session, str(actor.org_id), str(child.id)
-            )
+            child.queue_id = await queue.enqueue_in_transaction(session, str(child.id))
         await session.flush()
     exit_code = 0 if result.ok else 5
     if call.command == "job status" and result.data.get("status") in {"failed", "cancelled"}:
@@ -459,11 +450,8 @@ async def recover(session, actor, agent_session, step, *, storage, execution=Non
     if execution is not None:
         await execution.owned_job(session)
     if (
-        actor.org_id != agent_session.org_id
-        or actor.user_id != agent_session.owner_user_id
-        or actor.principal_id != agent_session.principal_id
+        actor.principal_id != agent_session.principal_id
         or actor.session_id != agent_session.id
-        or step.org_id != agent_session.org_id
         or step.session_id != agent_session.id
     ):
         raise not_found()
@@ -504,7 +492,7 @@ async def provenance(session, job_id):
 
 
 async def provenance_many(session, job_ids):
-    """Resolve public origins in one org-scoped query, independent of history size."""
+    """Resolve public origins in one installation query, independent of history size."""
     ids = {job_id for job_id in job_ids if job_id is not None}
     if not ids:
         return {}
@@ -526,7 +514,6 @@ def provenance_for_job(job):
         return AgentProvenance.model_validate(
             {
                 "initiated_by": "builtin_agent",
-                "on_behalf_of_user_id": job.on_behalf_of_user_id,
                 "principal_id": job.agent_principal_id,
                 "session_id": job.agent_session_id,
                 "step_id": job.agent_step_id,
@@ -540,7 +527,6 @@ def provenance_for_job(job):
         return AgentProvenance.model_validate(
             {
                 "initiated_by": "external_agent",
-                "on_behalf_of_user_id": job.on_behalf_of_user_id,
                 "token_id": job.actor_token_id,
                 "invocation_id": job.invocation_id,
                 "command": job.command,

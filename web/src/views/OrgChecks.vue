@@ -4,7 +4,8 @@ import { useRoute } from "vue-router";
 import AssessmentPreflight from "../components/AssessmentPreflight.vue";
 import JobPanel from "../components/JobPanel.vue";
 import { assessmentError, enc, queryPath, stateLabels, usePreviewInvalidation } from "../assessments.js";
-import { formatTime, jobStatuses, orgRequest } from "../org.js";
+import { request } from "../api.js";
+import { formatTime, jobStatuses } from "../org.js";
 const route = useRoute();
 const taskId = computed(() => String(route.params.taskId)), extractionId = computed(() => String(route.query.job ?? ""));
 const task = ref(null), inputs = ref(null), histories = ref([]), historyMeta = ref(null), jobs = ref([]), jobsMeta = ref(null), activeJob = ref("");
@@ -22,13 +23,13 @@ usePreviewInvalidation(invalidate, taskId);
 watch([draftId, mode, assessmentDate, reasoning], invalidate, { flush: "sync" });
 async function history(cursor = null) {
   const current = sequence;
-  const result = await orgRequest("GET", queryPath(`/tasks/${enc(taskId.value)}/checks`, { view: "console", extraction_job_id: extractionId.value, limit: 50, cursor }));
+  const result = await request("GET", queryPath(`/tasks/${enc(taskId.value)}/checks`, { view: "console", extraction_job_id: extractionId.value, limit: 50, cursor }));
   if (current !== sequence) return;
   histories.value = result.items; historyMeta.value = result.data;
 }
 async function discover(cursor = null) {
   const current = sequence;
-  const result = await orgRequest("GET", queryPath(`/tasks/${enc(taskId.value)}/jobs`, { kind: "check", extraction_job_id: extractionId.value, limit: 50, cursor }));
+  const result = await request("GET", queryPath(`/tasks/${enc(taskId.value)}/jobs`, { kind: "check", extraction_job_id: extractionId.value, limit: 50, cursor }));
   if (current !== sequence) return;
   jobs.value = result.items; jobsMeta.value = result.data;
   if (!activeJob.value) activeJob.value = jobs.value.find(j => ["queued", "running"].includes(j.status))?.id ?? "";
@@ -37,14 +38,14 @@ async function load() {
   const current = ++sequence; loading.value = true; error.value = ""; inputs.value = null; histories.value = []; jobs.value = []; activeJob.value = ""; invalidate();
   if (!extractionId.value) { error.value = "请先在任务中明确选择成功的提取结果"; loading.value = false; return; }
   try {
-    const result = await Promise.all([orgRequest("GET", `/tasks/${enc(taskId.value)}`), orgRequest("GET", queryPath(`/tasks/${enc(taskId.value)}/assessment-inputs`, { job: extractionId.value }))]);
+    const result = await Promise.all([request("GET", `/tasks/${enc(taskId.value)}`), request("GET", queryPath(`/tasks/${enc(taskId.value)}/assessment-inputs`, { job: extractionId.value }))]);
     if (current !== sequence) return;
     task.value = result[0].data; inputs.value = result[1].data;
     if (inputs.value.task_id !== taskId.value || inputs.value.extraction_job_id !== extractionId.value) throw new Error("invalid input identity");
     const explicit = String(route.query.draft ?? "");
     if (explicit && !draftChoices.value.some(d => d.draft_id === explicit)) {
       // Explicit historical selections are validated by the existing draft read; never silently substitute.
-      const saved = (await orgRequest("GET", `/drafts/${enc(explicit)}`)).data;
+      const saved = (await request("GET", `/drafts/${enc(explicit)}`)).data;
       if (saved.task_id !== taskId.value || saved.extraction_job_id !== extractionId.value) throw new Error("invalid draft identity");
       inputs.value = { ...inputs.value, selected_draft: { draft_id: explicit, validity: saved.validity } };
     }
@@ -58,35 +59,35 @@ async function preflight() {
   invalidate(); busy.value = true; error.value = "";
   let key = selectionKey(), attempt = previewSerial;
   try {
-    let result = await orgRequest("POST", `/tasks/${enc(taskId.value)}/checks`, body());
+    let result = await request("POST", `/tasks/${enc(taskId.value)}/checks`, body());
     if (key !== selectionKey() || attempt !== previewSerial) return;
     const data = result.data, input = data.input;
-    if (input?.task_id !== taskId.value || input.org_id !== inputs.value.org_id || input.extraction_job_id !== extractionId.value || input.document_id !== inputs.value.document_id || input.draft_id !== draftId.value || input.assessment_date !== assessmentDate.value || data.mode !== mode.value || !/^[a-f0-9]{64}$/.test(input.input_hash) || data.preflight?.input_hash !== input.input_hash) throw { code: 'check_input_changed' };
+    if (input?.task_id !== taskId.value || input.extraction_job_id !== extractionId.value || input.document_id !== inputs.value.document_id || input.draft_id !== draftId.value || input.assessment_date !== assessmentDate.value || data.mode !== mode.value || !/^[a-f0-9]{64}$/.test(input.input_hash) || data.preflight?.input_hash !== input.input_hash) throw { code: 'check_input_changed' };
     preview.value = data; previewKey = key;
   } catch (exc) { if (exc.name !== "AbortError") error.value = assessmentError(exc); }
   finally { busy.value = false; }
 }
 async function submit(recover = false) {
   if (busy.value || !canRun.value || (!recover && (!preview.value || previewKey !== selectionKey() || blocker.value || (modelRun.value && (!consent.value))))) return;
-  const request = recover ? queueRequest.value : body(false); if (!request) return;
+  const requestBody = recover ? queueRequest.value : body(false); if (!requestBody) return;
   const generation = sequence;
   busy.value = true; error.value = "";
   try {
-    const result = await orgRequest("POST", `/tasks/${enc(taskId.value)}/checks`, request);
+    const result = await request("POST", `/tasks/${enc(taskId.value)}/checks`, requestBody);
     if (generation !== sequence) return;
     activeJob.value = result.data.job_id; cached.value = result.data.cached; invalidate(); await discover();
   } catch (exc) {
     if (exc.name === "AbortError" || generation !== sequence) return;
     error.value = assessmentError(exc); consent.value = false;
-    if (exc.code === "queue_unavailable" && exc.payload?.data.job_id) { activeJob.value = exc.payload.data.job_id; queueRequest.value = request; }
+    if (exc.code === "queue_unavailable" && exc.payload?.data.job_id) { activeJob.value = exc.payload.data.job_id; queueRequest.value = requestBody; }
     else if (exc.code?.includes("input_changed") || exc.code?.includes("stale")) invalidate();
   } finally { busy.value = false; }
 }
 async function finished() { try { await Promise.all([history(), discover()]); } catch (exc) { error.value = assessmentError(exc); } }
 function clear() { sequence++; inputs.value = null; task.value = null; histories.value = []; jobs.value = []; activeJob.value = ""; invalidate(); }
 watch(() => [taskId.value, extractionId.value, route.query.draft], load, { immediate: true });
-window.addEventListener("bid:org-reset", clear);
-onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", clear); });
+window.addEventListener("bid:session-reset", clear);
+onBeforeUnmount(() => { clear(); window.removeEventListener("bid:session-reset", clear); });
 </script>
 <template>
   <nav class="breadcrumb" aria-label="位置"><RouterLink to="/org/tasks">招标任务</RouterLink><span>/</span><RouterLink :to="`/org/tasks/${taskId}`">{{ task?.name ?? '任务' }}</RouterLink><span>/</span><span>检查风险</span></nav>
@@ -106,7 +107,7 @@ onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", cle
         <p class="hint">规则检查核对覆盖、证照日期与偏离；规则与语义检查还会评估已确认响应的语义，不代表完整法律或投标审核。</p>
         <template v-if="modelRun"><el-form-item label="推理档位（留空使用默认）"><el-input v-model="reasoning" aria-label="推理档位" /></el-form-item></template>
         <el-button native-type="submit" :loading="busy" :disabled="!canRun || !draftId || selected?.validity !== 'current'" type="primary" plain>预览检查</el-button>
-        <span v-if="!canRun">当前角色只读或尚未满足运行条件</span>
+        <span v-if="!canRun">尚未满足运行条件</span>
       </el-form>
       <AssessmentPreflight :preview="preview" :rules="!modelRun" />
       <section v-if="preview" aria-label="本次检查范围">
@@ -120,7 +121,7 @@ onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", cle
   </template>
   <p v-if="cached" role="status">已复用相同输入的结果</p>
   <el-button v-if="queueRequest" :disabled="busy" @click="submit(true)">重新调度已保存作业</el-button>
-  <JobPanel assessment-mode v-if="activeJob" :job-id="activeJob" :writable="!!jobs.find(j => j.id === activeJob)?.cancel?.allowed" @finished="finished" />
+  <JobPanel assessment-mode v-if="activeJob" :job-id="activeJob" @finished="finished" />
   <el-card v-if="inputs" class="section" shadow="never"><h3>检查作业</h3><p v-if="!jobs.length">尚无检查作业</p><div v-for="job in jobs" :key="job.id" class="actions"><el-button link @click="activeJob = job.id">查看作业 {{ job.id }}</el-button><span>{{ jobStatuses[job.status] ?? job.status }} · 尝试 {{ job.attempts }} 次</span><RouterLink v-if="job.result_id" :to="`/org/tasks/${taskId}/checks/${job.result_id}`">查看报告</RouterLink></div><el-button v-if="jobsMeta?.next_cursor" @click="discover(jobsMeta.next_cursor)">更多作业</el-button></el-card>
   <el-card v-if="inputs" class="section" shadow="never"><h3>检查历史</h3><el-empty v-if="!histories.length" description="尚未运行检查" /><div v-for="item in histories" :key="item.report.id" class="assessment-history"><RouterLink :to="`/org/tasks/${taskId}/checks/${item.report.id}`">查看检查报告</RouterLink><span>{{ item.mode === 'rules' ? '规则检查' : '规则与语义检查' }} · {{ item.report.assessment_date }} · {{ stateLabels[item.report.completion] }} · {{ stateLabels[item.report.validity] }}</span><small>初稿 {{ item.report.draft_id }} · {{ formatTime(item.report.created_at) }}</small></div><el-button v-if="historyMeta?.next_cursor" @click="history(historyMeta.next_cursor)">更多检查历史</el-button></el-card>
 </template>

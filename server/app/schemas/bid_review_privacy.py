@@ -75,7 +75,6 @@ class OutboundAuthorizationRequest(Contract):
 
 class OutboundAuthorizationView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     submission_id: UUID
     submission_manifest_sha256: Sha256
@@ -89,7 +88,6 @@ class OutboundAuthorizationView(Contract):
     purposes: list[Literal["bid_review_text"]]
     allowed_capabilities: list[Literal["llm"]]
     pages: list[SanitizedPageRef]
-    authorized_by: UUID
     authorized_at: AwareDatetime
     reason_sha256: Sha256
     actor_kind: Literal["session"] = "session"

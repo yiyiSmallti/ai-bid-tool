@@ -27,12 +27,11 @@ replacement. Batch disposition locks the task and cards in a stable order, and
 commits all items and their audits together.
 
 The `Identity` context in [auth.py](../../server/app/services/auth.py) supplies
-transaction-local actor kind, user, token, and organization. Services recheck
-active membership and intersect current role grants with token or saved worker
-grants. Only human sessions may make decisions: technical members review technical
-cards, bidders review commercial cards, and admins classify an unclassified draft
-or change the task redaction setting. Admin status does not confer a professional
-reviewer's authority. API token scopes exclude confirmation and export.
+transaction-local actor kind, token and agent attribution. Services recheck current
+scopes and saved worker grants. Only the installation human may confirm, reject,
+reopen, decide dispositions, classify cards or change the task redaction setting.
+Review domains determine response-table grouping. API tokens and agents cannot
+obtain confirmation or export scopes.
 
 The service and database enforce these transitions:
 
@@ -43,11 +42,11 @@ The service and database enforce these transitions:
 | draft | Submit | pending_review |
 | pending_review | Confirm / reject / request material | confirmed / rejected / needs_material |
 | pending_review | Withdraw with a reason | draft |
-| confirmed | Responsible human reopens with a reason | draft |
+| confirmed | Human reopens with a reason | draft |
 
 Each action appends a revision. Pending and confirmed content cannot be replaced
-directly. A human `comply_only` decision protects content until the responsible
-reviewer changes that decision back to `respond`. Confirmation requires complete
+directly. A human `comply_only` decision protects content until the human changes
+that decision back to `respond`. Confirmation requires complete
 response text, deviation and explanation, an exact tender citation, and explicit
 review of every linked evidence ID and warning. An evidence response requires
 confirmed material; a commitment has no evidence. Confirmation records `respond`
@@ -70,7 +69,7 @@ Evidence. A confirmed card must be reopened, updated and reviewed again.
 `submit_generation` in [card_generation.py](../../server/app/services/card_generation.py)
 requires `card:generate`, `card:read`, `task:read` and every selected material's
 read grants. It fixes the successful extraction job, selected requirements,
-current card revision IDs, model/catalog identity, reasoning and versioned
+current card revision IDs, provider configuration and model identity, reasoning and versioned
 input manifest. The encrypted text snapshot lives in internal `jobs.result.submission`
 until publication; job status never exposes submission state. Publication appends
 an immutable `CardGenerationRun` with the same encrypted snapshot and public
@@ -78,7 +77,7 @@ ID/hash manifest, satisfying the database's running-attempt insertion gate.
 
 The cache includes the input hash and expected revisions.
 A manual edit, new input,
-reasoning level, catalog revision, prompt/schema/adapter version or redaction
+reasoning level, provider configuration revision, prompt/schema/adapter version or redaction
 setting changes the key.
 Retries keep the original encrypted input and cumulative
 call budget.
@@ -124,9 +123,14 @@ dependency. `generation_materials_stale` checks the full manifest and its read
 permissions. The database's `response_generation_materials_active` enforces the
 same dependency boundary during confirmation and assembly.
 
-The PostgreSQL gates in
-[0015_response_cards.py](../../server/migrations/versions/0015_response_cards.py)
-combine tenant RLS, composite references, restricted write grants, immediate
+The PostgreSQL gates `response_require_human`, `response_revision_gate`,
+`response_card_gate`, `response_evidence_confirmation_complete`,
+`response_draft_complete` and `response_immutable_gate` in
+[00_functions_response.sql](../../server/migrations/baseline/00_functions_response.sql)
+combine task references from
+[40_foreign_keys.sql](../../server/migrations/baseline/40_foreign_keys.sql),
+restricted write grants from
+[60_grants.sql](../../server/migrations/baseline/60_grants.sql), immediate
 actor/state checks and deferred completeness checks. They reject missing or
 nonhuman decision context, invalid current pointers, unconfirmed evidence rows,
 late links to historical revisions, incomplete draft coverage, and updates or
@@ -136,10 +140,8 @@ SQL access as the application role is not an alternative authentication API.
 Card citation checks require the stored quote to occur as exact text and to
 resolve to one original span at the recorded page or Word block. Application and
 database checks use the same normalization and segment-boundary disambiguation
-defined in [docx-citations.md](docx-citations.md#how-it-works). Migration `0019`
-replaces the shared database citation predicate consumed by confirmation and
-draft gates; it does not rewrite requirements or review history. Migration `0017`
-adds nullable `requirements.model_quote` and
+defined in [docx-citations.md](docx-citations.md#how-it-works). The baseline defines the shared citation predicate consumed by confirmation and
+draft gates, plus `requirements.model_quote` and
 `response_card_revisions.quote_sha256`. Creation, editing, withdrawal, reopening,
 and human disposition bind a new revision to the current exact requirement quote;
 other actions inherit the previous baseline. Existing revisions remain immutable: when their hash is null,
@@ -149,10 +151,10 @@ quote when no model quote exists. It never backfills or rewrites revision histor
 A legacy citation repair may change the requirement's exact quote or populate
 `model_quote`, but it does not silently approve existing review. When the current
 revision's quote hash differs from the repaired source quote, the card reports
-`needs_reconfirmation` and cannot be confirmed. A pending card must be withdrawn,
+`invalid_citation` and cannot be confirmed. A pending card must be withdrawn,
 and a confirmed card reopened, before it is submitted or edited and reviewed
 again. A `comply_only` requirement needs a fresh human disposition. The repair
-audit event `requirement.repair_citation` contains only object IDs and old/new
+human audit event `requirement.citation_repair.executed` contains only object IDs and old/new
 hashes, including separate quote and model-quote changes; it excludes tender
 text and provider text, and retains the operator's reason only as
 `reason_sha256`.
@@ -174,7 +176,7 @@ deviations remain visible. Gaps contain source locations and reason codes, never
 unconfirmed candidate text. Reading an old draft recalculates validity and
 affected requirements without rewriting its response snapshots. The assembly rule
 (`RULE_VERSION` in [drafts.py](../../server/app/services/drafts.py)) maps repaired cards awaiting review to the
-`needs_reconfirmation` gap reason, so an old draft becomes invalid when its
+`invalid_citation` gap reason, so an old draft becomes invalid when its
 current source inputs no longer match its reviewed revision.
 
 Assembly does not call a model or OCR and records zero model cost without creating
@@ -208,15 +210,13 @@ text, response text, material quotes and credentials are not copied into logs.
 ## Code
 
 - [response_card_contracts.py](../../server/app/schemas/response_card_contracts.py): shared validation and views.
-- [models/response_cards.py](../../server/app/models/response_cards.py): tenant records and references.
+- [models/response_cards.py](../../server/app/models/response_cards.py): task records and references.
 - [services/response_cards.py](../../server/app/services/response_cards.py): actor checks, material resolution, revisions and human actions.
-- [services/citation_repair.py](../../server/app/services/citation_repair.py): preview-bound tenant-admin citation repair and hash-only audit metadata.
+- [services/citation_repair.py](../../server/app/services/citation_repair.py): preview-bound human-only citation repair and hash-only audit metadata.
 - [services/drafts.py](../../server/app/services/drafts.py): manifests, complete assembly and historical validity.
 - [services/card_generation.py](../../server/app/services/card_generation.py): fixed inputs, cache, worker publication and partial results.
-- [server/migrations/versions/0018_generation_dependencies.py](../../server/migrations/versions/0018_generation_dependencies.py): model input dependency gates and catalog identity width.
-- [server/migrations/versions/0017_exact_citations.py](../../server/migrations/versions/0017_exact_citations.py): quote provenance and immutable revision hashes.
 - [api/response_cards.py](../../server/app/api/response_cards.py): authenticated API entry points.
 - [jobs/processor.py](../../server/app/jobs/processor.py): attempt-safe background publication.
 - [test_response_cards.py](../../server/tests/test_response_cards.py): API-to-worker workflows and repeatable synthetic artifact.
 - [test_card_generation.py](../../server/tests/test_card_generation.py): model-to-review chain, outbound privacy, references, costs, attempts and isolation with MockTransport.
-- [test_response_card_db.py](../../server/tests/test_response_card_db.py), [test_rls.py](../../server/tests/test_rls.py): direct SQL gates and tenant isolation.
+- [test_response_card_db.py](../../server/tests/test_response_card_db.py): direct SQL human and integrity gates, including `test_nonhuman_or_missing_actor_cannot_make_decisions`, `test_response_history_cannot_be_deleted` and `test_confirmation_requires_nonempty_confirmed_evidence`.

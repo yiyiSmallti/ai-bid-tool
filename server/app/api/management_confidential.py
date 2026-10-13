@@ -13,7 +13,6 @@ from app.schemas.management_pages import (
     ConfidentialQuery,
     ConfidentialValueRevisionSet,
 )
-from app.services import management_confidential as confidential
 
 
 def create_router(context, settings):
@@ -28,6 +27,8 @@ def create_router(context, settings):
         return session, actor
 
     def page(purpose, value, started):
+        from app.services import management_confidential as confidential
+
         return confidential.page_result(
             confidential.COMMANDS[purpose],
             value,
@@ -38,12 +39,16 @@ def create_router(context, settings):
         "/confidential-fields/query", name="confidential_field_browse", response_model=Result
     )
     async def fields(body: ConfidentialQuery, ctx=Depends(management_context, scope="function")):
+        from app.services import management_confidential as confidential
+
         started = time.monotonic()
         session, actor = ctx
         return page("fields", await confidential.fields(session, actor, body), started)
 
     @router.post("/confidential-values/query", name="confidential_browse", response_model=Result)
     async def values(body: ConfidentialQuery, ctx=Depends(management_context, scope="function")):
+        from app.services import management_confidential as confidential
+
         started = time.monotonic()
         session, actor = ctx
         return page("values", await confidential.values(session, actor, body), started)
@@ -58,6 +63,8 @@ def create_router(context, settings):
         body: ConfidentialHistoryQuery,
         ctx=Depends(management_context, scope="function"),
     ):
+        from app.services import management_confidential as confidential
+
         started = time.monotonic()
         session, actor = ctx
         return page("history", await confidential.history(session, actor, field_id, body), started)
@@ -72,6 +79,8 @@ def create_router(context, settings):
         body: ConfidentialValueRevisionSet,
         ctx=Depends(management_context, scope="function"),
     ):
+        from app.services import management_confidential as confidential
+
         started = time.monotonic()
         session, actor = ctx
         value = await confidential.set_value(session, actor, field_id, body, secrets)

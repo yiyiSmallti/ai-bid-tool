@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -35,13 +35,11 @@ class PDFSettings(BaseSettings):
 
 class Settings(PDFSettings):
     database_url: SecretStr
-    platform_database_url: SecretStr | None = None
-    credential_database_url: SecretStr | None = None
-    _credential_connections: object | None = PrivateAttr(default=None)
+    access_key: SecretStr = Field(min_length=32)
     encryption_key: SecretStr
     # Retired data keys, comma separated: still decrypt, never encrypt.
     encryption_key_previous: Annotated[list[SecretStr], NoDecode] = []
-    # Sessions, signed links and domain-separated signup source digests; not data encryption.
+    # Sessions and signed links; not data encryption.
     token_key: SecretStr
     secrets_key: SecretStr | None = None
     secrets_key_previous: Annotated[list[SecretStr], NoDecode] = []
@@ -56,7 +54,7 @@ class Settings(PDFSettings):
     max_pages: int = 1000
     ocr_language: str = "chi_sim+eng"
     ocr_data_dir: str | None = None
-    # Standalone/eval model parameters; org jobs use their fixed provider or catalog identity.
+    # Standalone/eval model parameters; jobs use their fixed provider configuration.
     llm_provider: str = "disabled"
     llm_model: str | None = None
     llm_api_key: SecretStr | None = None
@@ -77,11 +75,6 @@ class Settings(PDFSettings):
     llm_json_mode: str = "json_schema"
     # JSON object merged into every model request, e.g. {"thinking": {"type": "disabled"}}.
     llm_request_options: str | None = None
-    # Platform operators come from deployment config only, so the app cannot promote anyone.
-    platform_admin_emails: str | None = None
-    platform_totp_secrets: SecretStr | None = None
-    platform_session_seconds: int = 1800
-    org_signup_enabled: bool = False
     # Shared model-job call ceilings; retries of the same job count toward the same ceiling.
     job_max_vendor_calls: int = Field(default=64, ge=1)
     # Per first-pass batch; the call ceiling is the larger of this times the batches and the
@@ -152,7 +145,7 @@ class Settings(PDFSettings):
             raise ValueError("Data, token and provider secret roots must remain distinct")
         return self
 
-    @field_validator("database_url", "platform_database_url", "credential_database_url")
+    @field_validator("database_url")
     @classmethod
     def postgres_only(cls, value: SecretStr) -> SecretStr:
         if value is None:
@@ -200,7 +193,6 @@ class Settings(PDFSettings):
             self.request_options()
         except ValueError:
             raise ValueError("BID_LLM_REQUEST_OPTIONS must be a JSON object") from None
-        self.platform_totp()  # Validate configured factors; other operators enroll in the browser.
         return self
 
     def request_options(self) -> dict:
@@ -211,29 +203,6 @@ class Settings(PDFSettings):
         if not isinstance(value, dict):
             raise ValueError("BID_LLM_REQUEST_OPTIONS must be a JSON object")
         return value
-
-    def platform_admins(self) -> list[str]:
-        return [
-            email.strip().lower()
-            for email in (self.platform_admin_emails or "").split(",")
-            if email.strip()
-        ]
-
-    def platform_totp(self) -> dict[str, str]:
-        """Parse "email:BASE32SECRET" pairs; malformed entries stop startup."""
-        from app.core.totp import decode_secret
-
-        raw = self.platform_totp_secrets.get_secret_value() if self.platform_totp_secrets else ""
-        pairs = {}
-        for entry in filter(None, (item.strip() for item in raw.split(","))):
-            email, _, secret = entry.rpartition(":")
-            try:
-                if len(decode_secret(secret)) < 10:
-                    raise ValueError
-            except ValueError:
-                raise ValueError("BID_PLATFORM_TOTP_SECRETS has an invalid entry") from None
-            pairs[email.strip().lower()] = secret.strip()
-        return pairs
 
     @field_validator("search_provider")
     @classmethod

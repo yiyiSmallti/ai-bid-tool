@@ -1,19 +1,15 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { ApiError } from "../api.js";
-import { formatTime, orgRequest } from "../org.js";
+import { ApiError, request } from "../api.js";
+import { formatTime } from "../org.js";
 import { reviewError } from "../bid-review.js";
-const props = defineProps({ taskId: String, run: Object, authority: Object, authorizationEpoch: Number });
+const props = defineProps({ taskId: String, run: Object, authorizationEpoch: Number });
 const findings = ref([]), meta = ref(null), cursor = ref(null), severity = ref(""), state = ref(""), outcome = ref(""), busy = ref(false), error = ref("");
 const dialog = ref(null), reason = ref(""), domain = ref("commercial"), history = ref(null), historyRows = ref([]), historyCursor = ref(null);
 const labels = { fatal: "废标风险", high: "高风险缺陷", medium: "其他", open: "待审查", dismissed: "已驳回", confirmed: "已确认", responded: "已响应", deviation: "偏离", missing: "缺失", unknown: "未确定", commercial: "商务", technical: "技术", dismiss: "驳回", reopen: "重新打开", confirm: "确认", classify: "分类", rejection: "废标风险", lost_points: "扣分风险", both: "废标与扣分风险", none: "未确定影响" };
 const groups = computed(() => ["fatal", "high", "medium"].map(key => ({ key, label: labels[key], rows: findings.value.filter(row => row.severity === key) })));
 const current = computed(() => props.run?.validity === "current" && meta.value?.validity === "current");
 const path = computed(() => `/bid-reviews/${encodeURIComponent(props.run.id)}/findings`);
-const activeMember = computed(() => props.authority?.taskState === "active" && props.authority.member?.active);
-const canClassify = computed(() => props.authority?.taskState === "active" && props.authority.role === "admin");
-function canDecide(row) { return current.value && activeMember.value && ["owner", "contributor", "reviewer"].includes(props.authority.member.role) && props.authority.member.review_domains?.includes(row.review_domain) && ((props.authority.role === "bidder" && row.review_domain === "commercial") || (props.authority.role === "technical" && row.review_domain === "technical")); }
-const canReadHistory = computed(() => ["admin", "bidder", "technical", "viewer"].includes(props.authority?.role) && (current.value || ["admin", "bidder"].includes(props.authority?.role)));
 let epoch = 0, historyEpoch = 0, controller;
 const seenCursors = new Set(), seenHistoryCursors = new Set();
 function invalid() { return new ApiError(502, "invalid_response", "发现项响应范围无法核验"); }
@@ -25,7 +21,7 @@ async function read(more = false) {
   const token = epoch, query = new URLSearchParams({ limit: "50" });
   for (const [key, value] of Object.entries({ severity: severity.value, state: state.value, outcome: outcome.value })) if (value) query.set(key, value);
   if (more && cursor.value) query.set("cursor", cursor.value);
-  const response = await orgRequest("GET", `${path.value}?${query}`, undefined, { signal: controller?.signal });
+  const response = await request("GET", `${path.value}?${query}`, undefined, { signal: controller?.signal });
   if (token !== epoch) return;
   validatePage(response);
   const known = new Set(more ? findings.value.map(row => row.id) : []);
@@ -45,12 +41,12 @@ async function more() { const token = epoch; busy.value = true; try { await read
 function openDialog(row, action) { closeHistory(); reason.value = ""; domain.value = row.review_domain ?? "commercial"; dialog.value = { row, action }; }
 async function mutate() {
   const fixed = dialog.value, token = epoch;
-  if (!fixed || !reason.value.trim() || !current.value || (fixed.action === "classify" ? !canClassify.value : !canDecide(fixed.row))) return;
+  if (!fixed || !reason.value.trim() || !current.value) return;
   const body = { request_id: crypto.randomUUID(), reason: reason.value.trim(), expected_revision: fixed.row.revision, expected_input_hash: meta.value.input_hash, expected_decision_id: fixed.row.latest_decision_id };
   if (fixed.action === "classify") body.review_domain = domain.value; else body.action = fixed.action;
   busy.value = true; error.value = "";
   try {
-    await orgRequest("POST", `${path.value}/${encodeURIComponent(fixed.row.id)}/${fixed.action === "classify" ? "classification" : "decisions"}`, body, { signal: controller?.signal });
+    await request("POST", `${path.value}/${encodeURIComponent(fixed.row.id)}/${fixed.action === "classify" ? "classification" : "decisions"}`, body, { signal: controller?.signal });
     if (token === epoch) await load();
   } catch (exc) {
     if (token === epoch && exc.name !== "AbortError") {
@@ -62,7 +58,7 @@ async function mutate() {
 async function readHistory(more = false) {
   const token = epoch, historyToken = historyEpoch, fixed = history.value, query = new URLSearchParams({ limit: "50" });
   if (!fixed) return; if (more && historyCursor.value) query.set("cursor", historyCursor.value);
-  const response = await orgRequest("GET", `${path.value}/${encodeURIComponent(fixed.row.id)}/${fixed.section}?${query}`, undefined, { signal: controller?.signal });
+  const response = await request("GET", `${path.value}/${encodeURIComponent(fixed.row.id)}/${fixed.section}?${query}`, undefined, { signal: controller?.signal });
   if (token !== epoch || historyToken !== historyEpoch) return;
   validatePage(response);
   const known = new Set(more ? historyRows.value.map(row => row.id) : []);
@@ -75,10 +71,10 @@ async function showHistory(row, section) { closeDialog(); closeHistory(); histor
 async function moreHistory(more = true) { const token = epoch; busy.value = true; try { await readHistory(more); } catch (exc) { if (token === epoch && exc.name !== "AbortError") { closeHistory(); error.value = reviewError(exc); } } finally { if (token === epoch) busy.value = false; } }
 const citationPosition = citation => `${citation.page_label === "rendered_docx" ? "固定转换第" : "原件第"} ${citation.page} 页${citation.location?.section_path?.length ? ` · ${citation.location.section_path.join(" / ")}` : ""}${citation.location?.block_id ? ` · 结构块 ${citation.location.block_id}` : ""}`;
 function basisLabel(basis) { if (!basis) return "依据未披露"; return `${({ rule: "规则", model: "模型" })[basis.kind] ?? "辅助检验"} · ${basis.rule_or_prompt_version}${basis.model ? ` · ${basis.model}` : ""}${basis.confidence !== null && basis.confidence !== undefined ? ` · 模型置信度 ${basis.confidence}（不代表准确率）` : ""}`; }
-watch(() => [props.run.id, props.run.input_hash, props.run.validity, props.authorizationEpoch, props.authority], load, { immediate: true });
+watch(() => [props.run.id, props.run.input_hash, props.run.validity, props.authorizationEpoch], load, { immediate: true });
 watch([severity, state, outcome], load);
-window.addEventListener("bid:org-reset", load);
-onBeforeUnmount(() => { epoch++; controller?.abort(); closeDialog(); closeHistory(); findings.value = []; window.removeEventListener("bid:org-reset", load); });
+window.addEventListener("bid:session-reset", load);
+onBeforeUnmount(() => { epoch++; controller?.abort(); closeDialog(); closeHistory(); findings.value = []; window.removeEventListener("bid:session-reset", load); });
 </script>
 <template>
   <section class="section" aria-label="标书发现项">
@@ -104,15 +100,15 @@ onBeforeUnmount(() => { epoch++; controller?.abort(); closeDialog(); closeHistor
         <p v-if="row.remediation">补救建议：{{ row.remediation }}</p><p v-for="code in row.limitation_codes" :key="code">检验限制：{{ reviewError({ code }) }}</p>
         <p class="hint">当前决定：{{ labels[row.state] }} · 修订 {{ row.revision }}<span v-if="row.latest_decision_id"> · <code>{{ row.latest_decision_id }}</code></span></p><p v-if="row.reviewed_basis?.kind === 'human_reviewed'">人工核对已确认 · 决定 <code>{{ row.reviewed_basis.human_decision_id }}</code></p>
         <div class="actions">
-          <template v-if="canDecide(row)"><el-button v-if="row.state === 'open'" :disabled="busy" @click="openDialog(row,'dismiss')">驳回发现项</el-button><el-button v-if="row.state === 'open'" type="primary" :disabled="busy" @click="openDialog(row,'confirm')">确认发现项</el-button><el-button v-if="row.state !== 'open'" :disabled="busy" @click="openDialog(row,'reopen')">重新打开发现项</el-button></template>
-          <el-button v-if="current && canClassify && row.state === 'open'" :disabled="busy" @click="openDialog(row,'classify')">分类发现项</el-button>
-          <el-button v-if="canReadHistory" :disabled="busy" @click="showHistory(row,'decisions')">决定历史</el-button><el-button v-if="canReadHistory && canClassify" :disabled="busy" @click="showHistory(row,'classification')">分类历史</el-button>
-        </div><p v-if="!row.review_domain" class="hint">需管理员先分类，再由对应职责的人工审查人决定。</p>
+          <template v-if="current"><el-button v-if="row.state === 'open'" :disabled="busy" @click="openDialog(row,'dismiss')">驳回发现项</el-button><el-button v-if="row.state === 'open'" type="primary" :disabled="busy" @click="openDialog(row,'confirm')">确认发现项</el-button><el-button v-if="row.state !== 'open'" :disabled="busy" @click="openDialog(row,'reopen')">重新打开发现项</el-button></template>
+          <el-button v-if="current && row.state === 'open'" :disabled="busy" @click="openDialog(row,'classify')">分类发现项</el-button>
+          <el-button v-if="current" :disabled="busy" @click="showHistory(row,'decisions')">决定历史</el-button><el-button v-if="current" :disabled="busy" @click="showHistory(row,'classification')">分类历史</el-button>
+        </div><p v-if="!row.review_domain" class="hint">请先分类，再作出人工审查决定。</p>
       </el-card>
     </template>
     <el-button v-if="cursor" :loading="busy" @click="more">更多发现项</el-button>
     <el-dialog :model-value="Boolean(dialog)" :title="`${labels[dialog?.action] ?? ''}发现项`" width="min(560px, 94vw)" :close-on-click-modal="false" @update:model-value="closeDialog">
-      <template v-if="dialog"><p>{{ dialog.row.title ?? dialog.row.code }} · 当前修订 {{ dialog.row.revision }}</p><p v-if="dialog.action === 'classify'">分类只记录专业职责，不授予管理员作出审查决定的权限。</p>
+      <template v-if="dialog"><p>{{ dialog.row.title ?? dialog.row.code }} · 当前修订 {{ dialog.row.revision }}</p><p v-if="dialog.action === 'classify'">分类记录发现项的专业领域。</p>
         <el-form label-position="top"><el-form-item v-if="dialog.action === 'classify'" label="专业职责"><el-select v-model="domain" aria-label="发现项专业职责" :disabled="busy"><el-option label="商务" value="commercial" /><el-option label="技术" value="technical" /></el-select></el-form-item><el-form-item label="审查理由（必填）"><el-input v-model="reason" aria-label="发现项审查理由" type="textarea" :rows="4" maxlength="20000" :disabled="busy" /></el-form-item></el-form>
       </template><template #footer><el-button :disabled="busy" @click="closeDialog">取消</el-button><el-button type="primary" :loading="busy" :disabled="!reason.trim()" @click="mutate">保存{{ labels[dialog?.action] }}</el-button></template>
     </el-dialog>

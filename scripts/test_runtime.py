@@ -66,14 +66,11 @@ def main():
         "BID_TEST_ADMIN_URL": f"postgresql+psycopg://bid_test_admin@/bid_test?host={socket}&port=55439",
         "BID_MIGRATION_DATABASE_URL": f"postgresql+psycopg://bid_test_admin@/bid_test?host={socket}&port=55439",
         "BID_DATABASE_URL": f"postgresql+psycopg://bid_app@/bid_test?host={socket}&port=55439",
-        "BID_PLATFORM_DATABASE_URL": f"postgresql+psycopg://bid_platform_app@/bid_test?host={socket}&port=55439",
-        "BID_CREDENTIAL_DATABASE_URL": f"postgresql+psycopg://bid_credential_reader@/bid_test?host={socket}&port=55439",
         "BID_SECRETS_KEY": Fernet.generate_key().decode(),
         "BID_ENCRYPTION_KEY": Fernet.generate_key().decode(),
+        "BID_ACCESS_KEY": secrets.token_urlsafe(48),
         "BID_TOKEN_KEY": Fernet.generate_key().decode(),
-        "BID_CLI_KEY": Fernet.generate_key().decode(),
         "BID_DATA_DIR": str(root / "files"),
-        "BID_PASSWORD": secrets.token_urlsafe(24),
     }
     env_file = root / "environment.sh"
     descriptor = os.open(env_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)

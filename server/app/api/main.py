@@ -6,9 +6,9 @@ from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -16,34 +16,12 @@ from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException
 
 from app.api.account import create_router as create_account_router
-from app.api.agent import create_router as create_agent_router
-from app.api.bid_review import create_router as create_bid_review_router
-from app.api.check import create_router as create_check_router
-from app.api.confidential import create_router as create_confidential_router
-from app.api.exports import create_router as create_export_router
-from app.api.jobs import create_router as create_job_router
-from app.api.org_console import create_router as create_org_console_router
-from app.api.platform import create_router as create_platform_router
-from app.api.providers import create_router as create_provider_router
-from app.api.resources import create_router as create_resource_router
-from app.api.response_cards import create_router as create_response_router
-from app.api.sandbox import create_router as create_sandbox_router
-from app.api.score import create_router as create_score_router
-from app.api.task_board import create_router as create_task_board_router
-from app.api.task_cosign import create_router as create_task_cosign_router
-from app.api.task_discussion import create_router as create_task_discussion_router
-from app.api.task_workflow import create_router as create_task_workflow_router
-from app.api.tenders import create_router as create_tender_router
 from app.core.config import Settings
-from app.core.credential_db import close_connections, get_connections
 from app.core.db import Database
 from app.core.errors import ServiceError
-from app.core.password_attempts import PasswordAttempts
 from app.core.security import TokenSigner
-from app.jobs.processor import Processor
 from app.jobs.queue import Queue
 from app.providers.disabled import DisabledLLM
-from app.providers.llm import resolve_llm
 from app.providers.local_ocr import LocalOCR
 from app.providers.storage import create_storage
 from app.schemas.contracts import CONTRACT_VERSION, Result
@@ -116,12 +94,28 @@ def mount_console(app: FastAPI, web_dir: Path) -> None:
 def create_app(
     settings: Settings | None = None, *, llm=None, ocr=None, queue=None, llm_transport=None
 ) -> FastAPI:
+    from app.api.agent import create_router as create_agent_router
+    from app.api.bid_review import create_router as create_bid_review_router
+    from app.api.check import create_router as create_check_router
+    from app.api.confidential import create_router as create_confidential_router
+    from app.api.exports import create_router as create_export_router
+    from app.api.jobs import create_router as create_job_router
+    from app.api.org_console import create_router as create_org_console_router
+    from app.api.providers import create_router as create_provider_router
+    from app.api.resources import create_router as create_resource_router
+    from app.api.response_cards import create_router as create_response_router
+    from app.api.sandbox import create_router as create_sandbox_router
+    from app.api.score import create_router as create_score_router
+    from app.api.task_board import create_router as create_task_board_router
+    from app.api.tenders import create_router as create_tender_router
+    from app.jobs.processor import Processor
+    from app.providers.llm import resolve_llm
+
     settings = settings or Settings.load()
     settings.assert_vendor_credentials_absent()
     db, crypto = Database(settings), TokenSigner.for_tokens(settings)
-    password_attempts = PasswordAttempts(db)
     storage = create_storage(settings)
-    # Test injection is explicit; runtime jobs resolve org configuration then the catalog.
+    # Test injection is explicit; runtime jobs resolve local provider configuration.
     resolve: Callable[..., Awaitable[Any]] | None = None
     if llm is None:
 
@@ -138,17 +132,13 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_app):
         await db.verify_role()
-        await get_connections(settings).management.verify()
-        await get_connections(settings).reader.verify()
         try:
             yield
         finally:
-            await password_attempts.close()
             stream_caps = getattr(_app.state, "workflow_stream_caps", None)
             if stream_caps is not None:
                 await stream_caps.close()
             await db.engine.dispose()
-            await close_connections(settings)
 
     app = FastAPI(
         title="Local API",
@@ -163,7 +153,6 @@ def create_app(
         queue,
     )
     app.state.crypto = crypto
-    app.state.password_attempts = password_attempts
 
     @app.middleware("http")
     async def bound_source_input(request: Request, call_next):
@@ -175,7 +164,6 @@ def create_app(
             and parts[3] == "requirements"
             and parts[4] in {"manual", "manual-preview"}
         )
-        credential_route = request.url.path.startswith("/platform/credentials")
         resource_management_route = request.method == "POST" and request.url.path.startswith(
             (
                 "/management/memories",
@@ -190,45 +178,8 @@ def create_app(
                 "/management/providers",
             )
         )
-        if credential_route:
-            from app.services.platform import identify
-
-            header = request.headers.get("authorization", "")
-            try:
-                scheme, _, token = header.partition(" ")
-                if scheme.lower() != "bearer" or not token:
-                    raise ServiceError("invalid_session", "Invalid platform session", 401, 4)
-                request.state.credential_actor = identify(settings, crypto, token)
-            except ServiceError:
-                # The ordinary pool records a fixed rejection category; it never invokes
-                # privileged credential functions or creates probe authority.
-                from app.services.platform import audit
-
-                try:
-                    async with db.transaction() as session:
-                        audit(
-                            session,
-                            "unauthenticated@localhost",
-                            "platform.credential_denied",
-                            "denied",
-                            details={"error_code": "invalid_session"},
-                        )
-                except Exception:
-                    return error_response(
-                        request,
-                        ServiceError(
-                            "credential_audit_unavailable",
-                            "Credential audit could not be saved",
-                            503,
-                            3,
-                        ),
-                    )
-                return error_response(
-                    request, ServiceError("invalid_session", "Invalid platform session", 401, 4)
-                )
         if (
-            credential_route
-            or (
+            (
                 request.method == "POST"
                 and (
                     (
@@ -253,33 +204,13 @@ def create_app(
                 if len(content) > (
                     16 * 1024
                     if resource_management_route
-                    else 512 * 1024
-                    if credential_route
                     else 256 * 1024
                     if manual_requirement_route
                     else 128 * 1024
                 ):
-                    if credential_route:
-                        from app.services.platform_credentials import (
-                            PlatformCredentialService,
-                            credential_error,
-                        )
-
-                        try:
-                            await PlatformCredentialService(settings).record_failure(
-                                request.state.credential_actor,
-                                "read",
-                                credential_error("invalid_input"),
-                            )
-                        except ServiceError as exc:
-                            return error_response(request, exc)
                     return error_response(
                         request,
-                        ServiceError("invalid_input", "Credential input exceeds JSON limit", 422, 2)
-                        if credential_route
-                        else ServiceError(
-                            "invalid_input", "Management input exceeds JSON limit", 413, 2
-                        )
+                        ServiceError("invalid_input", "Management input exceeds JSON limit", 413, 2)
                         if resource_management_route
                         else ServiceError(
                             "input_too_large",
@@ -300,7 +231,6 @@ def create_app(
             request.scope["path"] = request.scope["path"][3:]
             request.scope["raw_path"] = request.scope["path"].encode()
         request.state.contract_version = version
-        path = request.scope["path"]
         response = await call_next(request)
         response.headers["X-Bid-Contract-Version"] = version
         response.headers["X-Duration-Ms"] = str(int((time.monotonic() - start) * 1000))
@@ -313,12 +243,7 @@ def create_app(
             )
             payload = json.loads(raw)
             if isinstance(payload, dict) and "command" in payload and "duration_ms" in payload:
-                # Public signup receipts carry no per-request timing discriminator.
-                payload["duration_ms"] = (
-                    0
-                    if path == "/auth/org-applications"
-                    else int((time.monotonic() - start) * 1000)
-                )
+                payload["duration_ms"] = int((time.monotonic() - start) * 1000)
                 if "preflight" in payload.get("data", {}):
                     payload["cost"] = payload["data"]["preflight"]["estimate"]
                 raw = json.dumps(payload, ensure_ascii=False).encode()
@@ -331,23 +256,6 @@ def create_app(
     def error_response(request: Request, error: ServiceError):
         command = request.scope.get("route")
         name = command.name.replace("_", " ") if command else "request"
-        if command is None and request.url.path.startswith("/platform/credentials"):
-            tail = request.url.path.removeprefix("/platform/credentials").strip("/")
-            action = (
-                {
-                    "active": "set-active",
-                    "replace": "replace",
-                    "remove": "remove",
-                    "test": "test",
-                }.get(tail.rsplit("/", 1)[-1], "show")
-                if tail
-                else "list"
-                if request.method == "GET"
-                else "create"
-            )
-            if tail == "import-env":
-                action = "import-env"
-            name = "platform credential " + action
         body = Result(
             ok=False,
             command=name,
@@ -375,16 +283,10 @@ def create_app(
                     retryable=error.exit_code == 3,
                 )
             ).model_dump(mode="json")
-        if request.url.path == "/auth/org-applications":
-            body.command = "auth org-application submit"
         retry = {
-            "auth_busy": "1",
-            "too_many_attempts": "900",
             "stream_limit": "1",
             "board_busy": "1",
         }.get(error.code)
-        if request.url.path == "/auth/org-applications" and error.code == "too_many_attempts":
-            retry = "86400"
         return JSONResponse(
             status_code=error.status,
             content=body.model_dump(mode="json"),
@@ -400,39 +302,9 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):
-        if request.url.path == "/org/members" or request.url.path.startswith("/org/members/"):
+        if request.url.path.startswith("/platform/credentials"):
             return error_response(
-                request, ServiceError("invalid_input", "Invalid member input", 400, 2)
-            )
-        if request.url.path.startswith(("/platform/enrollment/", "/platform/operators")):
-            from app.services.operator_enrollment import invalid_link
-
-            # Unknown property names can themselves contain a secret. Never reflect loc/input.
-            bad_link = any(
-                tuple(item.get("loc", ())) in {("body", "token"), ("body", "pending")}
-                for item in error.errors()
-            )
-            return error_response(
-                request,
-                invalid_link()
-                if bad_link
-                else ServiceError("invalid_input", "Invalid enrollment input", 422, 2),
-            )
-        if request.url.path == "/auth/org-applications" or request.url.path.startswith(
-            "/platform/org-applications"
-        ):
-            # Never reflect caller-controlled field names or password input.
-            disabled = (
-                request.url.path == "/auth/org-applications" and not settings.org_signup_enabled
-            )
-            return error_response(
-                request,
-                ServiceError(
-                    "signup_disabled" if disabled else "invalid_input",
-                    "Organization signup is disabled" if disabled else "Invalid application input",
-                    404 if disabled else 400,
-                    4 if disabled else 2,
-                ),
+                request, ServiceError("invalid_input", "Invalid credential input", 422, 2)
             )
         if request.url.path in {
             "/providers",
@@ -449,28 +321,6 @@ def create_app(
             # validation locations or input values leave confidential routes.
             return error_response(
                 request, ServiceError("invalid_input", "Invalid confidential input", 422, 2)
-            )
-        if request.url.path.startswith("/platform/credentials"):
-            from app.services.platform_credentials import (
-                PlatformCredentialService,
-                credential_error,
-            )
-
-            actor = getattr(request.state, "credential_actor", None)
-            dry_import = (
-                request.url.path == "/platform/credentials/import-env"
-                and isinstance(error.body, dict)
-                and error.body.get("dry_run") is True
-            )
-            if actor is not None and not dry_import:
-                try:
-                    await PlatformCredentialService(settings).record_failure(
-                        actor, "read", credential_error("invalid_input")
-                    )
-                except ServiceError as exc:
-                    return error_response(request, exc)
-            return error_response(
-                request, ServiceError("invalid_input", "Invalid credential input", 422, 2)
             )
         if "bid-submissions" in request.url.path.split("/"):
             return error_response(
@@ -515,9 +365,6 @@ def create_app(
             request, ServiceError("internal_error", "Unexpected server error", 500, 4)
         )
 
-    app.include_router(
-        create_platform_router(settings, db, crypto, password_attempts, llm_transport, processor)
-    )
     if settings.web_dir is not None:
         mount_console(app, settings.web_dir)
 
@@ -526,12 +373,9 @@ def create_app(
     async def context(
         request: Request,
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-        x_org_id: UUID = Header(...),
     ):
         if credentials is None:
             raise ServiceError("invalid_session", "Bearer credentials required", 401, 4)
-        # Candidate scope is used only for the membership check; handlers receive a
-        # tenant transaction only after identity and active membership are verified.
         from app.services.versioned import audit
 
         identity = None
@@ -563,13 +407,12 @@ def create_app(
                     body = None
             dry_run = dry_run or (isinstance(body, dict) and body.get("dry_run") is True)
         try:
-            async with db.transaction(x_org_id) as session:
+            async with db.transaction() as session:
                 identity = await authenticate(
                     session,
                     credentials.credentials,
-                    x_org_id,
                     crypto,
-                    joined_membership=resource_management_read,
+                    settings,
                 )
                 identity.invocation_id = uuid4()
                 session.info["command"] = command
@@ -601,7 +444,7 @@ def create_app(
                     else:
                         # Older submit routes explicitly commit before dispatching.
                         # Their business audit is already atomic with the mutation.
-                        async with db.transaction(x_org_id) as receipt:
+                        async with db.transaction() as receipt:
                             await set_actor_context(receipt, identity)
                             audit(
                                 receipt,
@@ -613,7 +456,7 @@ def create_app(
         except Exception as exc:
             if identity is not None and identity.token_id is not None and not dry_run:
                 assert identity.invocation_id is not None
-                async with db.transaction(x_org_id) as receipt:
+                async with db.transaction() as receipt:
                     await set_actor_context(receipt, identity)
                     audit(
                         receipt,
@@ -629,11 +472,7 @@ def create_app(
                     )
             raise
 
-    from app.api.org_members import create_router as create_org_member_router
-
-    app.include_router(create_org_member_router(context, crypto))
     app.include_router(create_org_console_router(context, storage, settings))
-    app.include_router(create_task_workflow_router(context, settings))
     from app.api.requirement_confirmation import create_router as create_requirement_review_router
 
     app.include_router(create_requirement_review_router(context, settings))
@@ -642,8 +481,6 @@ def create_app(
     app.include_router(
         create_annotation_router(context, storage, queue, settings, crypto, processor)
     )
-    app.include_router(create_task_cosign_router(context, settings, storage))
-    app.include_router(create_task_discussion_router(context, settings))
     task_board_router = create_task_board_router(context, db, storage, queue, settings)
     app.state.workflow_stream_caps = task_board_router.stream_caps
     app.include_router(task_board_router)
@@ -659,9 +496,7 @@ def create_app(
         create_screenshot_router(context, db, storage, queue, settings, llm, resolve, processor)
     )
 
-    app.include_router(
-        create_account_router(context, settings, db, crypto, password_attempts, llm, resolve)
-    )
+    app.include_router(create_account_router(context, settings, db, crypto, llm, resolve))
     app.include_router(
         create_tender_router(context, settings, db, storage, queue, crypto, llm, resolve, ocr)
     )
@@ -695,8 +530,15 @@ def create_app(
     from app.api.management_providers import create_router as create_management_provider_router
 
     app.include_router(create_management_provider_router(context, settings))
+    from app.api.platform_clef import create_router as create_clef_settings_router
+    from app.api.platform_credentials import create_router as create_credential_settings_router
+    from app.api.platform_trust_anchors import create_router as create_trust_anchor_settings_router
+
+    app.include_router(create_credential_settings_router(settings, db, context))
+    app.include_router(create_clef_settings_router(settings, db, context))
+    app.include_router(create_trust_anchor_settings_router(db, context))
     app.include_router(create_confidential_router(context, settings))
-    app.include_router(create_bid_review_router(context, settings, storage, queue))
+    app.include_router(create_bid_review_router(context, settings, storage, queue, db))
     app.include_router(create_check_router(context, db, storage, queue, settings))
     app.include_router(create_score_router(context, db, storage, queue, settings))
     from app.api.memory import create_router as create_memory_router

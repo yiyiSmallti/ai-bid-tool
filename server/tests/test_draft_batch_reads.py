@@ -12,8 +12,8 @@ Failure modes enumerated before these gates:
 * Freshness drift: changed card pointers, newly created cards for old gaps,
   replaced material selections, repaired quotes and invalid citations must keep
   their precedence, including already-reported invalid-citation gaps.
-* Access drift: foreign org drafts and history stay hidden; scoped tokens still
-  need grants for historical page evidence and model inputs even when those
+* Access drift: scoped tokens need grants for historical page evidence and
+  model inputs even when those
   inputs were not cited or a comply-only decision takes eligibility precedence.
 * Query-count evidence must use fresh transactions (no warmed identity map), and
   count every SQL statement on the restricted application's engine, including
@@ -37,15 +37,15 @@ from app.models.response_cards import DraftRun, ResponseCard, ResponseCardRevisi
 from app.providers.llm import OpenAICompatibleExtractor
 from app.schemas.contracts import Result
 from app.schemas.response_card_contracts import DraftView
-from app.services import drafts, task_cosign
+from app.services import drafts
 from app.services import response_cards as cards
 from app.services.agent_tools import provenance
-from app.services.auth import ROLE_SCOPES, Identity
+from app.services.auth import HUMAN_SCOPES, Identity
 from conftest import FakeQueue
 from docx import Document
-from sqlalchemy import event, func, select
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from task_fixtures import confirm_requirements_async, reviewer_header
+from task_fixtures import confirm_requirements_async
 from test_response_cards import (
     PRODUCT_DATA,
     create_card,
@@ -53,7 +53,6 @@ from test_response_cards import (
     require_action,
     run_document_job,
     select_real_materials,
-    set_role,
 )
 
 TABLES = drafts.TABLES
@@ -128,23 +127,15 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
             if requirement_state == "invalidated"
             else "requirement_unconfirmed"
         )
-        if item.kind != "gap" and (
-            requirement_gap
-            or card is not None
-            and not await session.scalar(
-                select(func.team_cosign_card_approved(actor.org_id, card.id))
-            )
-        ):
+        if item.kind != "gap" and requirement_gap:
             current_revision = await session.get(ResponseCardRevision, card.current_revision_id)
             if current_revision is None:
                 raise not_found()
             current_view = await cards.card_view(
                 session, actor, card, current_revision, requirement, requirement_review_gate=False
             )
-            review = (await task_cosign.projections(session, actor.org_id, [card.id]))[card.id]
             entry["reasons"] = drafts.gap_reasons(
                 current_view,
-                review,
                 requirement_gap=requirement_gap,
                 valid_citation=await cards.citation_valid(session, requirement),
                 quote_current=cards.revision_quote_hash(current_revision, requirement)
@@ -170,7 +161,7 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
             }
             tables[item.table].append(entry)
         elif item.kind == "comply_only":
-            entry |= {"disposition_by": item.disposition_by, "disposition_at": item.disposition_at}
+            entry |= {"disposition_at": item.disposition_at}
             comply_only.append(entry)
         else:
             entry["reasons"] = item.gap_reasons
@@ -194,7 +185,6 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
         {
             "agent_provenance": await provenance(session, run.generation_job_id),
             "id": run.id,
-            "org_id": run.org_id,
             "task_id": run.task_id,
             "extraction_job_id": run.extraction_job_id,
             "generation_job_id": run.generation_job_id,
@@ -288,9 +278,8 @@ async def api_data(api, method, path, header, **kwargs):
     return response.json()["data"]
 
 
-async def build_large_draft(api, app, header, tenants, admin_engine, tmp_path, count):
-    org, user = tenants["orgs"][0], tenants["users"][0]
-    set_role(admin_engine, org, user, "admin")
+async def build_large_draft(api, app, header, database, admin_engine, tmp_path, count):
+
     task = (
         await api_data(api, "POST", "/tasks", header, json={"name": f"Synthetic batch {count}"})
     )["id"]
@@ -315,10 +304,8 @@ async def build_large_draft(api, app, header, tenants, admin_engine, tmp_path, c
     assert response.status_code == 200, response.text
     requirements = response.json()["items"]
     assert len(requirements) == count
-    async with app.state.db.transaction(org) as session:
-        await confirm_requirements_async(
-            session, org, UUID(task), settings=app.state.processor.settings
-        )
+    async with app.state.db.transaction() as session:
+        await confirm_requirements_async(session, UUID(task), settings=app.state.processor.settings)
     (
         product,
         product_selection,
@@ -363,7 +350,7 @@ async def build_large_draft(api, app, header, tenants, admin_engine, tmp_path, c
             "requirement_ids": [requirements[index]["id"] for index in (8, 9)],
         },
     )
-    await app.state.processor(str(org), generation["job_id"])
+    await app.state.processor(generation["job_id"])
     status = await api_data(api, "GET", f"/jobs/{generation['job_id']}", header)
     assert status["status"] == "succeeded", status
     slots = (
@@ -427,17 +414,9 @@ async def build_large_draft(api, app, header, tenants, admin_engine, tmp_path, c
                 "evidence": evidence,
             },
         )
-    for role in ("technical", "bidder"):
-        set_role(admin_engine, org, user, role)
-        _, review_header = await reviewer_header(
-            api,
-            admin_engine,
-            org,
-            UUID(task),
-            "technical" if role == "technical" else "commercial",
-        )
+    for domain in ("technical", "commercial"):
+        review_header = header
         for index, card in list(created.items()):
-            domain = "commercial" if role == "bidder" else "technical"
             if card["review_domain"] != domain:
                 continue
             card = await require_action(api, review_header, card, "submit")
@@ -456,7 +435,7 @@ async def build_large_draft(api, app, header, tenants, admin_engine, tmp_path, c
                     reason="Each fixed synthetic declaration and page has been reviewed.",
                 )
             created[index] = card
-    set_role(admin_engine, org, user, "technical")
+
     await api_data(
         api,
         "POST",
@@ -478,7 +457,7 @@ async def build_large_draft(api, app, header, tenants, admin_engine, tmp_path, c
             ],
         },
     )
-    set_role(admin_engine, org, user, "admin")
+
     return {
         "task": task,
         "extraction": extraction,
@@ -497,7 +476,7 @@ async def assemble_draft(api, app, header, fixture):
         header,
         json={"extraction_job_id": fixture["extraction"]},
     )
-    await app.state.processor(header["X-Org-Id"], receipt["job_id"])
+    await app.state.processor(receipt["job_id"])
     status = await api_data(api, "GET", f"/jobs/{receipt['job_id']}", header)
     assert status["status"] == "succeeded", status
     return status["result"]["draft_id"]
@@ -509,7 +488,7 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
     for draft_id in draft_ids:
         # New transactions keep the reference independent of any preloaded graph.
         with statement_count(app) as counter:
-            async with app.state.db.transaction(actor.org_id) as session:
+            async with app.state.db.transaction() as session:
                 references[draft_id] = await slow_show_draft(session, actor, UUID(draft_id))
                 scope_warnings = await cards.scope_warnings(session, UUID(fixture["extraction"]))
         slow_counts.append(counter["statements"])
@@ -571,7 +550,7 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
         "memory_lineage",
         "agent_provenance",
     )
-    async with app.state.db.transaction(actor.org_id) as session:
+    async with app.state.db.transaction() as session:
         runs = (
             await session.scalars(
                 select(DraftRun)
@@ -628,7 +607,7 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
 
 
 async def test_large_draft_reads_match_reference_and_have_bounded_queries(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
     settings = Settings(
         data_dir=tmp_path,
@@ -638,20 +617,16 @@ async def test_large_draft_reads_match_reference_and_have_bounded_queries(
     )
     provider = OpenAICompatibleExtractor(settings, httpx.MockTransport(synthetic_vendor))
     app = create_app(settings, llm=provider, queue=FakeQueue())
-    org, user = tenants["orgs"][0], tenants["users"][0]
-    actor = Identity(user, org, ROLE_SCOPES["admin"], "admin")
+    actor = Identity(scopes=HUMAN_SCOPES)
     reports = []
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        header, other = [
-            await login(api, organization, label)
-            for organization, label in zip(tenants["orgs"], ("a", "b"), strict=True)
-        ]
+        header = await login(api)
         for count in (12, 324):
             fixture = await build_large_draft(
-                api, app, header, tenants, admin_engine, tmp_path, count
+                api, app, header, database, admin_engine, tmp_path, count
             )
             first = await assemble_draft(api, app, header, fixture)
             current = await compare_reads(api, app, header, actor, fixture, [first])
@@ -661,7 +636,7 @@ async def test_large_draft_reads_match_reference_and_have_bounded_queries(
             ]
             # Normal API writes invalidate pointers, old missing-card gaps and both
             # direct Evidence and uncited model-input material dependencies.
-            set_role(admin_engine, org, user, "technical")
+
             await require_action(
                 api, header, fixture["cards"][0], "reopen", reason="Synthetic renewed review."
             )
@@ -679,7 +654,7 @@ async def test_large_draft_reads_match_reference_and_have_bounded_queries(
                     "evidence": [],
                 },
             )
-            set_role(admin_engine, org, user, "admin")
+
             await api_data(
                 api,
                 "POST",
@@ -745,14 +720,6 @@ async def test_large_draft_reads_match_reference_and_have_bounded_queries(
                 )
                 == 1
             )
-            for path in (
-                f"/v4/drafts/{first}",
-                f"/v4/tasks/{fixture['task']}/drafts?job={fixture['extraction']}",
-                f"/drafts/{first}",
-                f"/tasks/{fixture['task']}/drafts?job={fixture['extraction']}",
-            ):
-                foreign = await api.get(path, headers=other)
-                assert foreign.status_code == 404
             from test_card_generation import token_header
 
             for missing_scope in ("resource:read", "certificate:file:read", "profile:read"):

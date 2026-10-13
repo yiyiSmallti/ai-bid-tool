@@ -52,7 +52,7 @@ const reasons = { offline_revocation_unknown: "离线材料不能确定吊销状
       <h4>候选 {{ candidate.ordinal }} · 适用性未知</h4>
       <p class="mono">文档 {{ candidate.document_id }} · 第 {{ candidate.page }} 页 · 页面 {{ candidate.page_id }}</p>
       <template v-if="candidate.quote !== null && candidate.quote !== undefined"><blockquote class="exact-quote">{{ candidate.quote }}</blockquote><p>原文字符位置 {{ candidate.start_offset }}–{{ candidate.end_offset }}<span v-if="candidate.location_hint"> · {{ candidate.location_hint }}</span></p><p v-if="candidate.mark_types?.length">标记候选：{{ candidate.mark_types.map(mark).join('、') }}</p><p v-if="candidate.owner_roles?.length">主体候选：{{ candidate.owner_roles.map(owner).join('、') }}</p><p v-if="candidate.date_required !== null && candidate.date_required !== undefined">日期候选：{{ candidate.date_required ? '可能要求填写日期' : '未识别日期要求' }}</p></template>
-      <p v-else class="hint">原文与候选详情仅向有原件读取权限的人工身份显示。</p>
+      <p v-else class="hint">原文与候选详情在本人登录控制台后显示。</p>
     </article>
     <el-button v-if="nextCursor !== null" :loading="busy" @click="$emit('more')">加载更多候选</el-button>
   </el-card>

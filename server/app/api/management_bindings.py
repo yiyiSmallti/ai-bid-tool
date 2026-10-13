@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, Request
 from app.core.errors import not_found
 from app.schemas.contracts import Result
 from app.schemas.management_pages import BindingDetailQuery, BindingQuery
-from app.services import management_bindings as bindings
 
 
 def create_router(context, settings):
@@ -23,6 +22,8 @@ def create_router(context, settings):
 
     @router.post("/query", name="export_binding_browse", response_model=Result)
     async def query(body: BindingQuery, ctx=Depends(management_context, scope="function")):
+        from app.services import management_bindings as bindings
+
         started = time.monotonic()
         session, actor = ctx
         value = await bindings.query(session, actor, body)
@@ -38,6 +39,8 @@ def create_router(context, settings):
         template_revision_id: UUID,
         ctx=Depends(management_context, scope="function"),
     ):
+        from app.services import management_bindings as bindings
+
         started = time.monotonic()
         session, actor = ctx
         value = await bindings.detail(

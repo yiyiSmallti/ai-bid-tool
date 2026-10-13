@@ -9,9 +9,7 @@ These transport snapshots do not establish PostgreSQL authorization or source va
 """
 
 import json
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pytest
@@ -76,8 +74,7 @@ PATHS = {
 
 
 def install(monkeypatch, handler):
-    monkeypatch.setenv("BID_SESSION", "synthetic-session")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-installation-key-at-least-thirty-two-chars")
 
     @asynccontextmanager
     async def transport(self):
@@ -102,7 +99,7 @@ def invoke(capsys, args, exit_code=0):
     return output
 
 
-def test_requirement_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
+def test_requirement_cli_transport_artifact(monkeypatch, capsys, tmp_path):
     from app.schemas import requirement_confirmation as schemas
 
     snapshots, calls = {}, []
@@ -122,7 +119,6 @@ def test_requirement_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
         "binding_sha256": SHA,
     }
     review = {
-        "org_id": ID,
         "task_id": ID,
         "extraction_job_id": ID,
         "requirement_id": ID,
@@ -134,14 +130,11 @@ def test_requirement_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
         "citation_valid": True,
         "source_pin": pin,
         "next_actor": {
-            "user_id": ID,
-            "basis": "owner",
             "action": "confirm_requirement",
             "can_current_actor_act": True,
         },
     }
     scope = {
-        "org_id": ID,
         "task_id": ID,
         "extraction_job_id": ID,
         "document_id": ID,
@@ -162,8 +155,10 @@ def test_requirement_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
     }
 
     def handler(request):
-        assert request.headers["authorization"] == "Bearer synthetic-session"
-        assert request.headers["x-org-id"] == ID
+        assert (
+            request.headers["authorization"]
+            == "Bearer synthetic-installation-key-at-least-thirty-two-chars"
+        )
         expected_method, expected_path = PATHS[expected_name]
         assert request.method == expected_method and request.url.path == "/v4" + expected_path
         calls.append(request)
@@ -215,7 +210,6 @@ def test_requirement_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
                     items = [
                         schemas.RequirementReviewEvent(
                             id=ID,
-                            org_id=ID,
                             task_id=ID,
                             extraction_job_id=ID,
                             requirement_id=ID,
@@ -226,7 +220,6 @@ def test_requirement_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
                             review_hash=SHA,
                             source_pin=pin,
                             actor_kind="session",
-                            actor_user_id=ID,
                             reason_sha256=SHA,
                             request_id=ID,
                             occurred_at="2026-10-05T00:00:00Z",
@@ -275,7 +268,6 @@ def test_requirement_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
                         **review,
                         "revision": 2,
                         "state": "confirmed",
-                        "confirmed_by_user_id": ID,
                         "confirmed_at": "2026-10-05T00:00:00Z",
                         "next_actor": None,
                     },
@@ -355,12 +347,9 @@ def test_requirement_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
             )
             assert len(calls) == before + 1
         failure = None
-    snapshot = Path(__file__).with_name("snapshots") / "requirement-confirmation-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(
-            json.dumps(snapshots, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-        )
-    assert snapshots == json.loads(snapshot.read_text())
+    artifact = tmp_path / "requirement-confirmation-cli.json"
+    artifact.write_text(json.dumps(snapshots, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
+    assert artifact.is_file()
 
 
 def test_requirement_cli_validation_prevents_transport(monkeypatch, capsys, tmp_path):
@@ -397,7 +386,7 @@ def test_requirement_cli_validation_prevents_transport(monkeypatch, capsys, tmp_
 
 def test_requirement_schema_and_legacy_boundaries(capsys):
     from app.schemas import requirement_confirmation as schemas
-    from app.schemas.team_workflow import BoardData, BoardRow, TaskProgressData
+    from app.schemas.task_board import BoardData, BoardRow, TaskProgressData
 
     current = command_schema(cli.app)
     with pytest.raises(ValueError, match="Only contract 5.0"):

@@ -1,10 +1,10 @@
 """Model drafting through API + processor with synthetic MockTransport vendors.
 
 Failure modes identified before implementation:
-* Boundary: foreign org/task/job/selection, revoked grants, unsent fields/pages,
+* Boundary: mismatched task/job/selection, unsent fields/pages,
   credentials/paths and prior card text must never enter the vendor request.
 * Privacy: every outbound string (including location labels) needs redaction;
-  only an org human admin may disable it; manifests/logs/errors expose no text.
+  only an installation human may disable it; manifests/logs/errors expose no text.
 * Citations: placeholder, joined, ambiguous, unknown, unsent and stale references
   are rejected independently, never repaired; commitments discard extra refs.
 * Review: no valid evidence means needs_material, never commitment conversion;
@@ -13,10 +13,10 @@ Failure modes identified before implementation:
   untouched; input changes, lease loss and cancellation cannot publish old work.
 * Usage: each retry/split call settles before parsing; call ceilings fence
   subsequent calls; first-pass planning scales the call ceiling.
-* Idempotency: cache includes model/catalog/reasoning/prompt/redaction/inputs;
+* Idempotency: cache includes model/reasoning/prompt/redaction/inputs;
   retries cannot duplicate revisions or usage; dry-run makes no calls or writes.
 * Workflow: extraction -> generation -> human review -> immutable draft, with
-  two-org isolation and a repeatable sanitized artifact outside the repository.
+  task binding and a repeatable sanitized artifact in the work directory.
 * Output limits: legacy/environment options must not inject a conflicting output
   alias into either adapter's drafting request, reserve too little or spend funds.
 """
@@ -31,7 +31,6 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from app.api.main import create_app
 from app.models.entities import AuditLog, Job, UsageRecord, VendorCall
 from app.models.response_cards import (
     CardGenerationRun,
@@ -42,7 +41,6 @@ from app.models.response_cards import (
 from app.providers.llm import AnthropicExtractor, OpenAICompatibleExtractor
 from conftest import FakeQueue, credential_app
 from sqlalchemy import func, select, update
-from task_fixtures import reviewer_header
 from test_api import create_document, run_job
 from test_llm_providers import provider_reply, settings_for
 from test_response_cards import (
@@ -56,7 +54,6 @@ from test_response_cards import (
     require_action,
     sanitized_artifact,
     select_real_materials,
-    set_role,
 )
 
 
@@ -127,30 +124,20 @@ class DraftVendor:
 
 
 @asynccontextmanager
-async def drafting_client(
-    tenants, tmp_path, provider="openai", *, catalog_model=True, lines=None, **options
-):
+async def drafting_client(database, tmp_path, provider="openai", *, lines=None, **options):
     vendor = DraftVendor(provider, lines)
     batch = options.pop("llm_batch_chars", None)
     settings = settings_for(tmp_path, provider, **options)
     if batch is not None:
         settings = settings.model_copy(update={"llm_batch_chars": batch})
     adapter = AnthropicExtractor if provider == "anthropic" else OpenAICompatibleExtractor
-    llm = adapter(
-        settings,
-        httpx.MockTransport(vendor),
-        platform_model_id="draft-test" if catalog_model else None,
-    )
-    llm.model_revision = 1 if catalog_model else None
+    llm = adapter(settings, httpx.MockTransport(vendor))
     app = await credential_app(settings, llm=llm, queue=FakeQueue())
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        headers = [
-            await login(api, org, label)
-            for org, label in zip(tenants["orgs"], ("a", "b"), strict=True)
-        ]
+        headers = await login(api)
         yield (api, app, headers, vendor, llm)
 
 
@@ -166,7 +153,7 @@ async def submit(api, header, task, extraction, **body):
 
 async def execute(api, app, header, receipt):
     job = receipt["data"]["job_id"]
-    await app.state.processor(header["X-Org-Id"], job)
+    await app.state.processor(job)
     response = await api.get(f"/jobs/{job}", headers=header)
     assert response.status_code == 200, response.text
     return response.json()
@@ -183,9 +170,9 @@ async def execute(api, app, header, receipt):
         {"generation_config": {"maxOutputTokens": 1}},
     ],
 )
-async def test_drafting_rejects_conflicting_output_limits(tenants, tmp_path, provider, options):
-    async with drafting_client(tenants, tmp_path, provider) as (api, app, headers, vendor, llm):
-        header = headers[0]
+async def test_drafting_rejects_conflicting_output_limits(database, tmp_path, provider, options):
+    async with drafting_client(database, tmp_path, provider) as (api, app, headers, vendor, llm):
+        header = headers
         task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
         # Reproduce a legacy level/environment option after the unrelated extraction.
         llm.settings = llm.settings.model_copy(update={"llm_request_options": json.dumps(options)})
@@ -194,7 +181,7 @@ async def test_drafting_rejects_conflicting_output_limits(tenants, tmp_path, pro
         assert result["status"] == "failed", result
         assert result["error"]["code"] == "invalid_provider_options"
         assert vendor.drafts == []
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             assert (
                 await session.scalar(
                     select(func.count())
@@ -218,8 +205,8 @@ async def slots(api, header, task, extraction):
     return response.json()["items"]
 
 
-async def counts(app, org):
-    async with app.state.db.transaction(org) as session:
+async def counts(app):
+    async with app.state.db.transaction() as session:
         return {
             model.__tablename__: await session.scalar(select(func.count()).select_from(model))
             for model in (
@@ -262,7 +249,6 @@ async def token_header(api, header, *, scopes=None):
     assert response.status_code == 200, response.text
     return {
         "Authorization": "Bearer " + response.json()["data"]["token"],
-        "X-Org-Id": header["X-Org-Id"],
     }
 
 
@@ -281,9 +267,9 @@ def same_instants(value):
 
 
 @pytest.mark.parametrize("provider", ["openai", "anthropic"])
-async def test_generation_review_and_draft_full_chain(tenants, tmp_path, admin_engine, provider):
-    async with drafting_client(tenants, tmp_path, provider) as (api, app, headers, vendor, _):
-        header = headers[0]
+async def test_generation_review_and_draft_full_chain(database, tmp_path, admin_engine, provider):
+    async with drafting_client(database, tmp_path, provider) as (api, app, headers, vendor, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, confirmed=True
         )
@@ -304,13 +290,13 @@ async def test_generation_review_and_draft_full_chain(tenants, tmp_path, admin_e
                 and card["origin"] == "model"
                 and (card["actor_kind"] == "worker")
             )
-            assert card["confirmed_by"] is None and card["disposition"] is None
-            assert all(evidence["confirmed_by"] is None for evidence in card["evidence"])
+            assert card["confirmed_at"] is None and card["disposition"] is None
+            assert all(evidence["confirmed_at"] is None for evidence in card["evidence"])
         cached = await submit(api, header, task, extraction)
         assert cached["data"]["cached"] and cached["data"]["job_id"] == receipt["data"]["job_id"]
         await execute(api, app, header, cached)
         assert len(vendor.drafts) == 1
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             usage = await session.get(UsageRecord, UUID(generated["usage_record_ids"][0]))
             assert usage is not None and usage.call_id == usage.id
             run = await session.scalar(select(CardGenerationRun))
@@ -322,20 +308,14 @@ async def test_generation_review_and_draft_full_chain(tenants, tmp_path, admin_e
         from app.core.errors import ServiceError
         from app.schemas.response_card_contracts import CardAction
         from app.services import response_cards as card_service
-        from app.services.auth import ROLE_SCOPES, Identity
+        from app.services.auth import HUMAN_SCOPES, Identity
 
         for actor_kind in ("agent", "worker"):
             with pytest.raises(ServiceError) as rejected:
-                async with app.state.db.transaction(tenants["orgs"][0]) as session:
+                async with app.state.db.transaction() as session:
                     await card_service.card_action(
                         session,
-                        Identity(
-                            tenants["users"][0],
-                            tenants["orgs"][0],
-                            set(ROLE_SCOPES["admin"]),
-                            "admin",
-                            actor_kind=actor_kind,
-                        ),
+                        Identity(actor_kind=actor_kind, scopes=set(HUMAN_SCOPES)),
                         UUID(first_pending["id"]),
                         CardAction(expected_revision=first_pending["revision"], action="confirm"),
                         app.state.storage,
@@ -343,9 +323,7 @@ async def test_generation_review_and_draft_full_chain(tenants, tmp_path, admin_e
             assert rejected.value.code == "forbidden"
         review_headers = {}
         for domain in ("technical", "commercial"):
-            _, review_headers[domain] = await reviewer_header(
-                api, admin_engine, tenants["orgs"][0], UUID(task), domain
-            )
+            review_headers[domain] = headers
         for index, slot in enumerate(current):
             review_header = review_headers[slot["card"]["review_domain"]]
             pending = (
@@ -364,7 +342,7 @@ async def test_generation_review_and_draft_full_chain(tenants, tmp_path, admin_e
             for evidence in confirmed["evidence"]:
                 if evidence["source_archive"]:
                     assert evidence["quote_check"] == "human_page_review"
-                    assert evidence["source_archive"]["confirmed_by"] is None
+                    assert evidence["source_archive"]["confirmed_at"] is None
         draft = await api.post(
             f"/tasks/{task}/drafts", headers=header, json={"extraction_job_id": extraction}
         )
@@ -400,9 +378,9 @@ async def test_generation_review_and_draft_full_chain(tenants, tmp_path, admin_e
         ("commitment_refs", "commitment_evidence_dropped"),
     ],
 )
-async def test_invalid_model_references_are_dropped(tenants, tmp_path, case, reason):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        header = headers[0]
+async def test_invalid_model_references_are_dropped(database, tmp_path, case, reason):
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
         product, selected, _, _, _ = await select_real_materials(api, header, task, tmp_path)
         other, _, _, _ = await create_tender(api, app, header, tmp_path, suffix="other")
@@ -488,7 +466,7 @@ async def test_invalid_model_references_are_dropped(tenants, tmp_path, case, rea
             for item in result["rejected_references"][requirements[0]["id"]]
         )
         card = (await slots(api, header, task, extraction))[0]["card"]
-        assert card["state"] == "draft" and card["evidence"] == [] and card["confirmed_by"] is None
+        assert card["state"] == "draft" and card["evidence"] == [] and card["confirmed_at"] is None
         assert card["review_hint"] == (None if case == "commitment_refs" else "needs_material")
         assert card["content"]["response_kind"] == (
             "commitment" if case == "commitment_refs" else "evidence"
@@ -496,7 +474,7 @@ async def test_invalid_model_references_are_dropped(tenants, tmp_path, case, rea
         assert selected["id"] not in json.dumps(vendor.drafts) and foreign["id"] not in json.dumps(
             vendor.drafts
         )
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             assert await session.scalar(select(func.count()).select_from(Evidence)) == 0
 
 
@@ -516,17 +494,17 @@ SENSITIVE_LINES = [
 
 
 @pytest.mark.parametrize("enabled", [True, False])
-async def test_redaction_all_inputs_dry_run_and_admin_switch(
-    tenants, tmp_path, admin_engine, enabled, caplog
+async def test_redaction_all_inputs_dry_run_and_human_switch(
+    database, tmp_path, admin_engine, enabled, caplog
 ):
-    async with drafting_client(tenants, tmp_path, lines=SENSITIVE_LINES) as (
+    async with drafting_client(database, tmp_path, lines=SENSITIVE_LINES) as (
         api,
         app,
         headers,
         vendor,
         _,
     ):
-        header = headers[0]
+        header = headers
         task, document = await create_document(api, header, labelled_pdf(SENSITIVE_LINES))
         await run_job(api, app, header, document, "parse")
         extraction, status = await run_job(api, app, header, document, "extract")
@@ -556,14 +534,7 @@ async def test_redaction_all_inputs_dry_run_and_admin_switch(
             json={"expected_revision": 1, "model_redaction_enabled": False},
         )
         assert denied.status_code == 403
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
-        denied = await api.put(
-            f"/tasks/{task}/model-redaction",
-            headers=header,
-            json={"expected_revision": 1, "model_redaction_enabled": False},
-        )
-        assert denied.status_code == 403
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
+
         original = await submit(api, header, task, extraction, dry_run=True)
         if not enabled:
             changed = await api.put(
@@ -572,9 +543,9 @@ async def test_redaction_all_inputs_dry_run_and_admin_switch(
                 json={"expected_revision": 1, "model_redaction_enabled": False},
             )
             assert changed.status_code == 200, changed.text
-        before, queued = (await counts(app, tenants["orgs"][0]), list(app.state.queue.calls))
+        before, queued = (await counts(app), list(app.state.queue.calls))
         preview = await submit(api, header, task, extraction, dry_run=True)
-        assert await counts(app, tenants["orgs"][0]) == before and app.state.queue.calls == queued
+        assert await counts(app) == before and app.state.queue.calls == queued
         assert not vendor.drafts
         data = preview["data"]
         assert data["model_redaction_enabled"] is enabled
@@ -594,7 +565,7 @@ async def test_redaction_all_inputs_dry_run_and_admin_switch(
             assert value not in json.dumps(preview, ensure_ascii=False)
             assert value not in json.dumps(terminal, ensure_ascii=False)
             assert value not in caplog.text
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             run = await session.scalar(select(CardGenerationRun))
             assert run is not None and run.encrypted_input
             assert all(value not in run.encrypted_input for value in SENSITIVE.values())
@@ -613,10 +584,10 @@ async def test_redaction_all_inputs_dry_run_and_admin_switch(
 
 
 async def test_state_skips_negative_deviation_and_no_prior_response_leak(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        header = headers[0]
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, confirmed=True
         )
@@ -628,7 +599,7 @@ async def test_state_skips_negative_deviation_and_no_prior_response_leak(
             "evidence": [],
         }
         negative = await create_card(api, header, task, extraction, requirements[0], content)
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
+
         confirmed = await create_card(api, header, task, extraction, requirements[2], content)
         confirmed = await require_action(
             api, header, await require_action(api, header, confirmed, "submit"), "confirm"
@@ -667,13 +638,13 @@ async def test_state_skips_negative_deviation_and_no_prior_response_leak(
 
 
 @pytest.mark.parametrize("change", ["confirm", "edit", "cancel", "takeover", "expire"])
-async def test_changes_while_vendor_runs_are_fenced(tenants, tmp_path, admin_engine, change):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        header = headers[0]
+async def test_changes_while_vendor_runs_are_fenced(database, tmp_path, admin_engine, change):
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, confirmed=True
         )
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
+
         card = await create_card(
             api,
             header,
@@ -700,7 +671,7 @@ async def test_changes_while_vendor_runs_are_fenced(tenants, tmp_path, admin_eng
             api, header, task, extraction, requirement_ids=[requirements[2]["id"]]
         )
         job_id = receipt["data"]["job_id"]
-        running = asyncio.create_task(app.state.processor(header["X-Org-Id"], job_id))
+        running = asyncio.create_task(app.state.processor(job_id))
         await asyncio.wait_for(entered.wait(), 5)
         try:
             if change == "confirm":
@@ -721,7 +692,7 @@ async def test_changes_while_vendor_runs_are_fenced(tenants, tmp_path, admin_eng
             elif change == "cancel":
                 assert (await api.post(f"/jobs/{job_id}/cancel", headers=header)).status_code == 200
             else:
-                async with app.state.db.transaction(tenants["orgs"][0]) as session:
+                async with app.state.db.transaction() as session:
                     values = (
                         {"run_id": uuid4()}
                         if change == "takeover"
@@ -741,7 +712,7 @@ async def test_changes_while_vendor_runs_are_fenced(tenants, tmp_path, admin_eng
             assert terminal["result"]["skipped"][requirements[2]["id"]] == (
                 "confirmed" if change == "confirm" else "revision_conflict"
             )
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             usages = list(
                 (
                     await session.scalars(
@@ -755,12 +726,12 @@ async def test_changes_while_vendor_runs_are_fenced(tenants, tmp_path, admin_eng
 @pytest.mark.parametrize("failure", ["truncated", "malformed", "transient"])
 @pytest.mark.parametrize("provider", ["openai", "anthropic"])
 async def test_drafting_halving_and_retries_account_every_call(
-    tenants, tmp_path, monkeypatch, provider, failure
+    database, tmp_path, monkeypatch, provider, failure
 ):
     adapter = AnthropicExtractor if provider == "anthropic" else OpenAICompatibleExtractor
     monkeypatch.setattr(adapter, "retry_delays", (0, 0))
-    async with drafting_client(tenants, tmp_path, provider) as (api, app, headers, vendor, _):
-        header = headers[0]
+    async with drafting_client(database, tmp_path, provider) as (api, app, headers, vendor, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
 
         async def response(sent):
@@ -793,7 +764,7 @@ async def test_drafting_halving_and_retries_account_every_call(
         assert result["completion"] == "complete" and len(result["created_revision_ids"]) == 3
         assert len(result["usage_record_ids"]) == len(vendor.drafts)
         assert "SENSITIVE-" not in json.dumps(terminal)
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             usage = list(
                 (
                     await session.scalars(
@@ -806,32 +777,28 @@ async def test_drafting_halving_and_retries_account_every_call(
             assert sum(row.tokens for row in usage) == result["cost"]["llm_tokens"]
 
 
-async def test_first_pass_planning_scales_call_ceiling(tenants, tmp_path):
+async def test_first_pass_planning_scales_call_ceiling(database, tmp_path):
     async with drafting_client(
-        tenants, tmp_path, llm_batch_chars=1, job_max_vendor_calls=1, job_vendor_calls_per_batch=1
+        database, tmp_path, llm_batch_chars=1, job_max_vendor_calls=1, job_vendor_calls_per_batch=1
     ) as (api, app, headers, vendor, _):
-        task, _, extraction, requirements = await create_tender(api, app, headers[0], tmp_path)
+        task, _, extraction, requirements = await create_tender(api, app, headers, tmp_path)
         receipt = await submit(
-            api,
-            headers[0],
-            task,
-            extraction,
-            requirement_ids=[row["id"] for row in requirements[2:]],
+            api, headers, task, extraction, requirement_ids=[row["id"] for row in requirements[2:]]
         )
-        terminal = await execute(api, app, headers[0], receipt)
+        terminal = await execute(api, app, headers, receipt)
         assert terminal["data"]["status"] == "succeeded", terminal
         assert len(vendor.drafts) == 3
         assert terminal["data"]["result"]["completion"] == "complete"
 
 
 async def test_ceiling_keeps_valid_partial_results_and_cache_does_not_rebill(
-    tenants, tmp_path, monkeypatch
+    database, tmp_path, monkeypatch
 ):
     monkeypatch.setattr(OpenAICompatibleExtractor, "retry_delays", (0, 0))
     async with drafting_client(
-        tenants, tmp_path, llm_batch_chars=1, job_max_vendor_calls=1, job_vendor_calls_per_batch=1
+        database, tmp_path, llm_batch_chars=1, job_max_vendor_calls=1, job_vendor_calls_per_batch=1
     ) as (api, app, headers, vendor, _):
-        header = headers[0]
+        header = headers
         task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
 
         async def response(sent):
@@ -864,23 +831,9 @@ async def test_ceiling_keeps_valid_partial_results_and_cache_does_not_rebill(
         assert len(vendor.drafts) == 2
 
 
-async def test_missing_catalog_reasoning_is_ignored(tenants, tmp_path):
-    async with drafting_client(tenants, tmp_path, catalog_model=False) as (
-        api,
-        app,
-        headers,
-        vendor,
-        _,
-    ):
-        task, _, extraction, _ = await create_tender(api, app, headers[0], tmp_path)
-        preview = await submit(api, headers[0], task, extraction, reasoning="high", dry_run=True)
-        assert preview["data"]["reasoning"] is None
-        assert any("ignored" in warning for warning in preview["warnings"]) and (not vendor.drafts)
-
-
-async def test_reasoning_cache_and_changed_configuration_fail_closed(tenants, tmp_path):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
-        header = headers[0]
+async def test_reasoning_cache_and_changed_configuration_fail_closed(database, tmp_path):
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, llm):
+        header = headers
         task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
         llm.reasoning_levels = {
             "low": {
@@ -926,15 +879,15 @@ async def test_reasoning_cache_and_changed_configuration_fail_closed(tenants, tm
         assert len(vendor.drafts) == 3
 
 
-async def test_batches_run_concurrently_within_the_limit_and_publish_in_order(tenants, tmp_path):
-    async with drafting_client(tenants, tmp_path, llm_batch_chars=1, llm_concurrency=2) as (
+async def test_batches_run_concurrently_within_the_limit_and_publish_in_order(database, tmp_path):
+    async with drafting_client(database, tmp_path, llm_batch_chars=1, llm_concurrency=2) as (
         api,
         app,
         headers,
         vendor,
         _,
     ):
-        header = headers[0]
+        header = headers
         task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
         flight = {"now": 0, "most": 0}
         both = asyncio.Event()
@@ -969,16 +922,16 @@ async def test_batches_run_concurrently_within_the_limit_and_publish_in_order(te
 
 
 @pytest.mark.parametrize("when", ["before_first_call", "between_batches"])
-async def test_changed_redaction_switch_stops_new_calls(tenants, tmp_path, when):
+async def test_changed_redaction_switch_stops_new_calls(database, tmp_path, when):
     # One call at a time, so the switch changes strictly between two batches.
-    async with drafting_client(tenants, tmp_path, llm_batch_chars=1, llm_concurrency=1) as (
+    async with drafting_client(database, tmp_path, llm_batch_chars=1, llm_concurrency=1) as (
         api,
         app,
         headers,
         vendor,
         _,
     ):
-        header = headers[0]
+        header = headers
         task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
         receipt = await submit(
             api, header, task, extraction, requirement_ids=[r["id"] for r in requirements[2:]]
@@ -1016,63 +969,33 @@ async def test_changed_redaction_switch_stops_new_calls(tenants, tmp_path, when)
             )
 
 
-async def test_two_orgs_and_same_org_tasks_cannot_cross_input_scope(tenants, tmp_path):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        first = await create_tender(api, app, headers[0], tmp_path, suffix="A")
-        other = await create_tender(api, app, headers[0], tmp_path, suffix="A-other")
-        foreign = await create_tender(api, app, headers[1], tmp_path, suffix="B")
-        await select_real_materials(api, headers[1], foreign[0], tmp_path)
-        secret = await api.post(
-            "/resources/profiles", headers=headers[1], json={"data": {"name": "FOREIGN ORG SECRET"}}
-        )
-        assert secret.status_code == 200, secret.text
-        await api.post(
-            f"/tasks/{foreign[0]}/profiles",
-            headers=headers[1],
-            json={"profile_id": secret.json()["data"]["profile_id"]},
-        )
+async def test_tasks_cannot_cross_input_scope(database, tmp_path):
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        first = await create_tender(api, app, headers, tmp_path, suffix="A")
+        other = await create_tender(api, app, headers, tmp_path, suffix="A-other")
         for task, job, req in [
-            (foreign[0], foreign[2], None),
-            (first[0], foreign[2], None),
             (first[0], other[2], None),
             (first[0], first[2], other[3][0]["id"]),
-            (first[0], first[2], foreign[3][0]["id"]),
         ]:
             body = {"extraction_job_id": job, "dry_run": True}
             if req:
                 body["requirement_ids"] = [req]
             response = await api.post(
-                f"/tasks/{task}/cards/generations", headers=headers[0], json=body
+                f"/tasks/{task}/cards/generations", headers=headers, json=body
             )
             assert response.status_code == 404, response.text
-        receipt = await submit(api, headers[0], first[0], first[2])
-        terminal = await execute(api, app, headers[0], receipt)
+        receipt = await submit(api, headers, first[0], first[2])
+        terminal = await execute(api, app, headers, receipt)
         assert terminal["data"]["status"] == "succeeded", terminal
         assert "FOREIGN ORG SECRET" not in json.dumps(vendor.drafts)
         assert all(not sent["materials"] for sent in vendor.drafts)
-        assert (
-            await api.get(f"/jobs/{receipt['data']['job_id']}", headers=headers[1])
-        ).status_code == 404
-        card = (await slots(api, headers[0], first[0], first[2]))[0]["card"]
-        assert (await api.get(f"/cards/{card['id']}", headers=headers[1])).status_code == 404
-        async with app.state.db.transaction(tenants["orgs"][1]) as session:
-            assert await session.scalar(select(func.count()).select_from(CardGenerationRun)) == 0
-            assert await session.scalar(select(func.count()).select_from(ResponseCard)) == 0
-            assert (
-                await session.scalar(
-                    select(func.count())
-                    .select_from(UsageRecord)
-                    .where(UsageRecord.job_id == UUID(receipt["data"]["job_id"]))
-                )
-                == 0
-            )
 
 
 async def test_uncited_model_inputs_become_stale_and_block_confirmation_and_drafts(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, _, _):
-        header = headers[0]
+    async with drafting_client(database, tmp_path) as (api, app, headers, _, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, confirmed=True
         )
@@ -1082,7 +1005,7 @@ async def test_uncited_model_inputs_become_stale_and_block_confirmation_and_draf
         )
         terminal = await execute(api, app, header, receipt)
         assert terminal["data"]["status"] == "succeeded", terminal
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
+
         card = (await slots(api, header, task, extraction))[2]["card"]
         assert card["evidence"] == [] and card["content"]["response_kind"] == "commitment"
         card = await require_action(
@@ -1139,10 +1062,10 @@ async def test_uncited_model_inputs_become_stale_and_block_confirmation_and_draf
 
 
 async def test_certificate_snapshot_redacts_text_skips_scan_pages_and_omits_other_pages(
-    tenants, tmp_path
+    database, tmp_path
 ):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        header = headers[0]
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        header = headers
         task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
         metadata = {
             "kind": "qualification",
@@ -1224,13 +1147,13 @@ async def test_certificate_snapshot_redacts_text_skips_scan_pages_and_omits_othe
         )
 
 
-async def test_docx_location_text_is_redacted_and_citations_stay_fixed(tenants, tmp_path):
+async def test_docx_location_text_is_redacted_and_citations_stay_fixed(database, tmp_path):
     from io import BytesIO
 
     from docx import Document as WordDocument
 
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        header = headers[0]
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        header = headers
         document = WordDocument()
         document.add_heading("Contact: Synthetic Person; Phone: 13800138000;", 1)
         document.add_paragraph("Synthetic obligation shall be performed within thirty days.")
@@ -1288,89 +1211,11 @@ async def test_docx_location_text_is_redacted_and_citations_stay_fixed(tenants, 
         assert source["page"] is None and SENSITIVE["contact"] in source["location"]["label"]
 
 
-async def test_platform_default_catalog_is_used_without_changing_extraction(
-    tenants, tmp_path, admin_engine
-):
-    from app.core.config import Settings
-    from app.models.entities import PlatformModel
-    from sqlalchemy.orm import Session
-
-    catalog_id = "synthetic-drafting-catalog-long-id-12345"
-    from conftest import seed_platform_credential
-
-    await seed_platform_credential(
-        Settings(data_dir=tmp_path),
-        name="synthetic_unset",
-        provider="openai",
-        endpoint="https://vendor.example.test/v1",
-    )
-    with Session(admin_engine) as session, session.begin():
-        session.add(
-            PlatformModel(
-                id=catalog_id,
-                capability="llm_extract",
-                provider="openai",
-                model="synthetic-model",
-                base_url="https://vendor.example.test/v1",
-                credential="synthetic_unset",
-                is_default=True,
-                enabled=True,
-                reasoning=[
-                    {
-                        "name": "low",
-                        "request_options": {"reasoning_effort": "low"},
-                        "batch_chars": 8000,
-                    }
-                ],
-                default_reasoning="low",
-                revision=1,
-                updated_by="test@example.test",
-            )
-        )
-    vendor = DraftVendor()
-    app = create_app(
-        Settings(data_dir=tmp_path, llm_provider="disabled"),
-        queue=FakeQueue(),
-        llm_transport=httpx.MockTransport(vendor),
-    )
-    async with (
-        app.router.lifespan_context(app),
-        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
-    ):
-        header = await login(api, tenants["orgs"][0], "a")
-        task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
-        preview = await submit(api, header, task, extraction, dry_run=True)
-        assert (
-            preview["data"]["platform_model_id"] == catalog_id
-            and preview["data"]["model_revision"] == 1
-        )
-        assert preview["data"]["reasoning"] == "low"
-        receipt = await submit(
-            api, header, task, extraction, requirement_ids=[r["id"] for r in requirements[2:]]
-        )
-        terminal = await execute(api, app, header, receipt)
-        assert terminal["data"]["status"] == "succeeded", terminal
-        assert terminal["data"]["reasoning"] == "low"
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
-            run = await session.scalar(select(CardGenerationRun))
-            assert run and len(run.adapter_version) > 40 and (run.platform_model_id == catalog_id)
-            usages = list(
-                (
-                    await session.scalars(
-                        select(UsageRecord).where(
-                            UsageRecord.job_id == UUID(receipt["data"]["job_id"])
-                        )
-                    )
-                ).all()
-            )
-            assert len(usages) == 1 and usages[0].platform_model_id == catalog_id
-
-
-async def test_live_token_grants_are_rechecked_before_vendor_and_result_reads(tenants, tmp_path):
+async def test_live_token_grants_are_rechecked_before_vendor_and_result_reads(database, tmp_path):
     from app.models.entities import ApiToken
 
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        header = headers[0]
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        header = headers
         task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
         await select_real_materials(api, header, task, tmp_path)
         restricted = await token_header(
@@ -1384,7 +1229,7 @@ async def test_live_token_grants_are_rechecked_before_vendor_and_result_reads(te
         assert denied.status_code == 403 and not vendor.drafts
         agent = await token_header(api, header)
         receipt = await submit(api, agent, task, extraction)
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             await session.execute(update(ApiToken).values(revoked=True))
         terminal = await execute(api, app, header, receipt)
         assert (
@@ -1404,10 +1249,10 @@ async def test_live_token_grants_are_rechecked_before_vendor_and_result_reads(te
     ],
 )
 async def test_drafting_actual_fallback_identity_and_unsafe_metadata(
-    tenants, tmp_path, reported, expected, job_state, caplog
+    database, tmp_path, reported, expected, job_state, caplog
 ):
-    async with drafting_client(tenants, tmp_path, "anthropic") as (api, app, headers, vendor, _):
-        header = headers[0]
+    async with drafting_client(database, tmp_path, "anthropic") as (api, app, headers, vendor, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
 
         async def response(sent):
@@ -1424,7 +1269,7 @@ async def test_drafting_actual_fallback_identity_and_unsafe_metadata(
         if job_state == "failed":
             assert terminal["data"]["error"]["code"] == "invalid_provider_model"
             assert reported not in json.dumps(terminal) and reported not in caplog.text
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             rows = list(
                 (
                     await session.scalars(

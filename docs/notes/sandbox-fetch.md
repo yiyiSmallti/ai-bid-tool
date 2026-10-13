@@ -30,16 +30,16 @@ and no URLs. It admits every canonical public HTTPS URL as a main URL or resourc
 The file is valid only while the node environment sets
 `BID_SANDBOX_DEV_OPEN_EGRESS=1`; otherwise every load fails with `policy_invalid`.
 An exact policy match still takes precedence over the open revision. Requests under
-the open revision count against the organization's minute window at its own limit,
+the open revision count against the installation's minute window at its own limit,
 `BID_SANDBOX_OPEN_FETCH_PER_MINUTE` (default 600), while named vendor policies keep 60;
-both share one per-organization counter, and origin leases still apply. Each mapped revision must exist, list that URL as a main URL, and not be
+both share one installation counter, and origin leases still apply. Each mapped revision must exist, list that URL as a main URL, and not be
 revoked. Without an explicit selection, exactly one non-revoked policy must match.
 This selector is operator configuration and has no client parameter or edit API.
 
 `PolicySource(path).select(source_url)` admits an explicitly listed main URL and
 returns the operator-selected `FetchPolicy`. The trusted caller binds the selected product
 revision and policy revision before constructing
-`FetchBroker(policy_source, policy_revision, org_id, quota=SQLiteFetchQuota(path))`.
+`FetchBroker(policy_source, policy_revision, quota=SQLiteFetchQuota(path))`.
 `bundle=True` additionally retains allowed response bodies. Main URL selection
 belongs to this trusted caller; subresource fetching uses the same broker and
 cannot expand its rules.
@@ -106,17 +106,17 @@ closed. Only approved response headers survive; there is no cookie jar. Explicit
 password forms and common CAPTCHA markers cause failure. Those markers are
 conservative detection, not a general proof that a page is authentic or useful.
 
-`SQLiteFetchQuota` holds only hashed organization/origin identifiers, timestamps,
+`SQLiteFetchQuota` holds only hashed origin identifiers, timestamps,
 and temporary lease IDs. It is node control state, not a replacement for PostgreSQL
-business records or tenant RLS. SQLite transactions enforce a sliding organization
+business records. SQLite transactions enforce a sliding installation
 request window and origin connection leases across processes and restarts. A
 request for an origin whose two leases are taken waits up to the request timeout
-for one to be released; an exhausted organization window is denied at once. The
+for one to be released; an exhausted installation window is denied at once. The
 ledger parent directory must already exist and be private; every proxy process on
 the dedicated singleton proxy node must use the same local ledger. A crashed
 request lease expires after the bounded request deadline. Per-run request, byte,
 and concurrency counts remain in the single trusted broker instance; new attempts
-remain subject to the persistent organization window.
+remain subject to the persistent installation window.
 
 ## Pitfalls
 

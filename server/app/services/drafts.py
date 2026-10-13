@@ -14,7 +14,7 @@ from app.models.response_cards import DraftRun, ResponseCard, ResponseCardRevisi
 from app.providers.storage import Storage
 from app.schemas.contracts import Cost
 from app.schemas.response_card_contracts import DraftPreview, DraftRequest, DraftView
-from app.services import requirement_consumption, task_cosign
+from app.services import requirement_consumption
 from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.task_authorization import task_authorized
@@ -33,8 +33,8 @@ def digest(value: dict) -> str:
 def evidence_dependency(row: dict) -> dict:
     fixed = {
         "id": row["id"],
+        "confirmed_at": row["confirmed_at"],
         "active": row["active_selection"],
-        "confirmed_by": row["confirmed_by"],
     }
     if row["input"]["kind"] == "image_region":
         fixed |= {
@@ -58,7 +58,6 @@ def evidence_dependency(row: dict) -> dict:
 
 def gap_reasons(
     view,
-    review,
     *,
     valid_citation,
     quote_current=True,
@@ -82,16 +81,11 @@ def gap_reasons(
             or any(not material["active_selection"] for material in view["evidence"])
         ):
             reasons.append("stale_material")
-        if valid_citation and not quote_current:
-            reasons.append("needs_reconfirmation")
-    if not valid_citation:
+        if not quote_current:
+            reasons.append("invalid_citation")
+    if not valid_citation and "invalid_citation" not in reasons:
         reasons.append("invalid_citation")
-    return task_cosign.review_gap_reasons(
-        reasons,
-        review,
-        state=view["state"] if view else None,
-        disposition=view["disposition"] if view else None,
-    )
+    return list(dict.fromkeys(reasons))
 
 
 async def assemble(
@@ -106,17 +100,6 @@ async def assemble(
     reviews = await requirement_consumption.effective(session, requirements)
     if len(requirements) > 2000:
         cards.fail("requirement_manifest_limit", "At most 2000 requirements can be consumed", 422)
-    cosign = await task_cosign.projections(
-        session,
-        actor.org_id,
-        list(
-            await session.scalars(
-                select(ResponseCard.id).where(
-                    ResponseCard.task_id == task_id, ResponseCard.extraction_job_id == job_id
-                )
-            )
-        ),
-    )
     for requirement in requirements:
         card = await session.scalar(
             select(ResponseCard).where(ResponseCard.requirement_id == requirement.id)
@@ -145,11 +128,7 @@ async def assemble(
         review_gap = requirement_consumption.gap_reason(review)
         eligibility = review_gap or (view["eligibility"] if view else "missing_card")
         if view and eligibility == "comply_only":
-            entry |= {
-                "kind": "comply_only",
-                "disposition_by": view["disposition_by"],
-                "disposition_at": view["disposition_at"],
-            }
+            entry |= {"kind": "comply_only", "disposition_at": view["disposition_at"]}
         elif view and eligibility == "eligible":
             table = (
                 "substantive"
@@ -165,7 +144,6 @@ async def assemble(
         else:
             reasons = gap_reasons(
                 view,
-                cosign[card.id] if card else None,
                 valid_citation=valid_citation,
                 requirement_gap=review_gap,
                 quote_current=cards.revision_quote_hash(revision, requirement)
@@ -182,7 +160,6 @@ async def assemble(
             {
                 "requirement_id": str(requirement.id),
                 "requirement_review": requirement_consumption.fields(review),
-                **(task_cosign.manifest_fields(cosign[card.id]) if card else {}),
                 "card_revision_id": view["revision_id"] if view else None,
                 "source_hash": digest(entry["source"]),
                 "category": requirement.category,
@@ -199,7 +176,6 @@ async def assemble(
         )
     fixed = {
         "rule_version": RULE_VERSION,
-        "org_id": str(actor.org_id),
         "task_id": str(task_id),
         "extraction_job_id": str(job_id),
         "requirements": manifest,
@@ -293,7 +269,6 @@ async def submit_draft(
     if job is None:
         job = Job(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task_id,
             document_id=extraction.document_id,
             kind="draft",
@@ -316,7 +291,6 @@ async def submit_draft(
                 "extraction_job_id": str(body.extraction_job_id),
                 "input_hash": input_hash,
                 "input_manifest": manifest,
-                "actor_user_id": str(actor.user_id),
                 "actor_token_id": str(actor.token_id) if actor.token_id else None,
                 "actor_kind": actor.actor_kind,
                 **provenance_fields(actor),
@@ -367,13 +341,11 @@ async def complete_draft(session: AsyncSession, job: Job, storage: Storage):
     completion = "partial" if any(item["kind"] == "gap" for item in items) else "complete"
     run = DraftRun(
         id=uuid4(),
-        org_id=job.org_id,
         task_id=job.task_id,
         extraction_job_id=extraction_id,
         generation_job_id=job.id,
         generation_run_id=job.run_id,
         input_hash=input_hash,
-        actor_user_id=actor.user_id,
         actor_token_id=actor.token_id,
         actor_kind="worker",
         input_manifest=manifest,
@@ -389,14 +361,14 @@ async def complete_draft(session: AsyncSession, job: Job, storage: Storage):
     await session.flush()
     for item in items:
         values = dict(item)
-        for key in ("requirement_id", "card_id", "card_revision_id", "disposition_by"):
+        for key in ("requirement_id", "card_id", "card_revision_id"):
             if values.get(key):
                 values[key] = UUID(values[key])
         if values.get("disposition_at"):
             values["disposition_at"] = datetime.fromisoformat(
                 values["disposition_at"].replace("Z", "+00:00")
             )
-        session.add(ResponseItem(org_id=job.org_id, draft_id=run.id, **values))
+        session.add(ResponseItem(draft_id=run.id, **values))
     await session.flush()
     audit(
         session,
@@ -461,7 +433,6 @@ def current_draft_inputs(requirements: list[Requirement], batch: cards.CardReadB
         current[str(requirement.id)] = {
             "requirement_id": str(requirement.id),
             "requirement_review": requirement_consumption.fields(review),
-            **(task_cosign.manifest_fields(batch.cosign[card.id]) if card else {}),
             "card_revision_id": view["revision_id"] if view else None,
             "source_hash": digest(cards.source(requirement)),
             "category": requirement.category,
@@ -564,9 +535,19 @@ def draft_view(
         review_gap = requirement_consumption.gap_reason(
             batch.requirement_reviews[item.requirement_id]
         )
-        if item.kind != "gap" and (
-            review_gap or card is not None and not batch.cosign[card.id]["approved"]
-        ):
+        material_rows = (
+            batch.links.get(item.card_revision_id, [])
+            if item.kind == "row" and item.card_revision_id is not None
+            else []
+        )
+        invalid_image = any(
+            batch.image(row)[2] for row in material_rows if row.kind == "image_region"
+        )
+        if invalid_image:
+            invalidated.append(str(item.requirement_id))
+        # Withdrawn or otherwise invalid screenshots cannot remain response-table
+        # evidence, even while the immutable draft preserves its historical row.
+        if item.kind != "gap" and (review_gap or invalid_image):
             current_view = None
             current_revision = None
             if card is not None:
@@ -578,25 +559,24 @@ def draft_view(
                 )
             entry["reasons"] = gap_reasons(
                 current_view,
-                batch.cosign[card.id] if card else None,
                 requirement_gap=review_gap,
                 valid_citation=batch.citation_valid(requirement),
                 quote_current=cards.revision_quote_hash(current_revision, requirement)
                 == cards.quote_hash(requirement.quote)
                 if current_revision
                 else True,
-                generation_stale=batch.generation_materials_stale(current_revision)
-                if current_revision
-                else False,
+                generation_stale=invalid_image
+                or (
+                    batch.generation_materials_stale(current_revision)
+                    if current_revision
+                    else False
+                ),
             )
             gaps.append(entry)
             continue
         if item.kind == "row":
             if item.card_revision_id is None or item.table is None:
                 cards.fail("invalid_draft", "Draft row is incomplete", 500, 4)
-            material_rows = batch.links.get(item.card_revision_id, [])
-            if any(batch.image(row)[2] for row in material_rows if row.kind == "image_region"):
-                invalidated.append(str(item.requirement_id))
             entry |= {
                 "category": item.category,
                 "starred": item.starred,
@@ -606,7 +586,7 @@ def draft_view(
             }
             tables[item.table].append(entry)
         elif item.kind == "comply_only":
-            entry |= {"disposition_by": item.disposition_by, "disposition_at": item.disposition_at}
+            entry |= {"disposition_at": item.disposition_at}
             comply_only.append(entry)
         else:
             entry["reasons"] = item.gap_reasons
@@ -625,7 +605,6 @@ def draft_view(
     return DraftView.model_validate(
         {
             "id": run.id,
-            "org_id": run.org_id,
             "task_id": run.task_id,
             "extraction_job_id": run.extraction_job_id,
             "generation_job_id": run.generation_job_id,

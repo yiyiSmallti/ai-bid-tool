@@ -32,15 +32,12 @@ def reusable_text(text: str) -> bool:
     residual = redaction.SECRET_PLACEHOLDER.sub("", residual)
     residual = residual.replace("[EVIDENCE_OMITTED]", "")
     residual = re.sub(
-        rf"(?:{redaction.AMOUNT_LABEL}|身份证(?:号码?|号)?|银行(?:账号|账户|帐号|卡号)|收款账号|账号|帐号"
-        r"|联系人|联系人员|联络人|项目联系人|联系电话|手机号码?|手机号|电话|手机"
-        r"|identity\s*(?:number|no\.?|id)|bank\s*account(?:\s*(?:number|no\.?))?|IBAN"
-        r"|contact(?:\s*(?:person|name))?|telephone|phone|mobile|tel\.?|password|passwd|api[_ -]?key|authorization|token|secret|密码|密钥)\s*[:：=]?",
+        f"(?:{redaction.AMOUNT_LABEL}|身份证(?:号码?|号)?|银行(?:账号|账户|帐号|卡号)|收款账号|账号|帐号|联系人|联系人员|联络人|项目联系人|联系电话|手机号码?|手机号|电话|手机|identity\\s*(?:number|no\\.?|id)|bank\\s*account(?:\\s*(?:number|no\\.?))?|IBAN|contact(?:\\s*(?:person|name))?|telephone|phone|mobile|tel\\.?|password|passwd|api[_ -]?key|authorization|token|secret|密码|密钥)\\s*[:：=]?",
         "",
         residual,
         flags=re.I,
     )
-    return bool(re.search(r"[\w\u4e00-\u9fff]", residual))
+    return bool(re.search("[\\w\\u4e00-\\u9fff]", residual))
 
 
 class FeedbackCopyProvider:
@@ -48,9 +45,9 @@ class FeedbackCopyProvider:
     version = GENERATOR_VERSION
 
     async def propose(self, request: MemoryCandidateInput) -> MemoryCandidateOutput:
-        from app.memory.access import org_target
+        from app.memory.access import library_target
 
-        org_target(request.target)
+        library_target(request.target)
         if request.generator_version != self.version:
             raise ServiceError(
                 "memory_generator_version", "Candidate generator version is not supported", 409, 4
@@ -90,20 +87,21 @@ class FeedbackCopyProvider:
 def worker(job):
     submitted = job.result["submission"]
     return Identity(
-        UUID(submitted["actor_user_id"]),
-        job.org_id,
-        set(submitted["scopes"]),
-        "viewer",
-        UUID(submitted["actor_token_id"]) if submitted["actor_token_id"] else None,
-        "worker",
+        scopes=set(submitted["scopes"]),
+        token_id=job.actor_token_id,
+        actor_kind="worker",
+        principal_id=job.agent_principal_id,
+        session_id=job.agent_session_id,
+        step_id=job.agent_step_id,
+        invocation_id=job.invocation_id,
+        job_id=job.id,
+        run_id=job.run_id,
     )
 
 
 async def events_access(session, actor, task_id, event_ids, *, execute=True):
-    from app.services.task_workflow import access as task_access
+    from app.services.task_access import access as task_access
 
-    # Replays and worker admission need the same live task ceiling as the
-    # original human card decision; an org memory scope alone is insufficient.
     await task_access(
         session,
         actor,
@@ -120,7 +118,7 @@ async def events_access(session, actor, task_id, event_ids, *, execute=True):
     events = []
     for event_id in event_ids:
         event = await session.get(MemoryFeedbackEvent, event_id)
-        if event is None or event.task_id != task_id or event.org_id != actor.org_id:
+        if event is None or event.task_id != task_id:
             raise not_found()
         card, _, _ = await require_card(session, event.card_id)
         if card.task_id != task_id:
@@ -130,14 +128,13 @@ async def events_access(session, actor, task_id, event_ids, *, execute=True):
         events.append(event)
     if len({event.document_id for event in events}) != 1:
         raise ServiceError("invalid_feedback_batch", "Feedback batch must use one document", 400, 2)
-    return actor, events
+    return (actor, events)
 
 
 async def create_job(session, actor, task_id, events, *, retry):
     from app.memory.feedback import digest
 
     manifest = {
-        "org_id": str(actor.org_id),
         "task_id": str(task_id),
         "document_id": str(events[0].document_id),
         "event_ids": [str(event.id) for event in events],
@@ -150,7 +147,12 @@ async def create_job(session, actor, task_id, events, *, retry):
     if job is None:
         job = Job(
             id=uuid4(),
-            org_id=actor.org_id,
+            actor_kind=actor.actor_kind,
+            actor_token_id=actor.token_id,
+            agent_principal_id=actor.principal_id,
+            agent_session_id=actor.session_id,
+            agent_step_id=actor.step_id,
+            invocation_id=actor.invocation_id,
             task_id=task_id,
             document_id=events[0].document_id,
             kind="memory_candidate",
@@ -160,7 +162,6 @@ async def create_job(session, actor, task_id, events, *, retry):
                 "submission": {
                     **manifest,
                     "input_hash": key,
-                    "actor_user_id": str(actor.user_id),
                     "actor_token_id": str(actor.token_id) if actor.token_id else None,
                     "actor_kind": actor.actor_kind,
                     "scopes": sorted(actor.scopes),
@@ -170,58 +171,66 @@ async def create_job(session, actor, task_id, events, *, retry):
         session.add(job)
     elif retry and (
         job.status in {"failed", "cancelled"}
-        or (job.status == "running" and job.lease_until and job.lease_until <= datetime.now(UTC))
+        or (job.status == "running" and job.lease_until and (job.lease_until <= datetime.now(UTC)))
     ):
-        job.status, job.error, job.queue_id = "queued", None, None
-        job.run_id, job.lease_until, job.finished_at, job.attempts = None, None, None, 0
+        # A retry is another attempt of the same submission, whose provenance is immutable.
+        if (job.actor_kind, job.actor_token_id, job.agent_principal_id) != (
+            actor.actor_kind,
+            actor.token_id,
+            actor.principal_id,
+        ):
+            raise ServiceError("forbidden", "Retry requires the original submission actor", 403, 4)
+        job.status, job.error, job.queue_id = ("queued", None, None)
+        job.run_id, job.lease_until, job.finished_at, job.attempts = (None, None, None, 0)
         job.result = {
             "submission": {
                 **job.result["submission"],
-                "actor_user_id": str(actor.user_id),
-                "actor_token_id": str(actor.token_id) if actor.token_id else None,
-                "actor_kind": actor.actor_kind,
-                "scopes": sorted(actor.scopes),
+                "scopes": sorted(set(job.result["submission"]["scopes"]) & actor.scopes),
             }
         }
     await session.flush()
-    return job, reused
+    return (job, reused)
 
 
 async def submit_candidates(session, actor, task_id, body, settings):
     actor, events = await events_access(session, actor, task_id, body.event_ids)
     if body.action.dry_run:
-        return Result(
-            ok=True,
-            command="memory candidates run",
-            data=MemoryJobSubmissionData(
-                job_id=None,
-                task_id=task_id,
-                reused=False,
-                dry_run=True,
-                event_count=len(events),
-            ).model_dump(mode="json"),
-        ), None
+        return (
+            Result(
+                ok=True,
+                command="memory candidates run",
+                data=MemoryJobSubmissionData(
+                    job_id=None,
+                    task_id=task_id,
+                    reused=False,
+                    dry_run=True,
+                    event_count=len(events),
+                ).model_dump(mode="json"),
+            ),
+            None,
+        )
     await task_lock(session, task_id)
     actor, events = await events_access(session, actor, task_id, body.event_ids)
     job, reused = await create_job(session, actor, task_id, events, retry=body.action.retry)
-    return Result(
-        ok=True,
-        command="memory candidates run",
-        data=MemoryJobSubmissionData(
-            job_id=job.id,
-            task_id=task_id,
-            reused=reused,
-            dry_run=False,
-            event_count=len(events),
-        ).model_dump(mode="json"),
-    ), job
+    return (
+        Result(
+            ok=True,
+            command="memory candidates run",
+            data=MemoryJobSubmissionData(
+                job_id=job.id,
+                task_id=task_id,
+                reused=reused,
+                dry_run=False,
+                event_count=len(events),
+            ).model_dump(mode="json"),
+        ),
+        job,
+    )
 
 
 async def job_access(session, actor, job, *, cancel=False):
     if job.task_id is None or job.kind != "memory_candidate":
         raise not_found()
-    # Status requires read grants only; cancellation additionally requires the
-    # original execution grants and rechecks every source card.
     actor, _ = await events_access(
         session,
         actor,
@@ -232,14 +241,14 @@ async def job_access(session, actor, job, *, cancel=False):
     return actor
 
 
-async def dispatch(db, queue, org_id, job):
+async def dispatch(db, queue, job):
     if job.status != "queued" or job.queue_id is not None:
         return []
     try:
-        queue_id = await queue.enqueue(str(org_id), str(job.id))
+        queue_id = await queue.enqueue(str(job.id))
     except (OSError, ConnectorException, OperationalError):
         return [f"memory_candidate_dispatch_pending:{job.id}"]
-    async with db.transaction(org_id) as session:
+    async with db.transaction() as session:
         saved = await session.scalar(select(Job).where(Job.id == job.id).with_for_update())
         if saved is not None and saved.queue_id is None:
             saved.queue_id = queue_id

@@ -81,7 +81,6 @@ class BidSubmissionCreate(Contract):
 
 class BidUploadedDocument(BidFileInput):
     id: UUID
-    org_id: UUID
     task_id: UUID
     submission_id: UUID
     file_id: UUID
@@ -89,12 +88,10 @@ class BidUploadedDocument(BidFileInput):
 
 class BidSubmissionUploaded(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     revision: Revision
     manifest_sha256: Sha256
     files: list[BidUploadedDocument] = Field(min_length=2, max_length=FILE_LIMIT)
-    created_by: UUID
     created_at: AwareDatetime
     state: Literal["uploaded", "withdrawn"] = "uploaded"
 
@@ -107,9 +104,8 @@ class BidSubmissionUploaded(Contract):
         if sum(item.size_bytes for item in self.files) > SUBMISSION_BYTE_LIMIT:
             raise ValueError("uploaded submission exceeds aggregate bytes")
         if any(
-            (item.org_id, item.task_id, item.submission_id)
+            (item.task_id, item.submission_id)
             != (
-                self.org_id,
                 self.task_id,
                 self.id,
             )
@@ -174,7 +170,6 @@ class BidPreparePreview(Contract):
 
 class BidDocumentView(BidUploadedDocument):
     id: UUID
-    org_id: UUID
     task_id: UUID
     submission_id: UUID
     file_id: UUID
@@ -198,12 +193,10 @@ class BidDocumentView(BidUploadedDocument):
 
 class BidSubmissionView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     revision: Revision
     manifest_sha256: Sha256
     documents: list[BidDocumentView] = Field(min_length=2, max_length=FILE_LIMIT)
-    created_by: UUID
     created_at: AwareDatetime
     state: Literal["prepared", "withdrawn"]
     preparation_job_id: UUID
@@ -216,8 +209,7 @@ class BidSubmissionView(Contract):
         if {document.role for document in self.documents} != {"tender", "bid"}:
             raise ValueError("both document roles are required")
         for document in self.documents:
-            if (document.org_id, document.task_id, document.submission_id) != (
-                self.org_id,
+            if (document.task_id, document.submission_id) != (
                 self.task_id,
                 self.id,
             ):
@@ -239,7 +231,6 @@ class BidPageRef(Contract):
 
 class BidPageView(BidPageRef):
     id: UUID
-    org_id: UUID
     task_id: UUID
     submission_id: UUID
     image: PNGDescriptor

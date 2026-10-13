@@ -1,9 +1,9 @@
 """Fixed-scale API/PostgreSQL acceptance, specified before implementation.
 
-Failure inventory: all-history scans, N+1 author lookups, cross-org prefix matches,
+Failure inventory: all-history scans, N+1 metadata lookups, incorrect prefix matches,
 unbounded rows/bytes, missing continuation, detail/history scans, query timeout,
-and serial warm p95 above the approved budget. Seed exactly two orgs with 10,000
-roots and 100,000 immutable revisions each. Capture actual runtime SQL plans,
+and serial warm p95 above the approved budget. Seed one library with 10,000
+roots and 100,000 immutable revisions. Capture actual runtime SQL plans,
 buffer/row work, SQL counts and complete Result bytes, never credentials.
 This test uses the supplied disposable DB; it never starts a service.
 """
@@ -14,12 +14,11 @@ import os
 import platform
 from pathlib import Path
 from time import perf_counter
-from uuid import UUID
 
 import pytest
 from sqlalchemy import event, text
 
-ROOTS = 10_000
+ROOTS = 10000
 REVISIONS = 10
 SAMPLES = 20
 OUTPUT = (
@@ -27,54 +26,36 @@ OUTPUT = (
 )
 
 
-def seed_scale(admin_engine, tenants):
-    """Synthetic owner-side bulk setup; runtime measurements still use bid_app RLS."""
+def seed_scale(admin_engine, database):
+    """Synthetic owner-side bulk setup; runtime measurements still use restricted bid_app."""
     with admin_engine.begin() as connection:
-        for org, user in zip(tenants["orgs"], tenants["users"], strict=True):
-            values = {"org": str(org), "actor": user, "roots": ROOTS, "revisions": REVISIONS}
-            values.update(
-                {
-                    "audit_prefix": ":audit:",
-                    "profile_prefix": ":profile:",
-                    "revision_prefix": ":revision:",
-                }
-            )
-            connection.execute(text("SELECT set_config('app.current_org', :org, true)"), values)
-            connection.execute(
-                text(
-                    "INSERT INTO org_profiles(id,org_id,created_by,current_revision,created_at) "
-                    "SELECT md5(:org||:profile_prefix||n)::uuid,CAST(:org AS uuid),:actor,:revisions,"
-                    "TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second' "
-                    "FROM generate_series(1,:roots) n"
-                ),
-                values,
-            )
-            connection.execute(
-                text(
-                    "INSERT INTO org_profile_revisions(id,org_id,profile_id,revision,data,created_at) "
-                    "SELECT md5(:org||:revision_prefix||n||':'||v)::uuid,CAST(:org AS uuid),"
-                    "md5(:org||:profile_prefix||n)::uuid,v,"
-                    "jsonb_build_object('name','Scale profile '||lpad(n::text,5,'0'),"
-                    "'registration_details','Declared registration','performance_summary','Declared performance',"
-                    "'standard_wording','Declared wording'),"
-                    "TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second'+v*interval '1 microsecond' "
-                    "FROM generate_series(1,:roots) n CROSS JOIN generate_series(1,:revisions) v"
-                ),
-                values,
-            )
-            connection.execute(
-                text(
-                    "INSERT INTO audit_logs(id,org_id,actor_user_id,action,object_id,details,created_at) "
-                    "SELECT md5(:org||:audit_prefix||n||':'||v)::uuid,CAST(:org AS uuid),:actor,"
-                    "CASE WHEN v=1 THEN 'resource.profile.create' ELSE 'resource.profile.update' END,"
-                    "md5(:org||:profile_prefix||n)::uuid,"
-                    "jsonb_build_object('new_revision_id',md5(:org||:revision_prefix||n||':'||v)::uuid,"
-                    "'revision',v),TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second' "
-                    "FROM generate_series(1,:roots) n CROSS JOIN generate_series(1,:revisions) v"
-                ),
-                values,
-            )
-        for table in ("org_profiles", "org_profile_revisions", "audit_logs", "memberships"):
+        values = {"seed": "test_management_profiles_scale", "roots": ROOTS, "revisions": REVISIONS}
+        values.update(
+            {
+                "audit_prefix": ":audit:",
+                "profile_prefix": ":profile:",
+                "revision_prefix": ":revision:",
+            }
+        )
+        connection.execute(
+            text(
+                "INSERT INTO org_profiles(id,current_revision,created_at) SELECT md5(:seed||:profile_prefix||n)::uuid,:revisions,TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second' FROM generate_series(1,:roots) n"
+            ),
+            values,
+        )
+        connection.execute(
+            text(
+                "INSERT INTO org_profile_revisions(id,profile_id,revision,data,created_at) SELECT md5(:seed||:revision_prefix||n||':'||v)::uuid,md5(:seed||:profile_prefix||n)::uuid,v,jsonb_build_object('name','Scale profile '||lpad(n::text,5,'0'),'registration_details','Declared registration','performance_summary','Declared performance','standard_wording','Declared wording'),TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second'+v*interval '1 microsecond' FROM generate_series(1,:roots) n CROSS JOIN generate_series(1,:revisions) v"
+            ),
+            values,
+        )
+        connection.execute(
+            text(
+                "INSERT INTO audit_logs(id,action,object_id,details,created_at,actor_kind) SELECT md5(:seed||:audit_prefix||n||':'||v)::uuid,CASE WHEN v=1 THEN 'resource.profile.create' ELSE 'resource.profile.update' END,md5(:seed||:profile_prefix||n)::uuid,jsonb_build_object('new_revision_id',md5(:seed||:revision_prefix||n||':'||v)::uuid,'revision',v),TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second','session' FROM generate_series(1,:roots) n CROSS JOIN generate_series(1,:revisions) v"
+            ),
+            values,
+        )
+        for table in ("org_profiles", "org_profile_revisions", "audit_logs"):
             connection.execute(text(f"ANALYZE {table}"))
 
 
@@ -95,8 +76,8 @@ def plan_work(node):
 
 
 @pytest.mark.latency
-async def test_fixed_scale_profile_reads(api, headers, application, tenants, admin_engine):
-    seed_scale(admin_engine, tenants)
+async def test_fixed_scale_profile_reads(api, headers, application, database, admin_engine):
+    seed_scale(admin_engine, database)
     root = OUTPUT.resolve()
     root.mkdir(parents=True, exist_ok=True)
     receipt = {
@@ -104,7 +85,7 @@ async def test_fixed_scale_profile_reads(api, headers, application, tenants, adm
         "scenario": "u01-profile-fixed-scale-v1",
         "status": "running",
         "schema": "5.0",
-        "fixture": {"orgs": 2, "roots_per_org": ROOTS, "revisions_per_org": ROOTS * REVISIONS},
+        "fixture": {"roots": ROOTS, "revisions": ROOTS * REVISIONS},
         "hardware": {
             "system": platform.platform(),
             "machine": platform.machine(),
@@ -126,7 +107,7 @@ async def test_fixed_scale_profile_reads(api, headers, application, tenants, adm
         with admin_engine.connect() as connection:
             receipt["postgresql"] = connection.scalar(text("SELECT version()"))
         query_path = "/v4/management/resources/profiles/query"
-        first = await api.post(query_path, headers=headers[0], json={"limit": 25})
+        first = await api.post(query_path, headers=headers, json={"limit": 25})
         assert first.status_code == 200, first.text
         profile = first.json()["items"][0]["ref"]["resource_id"]
         cases = [
@@ -172,13 +153,13 @@ async def test_fixed_scale_profile_reads(api, headers, application, tenants, adm
             ),
         ]
         for name, method, path, body, latency_limit, sql_limit, byte_limit in cases:
-            await api.request(method, path, headers=headers[0], json=body)
-            timings, sizes, reads, controls, round_trips = [], [], [], [], []
+            await api.request(method, path, headers=headers, json=body)
+            timings, sizes, reads, controls, round_trips = ([], [], [], [], [])
             last_queries = []
             for _ in range(SAMPLES):
                 captured.clear()
                 started = perf_counter()
-                response = await api.request(method, path, headers=headers[0], json=body)
+                response = await api.request(method, path, headers=headers, json=body)
                 timings.append((perf_counter() - started) * 1000)
                 assert response.status_code == 200, response.text
                 sizes.append(len(response.content))
@@ -206,15 +187,12 @@ async def test_fixed_scale_profile_reads(api, headers, application, tenants, adm
                     assert len(result["items"]) <= body.get("limit", 25)
                     assert "total" not in result["data"]
                     assert result["data"]["returned"] == len(result["items"])
-                    assert all(row["org_id"] == headers[0]["X-Org-Id"] for row in result["items"])
                     if name == "prefix":
                         assert all(
                             row["name"].startswith("Scale profile 099") for row in result["items"]
                         )
-                else:
-                    assert result["data"]["org_id"] == headers[0]["X-Org-Id"]
             plans = []
-            async with application.state.db.transaction(UUID(headers[0]["X-Org-Id"])) as session:
+            async with application.state.db.transaction() as session:
                 connection = await session.connection()
                 for statement, parameters in last_queries:
                     if not any(
@@ -239,8 +217,6 @@ async def test_fixed_scale_profile_reads(api, headers, application, tenants, adm
                                 visits.get(relation, 0)
                                 + (row["rows"] + row["rows_removed"]) * row["loops"]
                             )
-                    # Prefix scans may touch all current roots, but immutable history
-                    # relations must not scale with the 100,000-row revision fixture.
                     for relation, visited in visits.items():
                         if visited > 8 * (100 + 1):
                             failures.append(f"{name}: {relation} visited {visited} history rows")
@@ -272,22 +248,12 @@ async def test_fixed_scale_profile_reads(api, headers, application, tenants, adm
                 failures.append(f"{name}: Result bytes exceed {byte_limit}")
             if max(round_trips) > sql_limit:
                 failures.append(f"{name}: {max(round_trips)} SQL round trips exceed {sql_limit}")
-        # Same names/search tokens in the second org must still produce disjoint roots.
-        other = await api.post(query_path, headers=headers[1], json={"limit": 25})
-        assert other.status_code == 200
-        assert all(row["org_id"] == headers[1]["X-Org-Id"] for row in other.json()["items"])
-        assert not {row["ref"]["resource_id"] for row in first.json()["items"]} & {
-            row["ref"]["resource_id"] for row in other.json()["items"]
-        }
-        # Measure real mutation paths at the same library scale. The contract gives
-        # numeric latency gates for reads; writes record observations without
-        # inventing another threshold or skipping their authorization/audit work.
         receipt["write_observations"] = []
 
         async def write(name, path, body):
             captured.clear()
             started = perf_counter()
-            response = await api.post(path, headers=headers[0], json=body)
+            response = await api.post(path, headers=headers, json=body)
             receipt["write_observations"].append(
                 {
                     "case": name,
@@ -328,7 +294,7 @@ async def test_fixed_scale_profile_reads(api, headers, application, tenants, adm
                     "reason_code": reason,
                 },
             )
-        pins = await api.get(pin_path, headers=headers[0])
+        pins = await api.get(pin_path, headers=headers)
         assert pins.status_code == 200
         assert pins.json()["items"][0]["id"] == selected["id"]
         assert pins.json()["items"][0]["revision"] == REVISIONS

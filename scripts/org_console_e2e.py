@@ -1,8 +1,7 @@
-"""Provision the real org-console browser fixture through API and job processor.
+"""Provision the single-user console browser fixture through API and job processor.
 
 The script accepts only a PostgreSQL database whose name starts with ``bid_test``.
-It creates identities with the migration owner, then creates every business object
-through the restricted application API. Parse, extraction and draft jobs are run
+It creates every business object through the authenticated application API. Parse, extraction and draft jobs are run
 by the production Processor. The only vendor is an in-process
 ``httpx.MockTransport`` returning explicitly synthetic, exact citations.
 
@@ -29,18 +28,12 @@ import httpx
 import pymupdf
 from app.api.main import create_app
 from app.core.config import Settings
-from app.core.security import hash_password
-from app.models.entities import Membership, Org, User
 from app.providers.llm import OpenAICompatibleExtractor
 from docx import Document as WordDocument
-from sqlalchemy import create_engine, select
 from sqlalchemy.engine import make_url
-from sqlalchemy.orm import Session
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORK_ROOT = (REPO_ROOT / "data" / "work").resolve()
-ROLE_NAMES = ("admin", "bidder", "technical", "viewer")
-ORG_NAMES = {"a": "合成控制台单位 A", "b": "合成控制台单位 B"}
 WORD_REQUIREMENTS = 1_200
 SYNTHETIC_MODEL = "org-console-synthetic-model"
 
@@ -198,17 +191,17 @@ class SyntheticExtractor(OpenAICompatibleExtractor):
 
 @dataclass
 class FixtureQueue:
-    calls: list[tuple[str, str]] = field(default_factory=list)
+    calls: list[str] = field(default_factory=list)
     processor: Any = None
     run_jobs: bool = False
     tasks: set[asyncio.Task[None]] = field(default_factory=set)
 
-    async def enqueue(self, org_id: str, job_id: str) -> int:
-        self.calls.append((org_id, job_id))
+    async def enqueue(self, job_id: str) -> int:
+        self.calls.append(job_id)
         if self.run_jobs:
             if self.processor is None:
                 raise RuntimeError("Fixture processor is not configured")
-            task = asyncio.create_task(self.processor(org_id, job_id))
+            task = asyncio.create_task(self.processor(job_id))
             self.tasks.add(task)
             task.add_done_callback(self.tasks.discard)
         return len(self.calls)
@@ -223,12 +216,19 @@ def fixture_settings(data_dir: Path, *, web_dir: Path | None = None) -> Settings
             "llm_model": SYNTHETIC_MODEL,
             "llm_api_key": None,
             "llm_base_url": "https://synthetic.example.invalid/v1",
-            "llm_input_usd_per_mtok": 1.0,
-            "llm_output_usd_per_mtok": 2.0,
             "llm_concurrency": 8,
             "llm_max_output_tokens": 64_000,
+            "converter_url": "https://synthetic.converter.invalid",
         }
     )
+
+
+def synthetic_converter(request: httpx.Request) -> httpx.Response:
+    with pymupdf.open() as pdf:
+        for page_num in (1, 2):
+            pdf.new_page().insert_text((72, 72), f"Synthetic export preview page {page_num}")
+        pdf_bytes = pdf.tobytes()
+    return httpx.Response(200, content=pdf_bytes, headers={"Content-Type": "application/pdf"})
 
 
 def fixture_app(settings: Settings, vendor: SyntheticVendor, *, run_jobs: bool = False):
@@ -249,40 +249,9 @@ def fixture_app(settings: Settings, vendor: SyntheticVendor, *, run_jobs: bool =
     }
     llm.default_reasoning = "low"
     llm.model_revision = 1
-    return create_app(settings, llm=llm, queue=FixtureQueue(run_jobs=run_jobs))
-
-
-def seed_identities(admin_url: str, password: str) -> dict[str, dict[str, Any]]:
-    engine = create_engine(admin_url, hide_parameters=True)
-    password_hash = hash_password(password)
-    seeded: dict[str, dict[str, Any]] = {}
-    try:
-        with Session(engine) as session, session.begin():
-            existing = session.scalar(select(Org.id).where(Org.name.in_(ORG_NAMES.values())))
-            if existing is not None:
-                raise SystemExit(
-                    "The org-console fixture already exists; use a fresh isolated bid_test database"
-                )
-            for org_key, org_name in ORG_NAMES.items():
-                org_id = uuid4()
-                session.add(Org(id=org_id, org_id=org_id, name=org_name))
-                users: dict[str, dict[str, str]] = {}
-                for role in ROLE_NAMES:
-                    user_id = uuid4()
-                    email = f"org-console-{org_key}-{role}@example.test"
-                    session.add(User(id=user_id, email=email, password_hash=password_hash))
-                    # Memberships reference users without an ORM relationship, so write users first.
-                    session.flush()
-                    session.add(Membership(org_id=org_id, user_id=user_id, role=role, active=True))
-                    users[role] = {"id": str(user_id), "email": email}
-                seeded[org_key] = {
-                    "id": str(org_id),
-                    "name": org_name,
-                    "users": users,
-                }
-    finally:
-        engine.dispose()
-    return seeded
+    app = create_app(settings, llm=llm, queue=FixtureQueue(run_jobs=run_jobs))
+    app.state.processor.converter_transport = httpx.MockTransport(synthetic_converter)
+    return app
 
 
 async def response_json(
@@ -312,23 +281,11 @@ async def response_json(
     return payload
 
 
-async def login(
-    client: httpx.AsyncClient, org: dict[str, Any], role: str, password: str
-) -> dict[str, str]:
+async def human_session(client: httpx.AsyncClient) -> dict[str, str]:
     payload = await response_json(
-        client,
-        "POST",
-        "/auth/login",
-        json={
-            "email": org["users"][role]["email"],
-            "password": password,
-            "org_id": org["id"],
-        },
+        client, "POST", "/auth/session", json={"access_key": env("BID_ACCESS_KEY")}
     )
-    return {
-        "Authorization": "Bearer " + payload["data"]["session"],
-        "X-Org-Id": org["id"],
-    }
+    return {"Authorization": "Bearer " + payload["data"]["session"]}
 
 
 async def run_job(
@@ -347,7 +304,7 @@ async def run_job(
         json=body or {},
     )
     job_id = receipt["data"]["job_id"]
-    await app.state.processor(headers["X-Org-Id"], job_id)
+    await app.state.processor(job_id)
     status = await response_json(client, "GET", f"/jobs/{job_id}", headers=headers)
     if status["data"]["status"] != "succeeded":
         raise RuntimeError(f"{action} job failed: {status['data']}")
@@ -358,7 +315,7 @@ async def create_task_documents(
     client: httpx.AsyncClient,
     app: Any,
     headers: dict[str, str],
-    org_key: str,
+    task_key: str,
     word_count: int,
 ) -> dict[str, Any]:
     task = await response_json(
@@ -367,24 +324,23 @@ async def create_task_documents(
         "/tasks",
         headers=headers,
         json={
-            "name": f"合成投标审阅任务 {org_key.upper()}",
-            "tender_number": f"E2E-{org_key.upper()}-2026",
+            "name": f"合成投标审阅任务 {task_key.upper()}",
+            "tender_number": f"E2E-{task_key.upper()}-2026",
             "deadline": "2027-01-15T12:00:00+08:00",
-            "budget_usd": 250.5,
         },
     )
     task_id = task["data"]["id"]
-    word = word_fixture(word_count, org_key.upper())
-    pdf = pdf_fixture(3, org_key.upper())
+    word = word_fixture(word_count, task_key.upper())
+    pdf = pdf_fixture(3, task_key.upper())
     uploaded: dict[str, dict[str, Any]] = {}
     for kind, content, name, media_type in (
         (
             "word",
             word,
-            f"synthetic-{org_key}-requirements.docx",
+            f"synthetic-{task_key}-requirements.docx",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ),
-        ("pdf", pdf, f"synthetic-{org_key}-pages.pdf", "application/pdf"),
+        ("pdf", pdf, f"synthetic-{task_key}-pages.pdf", "application/pdf"),
     ):
         result = await response_json(
             client,
@@ -513,16 +469,84 @@ def commitment_content(index: int, deviation: str = "none") -> dict[str, Any]:
     }
 
 
+async def confirm_requirements(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    task_id: str,
+    extraction_job_id: str,
+    requirements: list[dict[str, Any]],
+) -> None:
+    """Review synthetic exact citations through the human API before response work."""
+    scope_path = f"/tasks/{task_id}/extractions/{extraction_job_id}"
+    reviews = []
+    params: dict[str, Any] = {"limit": 100}
+    # Review every page before writing: confirmations invalidate pagination cursors.
+    while True:
+        page = await response_json(
+            client, "GET", f"{scope_path}/requirement-reviews", headers=headers, params=params
+        )
+        reviews.extend(page["items"])
+        cursor = page["data"]["next_cursor"]
+        if cursor is None:
+            break
+        params["cursor"] = cursor
+    sources = {row["id"]: row["source"] for row in requirements}
+    if len(reviews) != len(sources) or {row["requirement_id"] for row in reviews} != set(sources):
+        raise RuntimeError("Requirement review must cover the exact synthetic extraction")
+    for review in reviews:
+        source = sources[review["requirement_id"]]
+        if (
+            not review["citation_valid"]
+            or review["source_pin"] is None
+            or review["content"]["source"] != source
+            or review["source_pin"]["source"] != source
+        ):
+            raise RuntimeError("Synthetic requirement review needs its verified exact source")
+    set_revision = page["data"]["scope"]["revision"]
+    for offset in range(0, len(reviews), 100):
+        batch = reviews[offset : offset + 100]
+        confirmed = await response_json(
+            client,
+            "POST",
+            f"{scope_path}/requirement-confirmations",
+            headers=headers,
+            json={
+                "request_id": str(uuid4()),
+                "expected_set_revision": set_revision,
+                "reviewed_each": True,
+                "reason": "Synthetic human reviewed every selected requirement and its exact source.",
+                "items": [
+                    {
+                        "requirement_id": review["requirement_id"],
+                        "expected_revision": review["revision"],
+                        "expected_review_hash": review["review_hash"],
+                    }
+                    for review in batch
+                ],
+            },
+        )
+        if (
+            confirmed["data"]["changed"] != len(batch)
+            or {row["requirement_id"] for row in confirmed["items"]}
+            != {row["requirement_id"] for row in batch}
+            or any(row["current_state"] != "confirmed" for row in confirmed["items"])
+        ):
+            raise RuntimeError(
+                "The human requirement confirmation batch did not confirm every item"
+            )
+        set_revision = confirmed["data"]["scope"]["revision"]
+
+
 async def create_review_fixture(
     client: httpx.AsyncClient,
     app: Any,
-    org: dict[str, Any],
-    headers: dict[str, dict[str, str]],
+    headers: dict[str, str],
     task_data: dict[str, Any],
 ) -> dict[str, Any]:
     task_id = task_data["task"]["id"]
     extraction = task_data["extractions"]["low"]["id"]
     requirements = task_data["requirements"]
+    await confirm_requirements(client, headers, task_id, extraction, requirements)
 
     product_data = {
         "name": "合成存储设备声明",
@@ -535,14 +559,14 @@ async def create_review_fixture(
         client,
         "POST",
         "/resources/products",
-        headers=headers["admin"],
+        headers=headers,
         json={"data": product_data},
     )
     selection = await response_json(
         client,
         "POST",
         f"/tasks/{task_id}/products",
-        headers=headers["admin"],
+        headers=headers,
         json={"product_id": product["data"]["product_id"]},
     )
     evidence_input = {
@@ -561,7 +585,7 @@ async def create_review_fixture(
     cards: dict[str, dict[str, Any]] = {}
     cards["confirmed_evidence"] = await create_card(
         client,
-        headers["admin"],
+        headers,
         task_id,
         extraction,
         requirements[0]["id"],
@@ -574,11 +598,11 @@ async def create_review_fixture(
         },
     )
     cards["confirmed_evidence"] = await card_action(
-        client, headers["admin"], cards["confirmed_evidence"], "submit"
+        client, headers, cards["confirmed_evidence"], "submit"
     )
     cards["confirmed_evidence"] = await card_action(
         client,
-        headers["bidder"],
+        headers,
         cards["confirmed_evidence"],
         "confirm",
         reviewed_evidence_ids=[item["id"] for item in cards["confirmed_evidence"]["evidence"]],
@@ -586,34 +610,34 @@ async def create_review_fixture(
 
     cards["pending_evidence"] = await create_card(
         client,
-        headers["admin"],
+        headers,
         task_id,
         extraction,
         requirements[1]["id"],
         {
             "response_kind": "evidence",
-            "response_text": "待技术人员逐项核对的合成证据响应。",
+            "response_text": "待人工逐项核对的合成证据响应。",
             "deviation": "none",
-            "deviation_note": "证据尚未经过技术角色确认。",
+            "deviation_note": "证据尚未经过人工确认。",
             "evidence": [evidence_input],
         },
     )
     cards["pending_evidence"] = await card_action(
-        client, headers["admin"], cards["pending_evidence"], "submit"
+        client, headers, cards["pending_evidence"], "submit"
     )
 
     cards["rejected"] = await create_card(
         client,
-        headers["admin"],
+        headers,
         task_id,
         extraction,
         requirements[4]["id"],
         commitment_content(5),
     )
-    cards["rejected"] = await card_action(client, headers["admin"], cards["rejected"], "submit")
+    cards["rejected"] = await card_action(client, headers, cards["rejected"], "submit")
     cards["rejected"] = await card_action(
         client,
-        headers["bidder"],
+        headers,
         cards["rejected"],
         "reject",
         reason="合成审阅：商务响应文字需要修改。",
@@ -621,18 +645,16 @@ async def create_review_fixture(
 
     cards["needs_material"] = await create_card(
         client,
-        headers["admin"],
+        headers,
         task_id,
         extraction,
         requirements[5]["id"],
         commitment_content(6),
     )
-    cards["needs_material"] = await card_action(
-        client, headers["admin"], cards["needs_material"], "submit"
-    )
+    cards["needs_material"] = await card_action(client, headers, cards["needs_material"], "submit")
     cards["needs_material"] = await card_action(
         client,
-        headers["technical"],
+        headers,
         cards["needs_material"],
         "needs_material",
         reason="合成审阅：需要补充真实材料。",
@@ -640,42 +662,40 @@ async def create_review_fixture(
 
     cards["pending_reject"] = await create_card(
         client,
-        headers["admin"],
+        headers,
         task_id,
         extraction,
         requirements[12]["id"],
         commitment_content(13),
     )
-    cards["pending_reject"] = await card_action(
-        client, headers["admin"], cards["pending_reject"], "submit"
-    )
+    cards["pending_reject"] = await card_action(client, headers, cards["pending_reject"], "submit")
 
     cards["pending_needs_material"] = await create_card(
         client,
-        headers["admin"],
+        headers,
         task_id,
         extraction,
         requirements[17]["id"],
         commitment_content(18),
     )
     cards["pending_needs_material"] = await card_action(
-        client, headers["admin"], cards["pending_needs_material"], "submit"
+        client, headers, cards["pending_needs_material"], "submit"
     )
 
     cards["confirmed_commitment"] = await create_card(
         client,
-        headers["admin"],
+        headers,
         task_id,
         extraction,
         requirements[9]["id"],
         commitment_content(10, "negative"),
     )
     cards["confirmed_commitment"] = await card_action(
-        client, headers["admin"], cards["confirmed_commitment"], "submit"
+        client, headers, cards["confirmed_commitment"], "submit"
     )
     cards["confirmed_commitment"] = await card_action(
         client,
-        headers["technical"],
+        headers,
         cards["confirmed_commitment"],
         "confirm",
         reviewed_evidence_ids=[],
@@ -683,7 +703,7 @@ async def create_review_fixture(
 
     cards["conflict_target"] = await create_card(
         client,
-        headers["admin"],
+        headers,
         task_id,
         extraction,
         requirements[13]["id"],
@@ -691,7 +711,7 @@ async def create_review_fixture(
     )
     cards["evidence_draft"] = await create_card(
         client,
-        headers["admin"],
+        headers,
         task_id,
         extraction,
         requirements[8]["id"],
@@ -708,7 +728,7 @@ async def create_review_fixture(
     for offset, requirement in enumerate(requirements[820:900]):
         card = await create_card(
             client,
-            headers["admin"],
+            headers,
             task_id,
             extraction,
             requirement["id"],
@@ -721,7 +741,7 @@ async def create_review_fixture(
             },
         )
         if offset % 3 == 0:
-            card = await card_action(client, headers["admin"], card, "submit")
+            card = await card_action(client, headers, card, "submit")
         multi_evidence_cards.append(
             {
                 "id": card["id"],
@@ -735,7 +755,7 @@ async def create_review_fixture(
     ):
         raise RuntimeError("The large-list fixture needs 80 cards with two resolved Evidence rows")
 
-    bidder_items = [
+    commercial_items = [
         {
             "requirement_id": row["id"],
             "expected_revision": None,
@@ -755,12 +775,12 @@ async def create_review_fixture(
         for index, row in enumerate(requirements[20:820], start=20)
         if index % 4 == 1
     ][:200]
-    for role, items in (("bidder", bidder_items), ("technical", technical_items)):
+    for items in (commercial_items, technical_items):
         await response_json(
             client,
             "POST",
             f"/tasks/{task_id}/cards/dispositions",
-            headers=headers[role],
+            headers=headers,
             json={"extraction_job_id": extraction, "items": items},
         )
 
@@ -768,26 +788,22 @@ async def create_review_fixture(
         client,
         "POST",
         f"/tasks/{task_id}/drafts",
-        headers=headers["admin"],
+        headers=headers,
         json={"extraction_job_id": extraction},
     )
     draft_one_job = draft_one_receipt["data"]["job_id"]
-    await app.state.processor(org["id"], draft_one_job)
-    draft_one_status = await response_json(
-        client, "GET", f"/jobs/{draft_one_job}", headers=headers["admin"]
-    )
+    await app.state.processor(draft_one_job)
+    draft_one_status = await response_json(client, "GET", f"/jobs/{draft_one_job}", headers=headers)
     draft_one_id = draft_one_status["data"]["result"]["draft_id"]
 
     cards["confirmed_evidence"] = await card_action(
         client,
-        headers["bidder"],
+        headers,
         cards["confirmed_evidence"],
         "reopen",
         reason="合成审阅：使旧初稿进入 stale 状态。",
     )
-    stale_draft = await response_json(
-        client, "GET", f"/drafts/{draft_one_id}", headers=headers["admin"]
-    )
+    stale_draft = await response_json(client, "GET", f"/drafts/{draft_one_id}", headers=headers)
     if stale_draft["data"]["validity"] != "stale":
         raise RuntimeError("Reopening a reviewed response did not stale the existing draft")
 
@@ -795,24 +811,22 @@ async def create_review_fixture(
         client,
         "POST",
         f"/tasks/{task_id}/drafts",
-        headers=headers["admin"],
+        headers=headers,
         json={"extraction_job_id": extraction},
     )
     draft_two_job = draft_two_receipt["data"]["job_id"]
-    await app.state.processor(org["id"], draft_two_job)
-    draft_two_status = await response_json(
-        client, "GET", f"/jobs/{draft_two_job}", headers=headers["admin"]
-    )
+    await app.state.processor(draft_two_job)
+    draft_two_status = await response_json(client, "GET", f"/jobs/{draft_two_job}", headers=headers)
     current_draft_id = draft_two_status["data"]["result"]["draft_id"]
     current_draft = await response_json(
-        client, "GET", f"/drafts/{current_draft_id}", headers=headers["admin"]
+        client, "GET", f"/drafts/{current_draft_id}", headers=headers
     )
 
     generation_preview = await response_json(
         client,
         "POST",
         f"/tasks/{task_id}/cards/generations",
-        headers=headers["admin"],
+        headers=headers,
         json={
             "extraction_job_id": extraction,
             "requirement_ids": [requirements[18]["id"]],
@@ -820,8 +834,15 @@ async def create_review_fixture(
             "dry_run": True,
         },
     )
-    if generation_preview["data"]["estimated_cost"]["usd"] is None:
-        raise RuntimeError("The generation fixture needs a visible cost estimate")
+    preflight = generation_preview["data"]["preflight"]
+    if (
+        preflight["admission_blocker"] is not None
+        or preflight["estimate"]["calls"] <= 0
+        or preflight["estimate"]["llm_tokens"] <= 0
+    ):
+        raise RuntimeError(
+            "The generation fixture needs an available provider and resource estimate"
+        )
 
     batch_candidates = [
         row["id"] for index, row in enumerate(requirements[900:1000], start=900) if index % 4 == 1
@@ -832,7 +853,7 @@ async def create_review_fixture(
         "multi_evidence_cards": multi_evidence_cards,
         "batch_candidates": batch_candidates,
         "disposition_counts": {
-            "commercial": len(bidder_items),
+            "commercial": len(commercial_items),
             "technical": len(technical_items),
         },
         "drafts": {
@@ -868,13 +889,14 @@ def export_template() -> bytes:
 
 
 async def create_export_fixture(
-    client: httpx.AsyncClient, app: Any, org: dict[str, Any], headers: dict[str, dict[str, str]]
+    client: httpx.AsyncClient, app: Any, headers: dict[str, str]
 ) -> dict[str, Any]:
     """A small task with a confirmed certificate page and a released review copy to preview."""
-    data = await create_task_documents(client, app, headers["admin"], "c", 12)
+    data = await create_task_documents(client, app, headers, "c", 12)
     task_id = data["task"]["id"]
     extraction = data["extractions"]["pdf"]["id"]
     requirement = data["pdf_requirements"][0]
+    await confirm_requirements(client, headers, task_id, extraction, data["pdf_requirements"])
 
     certificate_data = {
         "kind": "qualification",
@@ -887,7 +909,7 @@ async def create_export_fixture(
         client,
         "POST",
         "/resources/certificates",
-        headers=headers["admin"],
+        headers=headers,
         json={"data": certificate_data},
     )
     certificate_pdf = pdf_fixture(2, "CERT")
@@ -895,7 +917,7 @@ async def create_export_fixture(
         client,
         "POST",
         f"/resources/certificates/{certificate['data']['certificate_id']}/file-revisions",
-        headers=headers["admin"],
+        headers=headers,
         data={"metadata": json.dumps({"expected_revision": 1, "data": certificate_data})},
         files={"file": ("synthetic-certificate.pdf", certificate_pdf, "application/pdf")},
     )
@@ -903,22 +925,22 @@ async def create_export_fixture(
         client,
         "POST",
         f"/tasks/{task_id}/certificates",
-        headers=headers["admin"],
+        headers=headers,
         json={"certificate_id": certificate["data"]["certificate_id"]},
     )
     source = await response_json(
         client,
         "POST",
         f"/tasks/{task_id}/evidence-sources",
-        headers=headers["admin"],
+        headers=headers,
         json={"task_certificate_id": selected["data"]["id"], "page": 1},
     )
     source = source["data"]["source"]
     with pymupdf.open(stream=certificate_pdf, filetype="pdf") as pdf:
-        page_quote = pdf[0].get_text().strip().splitlines()[0]
+        page_quote = pdf[0].get_textpage().extractText().strip().splitlines()[0]
     card = await create_card(
         client,
-        headers["admin"],
+        headers,
         task_id,
         extraction,
         requirement["id"],
@@ -942,7 +964,7 @@ async def create_export_fixture(
                 client,
                 "POST",
                 f"/cards/{card['id']}/classification",
-                headers=headers["admin"],
+                headers=headers,
                 json={
                     "expected_revision": card["revision"],
                     "review_domain": "commercial",
@@ -950,11 +972,10 @@ async def create_export_fixture(
                 },
             )
         )["data"]
-    reviewer = "bidder" if card["review_domain"] == "commercial" else "technical"
-    card = await card_action(client, headers["admin"], card, "submit")
+    card = await card_action(client, headers, card, "submit")
     card = await card_action(
         client,
-        headers[reviewer],
+        headers,
         card,
         "confirm",
         reviewed_evidence_ids=[item["id"] for item in card["evidence"]],
@@ -966,12 +987,12 @@ async def create_export_fixture(
         client,
         "POST",
         f"/tasks/{task_id}/drafts",
-        headers=headers["admin"],
+        headers=headers,
         json={"extraction_job_id": extraction},
     )
-    await app.state.processor(org["id"], draft_receipt["data"]["job_id"])
+    await app.state.processor(draft_receipt["data"]["job_id"])
     draft_status = await response_json(
-        client, "GET", f"/jobs/{draft_receipt['data']['job_id']}", headers=headers["admin"]
+        client, "GET", f"/jobs/{draft_receipt['data']['job_id']}", headers=headers
     )
     draft_id = draft_status["data"]["result"]["draft_id"]
 
@@ -979,7 +1000,7 @@ async def create_export_fixture(
         client,
         "POST",
         "/resources/templates",
-        headers=headers["admin"],
+        headers=headers,
         data={"metadata": json.dumps({"data": {"name": "合成导出版式", "chapters": []}})},
         files={"file": ("synthetic-export.docx", export_template(), DOCX_MEDIA_TYPE)},
     )
@@ -987,7 +1008,7 @@ async def create_export_fixture(
         client,
         "POST",
         f"/tasks/{task_id}/templates",
-        headers=headers["admin"],
+        headers=headers,
         json={"template_id": template["data"]["template_id"]},
     )
     binding_body = {
@@ -1014,13 +1035,13 @@ async def create_export_fixture(
         "dry_run": True,
     }
     binding_preview = await response_json(
-        client, "POST", "/export-template-bindings", headers=headers["admin"], json=binding_body
+        client, "POST", "/export-template-bindings", headers=headers, json=binding_body
     )
     binding = await response_json(
         client,
         "POST",
         "/export-template-bindings",
-        headers=headers["admin"],
+        headers=headers,
         json={
             **binding_body,
             "dry_run": False,
@@ -1037,14 +1058,14 @@ async def create_export_fixture(
         client,
         "POST",
         f"/tasks/{task_id}/export-runs",
-        headers=headers["bidder"],
+        headers=headers,
         json={**run_body, "dry_run": True},
     )
     run = await response_json(
         client,
         "POST",
         f"/tasks/{task_id}/export-runs",
-        headers=headers["bidder"],
+        headers=headers,
         json={
             **run_body,
             "expected_input_hash": run_preview["data"]["input_hash"],
@@ -1055,15 +1076,13 @@ async def create_export_fixture(
             ],
         },
     )
-    await app.state.processor(org["id"], run["data"]["render_job_id"])
-    ready = await response_json(
-        client, "GET", f"/export-runs/{run['data']['id']}", headers=headers["bidder"]
-    )
+    await app.state.processor(run["data"]["render_job_id"])
+    ready = await response_json(client, "GET", f"/export-runs/{run['data']['id']}", headers=headers)
     released = await response_json(
         client,
         "POST",
         f"/export-runs/{run['data']['id']}/release",
-        headers=headers["bidder"],
+        headers=headers,
         json={
             "expected_input_hash": ready["data"]["input_hash"],
             "expected_candidate_sha256": ready["data"]["candidate_sha256"],
@@ -1098,11 +1117,9 @@ async def provision(output: Path) -> Path:
         raise SystemExit(
             "BID_TEST_ADMIN_URL and BID_DATABASE_URL must select the same test database"
         )
-    password = env("E2E_ORG_PASSWORD")
     data_dir = await asyncio.to_thread(configured_data_directory)
     browser_materials = await asyncio.to_thread(write_browser_materials, output)
 
-    identities = seed_identities(admin_url, password)
     settings = fixture_settings(data_dir)
     vendor = SyntheticVendor()
     app = fixture_app(settings, vendor)
@@ -1112,36 +1129,27 @@ async def provision(output: Path) -> Path:
             transport=httpx.ASGITransport(app=app), base_url="http://org-console.fixture"
         ) as client,
     ):
-        headers: dict[str, dict[str, dict[str, str]]] = {}
-        for org_key, org in identities.items():
-            headers[org_key] = {
-                role: await login(client, org, role, password) for role in ROLE_NAMES
-            }
-        task_a = await create_task_documents(
-            client, app, headers["a"]["admin"], "a", WORD_REQUIREMENTS
-        )
-        task_b = await create_task_documents(client, app, headers["b"]["admin"], "b", 12)
-        review = await create_review_fixture(client, app, identities["a"], headers["a"], task_a)
-        previews = await create_export_fixture(client, app, identities["a"], headers["a"])
-
-        # Prove the three G1 discovery routes and their tenant boundary in the fixture itself.
+        headers = await human_session(client)
+        task_a = await create_task_documents(client, app, headers, "a", WORD_REQUIREMENTS)
+        task_b = await create_task_documents(client, app, headers, "b", 12)
+        review = await create_review_fixture(client, app, headers, task_a)
+        previews = await create_export_fixture(client, app, headers)
         task_b_id = task_b["task"]["id"]
         for path in (
             f"/tasks/{task_b_id}",
             f"/tasks/{task_b_id}/documents",
             f"/tasks/{task_b_id}/jobs?kind=parse",
         ):
-            await response_json(client, "GET", path, headers=headers["a"]["viewer"], expected=404)
+            await response_json(client, "GET", path, headers=headers)
 
     manifest = {
-        "schema": "org-console-e2e-v1",
+        "schema": "single-user-console-e2e-v2",
         "fixture": "synthetic-labelled-materials-only",
         "provider": {
             "transport": "httpx.MockTransport",
             "model": SYNTHETIC_MODEL,
             "calls": vendor.calls,
         },
-        "orgs": identities,
         "tasks": {"a": public_task_data(task_a), "b": public_task_data(task_b)},
         "review": review,
         "previews": previews,
@@ -1153,7 +1161,7 @@ async def provision(output: Path) -> Path:
             "interaction_p95_ms_max": 300,
             "g1_job_kind": "parse",
         },
-        "secrets": "Passwords and sessions are supplied only through environment variables.",
+        "secrets": "Access credentials are supplied only through environment variables.",
     }
     manifest_path = output / "fixture-manifest.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")

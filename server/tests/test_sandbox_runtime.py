@@ -6,7 +6,7 @@
 - Input/output/diagnostic streams exceed their bound before the receiver stops.
 - Cancellation, caller death or supervisor restart leaves containers running.
 - Validation reuses the renderer or publishes before cleanup confirmation.
-- Duplicate attempts execute again, or a cleanup failure admits another tenant.
+- Duplicate attempts execute again, or a cleanup failure admits another run.
 - Production PNG/PDF decode occurs on the trusted business host.
 - runsc admits work on a rootless daemon or with cgroups skipped, where limits are not
   enforced; runc admits work on a rootful daemon.
@@ -30,9 +30,7 @@ from app.providers.sandbox_runtime import RunDescriptor, RuntimeConfig, SandboxF
 
 
 def descriptor(html: bytes) -> RunDescriptor:
-    return RunDescriptor(
-        uuid4(), uuid4(), uuid4(), hashlib.sha256(html).hexdigest(), "prototype_offline"
-    )
+    return RunDescriptor(uuid4(), uuid4(), hashlib.sha256(html).hexdigest(), "prototype_offline")
 
 
 @pytest.mark.asyncio

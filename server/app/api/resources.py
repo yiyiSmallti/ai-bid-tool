@@ -1,4 +1,4 @@
-"""Org resource libraries, task selections, certificate and template files, and
+"""Versioned resource libraries, task selections, certificate and template files, and
 unconfirmed certificate-page sources."""
 
 import asyncio
@@ -33,16 +33,6 @@ from app.schemas.profile_contracts import (
 )
 from app.schemas.resource_contracts import ProductCreate, ProductUpdate, TaskProductSelection
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
-from app.services import (
-    certificate_files,
-    certificates,
-    evidence_sources,
-    features,
-    page_previews,
-    profiles,
-    resources,
-    templates,
-)
 from app.services.template_files import MAX_TEMPLATE_BYTES, validate_template
 from app.services.template_files import WARNINGS as TEMPLATE_WARNINGS
 
@@ -54,6 +44,8 @@ def create_router(
 
     @router.post("/resources/products", name="resource_product_add", response_model=Result)
     async def product_add(body: ProductCreate, ctx=Depends(context, scope="function")):
+        from app.services import resources
+
         session, actor = ctx
         return result("resource product add", await resources.create_product(session, actor, body))
 
@@ -63,6 +55,8 @@ def create_router(
         product_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import resources
+
         session, actor = ctx
         data, items = await resources.list_products(
             session, actor, history=history, product_id=product_id
@@ -77,6 +71,8 @@ def create_router(
     async def product_update(
         product_id: UUID, body: ProductUpdate, ctx=Depends(context, scope="function")
     ):
+        from app.services import resources
+
         session, actor = ctx
         return result(
             "resource product update",
@@ -87,6 +83,8 @@ def create_router(
     async def task_product_add(
         task_id: UUID, body: TaskProductSelection, ctx=Depends(context, scope="function")
     ):
+        from app.services import resources
+
         session, actor = ctx
         return result(
             "task resource add", await resources.select_product(session, actor, task_id, body)
@@ -96,6 +94,8 @@ def create_router(
     async def task_product_list(
         task_id: UUID, history: bool = False, ctx=Depends(context, scope="function")
     ):
+        from app.services import resources
+
         session, actor = ctx
         data, items = await resources.list_selections(session, actor, task_id, history=history)
         return result("task resource list", data, items)
@@ -104,6 +104,8 @@ def create_router(
 
     @router.post("/resources/features", name="resource_feature_add", response_model=Result)
     async def feature_add(body: FeatureCreate, ctx=Depends(context, scope="function")):
+        from app.services import features
+
         session, actor = ctx
         return result(
             "resource feature add",
@@ -117,6 +119,8 @@ def create_router(
         feature_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import features
+
         session, actor = ctx
         data, items = await features.list_features(
             session, actor, history=history, feature_id=feature_id
@@ -131,6 +135,8 @@ def create_router(
     async def feature_update(
         feature_id: UUID, body: FeatureUpdate, ctx=Depends(context, scope="function")
     ):
+        from app.services import features
+
         session, actor = ctx
         return result(
             "resource feature update",
@@ -142,6 +148,8 @@ def create_router(
     async def task_feature_add(
         task_id: UUID, body: TaskFeatureSelection, ctx=Depends(context, scope="function")
     ):
+        from app.services import features
+
         session, actor = ctx
         return result(
             "task feature add",
@@ -153,6 +161,8 @@ def create_router(
     async def task_feature_list(
         task_id: UUID, history: bool = False, ctx=Depends(context, scope="function")
     ):
+        from app.services import features
+
         session, actor = ctx
         data, items = await features.list_selections(session, actor, task_id, history=history)
         return result("task feature list", data, items, feature_warnings)
@@ -163,6 +173,8 @@ def create_router(
 
     @router.post("/resources/certificates", name="resource_certificate_add", response_model=Result)
     async def certificate_add(body: CertificateCreate, ctx=Depends(context, scope="function")):
+        from app.services import certificates
+
         session, actor = ctx
         return result(
             "resource certificate add",
@@ -177,6 +189,8 @@ def create_router(
         as_of: date | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import certificates
+
         session, actor = ctx
         data, items = await certificates.list_certificates(
             session, actor, history=history, certificate_id=certificate_id, as_of=as_of
@@ -191,6 +205,8 @@ def create_router(
     async def certificate_update(
         certificate_id: UUID, body: CertificateUpdate, ctx=Depends(context, scope="function")
     ):
+        from app.services import certificates
+
         session, actor = ctx
         return result(
             "resource certificate update",
@@ -204,6 +220,8 @@ def create_router(
     async def task_certificate_add(
         task_id: UUID, body: TaskCertificateSelection, ctx=Depends(context, scope="function")
     ):
+        from app.services import certificates
+
         session, actor = ctx
         return result(
             "task certificate add",
@@ -220,6 +238,8 @@ def create_router(
         as_of: date | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import certificates
+
         session, actor = ctx
         data, items = await certificates.list_selections(
             session, actor, task_id, history=history, as_of=as_of
@@ -232,6 +252,8 @@ def create_router(
 
     @router.post("/resources/profiles", name="resource_profile_add", response_model=Result)
     async def profile_add(body: OrgProfileCreate, ctx=Depends(context, scope="function")):
+        from app.services import profiles
+
         session, actor = ctx
         return result(
             "resource profile add",
@@ -245,6 +267,8 @@ def create_router(
         profile_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import profiles
+
         session, actor = ctx
         data, items = await profiles.list_profiles(
             session, actor, history=history, profile_id=profile_id
@@ -259,6 +283,8 @@ def create_router(
     async def profile_update(
         profile_id: UUID, body: OrgProfileUpdate, ctx=Depends(context, scope="function")
     ):
+        from app.services import profiles
+
         session, actor = ctx
         return result(
             "resource profile update",
@@ -270,6 +296,8 @@ def create_router(
     async def task_profile_add(
         task_id: UUID, body: TaskOrgProfileSelection, ctx=Depends(context, scope="function")
     ):
+        from app.services import profiles
+
         session, actor = ctx
         return result(
             "task profile add",
@@ -285,6 +313,8 @@ def create_router(
         limit: int | None = Query(None, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import profiles
+
         session, actor = ctx
         if limit is not None:
             from app.services.attachments import profile_candidates
@@ -310,6 +340,8 @@ def create_router(
         file: list[UploadFile] = File(...),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import certificate_files
+
         session, actor = ctx
         actor.require("certificate:write")
         actor.require("certificate:file:write")
@@ -356,6 +388,8 @@ def create_router(
         history: bool = False,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import certificate_files
+
         session, actor = ctx
         data, items, warnings = await certificate_files.list_files(
             session, actor, certificate_id=certificate_id, revision_id=revision_id, history=history
@@ -370,6 +404,8 @@ def create_router(
     async def task_certificate_file_list(
         task_id: UUID, history: bool = False, ctx=Depends(context, scope="function")
     ):
+        from app.services import certificate_files
+
         session, actor = ctx
         data, items, warnings = await certificate_files.list_task_files(
             session, actor, task_id, history=history
@@ -384,6 +420,8 @@ def create_router(
     async def certificate_file_download_link(
         revision_id: UUID, ctx=Depends(context, scope="function")
     ):
+        from app.services import certificate_files
+
         session, actor = ctx
         await certificate_files.require_file(session, actor, revision_id)
         return result(
@@ -392,7 +430,6 @@ def create_router(
                 crypto,
                 f"/resources/certificates/revisions/{revision_id}/file/download",
                 "certificate-file-download",
-                actor.org_id,
                 revision_id=revision_id,
             ),
             warnings=certificate_files.WARNINGS,
@@ -405,11 +442,11 @@ def create_router(
     async def certificate_file_download(
         revision_id: UUID, signature: str, ctx=Depends(context, scope="function")
     ):
+        from app.services import certificate_files
+
         session, actor = ctx
         await certificate_files.require_file(session, actor, revision_id)
-        check_signature(
-            crypto, signature, "certificate-file-download", actor.org_id, revision_id=revision_id
-        )
+        check_signature(crypto, signature, "certificate-file-download", revision_id=revision_id)
         content, descriptor = await certificate_files.read_revision(
             session, actor, revision_id, storage
         )
@@ -425,6 +462,8 @@ def create_router(
         zoom: int = Query(1, ge=1, le=2),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import page_previews
+
         session, actor = ctx
         png = await page_previews.certificate_page(
             session, actor, revision_id, page, zoom, storage, settings
@@ -451,6 +490,8 @@ def create_router(
         file: UploadFile = File(...),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import templates
+
         session, actor = ctx
         actor.require("template:write")
         body, descriptor, content = await template_upload(metadata, file, TemplateCreate)
@@ -466,6 +507,8 @@ def create_router(
         template_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import templates
+
         session, actor = ctx
         data, items = await templates.list_templates(
             session, actor, history=history, template_id=template_id
@@ -483,6 +526,8 @@ def create_router(
         file: UploadFile = File(...),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import templates
+
         session, actor = ctx
         actor.require("template:write")
         body, descriptor, content = await template_upload(metadata, file, TemplateUpdate)
@@ -498,6 +543,8 @@ def create_router(
     async def task_template_add(
         task_id: UUID, body: TaskTemplateSelection, ctx=Depends(context, scope="function")
     ):
+        from app.services import templates
+
         session, actor = ctx
         return result(
             "task template add",
@@ -509,6 +556,8 @@ def create_router(
     async def task_template_list(
         task_id: UUID, history: bool = False, ctx=Depends(context, scope="function")
     ):
+        from app.services import templates
+
         session, actor = ctx
         data, items = await templates.list_selections(session, actor, task_id, history=history)
         return result("task template list", data, items, TEMPLATE_WARNINGS)
@@ -519,6 +568,8 @@ def create_router(
         response_model=Result,
     )
     async def template_download_link(revision_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import templates
+
         session, actor = ctx
         actor.require("template:file:read")
         await templates.require_revision(session, actor, revision_id)
@@ -528,7 +579,6 @@ def create_router(
                 crypto,
                 f"/resources/templates/revisions/{revision_id}/download",
                 "template-download",
-                actor.org_id,
                 revision_id=revision_id,
             ),
             warnings=TEMPLATE_WARNINGS,
@@ -540,12 +590,12 @@ def create_router(
     async def template_download(
         revision_id: UUID, signature: str, ctx=Depends(context, scope="function")
     ):
+        from app.services import templates
+
         session, actor = ctx
         actor.require("template:file:read")
         await templates.require_revision(session, actor, revision_id)
-        check_signature(
-            crypto, signature, "template-download", actor.org_id, revision_id=revision_id
-        )
+        check_signature(crypto, signature, "template-download", revision_id=revision_id)
         content, descriptor = await templates.read_revision(session, actor, revision_id, storage)
         return attachment(content, descriptor.media_type, descriptor.name)
 
@@ -555,6 +605,8 @@ def create_router(
     async def evidence_source_add(
         task_id: UUID, body: EvidenceSourceCreate, ctx=Depends(context, scope="function")
     ):
+        from app.services import evidence_sources
+
         session, actor = ctx
         started = time.monotonic()
         value = result(
@@ -577,6 +629,8 @@ def create_router(
         limit: int | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import evidence_sources
+
         session, actor = ctx
         data, items, warnings = await evidence_sources.list_sources(
             session, actor, task_id, history=history, cursor=cursor, limit=limit, settings=settings
@@ -589,6 +643,8 @@ def create_router(
         response_model=Result,
     )
     async def evidence_source_preview_link(source_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import evidence_sources
+
         session, actor = ctx
         row, snapshot, original = await evidence_sources.require_source(session, actor, source_id)
         return result(
@@ -597,7 +653,6 @@ def create_router(
                 crypto,
                 f"/evidence-sources/{source_id}/preview/download",
                 "source-preview",
-                actor.org_id,
                 source_id=source_id,
             ),
             [evidence_sources.source_data(row, snapshot, original)],
@@ -615,9 +670,11 @@ def create_router(
     async def evidence_source_preview_download(
         source_id: UUID, signature: str, ctx=Depends(context, scope="function")
     ):
+        from app.services import evidence_sources
+
         session, actor = ctx
         await evidence_sources.require_source(session, actor, source_id)
-        check_signature(crypto, signature, "source-preview", actor.org_id, source_id=source_id)
+        check_signature(crypto, signature, "source-preview", source_id=source_id)
         content, descriptor = await evidence_sources.read_preview(
             session, actor, source_id, storage
         )

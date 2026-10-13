@@ -17,11 +17,8 @@ from app.models.entities import (
     Chunk,
     Document,
     Job,
-    Membership,
-    Org,
     Requirement,
     Task,
-    User,
 )
 from app.services import confidential, drafts, redaction
 from app.services import response_cards as cards
@@ -97,11 +94,6 @@ async def lock_inputs(
         .order_by(Requirement.id)
         .with_for_update(read=True)
     )
-    await session.scalar(select(Org).where(Org.id == actor.org_id).with_for_update(read=True))
-    await session.scalar(select(User).where(User.id == actor.user_id).with_for_update(read=True))
-    await session.scalar(
-        select(Membership).where(Membership.user_id == actor.user_id).with_for_update(read=True)
-    )
     if actor.token_id is not None:
         await session.scalar(
             select(ApiToken).where(ApiToken.id == actor.token_id).with_for_update(read=True)
@@ -139,7 +131,6 @@ async def snapshot(
                 .options(
                     load_only(
                         Requirement.id,
-                        Requirement.org_id,
                         Requirement.task_id,
                         Requirement.document_id,
                         Requirement.chunk_id,
@@ -155,7 +146,6 @@ async def snapshot(
                     ),
                     load_only(
                         Chunk.id,
-                        Chunk.org_id,
                         Chunk.task_id,
                         Chunk.document_id,
                         Chunk.page,
@@ -251,7 +241,6 @@ async def snapshot(
     ]
     warning_codes = await cards.scope_warnings(session, extraction.id)
     manifest = {
-        "org_id": str(actor.org_id),
         "task_id": str(task_id),
         "extraction_job_id": str(extraction.id),
         "document_id": str(document.id),
@@ -295,14 +284,12 @@ async def require_dependencies(
         or document is None
         or extraction.document_id != document.id
         or document.task_id != task_id
-        or manifest.get("org_id") != str(actor.org_id)
     ):
         raise not_found()
     expected = {UUID(entry["requirement_id"]) for entry in manifest.get("requirements", [])}
     rows = list(
         await session.scalars(
             select(Requirement).where(
-                Requirement.org_id == actor.org_id,
                 Requirement.task_id == task_id,
                 Requirement.job_id == extraction.id,
                 Requirement.id.in_(expected),
@@ -315,7 +302,6 @@ async def require_dependencies(
     available_chunks = set(
         await session.scalars(
             select(Chunk.id).where(
-                Chunk.org_id == actor.org_id,
                 Chunk.task_id == task_id,
                 Chunk.document_id == document.id,
                 Chunk.id.in_(chunk_ids),

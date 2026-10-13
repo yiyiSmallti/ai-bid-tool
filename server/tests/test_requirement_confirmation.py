@@ -1,9 +1,9 @@
 """B02 real API/PostgreSQL acceptance.
 
 Failure scenarios were fixed before implementation in the delegated work inventory:
-foreign org/task reads or writes leak metadata; replay reapplies obsolete decisions;
+cross-task reads or writes leak metadata; replay reapplies obsolete decisions;
 CAS and mixed batches partly commit; manual source verification accepts normalization
-or changed previews; source change-back resurrects approval; tokens or reviewers can
+or changed previews; source change-back resurrects approval; tokens or agents can
 confirm; SQL consumers bypass the human gate; source/history events lose atomicity.
 These tests never create, stop or reconfigure a database service.
 """
@@ -14,7 +14,6 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
 from test_response_cards import create_tender, phase_one_client
 
 TABLES = (
@@ -49,20 +48,20 @@ async def post_decision(api, auth, requirement_id, payload):
     )
 
 
-async def test_review_cas_replay_history_and_current_contract_aliases(tenants, tmp_path):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
+async def test_review_cas_replay_history_and_current_contract_aliases(database, tmp_path):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
         task, _, job, requirements = await create_tender(
-            api, app, headers[0], tmp_path, confirmed=False
+            api, app, headers, tmp_path, confirmed=False
         )
         rid = requirements[0]["id"]
-        initial = await review(api, headers[0], rid)
+        initial = await review(api, headers, rid)
         assert initial["requirement"]["state"] == "unconfirmed"
         body = decision(initial)
-        accepted = await post_decision(api, headers[0], rid, body)
+        accepted = await post_decision(api, headers, rid, body)
         assert accepted.status_code == 200, accepted.text
         approved = accepted.json()["data"]
         assert approved["requirement"]["state"] == "confirmed"
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             events = (
                 await session.execute(
                     text(
@@ -77,32 +76,30 @@ async def test_review_cas_replay_history_and_current_contract_aliases(tenants, t
                 for event in events
                 if event.payload.get("requirement_ids") == [rid]
             )
-        stale = await post_decision(api, headers[0], rid, {**body, "request_id": str(uuid4())})
+        stale = await post_decision(api, headers, rid, {**body, "request_id": str(uuid4())})
         assert stale.status_code == 409
-        reopened = await post_decision(api, headers[0], rid, decision(approved, "reopen"))
+        reopened = await post_decision(api, headers, rid, decision(approved, "reopen"))
         assert reopened.status_code == 200, reopened.text
-        replay = await post_decision(api, headers[0], rid, body)
+        replay = await post_decision(api, headers, rid, body)
         assert replay.status_code == 200, replay.text
         replayed = replay.json()["data"]
         assert replayed["replayed"] and replayed["requirement"]["state"] == "unconfirmed"
         assert replayed["event_ids"] == approved["event_ids"]
-        conflict = await post_decision(api, headers[0], rid, {**body, "reason": "Different review"})
+        conflict = await post_decision(api, headers, rid, {**body, "reason": "Different review"})
         assert (
             conflict.status_code == 409
             and conflict.json()["data"]["error"]["code"] == "idempotency_conflict"
         )
-        history = await api.get(
-            f"/v4/requirements/{rid}/review-history?limit=2", headers=headers[0]
-        )
+        history = await api.get(f"/v4/requirements/{rid}/review-history?limit=2", headers=headers)
         assert history.status_code == 200, history.text
         assert len(history.json()["items"]) == 2
         page = await api.get(
             f"/v4/tasks/{task}/extractions/{job}/requirement-reviews?limit=1&starred=false",
-            headers=headers[0],
+            headers=headers,
         )
         assert page.status_code == 200, page.text
         for prefix in ("", "/v4", "/v5"):
-            current = await api.get(f"{prefix}/requirements/{rid}/review", headers=headers[0])
+            current = await api.get(f"{prefix}/requirements/{rid}/review", headers=headers)
             assert current.status_code == 200, current.text
             assert current.headers["X-Bid-Contract-Version"] == "5.0"
             assert current.json()["data"]["requirement"] == replayed["requirement"]
@@ -123,19 +120,19 @@ async def test_review_cas_replay_history_and_current_contract_aliases(tenants, t
         )
 
 
-async def test_manual_scope_preview_float_hash_and_replay(tenants, tmp_path):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
+async def test_manual_scope_preview_float_hash_and_replay(database, tmp_path):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
         task, _, original_job, requirements = await create_tender(
-            api, app, headers[0], tmp_path, confirmed=False
+            api, app, headers, tmp_path, confirmed=False
         )
-        value = await review(api, headers[0], requirements[0]["id"])
+        value = await review(api, headers, requirements[0]["id"])
         content = {
             **value["requirement"]["content"],
             "condition": {"small": 1e-7, "large": 1e20, "whole": 1.0},
         }
         preview_input = {"content": content, "reason": "Recover omitted interpretation"}
         preview = await api.post(
-            f"/v4/tasks/{task}/requirements/manual-preview", headers=headers[0], json=preview_input
+            f"/v4/tasks/{task}/requirements/manual-preview", headers=headers, json=preview_input
         )
         assert preview.status_code == 200, preview.text
         data = preview.json()["data"]
@@ -145,9 +142,7 @@ async def test_manual_scope_preview_float_hash_and_replay(tenants, tmp_path):
             "request_id": str(uuid4()),
             "expected_preview_hash": data["preview_hash"],
         }
-        saved = await api.post(
-            f"/v4/tasks/{task}/requirements/manual", headers=headers[0], json=body
-        )
+        saved = await api.post(f"/v4/tasks/{task}/requirements/manual", headers=headers, json=body)
         assert saved.status_code == 201, saved.text
         manual = saved.json()["data"]
         assert (
@@ -155,15 +150,13 @@ async def test_manual_scope_preview_float_hash_and_replay(tenants, tmp_path):
             and manual["requirement"]["state"] == "unconfirmed"
         )
         assert manual["scope"]["extraction_job_id"] != original_job
-        replay = await api.post(
-            f"/v4/tasks/{task}/requirements/manual", headers=headers[0], json=body
-        )
+        replay = await api.post(f"/v4/tasks/{task}/requirements/manual", headers=headers, json=body)
         assert replay.status_code == 200 and replay.json()["data"]["replayed"], replay.text
         accepted = await post_decision(
-            api, headers[0], manual["requirement"]["requirement_id"], decision(manual)
+            api, headers, manual["requirement"]["requirement_id"], decision(manual)
         )
         assert accepted.status_code == 200, accepted.text
-        async with app.state.db.transaction(UUID(headers[0]["X-Org-Id"])) as session:
+        async with app.state.db.transaction() as session:
             receipt = (
                 await session.execute(
                     text(
@@ -175,82 +168,16 @@ async def test_manual_scope_preview_float_hash_and_replay(tenants, tmp_path):
             assert tuple(receipt) == ("succeeded", 0, None, None, None)
 
 
-@pytest.mark.parametrize("route", ["review", "review-history"])
-async def test_review_foreign_org_is_uniform_404(tenants, tmp_path, route):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        _, _, _, requirements = await create_tender(api, app, headers[0], tmp_path, confirmed=False)
-        foreign = await api.get(
-            f"/v4/requirements/{requirements[0]['id']}/{route}", headers=headers[1]
-        )
-        missing = await api.get(f"/v4/requirements/{uuid4()}/{route}", headers=headers[1])
-        assert foreign.status_code == missing.status_code == 404
-        assert foreign.json()["data"] == missing.json()["data"]
-
-
-@pytest.mark.parametrize("table", TABLES)
-async def test_review_tables_force_rls_and_foreign_reads(tenants, tmp_path, admin_engine, table):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        _, _, _, requirements = await create_tender(api, app, headers[0], tmp_path, confirmed=False)
-        initial = await review(api, headers[0], requirements[0]["id"])
-        assert (
-            await post_decision(api, headers[0], requirements[0]["id"], decision(initial))
-        ).status_code == 200
-        with admin_engine.connect() as connection:
-            assert all(
-                connection.execute(
-                    text(
-                        "SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE oid=to_regclass(:table)"
-                    ),
-                    {"table": table},
-                ).one()
-            )
-        async with app.state.db.transaction(tenants["orgs"][1]) as session:
-            assert (
-                await session.scalar(
-                    text(f"SELECT count(*) FROM {table} WHERE org_id=:org"),
-                    {"org": tenants["orgs"][0]},
-                )
-                == 0
-            )
-        if table in {"requirement_review_sets", "requirement_reviews"}:
-            async with app.state.db.transaction(tenants["orgs"][1]) as session:
-                changed = await session.execute(
-                    text(f"UPDATE {table} SET revision=revision WHERE org_id=:org"),
-                    {"org": tenants["orgs"][0]},
-                )
-                assert changed.rowcount == 0
-        from app.models import Base
-        from sqlalchemy import insert
-
-        with admin_engine.connect() as connection:
-            existing = connection.execute(Base.metadata.tables[table].select()).mappings().first()
-            assert existing is not None
-            foreign_row = {**dict(existing), "id": uuid4()}
-        with pytest.raises(DBAPIError):
-            async with app.state.db.transaction(tenants["orgs"][1]) as session:
-                await session.execute(insert(Base.metadata.tables[table]).values(**foreign_row))
-        async with app.state.db.engine.connect() as connection:
-            await connection.execute(text("SELECT set_config('app.current_org','',true)"))
-            assert await connection.scalar(text(f"SELECT count(*) FROM {table}")) == 0
-        with pytest.raises(DBAPIError):
-            async with app.state.db.transaction(tenants["orgs"][0]) as session:
-                await session.execute(text(f"DELETE FROM {table}"))
-
-
 async def test_source_mutation_and_change_back_preserve_invalidation(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        _, _, _, requirements = await create_tender(api, app, headers[0], tmp_path, confirmed=False)
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        _, _, _, requirements = await create_tender(api, app, headers, tmp_path, confirmed=False)
         rid = requirements[0]["id"]
-        initial = await review(api, headers[0], rid)
-        assert (await post_decision(api, headers[0], rid, decision(initial))).status_code == 200
+        initial = await review(api, headers, rid)
+        assert (await post_decision(api, headers, rid, decision(initial))).status_code == 200
         source = initial["requirement"]["content"]["source"]
         with admin_engine.begin() as connection:
-            connection.execute(
-                text("SELECT set_config('app.current_org',:org,true)"),
-                {"org": str(tenants["orgs"][0])},
-            )
             original = connection.scalar(
                 text("SELECT text FROM chunks WHERE id=:id"), {"id": source["chunk_id"]}
             )
@@ -258,21 +185,17 @@ async def test_source_mutation_and_change_back_preserve_invalidation(
                 text("UPDATE chunks SET text=:value WHERE id=:id"),
                 {"value": original + "\nAdditional parsed text", "id": source["chunk_id"]},
             )
-        invalid = await review(api, headers[0], rid)
+        invalid = await review(api, headers, rid)
         assert invalid["requirement"]["state"] == "invalidated"
         with admin_engine.begin() as connection:
-            connection.execute(
-                text("SELECT set_config('app.current_org',:org,true)"),
-                {"org": str(tenants["orgs"][0])},
-            )
             connection.execute(
                 text("UPDATE chunks SET text=:value WHERE id=:id"),
                 {"value": original, "id": source["chunk_id"]},
             )
-        restored = await review(api, headers[0], rid)
+        restored = await review(api, headers, rid)
         assert restored["requirement"]["state"] == "invalidated"
         assert restored["requirement"]["revision"] > invalid["requirement"]["revision"]
-        assert (await post_decision(api, headers[0], rid, decision(restored))).status_code == 200
+        assert (await post_decision(api, headers, rid, decision(restored))).status_code == 200
 
 
 def route_cases(task, job, value):
@@ -307,51 +230,23 @@ def route_cases(task, job, value):
     ]
 
 
-@pytest.mark.parametrize("scope", ["foreign_org", "same_org_nonmember"])
-@pytest.mark.parametrize("route_index", range(8))
-async def test_every_review_route_masks_inaccessible_tasks(
-    tenants, tmp_path, admin_engine, scope, route_index
-):
-    from test_team_workflow_membership import person
-
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        task, _, job, requirements = await create_tender(
-            api, app, headers[0], tmp_path, confirmed=False
-        )
-        value = await review(api, headers[0], requirements[0]["id"])
-        if scope == "foreign_org":
-            denied = headers[1]
-        else:
-            _, denied = await person(api, admin_engine, tenants["orgs"][0])
-        method, path, body = route_cases(task, job, value)[route_index]
-        response = await api.request(
-            method, path, headers=denied, **({"json": body} if body is not None else {})
-        )
-        assert response.status_code == 404, response.text
-        assert response.json()["data"]["error"]["code"] == "not_found"
-        current = await review(api, headers[0], requirements[0]["id"])
-        assert current["requirement"]["revision"] == value["requirement"]["revision"]
-
-
-@pytest.mark.parametrize("authority", ["token", "observer", "reviewer", "archived"])
+@pytest.mark.parametrize("authority", ["token"])
 @pytest.mark.parametrize("route_index", [4, 5, 6, 7])
-async def test_every_mutation_requires_active_human_owner_or_contributor(
-    tenants, tmp_path, admin_engine, authority, route_index
+async def test_every_mutation_requires_installation_human(
+    database, tmp_path, admin_engine, authority, route_index
 ):
     from datetime import UTC, datetime, timedelta
 
-    from test_team_workflow_membership import add_member, person, workflow
-
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
         task, _, job, requirements = await create_tender(
-            api, app, headers[0], tmp_path, confirmed=False
+            api, app, headers, tmp_path, confirmed=False
         )
-        value = await review(api, headers[0], requirements[0]["id"])
-        auth = headers[0]
+        value = await review(api, headers, requirements[0]["id"])
+        auth = headers
         if authority == "token":
             response = await api.post(
                 "/tokens",
-                headers=headers[0],
+                headers=headers,
                 json={
                     "name": "Read-only review agent",
                     "scopes": ["task:read", "job:read"],
@@ -359,46 +254,22 @@ async def test_every_mutation_requires_active_human_owner_or_contributor(
                 },
             )
             assert response.status_code == 200, response.text
-            auth = {**headers[0], "Authorization": "Bearer " + response.json()["data"]["token"]}
-        elif authority in {"observer", "reviewer"}:
-            uid, auth = await person(api, admin_engine, tenants["orgs"][0])
-            state = await workflow(api, headers[0], task)
-            response = await add_member(
-                api,
-                headers[0],
-                task,
-                uid,
-                state["revision"],
-                role=authority,
-                domains=["commercial"] if authority == "reviewer" else [],
-            )
-            assert response.status_code == 200, response.text
-        else:
-            state = await workflow(api, headers[0], task)
-            response = await api.post(
-                f"/tasks/{task}/archive",
-                headers=headers[0],
-                json={
-                    "expected_revision": state["revision"],
-                    "reason": "Archive synthetic completed extraction",
-                },
-            )
-            assert response.status_code == 200, response.text
+            auth = {**headers, "Authorization": "Bearer " + response.json()["data"]["token"]}
         method, path, body = route_cases(task, job, value)[route_index]
         response = await api.request(method, path, headers=auth, json=body)
-        assert response.status_code == (409 if authority == "archived" else 403), response.text
-        assert (await review(api, headers[0], requirements[0]["id"]))["requirement"][
+        assert response.status_code == 403, response.text
+        assert (await review(api, headers, requirements[0]["id"]))["requirement"][
             "state"
         ] == "unconfirmed"
 
 
 @pytest.mark.parametrize("invalid_target", ["stale_revision", "foreign_id"])
-async def test_owner_batch_is_atomic(tenants, tmp_path, invalid_target):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
+async def test_human_batch_is_atomic(database, tmp_path, invalid_target):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
         task, _, job, requirements = await create_tender(
-            api, app, headers[0], tmp_path, confirmed=False
+            api, app, headers, tmp_path, confirmed=False
         )
-        values = [await review(api, headers[0], item["id"]) for item in requirements[:2]]
+        values = [await review(api, headers, item["id"]) for item in requirements[:2]]
         targets = [
             {
                 "requirement_id": v["requirement"]["requirement_id"],
@@ -413,7 +284,7 @@ async def test_owner_batch_is_atomic(tenants, tmp_path, invalid_target):
             targets[1]["expected_revision"] += 10
         response = await api.post(
             f"/v4/tasks/{task}/extractions/{job}/requirement-confirmations",
-            headers=headers[0],
+            headers=headers,
             json={
                 "request_id": str(uuid4()),
                 "expected_set_revision": values[0]["scope"]["revision"],
@@ -426,7 +297,7 @@ async def test_owner_batch_is_atomic(tenants, tmp_path, invalid_target):
             response.text
         )
         for value in values:
-            current = await review(api, headers[0], value["requirement"]["requirement_id"])
+            current = await review(api, headers, value["requirement"]["requirement_id"])
             assert current["requirement"]["state"] == "unconfirmed"
             assert current["requirement"]["revision"] == value["requirement"]["revision"]
 
@@ -437,7 +308,7 @@ async def test_new_human_scopes_cannot_be_issued_to_tokens(api, headers, scope):
 
     response = await api.post(
         "/tokens",
-        headers=headers[0],
+        headers=headers,
         json={
             "name": "Forbidden human capability",
             "scopes": ["task:read", scope],

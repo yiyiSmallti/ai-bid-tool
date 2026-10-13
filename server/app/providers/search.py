@@ -273,9 +273,9 @@ async def create_search_provider(
             raise ProviderFailure("SearXNG endpoint is not configured", code="search_unavailable")
         return SearXNGSearch(settings.search_url, transport)
     if credential_resolver is None:
-        from app.services.platform_credentials import PlatformCredentialResolver
-
-        credential_resolver = PlatformCredentialResolver(settings)
+        raise ServiceError(
+            "provider_unavailable", "Search requires the runtime credential resolver", 503, 4
+        )
     try:
         target = await credential_resolver.select_service("vendor_search")
     except ServiceError as exc:

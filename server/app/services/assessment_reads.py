@@ -75,8 +75,8 @@ from app.services.assessment_bounds import (
 )
 from app.services.auth import Identity
 from app.services.extraction import source_text
+from app.services.task_access import access as task_access
 from app.services.task_authorization import task_authorized
-from app.services.task_workflow import access as task_access
 
 type ActionChecks = dict[tuple[str, UUID, str, str | None], tuple[str, ...]]
 
@@ -88,7 +88,6 @@ async def action(
     name: Any,
     scope: str,
     *,
-    role: Any = None,
     domain: Any = None,
     valid: bool = True,
     human: bool = False,
@@ -99,27 +98,23 @@ async def action(
     if cached is None:
         blockers = []
         # Reuse only task-policy outcomes within this projection. Row state and
-        # human/role hints stay uncached; every write independently reauthorizes.
+        # human hints stay uncached; every write independently reauthorizes.
         try:
-            await task_access(
-                session, actor, task_id, scope=scope, write=True, domain=domain, lock=False
-            )
+            await task_access(session, actor, task_id, scope=scope, write=True, lock=False)
         except ServiceError as error:
             if error.status == 404:
                 raise
-            if error.code not in {"forbidden", "task_archived"}:
+            if error.code != "forbidden":
                 raise
             blockers.append(error.code)
         if checks is not None:
-            # access may refresh the actor's live role/scopes.
+            # access may refresh the actor's live scopes.
             key = (digest(principal(actor)), task_id, scope, domain)
             checks[key] = tuple(blockers)
     else:
         blockers = list(cached)
     if scope not in actor.scopes and "forbidden" not in blockers:
         blockers.append("forbidden")
-    if actor.role == "viewer" or (role is not None and actor.role != role):
-        blockers.append("wrong_role")
     if human and (actor.actor_kind != "session" or actor.token_id is not None):
         blockers.append("human_required")
     if not valid:
@@ -127,7 +122,6 @@ async def action(
     return ActionAvailability(
         action=name,
         allowed=not blockers,
-        required_role=role,
         review_domain=domain,
         blocker_codes=blockers,
     )
@@ -198,7 +192,6 @@ async def inputs(
         selected_choice = None
     available = selected_choice is not None
     return AssessmentInputsData(
-        org_id=actor.org_id,
         task_id=task_id,
         extraction_job_id=extraction_job_id,
         document_id=extraction.document_id,
@@ -278,7 +271,6 @@ async def jobs(
         if extraction is None or extraction.task_id != task_id or extraction.kind != "extract":
             raise not_found()
     conditions: list[Any] = [
-        Job.org_id == actor.org_id,
         Job.task_id == task_id,
         Job.kind == query.kind,
     ]
@@ -404,7 +396,7 @@ async def check_summary(
                 state.label("state"),
                 func.count(),
             )
-            .where(CheckFinding.org_id == actor.org_id, CheckFinding.report_id == run.id)
+            .where(CheckFinding.report_id == run.id)
             .group_by(CheckFinding.severity, CheckFinding.review_domain, state)
         )
     ).all()
@@ -428,7 +420,6 @@ async def check_summary(
     return CheckSummaryData(
         report=ReportHeader(
             id=run.id,
-            org_id=run.org_id,
             task_id=run.task_id,
             job_id=run.job_id,
             extraction_job_id=run.extraction_job_id,
@@ -516,7 +507,6 @@ async def check_page(
             query.part
         ]
         conditions: list[Any] = [
-            model.org_id == actor.org_id,
             model.report_id == run.id,
             model.task_id == run.task_id,
         ]
@@ -638,9 +628,7 @@ async def check_page(
         loaded = (
             (
                 await session.scalars(
-                    select(model).where(
-                        model.org_id == actor.org_id, model.report_id == run.id, model.id.in_(ids)
-                    )
+                    select(model).where(model.report_id == run.id, model.id.in_(ids))
                 )
             ).all()
             if ids
@@ -695,7 +683,6 @@ async def check_page(
                                 key: getattr(row, key)
                                 for key in (
                                     "id",
-                                    "org_id",
                                     "task_id",
                                     "report_id",
                                     "check_item_id",
@@ -752,7 +739,6 @@ async def check_page(
                                 key: getattr(row, key)
                                 for key in (
                                     "id",
-                                    "org_id",
                                     "task_id",
                                     "report_id",
                                     "requirement_id",
@@ -792,7 +778,6 @@ async def check_page(
                                 key: getattr(row, key)
                                 for key in (
                                     "id",
-                                    "org_id",
                                     "task_id",
                                     "report_id",
                                     "task_certificate_id",
@@ -808,20 +793,18 @@ async def check_page(
     invalidated = await check.validity(session, actor, run, storage, settings)
     if query.part == "findings":
         for value in values:
-            role = {"commercial": "bidder", "technical": "technical"}.get(value.review_domain)
             availability = await action(
                 session,
                 actor,
                 run.task_id,
                 "finding_reopen" if value.status == "dismissed" else "finding_dismiss",
                 "check:decide",
-                role=role,
                 domain=value.review_domain,
                 checks=checks,
                 valid=not invalidated,
                 human=True,
             )
-            if role is None:
+            if value.review_domain is None:
                 availability = availability.model_copy(
                     update={"allowed": False, "blocker_codes": ["unclassified"]}
                 )
@@ -863,7 +846,7 @@ async def check_history(
     actor = await check_inputs.access(session, actor, "check:read")
     if await session.get(Task, task_id) is None:
         raise not_found()
-    conditions: list[Any] = [CheckRun.org_id == actor.org_id, CheckRun.task_id == task_id]
+    conditions: list[Any] = [CheckRun.task_id == task_id]
     if query.extraction_job_id:
         extraction = await session.get(Job, query.extraction_job_id)
         if extraction is None or extraction.task_id != task_id or extraction.kind != "extract":
@@ -1217,7 +1200,7 @@ async def resolve_citation(
         evidence = await session.get(Evidence, UUID(str(payload["evidence_id"])))
         if evidence is None or evidence.task_id != task_id:
             raise not_found()
-        if evidence.confirmed_by is None or evidence.confirmed_at is None:
+        if evidence.confirmed_at is None:
             raise ServiceError(
                 "invalid_input_citation", "Saved evidence is no longer confirmed", 409, 4
             )
@@ -1239,7 +1222,7 @@ async def resolve_citation(
             if evidence.evidence_source_id is None:
                 raise not_found()
             archive, _, file = await require_source(session, actor, evidence.evidence_source_id)
-            content = await storage.read(actor.org_id, file.storage_key)
+            content = await storage.read(file.storage_key)
             original = await asyncio.to_thread(cards.page_text, content, archive.page)
         elif evidence.kind in cards.MATERIALS:
             _, revision_model, _, revision_field, _, _ = cards.MATERIALS[evidence.kind]

@@ -15,7 +15,7 @@ from app.schemas import attachment_contracts as models
 from app.schemas.contracts import Result
 from pydantic import TypeAdapter
 
-from bid_cli.client import new_output_path, save_download
+from bid_cli.client import credential, new_output_path, save_download
 
 COMMAND_INPUTS = {
     "resource attachment upload": models.AttachmentCreate,
@@ -25,7 +25,6 @@ COMMAND_INPUTS = {
     "resource attachment show": None,
     "resource attachment history": models.PageQuery,
     "resource attachment revision show": None,
-    "resource attachment assign": models.AttachmentAssignment,
     "resource attachment review": models.AttachmentReviewInput,
     "resource attachment reviews": models.PageQuery,
     "resource attachment deactivate": models.AttachmentDeactivate,
@@ -51,7 +50,6 @@ COMMAND_DATA = {
         name: models.AttachmentShowData
         for name in (
             "resource attachment show",
-            "resource attachment assign",
             "resource attachment deactivate",
         )
     },
@@ -122,8 +120,8 @@ async def download(client, revision: UUID, output: Path, part: int | None) -> di
     output = await asyncio.to_thread(new_output_path, output)
     body = await client.request("GET", f"/resources/attachments/revisions/{revision}")
     detail = models.AttachmentRevisionView.model_validate(body["data"])
-    saved = client.state.load()
-    if detail.id != revision or str(detail.org_id) != saved["org_id"]:
+    bearer = credential()
+    if detail.id != revision:
         raise ServiceError("invalid_server_response", "File metadata scope mismatch", 502, 4)
     path = f"/resources/attachments/revisions/{revision}/" + (
         "file/download" if part is None else f"parts/{part}/download"
@@ -161,8 +159,7 @@ async def download(client, revision: UUID, output: Path, part: int | None) -> di
                 "/v4" + path,
                 params=query,
                 headers={
-                    "Authorization": f"Bearer {saved['session']}",
-                    "X-Org-Id": saved["org_id"],
+                    "Authorization": f"Bearer {bearer}",
                 },
                 follow_redirects=False,
             ) as response:
@@ -310,12 +307,6 @@ def register(resource_app, profile_app, task_app, evidence_app):
         group.command(action)(invoke)
 
     for group, action, command, path in (
-        (
-            attachment,
-            "assign",
-            "resource attachment assign",
-            "/resources/attachments/{id}/assignment",
-        ),
         (
             attachment,
             "review",

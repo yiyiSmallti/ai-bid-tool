@@ -66,10 +66,6 @@ def provider_set(
 
     body = input_contract(input, ProviderConfigInput)
     key = private_key(key_file)
-    if body["source"] == "platform" and key is not None:
-        raise ServiceError(
-            "invalid_input", "Platform selection does not accept a provider key", 400, 2
-        )
     if key is not None:
         body["api_key"] = key
     emit(call("POST", "/providers", json=body), "provider set", json_output)

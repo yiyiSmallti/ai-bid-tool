@@ -1,18 +1,17 @@
-"""Health, sign-in, the current org and API tokens."""
+"""Health, installation sessions and scoped API tokens."""
 
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 
 from app.api.common import result
 from app.core.config import Settings
 from app.core.db import Database
-from app.core.password_attempts import PasswordAttempts
-from app.core.security import TokenSigner
-from app.schemas.contracts import CONTRACT_VERSION, Login, Result, TokenCreate
+from app.core.errors import ServiceError
+from app.core.security import TokenSigner, access_key_matches
+from app.schemas.contracts import CONTRACT_VERSION, Result, SessionCreate, TokenCreate
 from app.services import tokens
-from app.services.auth import login
 
 
 def create_router(
@@ -20,7 +19,6 @@ def create_router(
     settings: Settings,
     db: Database,
     crypto: TokenSigner,
-    password_attempts: PasswordAttempts,
     llm,
     resolve: Callable[..., Awaitable[Any]] | None,
 ) -> APIRouter:
@@ -39,38 +37,32 @@ def create_router(
                 "status": "ok",
                 "version": CONTRACT_VERSION,
                 "real_llm_configured": configured,
-                "org_signup_enabled": settings.org_signup_enabled,
             },
         )
 
-    @router.post("/auth/login", name="login", response_model=Result)
-    async def auth_login(body: Login, request: Request):
-        user = await login(
-            password_attempts,
-            body.email,
-            body.password,
-            body.org_id,
-            request.client.host if request.client else None,
-        )
-        token = crypto.issue({"kind": "session", "user_id": str(user.id)}, settings.session_seconds)
+    @router.post("/auth/session", name="auth_session_create", response_model=Result)
+    async def auth_session_create(body: SessionCreate):
+        if not access_key_matches(
+            body.access_key.get_secret_value(), settings.access_key.get_secret_value()
+        ):
+            raise ServiceError("invalid_access_key", "Invalid access key", 401, 4)
+        token = crypto.issue({"kind": "session"}, settings.session_seconds)
         return result(
-            "login",
-            {
-                "session": token,
-                "org_id": str(body.org_id),
-                "expires_in": settings.session_seconds,
-            },
+            "auth session create",
+            {"session": token, "expires_in": settings.session_seconds},
         )
 
-    @router.get("/org/current", name="org_use", response_model=Result)
-    async def org_use(ctx=Depends(context, scope="function")):
+    @router.get("/auth/session", name="auth_session_show", response_model=Result)
+    async def auth_session_show(ctx=Depends(context, scope="function")):
         _, identity = ctx
         return result(
-            "org use",
+            "auth session show",
             {
-                "org_id": str(identity.org_id),
-                "role": identity.role,
-                "user_id": str(identity.user_id),
+                "actor_kind": identity.actor_kind,
+                "scopes": sorted(identity.scopes),
+                "expires_at": identity.session_expires_at.isoformat()
+                if identity.session_expires_at is not None
+                else None,
             },
         )
 

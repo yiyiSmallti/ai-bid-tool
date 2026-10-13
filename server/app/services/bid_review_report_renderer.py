@@ -140,7 +140,6 @@ def finding_table(document, row):
             ("人工决定", decision["action"]),
             ("决定原因", decision["reason"]),
             ("决定时间", decision["decided_at"]),
-            ("决定人", decision["decided_by"]),
             ("决定修订", decision["revision"]),
         ]
     else:

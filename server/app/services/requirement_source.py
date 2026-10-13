@@ -157,9 +157,8 @@ async def verify(session, actor, task_id, source):
     row = (
         await session.execute(
             select(Chunk, Document)
-            .join(Document, (Document.org_id == Chunk.org_id) & (Document.id == Chunk.document_id))
+            .join(Document, Document.id == Chunk.document_id)
             .where(
-                Chunk.org_id == actor.org_id,
                 Chunk.task_id == task_id,
                 Chunk.id == source.chunk_id,
                 Document.task_id == task_id,
@@ -190,7 +189,6 @@ def review_hash(req, pin):
     return digest(
         dict(
             version="requirement-review-v1",
-            org_id=str(req.org_id),
             task_id=str(req.task_id),
             extraction_job_id=str(req.job_id),
             requirement_id=str(req.id),
@@ -206,7 +204,6 @@ class EffectiveReview:
     revision: int
     review_hash: str
     source_pin: VerifiedRequirementSource | None
-    confirmed_by_user_id: UUID | None = None
     confirmed_at: object = None
     stored: RequirementReview | None = None
 
@@ -238,8 +235,7 @@ async def effective_reviews(session, requirements, *, citation_validity=None):
                 select(Requirement, RequirementReview)
                 .outerjoin(
                     RequirementReview,
-                    (RequirementReview.org_id == Requirement.org_id)
-                    & (RequirementReview.requirement_id == Requirement.id),
+                    RequirementReview.requirement_id == Requirement.id,
                 )
                 .where(Requirement.id.in_(ids))
                 .execution_options(populate_existing=True)
@@ -254,9 +250,7 @@ async def effective_reviews(session, requirements, *, citation_validity=None):
         (
             await session.execute(
                 select(Chunk, Document)
-                .outerjoin(
-                    Document, (Document.org_id == Chunk.org_id) & (Document.id == Chunk.document_id)
-                )
+                .outerjoin(Document, Document.id == Chunk.document_id)
                 .where(Chunk.id.in_({r.chunk_id for r in requirements}))
                 .execution_options(populate_existing=True)
             )
@@ -272,8 +266,7 @@ async def effective_reviews(session, requirements, *, citation_validity=None):
         if (
             not chunk
             or not document
-            or (chunk.org_id, chunk.task_id, chunk.document_id)
-            != (req.org_id, req.task_id, req.document_id)
+            or (chunk.task_id, chunk.document_id) != (req.task_id, req.document_id)
             or document.task_id != req.task_id
         ):
             pins[req.id] = None
@@ -331,7 +324,6 @@ async def effective_reviews(session, requirements, *, citation_validity=None):
             old.revision if old else 1,
             current_hash,
             pin,
-            old.confirmed_by_user_id if old and state == "confirmed" else None,
             old.confirmed_at if old and state == "confirmed" else None,
             old,
         )
@@ -345,7 +337,6 @@ class ReviewStateSummary:
     state: str
     revision: int
     citation_valid: bool
-    confirmed_by_user_id: UUID | None = None
     confirmed_at: object = None
     stored: RequirementReview | None = None
 
@@ -359,7 +350,6 @@ def _state_summary(value):
         value.state,
         value.revision,
         value.citation_valid,
-        value.confirmed_by_user_id,
         value.confirmed_at,
         value.stored,
     )

@@ -14,7 +14,7 @@ from app.schemas.contracts import CONTRACT_VERSION, Contract, Cost, Result
 from app.schemas.evidence_source_contracts import EvidenceSourceArchive
 from app.schemas.preflight_contracts import PreflightData
 from app.schemas.requirement_confirmation import ReviewState
-from app.schemas.response_card_contracts import CardAction, ReviewDomain
+from app.schemas.response_card_contracts import CardAction
 from app.schemas.screenshot_contracts import (
     ContentMapping,
     PixelRect,
@@ -22,7 +22,6 @@ from app.schemas.screenshot_contracts import (
     Sha256,
     VendorArchiveView,
 )
-from app.schemas.team_workflow import CoSignConfirm
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -100,7 +99,7 @@ AnnotationSource = Annotated[
 
 
 class AnnotationInput(Contract):
-    """The human-authored file has no org, actor, storage key, path or gate flags."""
+    """The human-authored file has no actor, storage key, path or gate flags."""
 
     extraction_job_id: UUID
     card_id: UUID
@@ -178,7 +177,6 @@ class VendorRenditionBinding(Contract):
     """Server-normalized lineage; no raw URLs, storage keys or local paths."""
 
     kind: Literal["vendor_rendition"] = "vendor_rendition"
-    org_id: UUID
     task_id: UUID
     extraction_job_id: UUID
     asset_id: UUID
@@ -239,7 +237,7 @@ class AnnotationRequirementPin(Contract):
 
 
 class AnnotationRendererIdentity(Contract):
-    protocol_version: Literal["annotation-render-v1"] = "annotation-render-v1"
+    protocol_version: Literal["annotation-render-v2"] = "annotation-render-v2"
     profile: Literal["annotation-candidate-v1", "annotation-release-v1"]
     version: str = Field(min_length=1, max_length=100)
     binary_sha256: Sha256
@@ -247,7 +245,6 @@ class AnnotationRendererIdentity(Contract):
 
 
 class AnnotationInputManifest(Contract):
-    org_id: UUID
     task_id: UUID
     target: AnnotationInput
     card_content_sha256: Sha256
@@ -273,13 +270,11 @@ class AnnotationInputManifest(Contract):
         if self.renderer.profile != "annotation-candidate-v1":
             raise ValueError("candidate input requires the candidate renderer profile")
         source = self.source
-        org_id, task_id = (
-            (source.archive.org_id, source.archive.task_id)
-            if isinstance(source, CertificatePageBinding)
-            else (source.org_id, source.task_id)
+        task_id = (
+            source.archive.task_id if isinstance(source, CertificatePageBinding) else source.task_id
         )
-        if (org_id, task_id) != (self.org_id, self.task_id):
-            raise ValueError("source must belong to the request org and task")
+        if task_id != self.task_id:
+            raise ValueError("source must belong to the request task")
         supplied = self.target.source
         if isinstance(supplied, CertificateAnnotationSource):
             if not isinstance(source, CertificatePageBinding) or (
@@ -396,7 +391,6 @@ class AnnotationRendering(Contract):
 
 class AnnotationCandidateView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     job_id: UUID
     input_hash: Sha256
@@ -406,12 +400,12 @@ class AnnotationCandidateView(Contract):
     rendering: AnnotationRendering
     created_at: AwareDatetime
     status: Literal["unconfirmed_material"] = "unconfirmed_material"
-    confirmed_by: Literal[None] = None
+    confirmed_at: Literal[None] = None
     eligible_for_draft_export: Literal[False] = False
 
     @model_validator(mode="after")
     def candidate_scope(self):
-        if (self.org_id, self.task_id) != (self.manifest.org_id, self.manifest.task_id):
+        if self.task_id != self.manifest.task_id:
             raise ValueError("candidate scope differs from normalized manifest")
         if self.input_hash != self.manifest.canonical_sha256():
             raise ValueError("candidate must retain its exact submitted input hash")
@@ -428,33 +422,6 @@ class AnnotationCandidateView(Contract):
         return self
 
 
-class AnnotationSignaturePin(Contract):
-    """Exact signature keys emitted by task_cosign.projections."""
-
-    id: UUID
-    domain: ReviewDomain
-    signer_user_id: UUID
-    request_sha256: Sha256
-    reason_sha256: Sha256 | None
-
-
-class AnnotationCoSignManifest(Contract):
-    """Exact co_sign shape emitted by task_cosign.manifest_fields."""
-
-    policy_revision: int = Field(strict=True, ge=0)
-    task_rule_revision: Revision
-    round_id: UUID | None
-    round_revision: int = Field(strict=True, ge=0)
-    purpose: Literal["response", "disposition"] | None
-    required_domains: list[ReviewDomain] = Field(min_length=1, max_length=2)
-    status: Literal["not_required", "pending", "partial", "complete", "invalidated"]
-    evidence_sha256: Sha256 | None
-    requirement_sha256: Sha256 | None
-    citation_sha256: Sha256 | None
-    content_sha256: Sha256 | None
-    signatures: list[AnnotationSignaturePin] = Field(max_length=2)
-
-
 class AnnotationApprovalBinding(Contract):
     """Server decision pin; a release worker never creates or changes approval."""
 
@@ -462,7 +429,6 @@ class AnnotationApprovalBinding(Contract):
     card_id: UUID
     card_revision: Revision
     card_revision_id: UUID
-    confirmed_by: UUID
     confirmed_at: AwareDatetime
     candidate_annotation_id: UUID
     candidate_rendition_id: UUID
@@ -473,9 +439,6 @@ class AnnotationApprovalBinding(Contract):
     root_mapping_sha256: Sha256
     reviewed_region: PixelRect
     requirement: AnnotationRequirementPin
-    decision_kind: Literal["single_domain", "cosign"]
-    review_domain: ReviewDomain
-    co_sign: AnnotationCoSignManifest | None
     card_content_sha256: Sha256
     evidence_binding_sha256: Sha256
     approval_binding_sha256: Sha256
@@ -484,52 +447,6 @@ class AnnotationApprovalBinding(Contract):
     def complete_approval(self):
         if self.requirement.state != "confirmed" or self.requirement.source_binding_sha256 is None:
             raise ValueError("release requires current B02 confirmation with a verified source")
-        co_sign = self.co_sign
-        if co_sign is not None and (
-            len(set(co_sign.required_domains)) != len(co_sign.required_domains)
-            or len({signature.domain for signature in co_sign.signatures})
-            != len(co_sign.signatures)
-            or len({signature.id for signature in co_sign.signatures}) != len(co_sign.signatures)
-            or self.review_domain not in co_sign.required_domains
-        ):
-            raise ValueError("co-sign domains and signature identities must be unique and bound")
-        if self.decision_kind == "single_domain" and co_sign is None:
-            # Only a genuine historical decision without a round uses this shape.
-            # The service must retain every real round, including one-domain rounds.
-            return self
-        if self.decision_kind == "single_domain" and co_sign is not None:
-            if co_sign.required_domains != [self.review_domain]:
-                raise ValueError("single-domain approval must retain its sole review domain")
-            if co_sign.round_id is None:
-                if (
-                    co_sign.round_revision != 0
-                    or co_sign.status != "not_required"
-                    or co_sign.purpose is not None
-                    or co_sign.signatures
-                ):
-                    raise ValueError("legacy approval cannot fabricate an active review round")
-                return self
-        if co_sign is None or (
-            co_sign.round_id is None
-            or co_sign.round_revision < 1
-            or co_sign.status != "complete"
-            or co_sign.purpose != "response"
-            or set(co_sign.required_domains)
-            != {signature.domain for signature in co_sign.signatures}
-            or len(co_sign.required_domains) != len(co_sign.signatures)
-            or len({signature.signer_user_id for signature in co_sign.signatures})
-            != len(co_sign.signatures)
-            or any(
-                value is None
-                for value in (
-                    co_sign.evidence_sha256,
-                    co_sign.requirement_sha256,
-                    co_sign.citation_sha256,
-                    co_sign.content_sha256,
-                )
-            )
-        ):
-            raise ValueError("co-sign approval must retain the exact complete response manifest")
         return self
 
 
@@ -646,7 +563,7 @@ class AnnotationRenderRequest(Contract):
     The original plan is retained solely for hash/provenance validation on release.
     """
 
-    protocol: Literal["annotation-render-v1"] = "annotation-render-v1"
+    protocol: Literal["annotation-render-v2"] = "annotation-render-v2"
     source: AnnotationSourceBinding
     plan: AnnotationPlan
     plan_sha256: Sha256
@@ -722,7 +639,7 @@ class AnnotationService(Protocol):
     ) -> tuple[AnnotationListData, list[AnnotationCandidateView]]: ...
 
 
-# Existing human CardAction/CoSignConfirm remain the sole confirmation contracts.
+# Existing human CardAction remains the sole confirmation contract.
 # Payload names refer to Result.data/items; they do not register commands or scopes.
 COMMAND_PAYLOADS = {
     "evidence stamp --dry-run": (AnnotationPreflight, None),
@@ -734,5 +651,5 @@ COMMAND_PAYLOADS = {
     "evidence annotation release preview": (AnnotationPreviewLink, None),
     "evidence annotation release retry": (AnnotationJobAccepted, None),
 }
-SHARED_SCHEMA_MODELS = (Result, Cost, CardAction, CoSignConfirm)
+SHARED_SCHEMA_MODELS = (Result, Cost, CardAction)
 RESULT_CONTRACT_VERSION = CONTRACT_VERSION

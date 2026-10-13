@@ -287,7 +287,7 @@ def _completeness(report: dict) -> RubricCompletenessView:
         disposition = row.get("disposition")
         references = list(map(str, row.get("rubric_item_ids", [])))
         canonical = row.get("canonical_requirement_id")
-        if disposition == "pending" or not row.get("decided_by") or not row.get("decided_at"):
+        if disposition == "pending" or not row.get("decided_at"):
             pending.add(requirement_id)
         elif requirement_id in expected:
             covered.add(requirement_id)
@@ -340,7 +340,7 @@ def _completeness(report: dict) -> RubricCompletenessView:
         for row in sections
         if row.get("state") != "confirmed"
         or not row.get("review_domain")
-        or not row.get("confirmed_by")
+        or not row.get("confirmed_at")
         or not row.get("confirmed_at")
     ]
     unconfirmed_items = [
@@ -348,7 +348,7 @@ def _completeness(report: dict) -> RubricCompletenessView:
         for row in items
         if row.get("state") != "confirmed"
         or not row.get("review_domain")
-        or not row.get("confirmed_by")
+        or not row.get("confirmed_at")
         or not row.get("confirmed_at")
     ]
     section_confirmed = not section_errors and not unconfirmed_sections

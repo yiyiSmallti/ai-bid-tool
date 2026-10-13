@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import os
+import stat
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -9,7 +10,6 @@ from uuid import UUID
 
 import httpx
 from app.core.errors import ServiceError
-from app.core.security import Secrets
 from app.schemas.certificate_file_contracts import (
     CertificateFileDownloadReceipt,
     CertificateScanFile,
@@ -64,74 +64,46 @@ def save_download(output: Path, content: bytes | bytearray) -> None:
             Path(temporary).unlink(missing_ok=True)
 
 
-class State:
-    def __init__(self, path: Path):
-        self.path = path
-
-    def cipher(self) -> Secrets:
-        key = os.environ.get("BID_CLI_KEY")
-        if not key:
+def credential() -> str:
+    key = os.environ.get("BID_ACCESS_KEY")
+    if key:
+        return key
+    filename = os.environ.get("BID_ACCESS_KEY_FILE")
+    if filename:
+        try:
+            descriptor = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(descriptor, "r") as handle:
+                info = os.fstat(handle.fileno())
+                if (
+                    not stat.S_ISREG(info.st_mode)
+                    or info.st_uid != os.getuid()
+                    or info.st_mode & 0o077
+                ):
+                    raise ValueError("unsafe access key file")
+                key = handle.read().strip()
+                if len(key) < 32:
+                    raise ValueError("invalid access key")
+                return key
+        except (OSError, ValueError, UnicodeError):
             raise ServiceError(
-                "cli_key_required",
-                "BID_CLI_KEY is required to persist or read an encrypted CLI session",
+                "invalid_access_key_file",
+                "Access key file must be a regular owner-only file containing an access key",
                 400,
                 2,
-            )
-        return Secrets(key)
-
-    def load(self) -> dict:
-        import json
-
-        if os.environ.get("BID_SESSION") and os.environ.get("BID_ORG"):
-            return {"session": os.environ["BID_SESSION"], "org_id": os.environ["BID_ORG"]}
-        if not self.path.exists():
-            raise ServiceError("login_required", "Login or supply BID_SESSION and BID_ORG", 401, 4)
-        return json.loads(self.cipher().decrypt(self.path.read_text()))
-
-    def load_platform(self) -> str:
-        import json
-
-        if os.environ.get("BID_PLATFORM_SESSION"):
-            return os.environ["BID_PLATFORM_SESSION"]
-        if self.path.exists():
-            saved = json.loads(self.cipher().decrypt(self.path.read_text()))
-            if saved.get("platform_session"):
-                return saved["platform_session"]
-        raise ServiceError(
-            "login_required", "Run bid platform login or supply BID_PLATFORM_SESSION", 401, 4
-        )
-
-    def save_platform(self, session: str) -> None:
-        import json
-
-        # Kept beside any org session in the same encrypted file.
-        saved = (
-            json.loads(self.cipher().decrypt(self.path.read_text())) if self.path.exists() else {}
-        )
-        self.save({**saved, "platform_session": session})
-
-    def save(self, value: dict) -> None:
-        import json
-
-        encrypted = self.cipher().encrypt(json.dumps(value))
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        if self.path.is_symlink():
-            raise ServiceError("unsafe_state_path", "CLI state must not be a symlink", 400, 2)
-        temp = self.path.with_suffix(".tmp")
-        descriptor = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        try:
-            with os.fdopen(descriptor, "w") as handle:
-                handle.write(encrypted)
-            os.replace(temp, self.path)
-        finally:
-            temp.unlink(missing_ok=True)
+            ) from None
+    token = os.environ.get("BID_TOKEN")
+    if token and token.startswith("bid_"):
+        return token
+    raise ServiceError(
+        "access_key_required", "Set BID_ACCESS_KEY, BID_ACCESS_KEY_FILE or BID_TOKEN", 401, 4
+    )
 
 
 class Client:
-    def __init__(self, mode: str, server: str, state: State, contract_version: str = "5.0"):
+    def __init__(self, mode: str, server: str, contract_version: str = "5.0"):
         if mode not in {"local", "remote"}:
             raise ServiceError("invalid_mode", "Mode must be local or remote", 400, 2)
-        self.mode, self.server, self.state = mode, server.rstrip("/"), state
+        self.mode, self.server = mode, server.rstrip("/")
         self.contract_version = contract_version
 
     @asynccontextmanager
@@ -167,19 +139,10 @@ class Client:
         path: str,
         *,
         authenticated=True,
-        org: UUID | None = None,
         platform=False,
         **kwargs,
     ) -> dict:
-        headers = {}
-        if platform:
-            headers = {"Authorization": f"Bearer {self.state.load_platform()}"}
-        elif authenticated:
-            saved = self.state.load()
-            headers = {
-                "Authorization": f"Bearer {saved['session']}",
-                "X-Org-Id": str(org or saved["org_id"]),
-            }
+        headers = {"Authorization": f"Bearer {credential()}"} if authenticated else {}
         try:
             async with self.transport() as client:
                 response = await client.request(
@@ -198,7 +161,7 @@ class Client:
             raise ServiceError(
                 "invalid_server_response", "Server returned an invalid response", 502, 3
             ) from exc
-        if platform and (path == "/platform/clef" or path.startswith("/platform/clef/")):
+        if path == "/platform/clef" or path.startswith("/platform/clef/"):
             from bid_cli.platform_clef import safe_result
 
             action = (
@@ -210,9 +173,7 @@ class Client:
                     "invalid_server_response", "Server returned invalid Clef status", 502, 4
                 )
             return result
-        if platform and (
-            path == "/platform/trust-anchors" or path.startswith("/platform/trust-anchors/")
-        ):
+        if path == "/platform/trust-anchors" or path.startswith("/platform/trust-anchors/"):
             from bid_cli.platform_trust_anchors import safe_result
 
             action = (
@@ -228,9 +189,7 @@ class Client:
                     "invalid_server_response", "Server returned invalid trust status", 502, 4
                 )
             return result
-        if platform and (
-            path == "/platform/credentials" or path.startswith("/platform/credentials/")
-        ):
+        if path == "/platform/credentials" or path.startswith("/platform/credentials/"):
             from bid_cli.platform_credentials import safe_result
 
             actions = {
@@ -300,14 +259,12 @@ class Client:
 
     async def download_template(self, revision_id: UUID, output: Path) -> dict:
         output = await asyncio.to_thread(new_output_path, output)
-        saved = self.state.load()
+        bearer = credential()
         listing = await self.request("GET", "/resources/templates", params={"history": True})
         rows = [row for row in listing.get("items", []) if row.get("id") == str(revision_id)]
         if len(rows) != 1:
             raise ServiceError("not_found", "Resource not found", 404, 4)
         try:
-            if rows[0].get("org_id") != saved["org_id"]:
-                raise ValueError("scope mismatch")
             descriptor = TemplateFile.model_validate(rows[0]["file"])
         except (ValueError, KeyError, ValidationError):
             raise ServiceError(
@@ -332,7 +289,7 @@ class Client:
             raise ServiceError(
                 "invalid_download_link", "Server returned an unsafe download link", 502, 4
             ) from None
-        headers = {"Authorization": f"Bearer {saved['session']}", "X-Org-Id": saved["org_id"]}
+        headers = {"Authorization": f"Bearer {bearer}"}
         content = bytearray()
         try:
             async with self.transport() as http:
@@ -379,7 +336,7 @@ class Client:
 
     async def download_certificate_file(self, revision_id: UUID, output: Path) -> dict:
         output = await asyncio.to_thread(new_output_path, output)
-        saved = self.state.load()
+        bearer = credential()
         listing = await self.request(
             "GET", "/resources/certificates/files", params={"revision_id": str(revision_id)}
         )
@@ -391,8 +348,6 @@ class Client:
         if len(rows) != 1:
             raise ServiceError("not_found", "Resource not found", 404, 4)
         try:
-            if rows[0].get("org_id") != saved["org_id"]:
-                raise ValueError("scope mismatch")
             descriptor = CertificateScanFile.model_validate(rows[0]["file"])
         except (ValueError, KeyError, ValidationError):
             raise ServiceError(
@@ -417,7 +372,7 @@ class Client:
             raise ServiceError(
                 "invalid_download_link", "Server returned an unsafe download link", 502, 4
             ) from None
-        headers = {"Authorization": f"Bearer {saved['session']}", "X-Org-Id": saved["org_id"]}
+        headers = {"Authorization": f"Bearer {bearer}"}
         content = bytearray()
         try:
             async with self.transport() as http:
@@ -464,16 +419,12 @@ class Client:
 
     async def download_evidence_source(self, source_id: UUID, output: Path) -> dict:
         output = await asyncio.to_thread(new_output_path, output)
-        saved = self.state.load()
+        bearer = credential()
         path = f"/evidence-sources/{source_id}/preview/download"
         link = await self.request("GET", path + "-link")
         try:
             rows = link["items"]
-            if (
-                len(rows) != 1
-                or rows[0].get("id") != str(source_id)
-                or rows[0].get("org_id") != saved["org_id"]
-            ):
+            if len(rows) != 1 or rows[0].get("id") != str(source_id):
                 raise ValueError("source mismatch")
             archive = EvidenceSourceArchive.model_validate(rows[0])
             descriptor = archive.preview
@@ -498,7 +449,7 @@ class Client:
             raise ServiceError(
                 "invalid_download_link", "Server returned an unsafe download link", 502, 4
             ) from None
-        headers = {"Authorization": f"Bearer {saved['session']}", "X-Org-Id": saved["org_id"]}
+        headers = {"Authorization": f"Bearer {bearer}"}
         content = bytearray()
         try:
             async with self.transport() as http:

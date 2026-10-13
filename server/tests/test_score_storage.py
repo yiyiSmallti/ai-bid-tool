@@ -1,7 +1,7 @@
-"""Database rubric invariants: isolation, immutable publication, and human gates.
+"""Database rubric invariants: task binding, immutable publication, and human gates.
 
-Failures to prevent: cross-org reads/writes, cross-task references, rewriting
-history, token review, worker review, admin domain confirmation, stale attempts,
+Failures to prevent: cross-task references, rewriting
+history, token review, worker review, stale attempts,
 and confirming a set without complete normalized coverage.
 """
 
@@ -23,29 +23,8 @@ TABLES = (
 )
 
 
-@pytest.mark.parametrize("table", TABLES)
-def test_rubric_tables_force_tenant_security(tenants, admin_engine, table):
-    """Exercise each actual migrated table as the ordinary application role."""
-    with admin_engine.connect() as connection:
-        security = connection.execute(
-            text("SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname=:table"),
-            {"table": table},
-        ).one()
-        assert security == (True, True)
-        columns = connection.execute(
-            text(
-                "SELECT column_name,is_nullable FROM information_schema.columns WHERE table_name=:table AND column_name IN ('org_id','task_id')"
-            ),
-            {"table": table},
-        ).all()
-        assert set(columns) == {("org_id", "NO"), ("task_id", "NO")}
-        connection.execute(text("SET LOCAL ROLE bid_app"))
-        connection.execute(text("SELECT set_config('app.current_org','',true)"))
-        assert connection.execute(text(f'SELECT count(*) FROM "{table}"')).scalar_one() == 0
-
-
 @pytest.mark.asyncio
-async def test_every_rubric_table_isolated_and_immutable(rubric_case):
+async def test_every_rubric_table_immutable(rubric_case):
     from uuid import UUID, uuid4
 
     from sqlalchemy.exc import DBAPIError
@@ -60,26 +39,11 @@ async def test_every_rubric_table_isolated_and_immutable(rubric_case):
     for table in TABLES:
         with case["admin_engine"].connect() as connection:
             connection.execute(text("SET LOCAL ROLE bid_app"))
-            connection.execute(
-                text("SELECT set_config('app.current_org',:org,true)"),
-                {"org": str(case["tenants"]["orgs"][0])},
-            )
             ids = connection.execute(text(f'SELECT id FROM "{table}"')).scalars().all()
             assert ids, table
-            connection.execute(
-                text("SELECT set_config('app.current_org',:org,true)"),
-                {"org": str(case["tenants"]["orgs"][1])},
-            )
-            assert connection.execute(text(f'SELECT count(*) FROM "{table}"')).scalar_one() == 0
-            connection.execute(text("SELECT set_config('app.current_org','',true)"))
-            assert connection.execute(text(f'SELECT count(*) FROM "{table}"')).scalar_one() == 0
         for action in ("UPDATE", "DELETE", "INSERT"):
             with pytest.raises(DBAPIError), case["admin_engine"].begin() as connection:
                 connection.execute(text("SET LOCAL ROLE bid_app"))
-                connection.execute(
-                    text("SELECT set_config('app.current_org',:org,true)"),
-                    {"org": str(case["tenants"]["orgs"][0])},
-                )
                 if action == "UPDATE":
                     connection.execute(
                         text(f'UPDATE "{table}" SET id=id WHERE id=:id'), {"id": ids[0]}
@@ -89,50 +53,33 @@ async def test_every_rubric_table_isolated_and_immutable(rubric_case):
                 else:
                     connection.execute(
                         text(
-                            f'INSERT INTO "{table}" SELECT (jsonb_populate_record(NULL::"{table}",to_jsonb(existing)||jsonb_build_object(\'id\',:new_id,\'org_id\',:foreign_org))).* FROM "{table}" existing WHERE id=:id'
+                            f'''INSERT INTO "{table}" SELECT (jsonb_populate_record(NULL::"{table}",to_jsonb(existing)||jsonb_build_object('id',:new_id))).* FROM "{table}" existing WHERE id=:id'''
                         ),
-                        {
-                            "id": ids[0],
-                            "new_id": str(uuid4()),
-                            "foreign_org": str(case["tenants"]["orgs"][1]),
-                        },
+                        {"id": ids[0], "new_id": str(uuid4())},
                     )
     assert UUID(revised.json()["data"]["rubric"]["id"])
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "actor_kind,role_value",
-    [("worker", "bidder"), ("token", "bidder"), ("agent", "bidder"), ("session", "admin")],
-)
-async def test_database_refuses_nonresponsible_rubric_decisions(
-    rubric_case, actor_kind, role_value
-):
+@pytest.mark.parametrize("actor_kind", ["worker", "token", "agent"])
+async def test_database_refuses_nonresponsible_rubric_decisions(rubric_case, actor_kind):
     from uuid import UUID, uuid4
 
     from app.models.score import ScoreRubricDecision
     from app.services import response_cards as cards
-    from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
+    from app.services.auth import HUMAN_SCOPES, Identity, set_actor_context
     from sqlalchemy.exc import DBAPIError
-    from test_score_review import classify_all, role
+    from test_score_review import classify_all
 
     case = rubric_case
     report = await classify_all(case)
-    role(case, role_value)
     with pytest.raises(DBAPIError):
-        async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
-            actor = Identity(
-                case["tenants"]["users"][0],
-                case["tenants"]["orgs"][0],
-                ROLE_SCOPES[role_value],
-                role_value,
-                actor_kind=actor_kind,
-            )
+        async with case["app"].state.db.transaction() as session:
+            actor = Identity(HUMAN_SCOPES, actor_kind=actor_kind)
             await set_actor_context(session, actor)
             session.add(
                 ScoreRubricDecision(
                     id=uuid4(),
-                    org_id=actor.org_id,
                     task_id=UUID(case["task"]),
                     rubric_id=UUID(report["rubric"]["id"]),
                     section_id=None,
@@ -143,7 +90,6 @@ async def test_database_refuses_nonresponsible_rubric_decisions(
                     reason="Synthetic direct bypass attempt",
                     reason_sha256=cards.quote_hash("Synthetic direct bypass attempt"),
                     expected_input_hash=report["rubric"]["input_hash"],
-                    decided_by=actor.user_id,
                     actor_kind="session",
                 )
             )
@@ -156,25 +102,19 @@ async def test_database_rejects_incomplete_set_confirmation(rubric_case):
 
     from app.models.score import ScoreRubricDecision
     from app.services import response_cards as cards
-    from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
+    from app.services.auth import HUMAN_SCOPES, Identity, set_actor_context
     from sqlalchemy.exc import DBAPIError
     from test_score_review import classify_all
 
     case = rubric_case
     report = await classify_all(case)
     with pytest.raises(DBAPIError):
-        async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
-            actor = Identity(
-                case["tenants"]["users"][0],
-                case["tenants"]["orgs"][0],
-                ROLE_SCOPES["bidder"],
-                "bidder",
-            )
+        async with case["app"].state.db.transaction() as session:
+            actor = Identity(HUMAN_SCOPES)
             await set_actor_context(session, actor)
             session.add(
                 ScoreRubricDecision(
                     id=uuid4(),
-                    org_id=actor.org_id,
                     task_id=UUID(case["task"]),
                     rubric_id=UUID(report["rubric"]["id"]),
                     section_id=None,
@@ -185,7 +125,6 @@ async def test_database_rejects_incomplete_set_confirmation(rubric_case):
                     reason="Synthetic incomplete direct confirmation",
                     reason_sha256=cards.quote_hash("Synthetic incomplete direct confirmation"),
                     expected_input_hash=report["rubric"]["input_hash"],
-                    decided_by=actor.user_id,
                     actor_kind="session",
                 )
             )
@@ -193,7 +132,7 @@ async def test_database_rejects_incomplete_set_confirmation(rubric_case):
 
 
 @pytest.mark.asyncio
-async def test_all_rubric_tables_reject_same_org_cross_task_foreign_keys(rubric_case):
+async def test_all_rubric_tables_reject_cross_task_foreign_keys(rubric_case):
     import json
     from uuid import uuid4
 
@@ -255,9 +194,6 @@ async def test_all_rubric_tables_reject_same_org_cross_task_foreign_keys(rubric_
         if table == "score_rubric_coverage_decisions":
             row["revision"] = 999
         with pytest.raises(IntegrityError) as failure, case["admin_engine"].begin() as connection:
-            # Suppress only application triggers in this rolled-back test transaction
-            # to prove the composite FOREIGN KEY itself rejects the splice. Internal
-            # FK triggers and all production grants/policies remain intact.
             connection.execute(text(f'ALTER TABLE "{table}" DISABLE TRIGGER USER'))
             connection.execute(
                 text(
@@ -274,25 +210,19 @@ async def test_database_rejects_whitespace_only_review_reason(rubric_case):
 
     from app.models.score import ScoreRubricDecision
     from app.services import response_cards as cards
-    from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
+    from app.services.auth import HUMAN_SCOPES, Identity, set_actor_context
     from sqlalchemy.exc import IntegrityError
     from test_score_review import classify_all
 
     case = rubric_case
     report = await classify_all(case)
     with pytest.raises(IntegrityError) as failure:
-        async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
-            actor = Identity(
-                case["tenants"]["users"][0],
-                case["tenants"]["orgs"][0],
-                ROLE_SCOPES["bidder"],
-                "bidder",
-            )
+        async with case["app"].state.db.transaction() as session:
+            actor = Identity(HUMAN_SCOPES)
             await set_actor_context(session, actor)
             session.add(
                 ScoreRubricDecision(
                     id=uuid4(),
-                    org_id=actor.org_id,
                     task_id=UUID(case["task"]),
                     rubric_id=UUID(report["rubric"]["id"]),
                     section_id=None,
@@ -303,7 +233,6 @@ async def test_database_rejects_whitespace_only_review_reason(rubric_case):
                     reason="\n\t  ",
                     reason_sha256=cards.quote_hash("\n\t  "),
                     expected_input_hash=report["rubric"]["input_hash"],
-                    decided_by=actor.user_id,
                     actor_kind="session",
                 )
             )

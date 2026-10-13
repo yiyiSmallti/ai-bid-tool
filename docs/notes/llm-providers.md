@@ -1,3 +1,7 @@
+---
+kind: reference
+---
+
 # LLM extraction and drafting providers
 
 ## Problem
@@ -9,11 +13,11 @@ a defined job state rather than partial or silent results.
 
 ## Usage
 
-Configure tenant models and select platform catalog models through
+Configure the installation model with its own key through
 [provider configuration](provider-config.md#usage). `BID_LLM_*` still supplies
-non-secret adapter execution limits and standalone/eval configuration; credential
+nonsecret adapter execution limits and standalone/eval configuration; credential
 resolution follows [platform credential authority](platform-credentials.md#how-it-works).
-These settings do not select a tenant job's fallback model. Tests inject adapters
+These settings do not select a job's fallback model. Tests inject adapters
 with `httpx.MockTransport`.
 
 ## How it works
@@ -36,7 +40,7 @@ into every request body, for vendor switches such as
 `{"thinking": {"type": "disabled"}}`. Output-limit fields and aliases are
 reserved: both adapters reject them with `invalid_provider_options` before
 admission in extraction and drafting, including nested vendor options. The
-platform catalog rejects such reasoning levels at creation and update. The
+provider configuration rejects such reasoning levels at creation and update. The
 shared field list and spelling rules are in
 [llm_options.py](../../server/app/core/llm_options.py); other adapter-owned fields
 win on conflict. Set the output limit through `BID_LLM_MAX_OUTPUT_TOKENS`.

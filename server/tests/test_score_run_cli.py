@@ -1,9 +1,7 @@
 """Score execution CLI snapshots at the DB-free HTTP transport boundary."""
 
 import json
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 from uuid import UUID
 
 import httpx
@@ -18,10 +16,9 @@ from app.schemas.score_contracts import (
     ScoreRunView,
 )
 from bid_cli import main as cli
-from bid_cli.client import Client, State
+from bid_cli.client import Client
 from bid_cli.schema import command_schema
 
-ORG = "00000000-0000-0000-0000-000000000001"
 TASK = "00000000-0000-0000-0000-000000000002"
 DRAFT = "00000000-0000-0000-0000-000000000003"
 EXTRACTION = "00000000-0000-0000-0000-000000000004"
@@ -37,9 +34,7 @@ SHA = "a" * 64
 DRAFT_SHA = "b" * 64
 ASSESSMENT_DATE = "2026-10-05"
 NOW = "2026-10-05T00:00:00Z"
-
 ASSESSMENT_INPUT = {
-    "org_id": ORG,
     "task_id": TASK,
     "draft_id": DRAFT,
     "extraction_job_id": EXTRACTION,
@@ -67,7 +62,6 @@ PREVIEW = {
             "provider": "synthetic",
             "model": "synthetic-model",
             "version": "synthetic-v1",
-            "platform_model_id": "synthetic-score",
             "request_sha256": SHA,
             "input_tokens_upper_bound": 400,
             "output_tokens_upper_bound": 500,
@@ -78,8 +72,7 @@ PREVIEW = {
     "admission_blocker": None,
     "estimated_duration_ms": None,
     "provider_config_id": None,
-    "provider_source": "platform",
-    "platform_model_id": "synthetic-score",
+    "provider_source": "local",
     "model_revision": 1,
     "model": "synthetic-model",
     "reasoning": "high",
@@ -97,7 +90,6 @@ PREVIEW = {
 }
 REPORT_VIEW = {
     "id": REPORT,
-    "org_id": ORG,
     "task_id": TASK,
     "job_id": JOB,
     "run_id": RUN,
@@ -149,7 +141,6 @@ REPORT_DATA = {
     "items": [
         {
             "id": ITEM,
-            "org_id": ORG,
             "task_id": TASK,
             "report_id": REPORT,
             "rubric_item_id": ITEM,
@@ -185,8 +176,8 @@ def result(*, data=None, items=None, warnings=None) -> dict:
 class MockClient(Client):
     """Run both CLI modes through the same deterministic HTTP mock."""
 
-    def __init__(self, mode: str, server: str, state: State, handler):
-        super().__init__(mode, server, state)
+    def __init__(self, mode: str, server: str, handler):
+        super().__init__(mode, server)
         self.handler = handler
 
     @asynccontextmanager
@@ -228,13 +219,8 @@ def handler(request: httpx.Request) -> httpx.Response:
 
 
 def install_transport(monkeypatch) -> None:
-    monkeypatch.setenv("BID_SESSION", "synthetic-interface-session")
-    monkeypatch.setenv("BID_ORG", ORG)
-    monkeypatch.setattr(
-        cli,
-        "Client",
-        lambda mode, server, state: MockClient(mode, server, state, handler),
-    )
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-interface-access-key-at-least-32-chars")
+    monkeypatch.setattr(cli, "Client", lambda mode, server: MockClient(mode, server, handler))
 
 
 def invoke(arguments: list[str], capsys) -> tuple[int, dict]:
@@ -246,7 +232,7 @@ def invoke(arguments: list[str], capsys) -> tuple[int, dict]:
     body = json.loads(capsys.readouterr().out)
     body["duration_ms"] = 0
     assert set(body) == {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}
-    return exit_code, body
+    return (exit_code, body)
 
 
 def test_score_run_cli_remote_and_local_snapshots_db_free(monkeypatch, tmp_path, capsys):
@@ -274,23 +260,18 @@ def test_score_run_cli_remote_and_local_snapshots_db_free(monkeypatch, tmp_path,
     for mode in ("remote", "local"):
         actual[mode] = {}
         for name, arguments in commands.items():
-            exit_code, body = invoke(
-                ["--mode", mode, "--state", str(tmp_path / f"{mode}.enc"), *arguments],
-                capsys,
-            )
+            exit_code, body = invoke(["--mode", mode, *arguments], capsys)
             assert exit_code == (5 if name == "score show" else 0)
             actual[mode][name] = body
         ScorePreview.model_validate(actual[mode]["score run"]["data"])
         AssessmentListData.model_validate(actual[mode]["score list"]["data"])
         [ScoreRunView.model_validate(item) for item in actual[mode]["score list"]["items"]]
         ScoreReportData.model_validate(actual[mode]["score show"]["data"])
-    snapshot = Path(__file__).with_name("snapshots") / "score-run-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(
-            json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    assert actual == json.loads(snapshot.read_text(encoding="utf-8"))
+    artifact = tmp_path / "score-run-cli.json"
+    artifact.write_text(
+        json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    assert json.loads(artifact.read_text(encoding="utf-8")) == actual
 
 
 def test_score_run_wait_partial_exit_and_schema(monkeypatch, capsys):
@@ -343,7 +324,6 @@ def test_score_run_wait_partial_exit_and_schema(monkeypatch, capsys):
     assert code == 5 and body["ok"] is False
     assert body["data"]["report_id"] == REPORT
     assert body["warnings"] == ["unassessable_items"]
-
     schema = command_schema(cli.app)["commands"]
     for name in ("score run", "score list", "score show"):
         assert name in schema and schema[name].get("output")

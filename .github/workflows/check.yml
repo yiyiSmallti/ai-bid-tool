@@ -17,6 +17,7 @@ env:
   BID_TEST_ADMIN_URL: postgresql+psycopg://postgres:synthetic-ci-test-only@127.0.0.1:5432/bid_test
   BID_DATABASE_URL: postgresql+psycopg://bid_app:synthetic-ci-test-only@127.0.0.1:5432/bid_test
   BID_DATABASE_PASSWORD: synthetic-ci-test-only
+  BID_ACCESS_KEY: synthetic-ci-access-key-for-tests-only-2026
 jobs:
   changes:
     if: github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft

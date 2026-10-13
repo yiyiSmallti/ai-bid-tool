@@ -4,7 +4,7 @@ kind: adr
 
 # 0006 Database storage and access boundaries for platform service credentials
 
-Date: 2026-10-05. Status: **accepted.**
+Date: 2026-10-05. Status: superseded by 0012.
 
 ## Context
 

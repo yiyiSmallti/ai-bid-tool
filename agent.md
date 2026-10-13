@@ -6,35 +6,30 @@ in [the glossary](docs/glossary.md).
 
 ## Project overview
 
-AI Bid Tool helps bidding orgs (organizations/tenants; 单位) parse tender documents
+AI Bid Tool helps one person prepare bids locally: parse tender documents
 (招标文件), extract requirements, verify technical parameters and capture screenshots
 as evidence (证据), check bids (bid documents; 标书), and estimate scores.
-It is deployed as SaaS: multiple orgs share one service with isolated data. The `bid`
-CLI is the external interface; the web dashboard, built-in agent and external agents
-all use the same commands.
+The installation boundary is defined by
+[ADR 0012](docs/adr/0012-single-user-installation.md); the accepted
+[single-user plan](docs/plan/single-user.md) covers the access-key and baseline
+cutover together. The `bid` CLI is the external interface; the web dashboard,
+built-in agent and external agents use the same commands.
 
 ## Hard rules (must never be violated)
 
-1. **Org isolation**
-   - Every business table must have a NOT NULL `org_id` and enable PostgreSQL row-level security (RLS). Any change that creates a table must also include its RLS policies and isolation tests.
-   - `User` is a global identity table and the sole exception to the org `org_id` and RLS requirements; it stores only login identity and authentication information. One global account may join multiple orgs. Org affiliations, roles and permissions belong in `Membership`; `Membership` and all other org business tables must still have a NOT NULL `org_id` and enable RLS.
-   - The platform operator console (平台运营后台) has additional approved exceptions: the global tables `platform_models` (platform model catalog), `platform_audit_logs` (append-only; no updates or deletes), plus the `NOLOGIN` role `bid_platform_fn`, without `BYPASSRLS`. This role has read-only cross-org policies only on `orgs`, `memberships`, `usage_records`, and serves only as the owner of fixed functions. Functions must not return any org business content. Decisions and rationale are in [ADR 0001](docs/adr/0001-platform-console-access.md) and [ADR 0011](docs/adr/0011-remove-billing.md).
-   - [ADR 0006](docs/adr/0006-platform-credentials.md) approves a narrowly scoped new global table, `platform_credentials`, without `org_id` or tenant RLS. It stores only platform-held outbound service credentials and encryption and management metadata. It must not store org BYOK credentials, business content, login identities, platform administrator lists or keys used to unlock itself. Do not add a global credential-history table containing plaintext or ciphertext.
-   - [ADR 0008](docs/adr/0008-org-signup.md) approves the third global-table exception, `org_applications`, without tenant `org_id` or RLS. It stores only prospective org onboarding fields, a keyed source digest, a temporary password hash and decision metadata; its nullable `org_id` records an approved result. `bid_app` has no direct table privileges and uses fixed `SECURITY DEFINER` submit/list/approve/reject/expire functions owned by `bid_platform_fn`. Public access invokes only submit; platform sessions authorize list and decisions. Approval reuses `platform_create_org` under ordinary org RLS, requires explicit attachment of an existing user and never replaces that user's password. Every terminal state clears its hash. Do not store org business content, plaintext passwords or raw client addresses here.
-   - [ADR 0009](docs/adr/0009-operator-enrollment.md) approves the fourth global-table exception, `platform_operator_factors`, without `org_id` or tenant RLS. It stores only lowercased email, encrypted TOTP secret, envelope version, generation and enrollment metadata; the operator allowlist stays exclusively in deployment configuration. Environment factors take precedence and block browser enrollment. `bid_app` has no direct table privileges and executes only fixed one-email factor read, metadata list, lock and atomic enrollment functions owned by the dedicated `NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT` role `bid_operator_enrollment_fn`, with only required factor/identity privileges and append-only audit insertion. Functions fix `search_path`, qualify table names, revoke PUBLIC access and use no dynamic SQL. Enrollment preserves existing usable passwords, creates no org membership and records its consumed TOTP counter. Encrypt under `BID_SECRETS_KEY`; root rotation preserves generations. Do not store plaintext factors, invitations, operator allowlists or org business content here.
-   - [ADR 0010](docs/adr/0010-offline-signature-trust.md) approves the fifth global-table exception, `platform_trust_anchors`, without `org_id` or tenant RLS. It stores only explicitly admitted public CA certificates, fingerprints and operator management metadata. `bid_app` has no direct table privileges and executes fixed metadata, enabled-snapshot, add and disable functions owned by `bid_trust_anchors_fn`, a dedicated `NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT` role with only anchor privileges and append-only audit insertion. Functions fix `search_path`, qualify names, revoke PUBLIC access and use no dynamic SQL; add/disable and audit commit atomically. Platform password-and-TOTP sessions authorize management at the API boundary. Every local preparation pins its enabled snapshot; subsequent changes never rewrite evidence. Bid signer names, signature field names and tender quotes belong only in encrypted tenant rows. No network revocation lookup, automatic CA trust, signature creation or procurement submission is authorized.
-   - Reuse the restricted function-owner pattern of `bid_platform_fn`, without extending access to the new ciphertext to that existing role. The new `bid_platform_credentials_fn` is `NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT`; it has only the table privileges required by the fixed credential functions and no privileges on any org business table. The org runtime role `bid_app` has no direct privileges on this table, no EXECUTE privilege on these functions and no membership in these roles. `bid_platform_app` (the dedicated platform management connection) may execute only metadata and write functions. `bid_credential_reader` (the dedicated API/worker credential-resolution connection) may execute only the function that resolves one ciphertext record for a verified consumer and the readiness metadata function. Neither receives table SELECT/UPDATE privileges, inherits the owner role or has any `BYPASSRLS` capability. Functions must fix `search_path`, fully qualify object names, revoke PUBLIC EXECUTE and prohibit dynamic SQL. TOTP is verified at the platform application boundary; the database must not treat forgeable `SET app.*` values as authentication. Separate connection roles form the isolation boundary for org SQL paths; they do not claim to isolate an entire compromised service process that holds the root key.
-   - Successful login does not authorize access to arbitrary orgs. Before switching to or accessing an org, validate an active `Membership`, then set that request's org context.
-   - Database sessions set the org context through `SET app.current_org = ...`. Application code must not use a database role that bypasses RLS.
-   - Every object-storage path must start with `org/{org_id}/`. Issue only signed, short-lived download links.
-   - Vector retrieval must filter by both `org_id` and memory scope.
-   - Background jobs must run with an org context. A job must not query another org's data incidentally.
+1. **Single-user installation**
+   - One installation serves one human. Do not reintroduce orgs, users, memberships, roles, RLS, org composite keys or `app.current_org`. The operating-system account is the isolation boundary; application services listen on loopback.
+   - PostgreSQL has two roles: the owner runs migrations and owns all objects; `bid_app` runs application work and cannot alter tables or disable triggers. Keep database human-versus-agent gates and write attribution (`app.actor_kind`, token, agent session and job).
+   - The installation access key or a console session minted from it acts as the human. Built-in agents and `bid_` API tokens remain scoped non-human actors. See [the single-user plan](docs/plan/single-user.md#slice-2-access-key-instead-of-login) for authentication and CLI key handling.
+   - Provider credentials, service credentials, Clef and offline-signature trust anchors are local settings. Model configuration uses the human's own credentials; there is no platform catalog or operator console.
+   - Storage keys have no org prefix. Keep protected files and short-lived signed download links. Vector retrieval respects enabled memory scopes; jobs retain actor attribution without tenancy context.
+   - Offline signature preparation pins the enabled trust-anchor snapshot; later changes never rewrite evidence. Keep signer names, field names and tender quotes encrypted. No automatic CA trust, network revocation lookup, signature creation or procurement submission is authorized; see [ADR 0010](docs/adr/0010-offline-signature-trust.md) as amended by ADR 0012.
 2. **Human confirmation gate (人工确认)**
-   - Evidence whose `Evidence.confirmed_by` is null must not enter response (响应) tables generated by `draft` or files produced by `export`.
+   - Evidence without human confirmation (`Evidence.confirmed_at` is null) must not enter response (响应) tables generated by `draft` or files produced by `export`. Decisions record timestamps and actor kind, without a user record or separation-of-duty checks between people.
    - API tokens must never receive `evidence:confirm` or `export` permission. Neither built-in nor external agents may confirm evidence.
 3. **No fabricated materials**
    - Do not implement any feature that generates vendor (厂家) pages, test reports or certificates (证书). Hardware evidence may come only from screenshots of real web pages or files.
-   - For `ui mock`, the model generates single-page HTML prototypes (原型) from functional requirements and captures screenshots in the sandbox defined by [docs/plan/sandbox.md](docs/plan/sandbox.md). Prototype images have no watermark, and images, drafts (初稿) and exported documents have no visible prototype labels. Internally, the system must retain origin=prototype, the generating model and the HTML hash. Prototypes may become evidence through human confirmation of each response card (响应卡). Before a final export, a human in the corresponding review domain (职责) must choose either "保留（已是或将成为交付界面）" (keep: already is or will become the delivered interface) or "替换为真实截图" (replace with a real screenshot) for each piece of evidence referencing a prototype. Decisions may be made in batches by module, with a record for each item. An undecided item or an incomplete replacement blocks final export but does not independently block a review copy (审阅件). Generating vendor pages, reports and certificates remains prohibited; hardware evidence must still come only from real web pages or files.
+   - For `ui mock`, the model generates single-page HTML prototypes (原型) from functional requirements and captures screenshots in the sandbox defined by [docs/plan/sandbox.md](docs/plan/sandbox.md). Prototype images have no watermark, and images, drafts (初稿) and exported documents have no visible prototype labels. Internally, retain origin=prototype, the generating model and the HTML hash. Prototypes may become evidence through human confirmation of each response card (响应卡). Before a final export, the human must choose either "保留（已是或将成为交付界面）" (keep: already is or will become the delivered interface) or "替换为真实截图" (replace with a real screenshot) for each piece of evidence referencing a prototype. Decisions may be batched by module, with a record for each item. An undecided item or incomplete replacement blocks final export but does not independently block a review copy (审阅件).
 4. **Model calls only through the provider layer**
    - Only `server/app/providers/` may import vendor SDKs. Business code depends only on Provider interfaces.
    - Record the provider, model name, duration and resource usage (tokens, pages and requests) of every call in `UsageRecord`.
@@ -43,10 +38,10 @@ all use the same commands.
    - Exit codes: 0 success; 2 argument or input error; 3 retryable failure; 4 non-retryable failure; 5 partial success.
    - Do not ask interactive questions; report an error immediately when arguments are missing.
    - Incompatible changes to JSON output structures must increase the version number. `bid schema` output must stay consistent with the implementation.
-   - Local mode uses local PostgreSQL and retains the same RLS and permission checks as remote mode. Files are stored in a local directory, still isolated by `org/{org_id}/`. Do not replace PostgreSQL with a file-only database.
+   - Local desktop mode uses rootless PostgreSQL over a local socket and local files. Configured API/Compose mode uses the local loopback service and may connect over its configured PostgreSQL transport. Both retain the same human-versus-agent gates and Result contract; neither uses an org storage prefix. Local commands belong in [the development guide](docs/guides/development.md).
 6. **Citations**: Every `Requirement` must include its source file and a verifiable location: a page number for PDF, or a section path and paragraph or table-cell location for Word. The quoted source text must occur verbatim at that location. Reject or flag extracted results without valid citations; never save them silently.
 7. **Keys and sensitive data**: Store provider keys and tokens encrypted. Logs must not contain keys, quoted prices, identity-card numbers or bank account numbers.
-8. **Memory (记忆)**: Org memory must never be written to the global layer. All automatically proposed memories are saved with `candidate` status and become effective only after human confirmation.
+8. **Memory (记忆)**: Installation memory uses the `library` scope. Automatically proposed memories remain `candidate` until human confirmation; memory never substitutes for evidence. Scope enablement and retrieval rules belong in [the memory plan](docs/plan/memory.md).
 
 ## Technology stack
 
@@ -54,7 +49,7 @@ all use the same commands.
 | --- | --- |
 | Server | Python 3.12, FastAPI (async), SQLAlchemy 2.0, Alembic |
 | Database | PostgreSQL 16 + pgvector |
-| File storage | S3-compatible object storage (MinIO for local development) |
+| File storage | Protected local files; retain the S3-compatible adapter for configured storage |
 | Background jobs | Procrastinate (PostgreSQL-based, avoiding an additional Redis component); if it must be replaced, change only `server/app/jobs/` |
 | Data structures | Pydantic v2 (shared by the API, CLI output and structured LLM output) |
 | CLI | Typer; command name `bid` |
@@ -63,7 +58,7 @@ all use the same commands.
 | Export preview conversion | Gotenberg (LibreOffice in a separate container) |
 | Evidence annotation | Rust (clap, serde, image, sha2), compiled as a standalone executable |
 | Frontend | Vue 3 + Vite + Element Plus |
-| Deployment | Docker Compose |
+| Local operation | Rootless PostgreSQL and local services; desktop packaging is a separate plan |
 | Quality | ruff, pyright, pytest, cargo test, GitHub Actions |
 
 Explain the reason and obtain approval before introducing a major dependency outside this table.
@@ -79,7 +74,7 @@ Explain the reason and obtain approval before introducing a major dependency out
 ├── server/
 │   ├── app/
 │   │   ├── api/          # Routes
-│   │   ├── core/         # Configuration, authentication, tenant context, encryption
+│   │   ├── core/         # Configuration, access-key/token authentication, actor context, encryption
 │   │   ├── models/       # SQLAlchemy models
 │   │   ├── schemas/      # Pydantic models, shared with CLI output
 │   │   ├── services/     # Business logic, one module per command
@@ -97,19 +92,18 @@ Explain the reason and obtain approval before introducing a major dependency out
 
 ## Workflow
 
-- **Interfaces before implementation**: For new features, write Pydantic models, Provider interfaces and CLI JSON structures first. Wait for confirmation before implementing them.
+- **Interfaces before implementation**: For new features outside the accepted cutover, write Pydantic models, Provider interfaces and CLI JSON structures first; agree the interface before implementing it.
 - **Vertical slices**: Advance one complete path at a time. Make it work and cover it with tests before starting the next. Do not build unfinished pieces across multiple modules at once.
 - **Small commits**: Keep each change focused on one concern; write commit messages in English.
-- **Ask when uncertain**: Ask first about anything the design document does not cover or that conflicts with this file; do not make assumptions.
-- **Document core mechanisms**: After completing core mechanisms such as org isolation, background jobs, the evidence chain or memory retrieval, write a one-page English note under `docs/notes/` with the structure Problem / Usage / How it works / Pitfalls / Code for later review.
+- **Document core mechanisms**: After completing core mechanisms such as actor gates, background jobs, the evidence chain or memory retrieval, update their English notes under `docs/notes/` with Problem / Usage / How it works / Pitfalls / Code.
 
 ## Test requirements
 
-- **Isolation tests are mandatory**: Fixtures must always provide two orgs, A and B. Every endpoint and table must have a test proving that accessing B's data as A fails. Return 404 both for nonexistent resources and unauthorized access.
-- **Gate tests are mandatory**: Unconfirmed evidence cannot be exported; a token request for confirmation permission must be rejected.
+- **Single-user fixtures**: Create no orgs or users. Remove obsolete two-org isolation tests; cover unknown resources and runtime-role restrictions.
 - **CLI contract tests**: Snapshot the `--json` output of every command. Structural changes must be intentional.
+- **Gate tests are mandatory**: Unconfirmed evidence cannot be exported; tokens and built-in agents cannot obtain or exercise human-only confirmation/export permissions. Test access-key/session authentication and actor/token/agent/job attribution.
 - **No real external services**: All Providers use fake implementations in CI. Put tests requiring real calls under `evals/`.
-- Never weaken isolation or confirmation rules, or delete tests, to make tests pass.
+- Never weaken human-versus-agent or confirmation gates, or delete their tests, to make tests pass.
 
 ## Scope and priorities
 

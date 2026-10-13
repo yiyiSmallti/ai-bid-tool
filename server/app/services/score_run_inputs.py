@@ -86,7 +86,6 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
                 .options(
                     load_only(
                         Requirement.id,
-                        Requirement.org_id,
                         Requirement.task_id,
                         Requirement.document_id,
                         Requirement.job_id,
@@ -142,11 +141,6 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
         if require_current
         else {}
     )
-    from app.services import task_cosign
-
-    cosign = await task_cosign.projections(
-        session, actor.org_id, [row.card_id for row in rows if row.card_id]
-    )
     secret_items, manifest_items = [], []
     citations = cards.citation_validity_batch(
         (requirement for requirement, _ in located), {chunk.id: chunk for _, chunk in located}
@@ -185,10 +179,8 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
                 ResponseCardRevision.state,
                 ResponseCardRevision.review_domain,
                 ResponseCardRevision.disposition,
-                ResponseCardRevision.disposition_by,
                 ResponseCardRevision.disposition_at,
                 ResponseCardRevision.quote_sha256,
-                ResponseCardRevision.confirmed_by,
                 ResponseCardRevision.confirmed_at,
                 ResponseCardRevision.model_job_id,
             ]
@@ -217,22 +209,12 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
                 stale()
             if entry["source_hash"] != drafts.digest(cards.source(requirement)):
                 stale()
-        if row.card_id is not None:
-            approval = cosign[row.card_id]
-            if row.kind != "gap" and not approval["approved"]:
-                stale()
-            if require_current and entry.get("co_sign") != task_cosign.manifest_fields(
-                approval
-            ).get("co_sign"):
-                stale()
         dependencies = []
         if revision is not None:
             for evidence in await cards.linked_evidence(session, revision.id):
                 view = await cards.evidence_view(session, actor, evidence)
                 dependencies.append(drafts.evidence_dependency(view))
-                if row.kind == "row" and (
-                    evidence.confirmed_by is None or evidence.confirmed_at is None
-                ):
+                if row.kind == "row" and (evidence.confirmed_at is None):
                     integrity()
             if require_current and dependencies != entry["evidence"]:
                 stale()
@@ -259,7 +241,6 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
             if (
                 revision is None
                 or revision.state != "confirmed"
-                or revision.confirmed_by is None
                 or revision.confirmed_at is None
                 or revision.disposition != "respond"
                 or any(getattr(row, key) != getattr(revision, key) for key in cards.CONTENT_FIELDS)
@@ -280,7 +261,6 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
                 "partition": item["partition"],
                 "content_sha256": drafts.digest(item),
                 "evidence": dependencies,
-                **(task_cosign.manifest_fields(cosign[row.card_id]) if row.card_id else {}),
             }
         )
     return secret_items, manifest_items
@@ -339,9 +319,8 @@ async def snapshot(
     # Publication rechecks it in the mandatory deferred gate, including live
     # citations, so that transaction must not locate every quote twice.
     if not defer_database_validation and not await session.scalar(
-        text("SELECT score_inputs_current(:org, :draft, :rubric, :revision)"),
+        text("SELECT score_inputs_current(:draft, :rubric, :revision)"),
         {
-            "org": actor.org_id,
             "draft": draft.id,
             "rubric": rubric.id,
             "revision": rubric_data["rubric"]["revision"],
@@ -399,10 +378,6 @@ async def require_dependencies(session, actor, task_id, manifest):
         or document is None
         or draft is None
         or rubric is None
-        or manifest["org_id"] != str(actor.org_id)
-        or any(
-            parent.org_id != actor.org_id for parent in (task, extraction, document, draft, rubric)
-        )
         or any(parent.task_id != task_id for parent in (extraction, document, draft, rubric))
         or extraction.document_id != document.id
         or rubric.document_id != document.id
@@ -426,7 +401,6 @@ async def require_dependencies(session, actor, task_id, manifest):
             )
         )
         .where(
-            ScoreRubricSection.org_id == actor.org_id,
             ScoreRubricSection.task_id == task_id,
             ScoreRubricSection.rubric_id == rubric.id,
         )
@@ -446,7 +420,6 @@ async def require_dependencies(session, actor, task_id, manifest):
             await session.execute(
                 select(
                     Requirement.id,
-                    Requirement.org_id,
                     Requirement.task_id,
                     Requirement.document_id,
                     Requirement.chunk_id,
@@ -459,9 +432,7 @@ async def require_dependencies(session, actor, task_id, manifest):
         row.id: row
         for row in (
             await session.execute(
-                select(Chunk.id, Chunk.org_id, Chunk.task_id, Chunk.document_id).where(
-                    Chunk.id.in_(chunk_ids)
-                )
+                select(Chunk.id, Chunk.task_id, Chunk.document_id).where(Chunk.id.in_(chunk_ids))
             )
         ).all()
     }
@@ -477,8 +448,6 @@ async def require_dependencies(session, actor, task_id, manifest):
             requirement is None
             or chunk is None
             or pinned is None
-            or requirement.org_id != actor.org_id
-            or chunk.org_id != actor.org_id
             or requirement.task_id != task_id
             or chunk.task_id != task_id
             or requirement.document_id != document.id

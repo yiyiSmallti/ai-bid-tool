@@ -200,9 +200,6 @@ class AgentDecision(Contract):
 
 class AgentPrincipalView(Contract):
     id: UUID
-    org_id: UUID
-    user_id: UUID
-    membership_id: UUID
     actor_kind: Literal["agent"] = "agent"
     scopes: list[AgentScope]
     authority_expires_at: AwareDatetime
@@ -219,12 +216,10 @@ class AgentCostView(Contract):
 
 class AgentSessionView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     document_id: UUID
     extraction_job_id: UUID
     principal_id: UUID
-    owner_user_id: UUID
     state: SessionState
     revision: int = Field(strict=True, ge=1)
     limits: AgentLimits
@@ -243,11 +238,9 @@ class AgentSessionView(Contract):
 
 class AgentMessageView(Contract):
     id: UUID
-    org_id: UUID
     session_id: UUID
     ordinal: int = Field(strict=True, ge=1)
     role: Literal["human", "assistant", "tool", "system"]
-    author_user_id: UUID | None = None
     step_id: UUID | None = None
     content: str = Field(max_length=8000)
     content_sha256: Sha256
@@ -256,7 +249,6 @@ class AgentMessageView(Contract):
 
 class AgentStepView(Contract):
     id: UUID
-    org_id: UUID
     session_id: UUID
     ordinal: int = Field(strict=True, ge=1)
     kind: Literal["decision", "tool"]
@@ -281,7 +273,6 @@ class AgentStepView(Contract):
 
 class AgentPauseView(Contract):
     id: UUID
-    org_id: UUID
     session_id: UUID
     step_id: UUID | None = None
     kind: Literal["human_action", "authority", "recovery"]
@@ -290,14 +281,12 @@ class AgentPauseView(Contract):
     action: Literal["review_cards", "export", "confidential_reveal", "clarify"] | None = None
     resource_ids: list[UUID] = Field(default_factory=list, max_length=100)
     input_sha256: Sha256
-    resolved_by: UUID | None = None
     created_at: AwareDatetime
     resolved_at: AwareDatetime | None = None
 
 
 class AgentJobLinkView(Contract):
     id: UUID
-    org_id: UUID
     session_id: UUID
     job_id: UUID
     role: Literal["controller", "tool"]
@@ -428,6 +417,6 @@ class AgentToolProvider(Protocol):
 
 
 class AgentRecoveryProvider(Protocol):
-    """Internal org-scoped queue recovery; not a model tool or a cross-org scan."""
+    """Internal installation queue recovery; not a model tool."""
 
-    async def wake(self, org_id: UUID, session_id: UUID, now: datetime) -> AgentJobResult: ...
+    async def wake(self, session_id: UUID, now: datetime) -> AgentJobResult: ...

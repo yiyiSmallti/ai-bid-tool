@@ -60,7 +60,6 @@ def add(input: Annotated[Path, typer.Option()], json_output: JsonOption = False)
 @app.command("list")
 def listing(
     scope: Annotated[str, typer.Option()],
-    user: Annotated[UUID | None, typer.Option()] = None,
     task: Annotated[UUID | None, typer.Option()] = None,
     status: Annotated[str | None, typer.Option()] = None,
     include_deleted: Annotated[bool, typer.Option()] = False,
@@ -70,7 +69,7 @@ def listing(
 ):
     request = MemoryListRequest.model_validate(
         {
-            "target": {"scope": scope, "user_id": user, "task_id": task},
+            "target": {"scope": scope, "task_id": task},
             "status": status,
             "include_deleted": include_deleted,
             "cursor": cursor,
@@ -82,7 +81,7 @@ def listing(
         "include_deleted": request.include_deleted,
         **page(cursor, limit),
     }
-    for key, value in (("user_id", user), ("task_id", task), ("status", status)):
+    for key, value in (("task_id", task), ("status", status)):
         if value is not None:
             params[key] = str(value)
     cli = helpers()

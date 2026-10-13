@@ -33,7 +33,7 @@ class FeatureUpdate(Contract):
 
 class FeatureRevision(Contract):
     id: UUID
-    org_id: UUID
+
     feature_id: UUID
     revision: int = Field(ge=1)
     data: FeatureData
@@ -47,7 +47,7 @@ class TaskFeatureSelection(Contract):
 
 class TaskFeatureSnapshot(Contract):
     id: UUID
-    org_id: UUID
+
     task_id: UUID
     feature_revision_id: UUID
     revision: int = Field(ge=1)

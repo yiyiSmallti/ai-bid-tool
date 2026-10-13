@@ -21,13 +21,13 @@ def record(value):
     target.write_text(json.dumps(value, indent=2) + "\n")
 
 
-async def test_bulk_review_reload_sees_raw_source_changes_in_the_same_session(tenants, tmp_path):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
+async def test_bulk_review_reload_sees_raw_source_changes_in_the_same_session(database, tmp_path):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
         task, _, extraction, requirements = await create_tender(
-            api, app, headers[0], tmp_path, confirmed=True
+            api, app, headers, tmp_path, confirmed=True
         )
-        org = tenants["orgs"][0]
-        async with app.state.db.transaction(org) as session:
+
+        async with app.state.db.transaction() as session:
             rows = list(
                 await session.scalars(
                     select(Requirement).where(

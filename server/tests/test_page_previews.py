@@ -1,15 +1,15 @@
 """Page previews of tender, certificate and export files through the real API and worker.
 
 Failure modes enumerated before implementation:
-- Another org's or an unknown document, certificate revision, export or job is a 404 on
-  every preview route; export previews are only for the people who may download it.
+- An unknown document, certificate revision, export or job is a 404 on every preview
+  route; export previews enforce the live human download gate.
 - A page outside the file, a Word original or an oversized zoom is refused, not guessed.
 - Stored bytes that no longer match their hash are never rendered.
 - A missing, failing or lying converter never publishes a partial or unreadable PDF; the
   failed job stays visible and only an explicit retry requeues it.
 - Repeated opens reuse one conversion per export file; pages before success are refused.
 - The generic job reader neither leaks the stored PDF location nor bypasses export access.
-- Reopened cards and revoked initiators invalidate cached pages just like signed downloads,
+- Reopened cards invalidate cached pages just like signed downloads,
   including changes during conversion or the read before the gate acquires its locks.
 - Previews call no model provider and record no usage.
 - Untrusted PDF opens happen only in the resource-limited child; child protocol, deadline
@@ -25,20 +25,14 @@ from uuid import UUID
 import httpx
 import pymupdf
 import pytest
-from app.api.main import create_app
-from app.core.config import Settings
-from app.models.entities import Job, Membership, UsageRecord
-from conftest import FakeQueue
+from app.models.entities import Job, UsageRecord
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 from test_exports import complete_inputs, draft, prepared, setup_template
 from test_response_cards import (
-    PhaseOneExtraction,
     create_tender,
-    login,
+    phase_one_client,
     require_action,
     select_real_materials,
-    set_role,
 )
 
 PNG = b"\x89PNG\r\n\x1a\n"
@@ -66,20 +60,9 @@ class FakeConverter:
 
 
 @asynccontextmanager
-async def preview_client(tenants, tmp_path, converter_url):
-    app = create_app(
-        Settings(data_dir=tmp_path, converter_url=converter_url),
-        llm=PhaseOneExtraction(),
-        queue=FakeQueue(),
-    )
-    async with (
-        app.router.lifespan_context(app),
-        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
-    ):
-        headers = [
-            await login(api, org, label)
-            for org, label in zip(tenants["orgs"], ("a", "b"), strict=True)
-        ]
+async def preview_client(database, tmp_path, converter_url):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        app.state.processor.settings.converter_url = converter_url
         yield api, app, headers
 
 
@@ -91,9 +74,9 @@ def is_png(response: httpx.Response) -> bool:
     )
 
 
-async def released_export(api, app, header, task, extraction, tenants, admin_engine):
+async def released_export(api, app, header, task, extraction, database, admin_engine):
     selected, binding = await setup_template(api, header, task)
-    set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
+
     draft_id = await draft(api, app, header, task, extraction)
     run = await prepared(
         api,
@@ -120,17 +103,17 @@ async def released_export(api, app, header, task, extraction, tenants, admin_eng
 
 
 async def test_previews_are_bounded_isolated_and_publish_only_readable_pdfs(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
     fake = FakeConverter()
-    async with preview_client(tenants, tmp_path, LIVE_URL or "http://converter.test") as (
+    async with preview_client(database, tmp_path, LIVE_URL or "http://converter.test") as (
         api,
         app,
         headers,
     ):
         if not LIVE_URL:
             app.state.processor.converter_transport = httpx.MockTransport(fake.handler)
-        header, foreign = headers
+        header = headers
         task, document, extraction, _ = await create_tender(api, app, header, tmp_path)
         _, _, _, _, source = await select_real_materials(api, header, task, tmp_path)
         revision = source["certificate_revision_id"]
@@ -147,11 +130,10 @@ async def test_previews_are_bounded_isolated_and_publish_only_readable_pdfs(
             assert (await api.get(route.format(page=0), headers=header)).status_code == 400
             zoom = await api.get(route.format(page=1), headers=header, params={"zoom": 3})
             assert zoom.status_code == 422
-            assert (await api.get(route.format(page=1), headers=foreign)).status_code == 404
         unknown = await api.get(f"/documents/{UUID(int=7)}/pages/1/preview", headers=header)
         assert unknown.status_code == 404
 
-        export = await released_export(api, app, header, task, extraction, tenants, admin_engine)
+        export = await released_export(api, app, header, task, extraction, database, admin_engine)
         base = f"/exports/{export['id']}/preview"
         before = await api.get(base, headers=header)
         assert before.json()["data"]["status"] == "not_requested"
@@ -163,21 +145,9 @@ async def test_previews_are_bounded_isolated_and_publish_only_readable_pdfs(
         assert again.json()["data"]["job_id"] == job_id
         assert (await api.get(f"{base}/pages/1", headers=header)).status_code == 409
 
-        # A foreign member with the right role still cannot tell the export exists.
-        set_role(admin_engine, tenants["orgs"][1], tenants["users"][1], "bidder")
-        for method, path in [
-            ("POST", base),
-            ("GET", base),
-            ("GET", f"{base}/pages/1"),
-            ("GET", f"/jobs/{job_id}"),
-            ("POST", f"/jobs/{job_id}/cancel"),
-        ]:
-            response = await api.request(method, path, headers=foreign)
-            assert response.status_code == 404, (method, path, response.text)
-
         if not LIVE_URL:
             # An unreadable reply fails the job and publishes nothing.
-            await app.state.processor(header["X-Org-Id"], job_id)
+            await app.state.processor(job_id)
             failed = await api.get(base, headers=header)
             assert failed.json()["data"]["status"] == "failed"
             assert failed.json()["data"]["error"]["code"] == "converter_invalid_output"
@@ -189,7 +159,7 @@ async def test_previews_are_bounded_isolated_and_publish_only_readable_pdfs(
             assert retried.json()["data"]["status"] == "queued"
             fake.reply = two_page_pdf()
 
-        await app.state.processor(header["X-Org-Id"], job_id)
+        await app.state.processor(job_id)
         ready = (await api.get(base, headers=header)).json()["data"]
         assert ready["status"] == "succeeded", ready
         assert ready["page_count"] >= (1 if LIVE_URL else 2)
@@ -207,18 +177,7 @@ async def test_previews_are_bounded_isolated_and_publish_only_readable_pdfs(
         public = status.json()["data"]["result"]
         assert "submission" not in public
         assert public["preview"] == {"page_count": ready["page_count"]}
-        for role in ("admin", "technical", "viewer"):
-            set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], role)
-            for method, path in [
-                ("POST", base),
-                ("GET", f"{base}/pages/1"),
-                ("GET", f"/jobs/{job_id}"),
-            ]:
-                response = await api.request(method, path, headers=header)
-                expected_status = 403 if path.startswith("/jobs/") else 404
-                assert response.status_code == expected_status, (role, method, path, response.text)
-
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             job = await session.get(Job, UUID(job_id))
             assert job is not None and job.kind == "export_preview"
             usage = await session.scalar(
@@ -227,17 +186,17 @@ async def test_previews_are_bounded_isolated_and_publish_only_readable_pdfs(
             assert usage == 0
 
 
-@pytest.mark.parametrize("invalidation", ["completed", "converting", "reading", "initiator"])
+@pytest.mark.parametrize("invalidation", ["completed", "converting", "reading"])
 async def test_cached_final_preview_obeys_live_download_gate(
-    tenants, tmp_path, admin_engine, monkeypatch, invalidation
+    database, tmp_path, admin_engine, monkeypatch, invalidation
 ):
     fake = FakeConverter()
     fake.reply = two_page_pdf()
-    async with preview_client(tenants, tmp_path, "http://converter.test") as (api, app, headers):
+    async with preview_client(database, tmp_path, "http://converter.test") as (api, app, headers):
         app.state.processor.converter_transport = httpx.MockTransport(fake.handler)
-        header = headers[0]
+        header = headers
         task, body, reviewed, _ = await complete_inputs(
-            api, app, header, tenants, admin_engine, tmp_path
+            api, app, header, database, admin_engine, tmp_path
         )
         run = await prepared(api, app, header, task, body)
         released = await api.post(
@@ -272,7 +231,7 @@ async def test_cached_final_preview_obeys_live_download_gate(
                 return fake.handler(request)
 
             app.state.processor.converter_transport = httpx.MockTransport(convert_after_reopen)
-        await app.state.processor(header["X-Org-Id"], job_id)
+        await app.state.processor(job_id)
         job = await api.get(f"/jobs/{job_id}", headers=header)
         assert job.json()["data"]["status"] == "succeeded", job.text
         if invalidation != "converting":
@@ -282,35 +241,14 @@ async def test_cached_final_preview_obeys_live_download_gate(
 
         if invalidation == "completed":
             await reopen()
-        elif invalidation == "initiator":
-            # A different active bidder keeps access while the original initiator is revoked.
-            with Session(admin_engine) as session, session.begin():
-                from task_fixtures import add_member
-
-                session.add(
-                    Membership(
-                        org_id=tenants["orgs"][0], user_id=tenants["users"][1], role="bidder"
-                    )
-                )
-                session.flush()
-                add_member(
-                    session,
-                    tenants["orgs"][0],
-                    UUID(task),
-                    tenants["users"][1],
-                    role="contributor",
-                    review_domains=["commercial"],
-                )
-            set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "viewer")
-            header = {**headers[1], "X-Org-Id": headers[0]["X-Org-Id"]}
         elif invalidation == "reading":
             read = app.state.storage.read
             reopened = False
 
-            async def read_then_reopen(org_id, key):
+            async def read_then_reopen(key):
                 nonlocal reopened
-                content = await read(org_id, key)
-                if not reopened and "/exports/" in key:
+                content = await read(key)
+                if not reopened and key.startswith("exports/"):
                     reopened = True
                     await reopen()
                 return content

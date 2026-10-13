@@ -1,6 +1,4 @@
 // Failure modes identified before writing these browser gates:
-// - Authentication and isolation: a cached role, forged org ID, foreign deep link,
-//   task/document/job ID or stale unit response must never reveal another org.
 // - Discovery: uploaded/unparsed documents and parse jobs must survive a fresh tab;
 //   the G1 job reader must not expose extraction/generation jobs or queue internals.
 // - Citations: PDF quotes must be found in the sorted extracted page text and Word
@@ -8,10 +6,9 @@
 // - Cost and jobs: a dry-run must not create a job or vendor call; queued is not
 //   completed, partial is not failure, and the model generation control must stay
 //   disabled until a human authorizes the exact preview hash.
-// - Review gates: viewers, admins, wrong-domain reviewers, tokens and workers must
-//   not perform human decisions; evidence and warnings need explicit review.
+// - Review gates: evidence and warnings need explicit human review.
 // - Concurrency: stale revisions must retain local edits, clear old review checks and
-//   fail visibly; an atomic batch with one stale/foreign item must write nothing.
+//   fail visibly; an atomic batch with one stale item must write nothing.
 // - Scale: all 1,200 requirements and CardViews must load without truncation, only
 //   one page plus one detail may mount, and filtering/paging/keyboard review must
 //   stay under the approved p95 and first-load limits without preloading images.
@@ -28,6 +25,8 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect, test } from "@playwright/test";
+import { openConsole } from "./access-key.js";
+import { SESSION_KEY } from "../src/session-storage.js";
 
 const env = (name) => {
   const value = process.env[name];
@@ -38,9 +37,7 @@ const env = (name) => {
 const workRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../data/work");
 let output;
 let fixture;
-let password;
 let taskA;
-let taskB;
 let taskId;
 let extractionJobId;
 let reviewUrl;
@@ -60,10 +57,8 @@ function loadRuntime() {
     throw new Error(`E2E_ORG_FIXTURE must stay under ${workRoot}`);
   }
   fixture = JSON.parse(readFileSync(manifestPath, "utf8"));
-  if (fixture.schema !== "org-console-e2e-v1") throw new Error("Unsupported fixture manifest");
-  password = env("E2E_ORG_PASSWORD");
+  if (fixture.schema !== "single-user-console-e2e-v2") throw new Error("Unsupported fixture manifest");
   taskA = fixture.tasks.a;
-  taskB = fixture.tasks.b;
   taskId = taskA.task.id;
   extractionJobId = taskA.extractions.low.id;
   reviewUrl = `/app/org/tasks/${taskId}/review?job=${extractionJobId}`;
@@ -77,22 +72,31 @@ function assertResult(payload) {
   expect(Array.isArray(payload.warnings)).toBe(true);
 }
 
-async function login(page, role, org = "a") {
-  const account = fixture.orgs[org].users[role];
-  await page.goto("/app/org/login");
-  await page.getByLabel("邮箱").fill(account.email);
-  await page.getByLabel("密码").fill(password);
-  await page.getByRole("button", { name: "登录" }).click();
+async function login(page) {
+  await openConsole(page);
   await expect(page).toHaveURL(/\/app\/org\/tasks$/);
   await expect(page.getByRole("heading", { name: "招标任务" })).toBeVisible();
 }
 
 // Element Plus selects open a listbox; options are chosen by their visible text.
-// The combobox input sits under the selected-value overlay; the click reaches the select through it.
-// Options are read from the listbox this combobox controls, never from another select still closing.
+// Use the combobox keyboard controls to open and close Element Plus listboxes.
+// Options are scoped to the listbox this combobox controls, never another select closing.
 async function openSelect(page, label) {
   const input = page.getByLabel(label, { exact: true });
-  await input.click({ force: true });
+  // The page disables its selects while an in-flight dry run resolves; a native
+  // disabled input swallows the key press, so wait for the control before opening.
+  await expect(input).toBeEnabled();
+  // Element Plus sometimes ignores the first ArrowDown while the control settles,
+  // leaving aria-controls pointing at a listbox that never became visible. A pointer
+  // click is not an option: the selected-value overlay and the sticky header both
+  // intercept it. Keep to the keyboard and retry until this combobox's listbox opens,
+  // re-reading aria-controls each time in case the dropdown element is re-created.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await input.press("ArrowDown");
+    const listbox = page.locator(`[id="${await input.getAttribute("aria-controls")}"]`);
+    if (await listbox.isVisible()) return listbox;
+    await page.waitForTimeout(100);
+  }
   const listbox = page.locator(`[id="${await input.getAttribute("aria-controls")}"]`);
   await expect(listbox).toBeVisible();
   return listbox;
@@ -107,7 +111,7 @@ async function choose(page, label, option) {
 async function optionTexts(page, label) {
   const listbox = await openSelect(page, label);
   const texts = await listbox.getByRole("option").allTextContents();
-  await page.getByLabel(label, { exact: true }).click({ force: true });
+  await page.getByLabel(label, { exact: true }).press("Escape");
   await expect(listbox).toBeHidden();
   return texts.join("\n");
 }
@@ -119,13 +123,10 @@ async function accept(page) {
 
 async function browserApi(page, method, path, body) {
   return page.evaluate(
-    async ({ requestMethod, requestPath, requestBody }) => {
-      const current = JSON.parse(sessionStorage.getItem("bid.org.session") ?? "null");
-      if (!current) throw new Error("Missing org session");
-      const headers = {
-        Authorization: `Bearer ${current.session}`,
-        "X-Org-Id": current.orgId,
-      };
+    async ({ requestMethod, requestPath, requestBody, sessionKey }) => {
+      const current = sessionStorage.getItem(sessionKey);
+      if (!current) throw new Error("Missing console session");
+      const headers = { Authorization: `Bearer ${current}` };
       if (requestBody !== undefined) headers["Content-Type"] = "application/json";
       const response = await fetch(requestPath, {
         method: requestMethod,
@@ -142,7 +143,7 @@ async function browserApi(page, method, path, body) {
       }
       return { status: response.status, payload };
     },
-    { requestMethod: method, requestPath: path, requestBody: body },
+    { requestMethod: method, requestPath: path, requestBody: body, sessionKey: SESSION_KEY },
   );
 }
 
@@ -171,11 +172,36 @@ function sanitized(value) {
   return value;
 }
 
-test.describe.serial("单位招标、审阅与初稿控制台", () => {
+test.describe("访问密钥登录", () => {
+  test("an unauthenticated visit shows the access-key form", async ({ page }) => {
+    await page.goto("/app/org/tasks");
+    await expect(page).toHaveURL(/\/app\/login$/);
+    await expect(page.getByRole("heading", { name: "输入访问密钥" })).toBeVisible();
+    await expect(page.getByLabel("访问密钥")).toBeVisible();
+    await expect(page.getByRole("button", { name: "进入" })).toBeVisible();
+  });
+
+  test("a wrong access key is rejected without a session", async ({ page }) => {
+    await page.goto("/app/login");
+    await page.getByLabel("访问密钥").fill(`wrong-${"x".repeat(40)}`);
+    await page.getByRole("button", { name: "进入" }).click();
+    await expect(page.getByRole("alert")).toContainText("访问密钥无效");
+    expect(await page.evaluate((key) => sessionStorage.getItem(key), SESSION_KEY)).toBeNull();
+  });
+
+  test("the URL fragment key is exchanged and removed before the tasks page renders", async ({ page }) => {
+    await login(page);
+    expect(new URL(page.url()).hash).toBe("");
+    expect(page.url()).not.toContain("#key");
+    await expect(page.getByRole("heading", { name: "招标任务" })).toBeVisible();
+  });
+});
+
+test.describe.serial("招标、审阅与初稿控制台", () => {
   test.beforeAll(() => loadRuntime());
 
-  test("G1 discovery, exact PDF/Word citations and two-org boundaries", async ({ page, request }) => {
-    await login(page, "viewer");
+  test("G1 discovery and exact PDF/Word citations", async ({ page, request }) => {
+    await login(page);
 
     const ownTask = await browserApi(page, "GET", `/tasks/${taskId}`);
     expect(ownTask.status).toBe(200);
@@ -271,30 +297,14 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
       expect(sourceBlock(pdfChunks.payload.items, requirement)).toContain(requirement.source.quote);
     }
 
-    const foreignTask = taskB.task.id;
-    const foreignDocument = taskB.documents.word.id;
-    const foreignJob = taskB.documents.word.parse_job.id;
-    for (const path of [
-      `/tasks/${foreignTask}`,
-      `/tasks/${foreignTask}/documents`,
-      `/tasks/${foreignTask}/jobs?kind=parse`,
-      `/documents/${foreignDocument}`,
-      `/jobs/${foreignJob}`,
-      `/tasks/${taskId}/jobs?kind=parse&document=${foreignDocument}`,
-    ]) {
-      const hidden = await browserApi(page, "GET", path);
-      expect(hidden.status, path).toBe(404);
-    }
-
     const anonymous = await request.get(`/tasks/${taskId}`);
-    // Org routes report missing credentials as invalid input (422) like the existing routes.
-    expect([401, 422]).toContain(anonymous.status());
+    expect(anonymous.status()).toBe(401);
     expect((await anonymous.json()).ok).toBe(false);
   });
 
-  test("task entry, official reasoning history and live role affordances", async ({ browser }) => {
+  test("task entry and official reasoning history", async ({ browser }) => {
     const admin = await browser.newPage();
-    await login(admin, "admin");
+    await login(admin);
     await admin.getByRole("button", { name: "新建任务" }).click();
     await expect(admin.getByRole("heading", { name: "创建任务" })).toBeVisible();
     for (const label of ["任务名称", "招标编号", "截止时间"]) {
@@ -315,11 +325,11 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await expect(admin.getByRole("status")).toContainText("同内容文件已存在");
 
     const recovered = await browser.newPage();
-    await login(recovered, "admin");
+    await login(recovered);
     await recovered.goto(`/app/org/tasks/${createdTaskId}`);
     // Documents load after the page; read the options only once the selected document is shown.
     await expect(recovered.getByText(/状态：已上传/)).toBeVisible();
-    expect(await optionTexts(recovered, "文档")).toContain("browser-upload-synthetic.pdf");
+    await choose(recovered, "文档", /browser-upload-synthetic\.pdf/);
     await recovered.close();
 
     await admin.getByRole("button", { name: "开始解析" }).click();
@@ -352,11 +362,14 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
       timeout: 30_000,
     });
     await expect(admin.getByRole("table", { name: /抽取历史/ })).toContainText("high");
-    await expect(admin.getByRole("link", { name: "审阅要求" })).toBeVisible();
+    await expect(admin.getByRole("link", { name: "确认要求" })).toBeVisible();
+    await expect(admin.getByRole("link", { name: "审阅响应" })).toBeVisible();
 
     await admin.goto("/app/org/tasks");
+    // Several synthetic tasks may share the fixture name; open the exact task ID.
     await admin
-      .getByRole("row", { name: new RegExp(taskA.task.name) })
+      .getByRole("row")
+      .filter({ has: admin.locator(`a[href="/app/org/tasks/${taskId}"]`) })
       .getByRole("link", { name: "打开任务" })
       .click();
     await expect(admin.getByRole("heading", { name: taskA.task.name })).toBeVisible();
@@ -371,20 +384,6 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await expect(admin.getByTestId("job-status")).toContainText("作业状态：已成功");
     await admin.close();
 
-    const technical = await browser.newPage();
-    await login(technical, "technical");
-    await expect(technical.getByRole("heading", { name: "创建任务" })).toHaveCount(0);
-    await technical.goto(`/app/org/tasks/${taskId}`);
-    await expect(technical.getByRole("button", { name: "上传文件" })).toBeVisible();
-    await technical.close();
-
-    const viewer = await browser.newPage();
-    await login(viewer, "viewer");
-    await expect(viewer.getByRole("heading", { name: "创建任务" })).toHaveCount(0);
-    await viewer.goto(`/app/org/tasks/${taskId}`);
-    await expect(viewer.getByRole("button", { name: "上传文件" })).toHaveCount(0);
-    await expect(viewer.getByRole("button", { name: "开始解析" })).toHaveCount(0);
-    await viewer.close();
   });
 
   test("1,200-row filtering, pagination and keyboard review meet the gate", async ({ page }) => {
@@ -396,7 +395,7 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     page.on("request", (request) => {
       if (request.url().includes("/preview/download")) previewRequests.push(request.url());
     });
-    await login(page, "technical");
+    await login(page);
 
     const started = Date.now();
     await page.goto(reviewUrl);
@@ -444,14 +443,12 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await choose(page, "类别", "技术");
     await expect(page.getByTestId("requirement-count")).toContainText("全集 1200");
     await choose(page, "状态", "缺卡片");
-    await page.getByLabel("待我审阅").check();
     await page.getByLabel("只看缺口").check();
     await page.getByLabel("只看星标").check();
     await expect(page.getByTestId("requirement-count")).toBeVisible();
 
     await page.getByLabel("只看星标").uncheck();
     await page.getByLabel("只看缺口").uncheck();
-    await page.getByLabel("待我审阅").uncheck();
     await choose(page, "状态", "全部");
     await choose(page, "类别", "全部");
     await expect(page.getByTestId("requirement-row")).toHaveCount(50);
@@ -461,7 +458,7 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await page.keyboard.press("Enter");
     await expect(page.getByRole("region", { name: "要求审阅详情" })).toBeVisible();
     await expect(page.getByText("招标原文", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: /下一条待我审阅/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /下一条待审阅/ })).toBeVisible();
 
     const interactionP95 = p95(samples);
     expect(interactionP95).toBeLessThanOrEqual(fixture.expectations.interaction_p95_ms_max);
@@ -507,10 +504,14 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     );
   });
 
+  // The 1,200-requirement fixture makes this serial review chain cost ~47s
+  // (measured 34.5s of human review work plus a 12.6s draft job), which exceeds
+  // Playwright's 60s default before the model-generation assertions run.
   test("review gates, conflict, atomic comply-only, drafts and the bound model generation run", async ({ browser }) => {
+    test.setTimeout(180_000);
     const technical = await browser.newPage();
     technical.on("dialog", (dialog) => dialog.accept());
-    await login(technical, "technical");
+    await login(technical);
     const modelRequests = [];
     technical.on("request", (request) => {
       if (request.method() !== "POST" || !request.url().endsWith("/cards/generations")) return;
@@ -530,18 +531,9 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await accept(technical);
     await expect(technical.getByText(/状态：已确认/)).toBeVisible();
 
-    const adminReviewer = await browser.newPage();
-    await login(adminReviewer, "admin");
-    await adminReviewer.goto(
-      `${reviewUrl}&requirement=${fixture.review.cards.pending_needs_material.requirement_id}`,
-    );
-    await expect(adminReviewer.getByText(/状态：待审阅/)).toBeVisible();
-    await expect(adminReviewer.getByRole("button", { name: "确认响应" })).toHaveCount(0);
-    await adminReviewer.close();
-
     const bidder = await browser.newPage();
     bidder.on("dialog", (dialog) => dialog.accept());
-    await login(bidder, "bidder");
+    await login(bidder);
     await bidder.goto(
       `${reviewUrl}&requirement=${fixture.review.cards.pending_reject.requirement_id}`,
     );
@@ -571,9 +563,10 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
 
     const conflict = fixture.review.cards.conflict_target;
     const second = await browser.newPage();
-    await login(second, "technical");
+    await login(second);
     await technical.goto(`${reviewUrl}&requirement=${conflict.requirement_id}`);
-    const localText = technical.getByLabel("响应正文");
+    // The label is shared by the form item and the editor; address the editor itself.
+    const localText = technical.getByRole("textbox", { name: "响应正文" });
     await localText.fill("浏览器一保留的未保存并发响应。");
     const competing = await browserApi(second, "PUT", `/cards/${conflict.id}`, {
       expected_revision: conflict.revision,
@@ -586,7 +579,8 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await technical.getByRole("button", { name: "保存草稿" }).click();
     await expect(technical.getByRole("dialog", { name: "修订冲突" })).toBeVisible();
     await expect(technical.getByRole("alert")).toContainText(/修订|改变/);
-    await expect(localText).toHaveValue("浏览器一保留的未保存并发响应。");
+    // The editor is a contenteditable element; retained text is its text content.
+    await expect(localText).toHaveText("浏览器一保留的未保存并发响应。");
     await second.close();
 
     const candidates = fixture.review.batch_candidates;
@@ -648,7 +642,7 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await batchDialog.getByRole("button", { name: "提交整批处置" }).click();
     await expect(technical.getByRole("status")).toContainText("整批处置已保存");
 
-    await technical.getByText("模型起草预检", { exact: true }).click();
+    await technical.getByText("模型起草预览", { exact: true }).click();
     await technical.getByRole("button", { name: "预检外发范围与配置" }).click();
     await expect(technical.getByRole("heading", { name: "本次预检" })).toBeVisible();
     // The run stays disabled until a human authorizes this exact preview.
@@ -663,10 +657,10 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await expect(technical.getByText("响应行", { exact: true })).toBeVisible();
     await expect(technical.getByText("须遵守", { exact: true })).toBeVisible();
     await expect(technical.getByText("缺口", { exact: true })).toBeVisible();
-    await expect(technical.getByText(/本次预检不调用模型/)).toBeVisible();
+    await expect(technical.locator(".draft-preview").getByText("本次预检为确定性组表，不调用模型。", { exact: true })).toBeVisible();
     await technical.getByRole("button", { name: "确认生成初稿" }).click();
     await expect(technical.getByTestId("job-status")).toContainText("作业状态：已成功", {
-      timeout: 30_000,
+      timeout: 60_000,
     });
     await expect(technical.getByText(/份$/).first()).toBeVisible();
     await expect(technical.getByText("有缺口", { exact: true }).first()).toBeVisible();
@@ -695,24 +689,19 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     expect(partition).toHaveLength(fixture.expectations.large_requirement_count);
     expect(new Set(partition).size).toBe(fixture.expectations.large_requirement_count);
 
-    const viewer = await browser.newPage();
-    await login(viewer, "viewer");
-    await viewer.goto(reviewUrl);
-    await expect(viewer.getByRole("button", { name: "保存草稿" })).toHaveCount(0);
-    await expect(viewer.getByRole("button", { name: "确认响应" })).toHaveCount(0);
-    await expect(viewer.getByRole("button", { name: /批量仅需遵守/ })).toHaveCount(0);
-    await viewer.goto(`/app/org/tasks/${taskId}/drafts?job=${extractionJobId}`);
-    await expect(viewer.getByRole("button", { name: "预检组表" })).toHaveCount(0);
-    await viewer.close();
-
     // A human-authorized run carries the exact preview hash.
     await technical.goto(reviewUrl);
     await choose(technical, "类别", "技术");
     await choose(technical, "状态", "缺卡片");
     await technical.getByTestId("requirement-row").getByRole("checkbox").first().check();
-    await technical.getByText("模型起草预检", { exact: true }).click();
+    await technical.getByText("模型起草预览", { exact: true }).click();
     await technical.getByRole("button", { name: "预检外发范围与配置" }).click();
     await expect(technical.getByRole("heading", { name: "本次预检" })).toBeVisible();
+    const tokenEstimate = technical.locator(".stat").filter({
+      has: technical.getByText("估算 tokens", { exact: true }),
+    }).locator("strong");
+    await expect(tokenEstimate).toBeVisible();
+    await expect(tokenEstimate).toHaveText(/^[1-9]\d*$/);
     const inputHash = (await technical.locator(".details-list code").last().textContent()).trim();
     const runModel = technical.getByRole("button", { name: "确认并运行" });
     await expect(runModel).toBeDisabled();
@@ -728,6 +717,77 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
 
     expect(modelRequests[0].requirement_ids).toHaveLength(1);
 
+    // Verify actor attribution on human-confirmed card and draft
+    const confirmedCard = await browserApi(
+      technical,
+      "GET",
+      `/cards/${pending.id}`,
+    );
+    expect(confirmedCard.status).toBe(200);
+    expect(confirmedCard.payload.data.actor_kind).toBe("session");
+    expect(confirmedCard.payload.data.origin).toBe("human");
+    expect(confirmedCard.payload.data.confirmed_at).toBeTruthy();
+
+    // Token and agent denial: tokens cannot mint human-only scopes or confirm/export
+    const forbiddenToken = await browserApi(technical, "POST", "/tokens", {
+      name: "illegal-token",
+      scopes: ["evidence:confirm", "export"],
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+    });
+    expect(forbiddenToken.status).toBe(403);
+    expect(forbiddenToken.payload.data.error.code).toBe("forbidden_scopes");
+
+    const tokenRes = await browserApi(technical, "POST", "/tokens", {
+      name: "e2e-scoped-token",
+      scopes: ["card:write", "job:read"],
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+    });
+    expect(tokenRes.status).toBe(200);
+    const tokenSecret = tokenRes.payload.data.token;
+    expect(tokenSecret).toMatch(/^bid_/);
+
+    const tokenConfirm = await technical.evaluate(async ({ cardId, secret }) => {
+      const res = await fetch(`/cards/${cardId}/actions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${secret}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "confirm",
+          expected_revision: 1,
+          reviewed_evidence_ids: [],
+          reviewed_warning_codes: [],
+          reason: "Token unauthorized confirm attempt",
+        }),
+      });
+      let json = null;
+      try { json = await res.json(); } catch {}
+      return { status: res.status, json };
+    }, { cardId: pending.id, secret: tokenSecret });
+    expect(tokenConfirm.status).toBe(403);
+
+    const tokenExport = await technical.evaluate(async ({ tId, draftId, secret }) => {
+      const res = await fetch(`/tasks/${tId}/export-runs`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${secret}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          draft_id: draftId,
+          task_template_id: tId,
+          binding_id: tId,
+          mode: "review_copy",
+          dry_run: true,
+        }),
+      });
+      let json = null;
+      try { json = await res.json(); } catch {}
+      return { status: res.status, json };
+    }, { tId: taskId, draftId: fixture.review.drafts.current.id, secret: tokenSecret });
+    expect(tokenExport.status).toBe(403);
+
     const result = sanitized({
       passed: true,
       fixture: fixture.fixture,
@@ -735,21 +795,21 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
       extraction_job_id: extractionJobId,
       gates: [
         "real-api-discovery",
-        "two-org-isolation",
         "exact-pdf-word-citations",
-        "role-read-only",
         "revision-conflict",
         "atomic-comply-only",
         "partial-stale-drafts",
         "generation-dry-run-model-unauthorized",
         "generation-model-bound-run",
+        "token-agent-denial",
+        "actor-attribution",
       ],
       rerun: {
         command: "cd web && npx playwright test e2e/org-console.spec.js",
         environment: [
           "E2E_BASE_URL",
           "E2E_ORG_FIXTURE",
-          "E2E_ORG_PASSWORD",
+          "E2E_ACCESS_KEY",
           "E2E_OUTPUT",
         ],
       },
@@ -768,10 +828,10 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     bidder.on("console", (message) => {
       if (message.type() === "error") consoleErrors.push(message.text());
     });
-    await login(bidder, "bidder");
+    await login(bidder);
     const firstPage = async (title) => {
       const dialog = bidder.getByRole("dialog", { name: title });
-      await expect(dialog).toBeVisible();
+      await expect(dialog).toBeVisible({ timeout: 30_000 });
       const image = dialog.getByRole("img", { name: `${title} 第 1 页` });
       await expect(image).toBeVisible({ timeout: 60_000 });
       expect(await image.evaluate((element) => element.naturalWidth)).toBeGreaterThan(300);
@@ -819,11 +879,5 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     expect(consoleErrors).toEqual([]);
     await bidder.close();
 
-    const viewer = await browser.newPage();
-    await login(viewer, "viewer");
-    await viewer.goto(`/app/org/tasks/${previews.task.id}`);
-    await expect(viewer.getByRole("heading", { name: previews.task.name })).toBeVisible();
-    await expect(viewer.getByRole("table", { name: "已发布的导出文件" })).toHaveCount(0);
-    await viewer.close();
   });
 });

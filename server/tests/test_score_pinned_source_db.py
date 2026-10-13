@@ -5,10 +5,10 @@ Failure inventory recorded before authoring:
 * a short model citation can overwrite its complete pinned rubric Source;
 * API acceptance can hide a failed stored citation binding/uniqueness gate;
 * moving the unrelated repeat before or after the Source can change the outcome;
-* a stored successful report can expose another tenant's synthetic bid content.
+* a stored successful report can expose an unrelated task's synthetic bid content.
 
 Uses the existing synthetic tender, actual rubric/card confirmation, DraftRun,
-HTTP MockTransport scoring Provider, and tenant-scoped persistence fixtures.
+HTTP MockTransport scoring Provider, and single-user persistence fixtures.
 This module requires an explicitly authorized isolated PostgreSQL test runtime.
 """
 
@@ -39,12 +39,11 @@ async def rubric_input_case(original_rubric_input_case, repeat_position):
     source = deepcopy(case["requirements"][0]["source"])
     pinned_quote = source["quote"]
     repeated = f"其他技术条款说明：{QUOTE}；这句话位于固定评分 Source 之外。"
-    org = case["tenants"]["orgs"][0]
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         requirement = await session.get(Requirement, UUID(case["requirements"][0]["id"]))
         assert requirement is not None and requirement.quote == pinned_quote
         chunk = await session.get(Chunk, requirement.chunk_id)
-        assert chunk is not None and chunk.blocks is None and chunk.page == source["page"]
+        assert chunk is not None and chunk.blocks is None and (chunk.page == source["page"])
         original = "\n".join(
             (repeated, chunk.text) if repeat_position == "before" else (chunk.text, repeated)
         )
@@ -56,7 +55,6 @@ async def rubric_input_case(original_rubric_input_case, repeat_position):
         assert review.state == "invalidated"
         await confirm_requirements_async(
             session,
-            org,
             UUID(case["task"]),
             [requirement.id],
             settings=case["app"].state.processor.settings,
@@ -80,9 +78,7 @@ async def test_score_short_citation_repeated_outside_source_persists_assessed(
     source = case["pinned_source"]
     assert case["rubric"]["rubric"]["state"] == "confirmed"
     assert case["rubric"]["items"][0]["source"] == source
-    assert case["rubric"]["items"][0]["confirmed_by"]
     assert not case["score_vendor"].requests
-
     preview = await preview_score(case)
     assert preview["admission_blocker"] is None
     submitted = await submit_score(case, preview)
@@ -91,7 +87,6 @@ async def test_score_short_citation_repeated_outside_source_persists_assessed(
     assert terminal["status"] == "succeeded", terminal
     assert terminal["result"]["completion"] == "complete", terminal
     assert Decimal(terminal["result"]["estimated_total"]) == 5
-
     report_id = terminal["result"]["report_id"]
     path = f"/tasks/{case['task']}/scores/{report_id}"
     response = await case["api"].get(path, headers=case["header"])
@@ -106,7 +101,6 @@ async def test_score_short_citation_repeated_outside_source_persists_assessed(
     citation_source = {**source, "quote": QUOTE}
     tender = next(citation for citation in item["citations"] if citation["kind"] == "tender")
     assert tender["source"] == citation_source
-
     assert len(case["score_vendor"].requests) == 1
     request = case["score_vendor"].requests[0]
     tender_ref = request["items"][0]["tender_ref"]
@@ -114,10 +108,7 @@ async def test_score_short_citation_repeated_outside_source_persists_assessed(
     assert sent == source["quote"]
     assert QUOTE in sent and case["outside_repeat"] not in json.dumps(request, ensure_ascii=False)
     assert len(report["report"]["usage_record_ids"]) == 1
-    assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
-
-    org = case["tenants"]["orgs"][0]
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         stored = (
             await session.scalars(
                 select(ScoreReportItem).where(ScoreReportItem.report_id == UUID(report_id))
@@ -141,7 +132,6 @@ async def test_score_short_citation_repeated_outside_source_persists_assessed(
         assert requirement is not None and requirement.quote == source["quote"]
         chunk = await session.get(Chunk, citation.chunk_id)
         assert chunk is not None and chunk.text == case["source_original"]
-
     artifact = case["tmp_path"] / f"score-pinned-source-db-{repeat_position}.json"
     artifact.write_text(
         json.dumps(
@@ -153,10 +143,7 @@ async def test_score_short_citation_repeated_outside_source_persists_assessed(
                 "preview": preview,
                 "job": terminal,
                 "report": report,
-                "rerun": (
-                    ".venv/bin/python -m pytest server/tests/test_score_pinned_source_db.py "
-                    f"-k {repeat_position} -q"
-                ),
+                "rerun": f".venv/bin/python -m pytest server/tests/test_score_pinned_source_db.py -k {repeat_position} -q",
             },
             ensure_ascii=False,
             indent=2,

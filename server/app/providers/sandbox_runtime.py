@@ -53,7 +53,6 @@ class SandboxFailure(Exception):
 
 @dataclass(frozen=True)
 class RunDescriptor:
-    org_id: UUID
     job_id: UUID
     attempt_id: UUID
     input_sha256: str
@@ -119,7 +118,7 @@ class RunDescriptor:
     @classmethod
     def from_wire(cls, value: dict[str, Any]) -> "RunDescriptor":
         values = dict(value)
-        for key in ("org_id", "job_id", "attempt_id"):
+        for key in ("job_id", "attempt_id"):
             values[key] = UUID(values[key])
         values["pdf_pages"] = tuple(values.get("pdf_pages", ()))
         result = cls(**values)

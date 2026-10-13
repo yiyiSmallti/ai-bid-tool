@@ -17,7 +17,6 @@ class CallPlan(Contract):
     model: str = Field(min_length=1, max_length=100)
     version: str = Field(min_length=1, max_length=100)
     provider_config_id: UUID | None = None
-    platform_model_id: str | None = None
     request_sha256: Sha256
     input_tokens_upper_bound: int = Field(default=0, ge=0)
     output_tokens_upper_bound: int = Field(default=0, ge=0)

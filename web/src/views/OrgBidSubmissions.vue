@@ -2,11 +2,12 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import TaskNavigation from "../components/TaskNavigation.vue";
-import { formatTime, orgRequest } from "../org.js";
-import { fileKinds, mib, multipart, reviewAuthority, reviewError, submissionPath, submissionStates, uploadManifest } from "../bid-review.js";
+import { request } from "../api.js";
+import { formatTime } from "../org.js";
+import { fileKinds, mib, multipart, reviewError, submissionPath, submissionStates, uploadManifest } from "../bid-review.js";
 const route = useRoute(), router = useRouter();
 const taskId = computed(() => String(route.params.taskId));
-const rows = ref([]), submissions = ref([]), listMeta = ref(null), preview = ref(null), consent = ref(false), writable = ref(false), busy = ref(false), error = ref("");
+const rows = ref([]), submissions = ref([]), listMeta = ref(null), preview = ref(null), consent = ref(false), busy = ref(false), error = ref("");
 let sequence = 0, requestId = crypto.randomUUID(), controller;
 const total = computed(() => rows.value.reduce((sum, row) => sum + row.file.size, 0));
 function invalidate() { preview.value = null; consent.value = false; requestId = crypto.randomUUID(); }
@@ -15,20 +16,20 @@ function remove(id) { invalidate(); rows.value = rows.value.filter(row => row.id
 async function list(cursor = null) {
   const run = sequence;
   const query = new URLSearchParams({ limit: "50" }); if (cursor) query.set("cursor", cursor);
-  const result = await orgRequest("GET", `${submissionPath(taskId.value)}?${query}`, undefined, { signal: controller?.signal });
+  const result = await request("GET", `${submissionPath(taskId.value)}?${query}`, undefined, { signal: controller?.signal });
   if (run !== sequence) return;
   if (result.data.task_id !== taskId.value) throw new Error("task mismatch");
   submissions.value = result.items; listMeta.value = result.data;
 }
 async function load() {
-  const run = ++sequence; controller?.abort(); controller = new AbortController(); error.value = ""; writable.value = false; busy.value = false; rows.value = []; submissions.value = []; listMeta.value = null; invalidate();
-  try { const allowed = await reviewAuthority(taskId.value); if (run !== sequence) return; writable.value = allowed; await list(); }
+  sequence++; controller?.abort(); controller = new AbortController(); error.value = ""; busy.value = false; rows.value = []; submissions.value = []; listMeta.value = null; invalidate();
+  try { await list(); }
   catch (exc) { if (exc.name !== "AbortError") error.value = reviewError(exc); }
 }
 async function inspect() {
   const run = sequence, task = taskId.value;
   busy.value = true; error.value = ""; preview.value = null; consent.value = false;
-  try { const metadata = await uploadManifest(rows.value, requestId, true); if (run !== sequence) return; const result = await orgRequest("POST", submissionPath(task), multipart(rows.value, metadata), { signal: controller?.signal }); if (run === sequence) preview.value = result.data; }
+  try { const metadata = await uploadManifest(rows.value, requestId, true); if (run !== sequence) return; const result = await request("POST", submissionPath(task), multipart(rows.value, metadata), { signal: controller?.signal }); if (run === sequence) preview.value = result.data; }
   catch (exc) { if (run === sequence && exc.name !== "AbortError") error.value = reviewError(exc); }
   finally { if (run === sequence) busy.value = false; }
 }
@@ -39,21 +40,21 @@ async function upload() {
   try {
     const metadata = await uploadManifest(rows.value, requestId, false);
     if (run !== sequence) return;
-    const result = await orgRequest("POST", submissionPath(task), multipart(rows.value, metadata), { signal: controller?.signal });
+    const result = await request("POST", submissionPath(task), multipart(rows.value, metadata), { signal: controller?.signal });
     if (run !== sequence) return;
     rows.value = []; invalidate(); await router.push(`/org/tasks/${taskId.value}/bid-submissions/${result.data.id}`);
   } catch (exc) { if (run === sequence && exc.name !== "AbortError") error.value = reviewError(exc); }
   finally { if (run === sequence) busy.value = false; }
 }
 watch(taskId, load, { immediate: true });
-window.addEventListener("bid:org-reset", load);
-onBeforeUnmount(() => { sequence++; controller?.abort(); rows.value = []; preview.value = null; window.removeEventListener("bid:org-reset", load); });
+window.addEventListener("bid:session-reset", load);
+onBeforeUnmount(() => { sequence++; controller?.abort(); rows.value = []; preview.value = null; window.removeEventListener("bid:session-reset", load); });
 </script>
 <template>
   <TaskNavigation :task-id="taskId" />
   <div class="page-heading"><div><h2>标书检验</h2><p class="hint">将招标文件和已编写的投标文件固定为一次提交，然后明确开始本地准备。</p></div><el-button :disabled="busy" @click="load">刷新提交列表</el-button></div>
   <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" class="section" />
-  <el-card v-if="writable" class="section" shadow="never">
+  <el-card class="section" shadow="never">
     <template #header><h3>上传标书</h3></template>
     <el-steps :active="preview ? 1 : 0" finish-status="success" simple><el-step title="选择文件与角色" /><el-step title="预览限制" /><el-step title="上传固定版本" /></el-steps>
     <p class="hint">仅支持 PDF、DOCX；招标和投标合计最多 20 份。文件上限 100 MiB，总上限 500 MiB，实际以预览显示的部署限制为准。不接受加密、密码保护或需要修复的 PDF。</p>
@@ -76,7 +77,6 @@ onBeforeUnmount(() => { sequence++; controller?.abort(); rows.value = []; previe
       <div class="actions section"><el-button type="primary" :loading="busy" :disabled="!consent" @click="upload">上传固定版本</el-button></div>
     </div>
   </el-card>
-  <el-alert v-else title="当前身份可查看安全提交信息；上传和准备需要任务负责人或协作成员中的管理员、商务成员。" type="info" :closable="false" class="section" />
   <el-card class="section" shadow="never"><template #header><h3>提交列表</h3></template>
     <el-table role="table" :data="submissions" aria-label="提交列表" empty-text="还没有标书提交">
       <el-table-column label="提交版本" min-width="200"><template #default="{ row }"><RouterLink :to="`/org/tasks/${taskId}/bid-submissions/${row.id}`">版本 {{ row.revision }}</RouterLink><div class="hint mono">{{ row.id }}</div></template></el-table-column>

@@ -44,8 +44,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [llm-providers.md](notes/llm-providers.md): model calls, batching, errors and usage for extraction and response (响应) drafting.
 - [docx-citations.md](notes/docx-citations.md): Word citations by section, paragraph and table cell.
 - [reasoning-levels.md](notes/reasoning-levels.md): official reasoning levels and extraction history.
-- [platform-console.md](notes/platform-console.md): platform operator console (平台运营后台), TOTP, org activation/deactivation and model catalog.
-- [operator-enrollment.md](notes/operator-enrollment.md): private enrollment links, password confirmation, encrypted authenticator factors and device recovery.
+- [platform-console.md](notes/platform-console.md): configured operator authentication, TOTP and model catalog.
 - [versioned-resources.md](notes/versioned-resources.md): product revisions and task (任务) snapshots.
 - [model-settings.md](notes/model-settings.md): metadata-only org model settings, immutable identity and explicit connection tests.
 - [management-pages.md](notes/management-pages.md): bounded product library reads, independent lifecycle and explicit revision pinning.
@@ -57,7 +56,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [unconfirmed-evidence-sources.md](notes/unconfirmed-evidence-sources.md): unconfirmed PDF-page sources.
 - [provider-config.md](notes/provider-config.md): org model revisions, separate key encryption, model resolution, call usage.
 - [human-section-exports.md](notes/human-section-exports.md): human export of Word response sections, fixed manifests, candidate and release gates, evidence-page attachments and signed downloads.
-- [team-workflow.md](notes/team-workflow.md): task membership, archival, bounded board snapshots, durable progress and reviewed authorization cutover.
+- [Task board and durable progress](notes/task-progress.md): bounded snapshots, activities, event polling and authenticated streams.
 - [org-console.md](notes/org-console.md): org task recovery, parsing and extraction, human response-card review, drafting resource previews and the draft-gap (缺口) console.
 - [product-simulation.md](notes/product-simulation.md): simulated proposals (模拟拟投), product selection by procurement item, official-page search and capture, verbatim parameter extraction and simulated-material markings.
 - [page-previews.md](notes/page-previews.md): online page previews of original tender documents (招标文件), original certificates and exports, and export conversion.
@@ -67,8 +66,6 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [attachment-archives.md](notes/attachment-archives.md): immutable PDF review, exact declaration/task pins, page privacy and retained-object reconciliation.
 - [annotation.md](notes/annotation.md): source-bound cloud certificate-page candidates, exact-approval confirmed releases, and explicit human attachment.
 - [screenshot-evidence.md](notes/screenshot-evidence.md): screenshot pixel redaction and privacy clearance, vendor web/PDF capture and archival, vendor-source search, response-card image evidence, prototype (原型) delivery decisions, analysis admission and usage, and invalidation/recomputation.
-- [Organization self-service application](notes/org-signup.md): public admission, platform review and expiry.
-- [Organization member management](notes/org-members.md): invitations, revision CAS, administrator continuity and reversible revocation.
 
 ## Decision records
 
@@ -81,12 +78,14 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [0008 Organization self-service applications](adr/0008-org-signup.md) (adr)
 - [0009 Browser enrollment of platform operators](adr/0009-operator-enrollment.md) (adr)
 - [0011 Remove billing, prices and task budgets](adr/0011-remove-billing.md) (adr)
+- [0012 Single-user local installation](adr/0012-single-user-installation.md) (adr)
 
 ## Plans and records
 
 Implementation and acceptance status is maintained on each plan page; the
 [roadmap](plan/roadmap.md) links the remaining work and dependencies.
 
+- [Single-user local installation](plan/single-user.md) (plan): staged surface removal, access key and baseline schema.
 - [Remaining scope and roadmap](plan/roadmap.md) (plan): coverage matrices, known defects and open decisions.
 - [Cloud annotation contract](plan/annotation.md) (plan): archived certificate pages, bounded server rendering, human response review and confirmed image releases.
 - [Org model configuration contract](plan/provider-config.md) (plan): org BYOK models and platform-model selection.

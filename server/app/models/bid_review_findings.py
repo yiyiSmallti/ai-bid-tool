@@ -1,172 +1,289 @@
-"""Immutable findings, normalized inspected sources and append-only human events."""
+from datetime import datetime
+from uuid import UUID, uuid4
 
-from uuid import UUID
-
-from sqlalchemy import CheckConstraint, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    PrimaryKeyConstraint,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy import (
+    text as sql_text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.bid_review import common, fk
-from app.models.bid_review_run import run_fk
-from app.models.entities import Base, Tenant
+from app.models.entities import Base
 
 
-class BidReviewFinding(Tenant, Base):
-    __tablename__ = "bid_review_findings"
-    task_id: Mapped[UUID] = mapped_column()
-    submission_id: Mapped[UUID] = mapped_column()
-    review_id: Mapped[UUID] = mapped_column()
-    obligation_id: Mapped[UUID] = mapped_column()
-    ordinal: Mapped[int] = mapped_column(Integer)
-    code: Mapped[str] = mapped_column(String(100))
-    outcome: Mapped[str] = mapped_column(String(20))
-    severity: Mapped[str] = mapped_column(String(10))
-    impact: Mapped[str] = mapped_column(String(20))
-    tender_support_count: Mapped[int] = mapped_column(Integer)
-    bid_support_count: Mapped[int] = mapped_column(Integer)
-    search_source_count: Mapped[int] = mapped_column(Integer)
-    rule_document_count: Mapped[int] = mapped_column(Integer)
-    absence_kind: Mapped[str | None] = mapped_column(String(30))
-    absence_coverage: Mapped[str | None] = mapped_column(String(30))
-    absence_method: Mapped[str | None] = mapped_column(String(30))
-    absence_manifest_sha256: Mapped[str | None] = mapped_column(String(64))
-    limitation_count: Mapped[int] = mapped_column(Integer)
-    details_encrypted: Mapped[str] = mapped_column(Text)
-    details_sha256: Mapped[str] = mapped_column(String(64))
+class BidReviewFindingEvent(Base):
+    __tablename__ = "bid_review_finding_events"
+    task_id: Mapped[UUID] = mapped_column(nullable=False)
+    submission_id: Mapped[UUID] = mapped_column(nullable=False)
+    review_id: Mapped[UUID] = mapped_column(nullable=False)
+    finding_id: Mapped[UUID] = mapped_column(nullable=False)
+    request_id: Mapped[UUID] = mapped_column(nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    prior_decision_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    review_domain: Mapped[str] = mapped_column(String(20), nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False)
+    expected_input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    id: Mapped[UUID] = mapped_column(nullable=False, primary_key=True, default=uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
     __table_args__ = (
-        *common(),
-        run_fk(),
-        UniqueConstraint("org_id", "task_id", "submission_id", "review_id", "id"),
-        UniqueConstraint("org_id", "review_id", "ordinal"),
-        fk(
-            ["task_id", "submission_id", "review_id", "obligation_id"],
-            "bid_review_obligations",
-            ["task_id", "submission_id", "review_id", "id"],
+        CheckConstraint(
+            "((((revision >= 2) AND (revision <= 100000)) AND ((action)::text = ANY ((ARRAY['classify'::character varying, 'dismiss'::character varying, 'reopen'::character varying, 'confirm'::character varying])::text[])) AND ((review_domain)::text = ANY ((ARRAY['commercial'::character varying, 'technical'::character varying])::text[])) AND ((state)::text = ANY ((ARRAY['open'::character varying, 'dismissed'::character varying, 'confirmed'::character varying])::text[]))))",
+            name="bid_review_finding_events_check",
         ),
         CheckConstraint(
-            "tender_support_count BETWEEN 1 AND 20 AND bid_support_count BETWEEN 0 AND 20 AND search_source_count BETWEEN 0 AND 1000 AND rule_document_count BETWEEN 0 AND 19 AND limitation_count BETWEEN 0 AND 100"
+            "((((expected_input_hash)::text ~ '^[0-9a-f]{64}$'::text) AND ((reason_sha256)::text ~ '^[0-9a-f]{64}$'::text) AND ((payload_hash)::text ~ '^[0-9a-f]{64}$'::text) AND (length(reason_encrypted) > 0)))",
+            name="bid_review_finding_events_check1",
         ),
-        CheckConstraint(
-            "(absence_kind IS NULL AND absence_coverage IS NULL AND absence_method IS NULL AND absence_manifest_sha256 IS NULL AND search_source_count=0 AND (bid_support_count>0 OR rule_document_count>0)) OR (absence_kind='locations' AND absence_coverage IN ('required_locations','all_bid_pages','partial') AND absence_method IN ('local_text','local_pdf','ocr','llm','human') AND absence_manifest_sha256 IS NULL AND (search_source_count>0 OR (outcome='unknown' AND absence_coverage='partial'))) OR (absence_kind='submission_inventory' AND absence_coverage IN ('complete_inventory','partial') AND absence_method IN ('manifest_rule','llm_mapping','human') AND absence_manifest_sha256 ~ '^[0-9a-f]{64}$' AND search_source_count BETWEEN 1 AND 19)"
+        UniqueConstraint("request_id", name="bid_review_finding_events_decided_by_request_id_key"),
+        UniqueConstraint(
+            "finding_id", "revision", name="bid_review_finding_events_finding_id_revision_key"
         ),
-        CheckConstraint(
-            "(absence_coverage IS DISTINCT FROM 'partial' OR (outcome='unknown' AND limitation_count>0)) AND (outcome<>'unknown' OR limitation_count>0)"
+        UniqueConstraint("task_id", "id", name="bid_review_finding_events_task_id_id_key"),
+        UniqueConstraint(
+            "task_id",
+            "submission_id",
+            "review_id",
+            "finding_id",
+            "id",
+            name="bid_review_finding_events_task_id_submission_id_revi_key",
         ),
-        CheckConstraint("ordinal BETWEEN 1 AND 10000 AND code ~ '^[a-z][a-z0-9_]{0,99}$'"),
-        CheckConstraint(
-            "outcome IN ('responded','deviation','missing','unknown') AND severity IN ('fatal','high','medium') AND impact IN ('rejection','lost_points','both','uncertain')"
+        PrimaryKeyConstraint("id", name="bid_review_finding_events_pkey"),
+        ForeignKeyConstraint(
+            ["task_id"], ["tasks.id"], name="bid_review_finding_events_task_id_fkey"
         ),
-        CheckConstraint(
-            "(outcome<>'responded' OR bid_support_count>0) AND (outcome<>'deviation' OR bid_support_count>0 OR rule_document_count>0) AND (outcome NOT IN ('missing','unknown') OR absence_kind IS NOT NULL) AND (outcome<>'missing' OR bid_support_count=0) AND (rule_document_count=0 OR (code='signature_validation_invalid' AND outcome='deviation'))"
+        ForeignKeyConstraint(
+            ["task_id", "submission_id", "review_id", "finding_id", "prior_decision_id"],
+            [
+                "bid_review_finding_events.task_id",
+                "bid_review_finding_events.submission_id",
+                "bid_review_finding_events.review_id",
+                "bid_review_finding_events.finding_id",
+                "bid_review_finding_events.id",
+            ],
+            name="bid_review_finding_events_task_id_submission_id_re_fkey1",
         ),
-        CheckConstraint("length(details_encrypted)>0 AND details_sha256 ~ '^[0-9a-f]{64}$'"),
+        ForeignKeyConstraint(
+            ["task_id", "submission_id", "review_id", "finding_id"],
+            [
+                "bid_review_findings.task_id",
+                "bid_review_findings.submission_id",
+                "bid_review_findings.review_id",
+                "bid_review_findings.id",
+            ],
+            name="bid_review_finding_events_task_id_submission_id_rev_fkey",
+        ),
     )
 
 
-def finding_fk():
-    return fk(
-        ["task_id", "submission_id", "review_id", "finding_id"],
-        "bid_review_findings",
-        ["task_id", "submission_id", "review_id", "id"],
-    )
-
-
-class BidReviewFindingSource(Tenant, Base):
+class BidReviewFindingSource(Base):
     __tablename__ = "bid_review_finding_sources"
-    task_id: Mapped[UUID] = mapped_column()
-    submission_id: Mapped[UUID] = mapped_column()
-    review_id: Mapped[UUID] = mapped_column()
-    finding_id: Mapped[UUID] = mapped_column()
-    preparation_id: Mapped[UUID] = mapped_column()
-    validation_id: Mapped[UUID | None] = mapped_column()
-    document_id: Mapped[UUID] = mapped_column()
-    page_id: Mapped[UUID | None] = mapped_column()
-    kind: Mapped[str] = mapped_column(String(30))
-    ordinal: Mapped[int] = mapped_column(Integer)
-    quote_sha256: Mapped[str | None] = mapped_column(String(64))
-    start_offset: Mapped[int | None] = mapped_column(Integer)
-    end_offset: Mapped[int | None] = mapped_column(Integer)
+    task_id: Mapped[UUID] = mapped_column(nullable=False)
+    submission_id: Mapped[UUID] = mapped_column(nullable=False)
+    review_id: Mapped[UUID] = mapped_column(nullable=False)
+    finding_id: Mapped[UUID] = mapped_column(nullable=False)
+    preparation_id: Mapped[UUID] = mapped_column(nullable=False)
+    validation_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    document_id: Mapped[UUID] = mapped_column(nullable=False)
+    page_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    quote_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    start_offset: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_offset: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    id: Mapped[UUID] = mapped_column(nullable=False, primary_key=True, default=uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
     __table_args__ = (
-        *common(),
-        finding_fk(),
-        fk(
-            ["task_id", "submission_id", "preparation_id", "document_id", "validation_id"],
-            "bid_pdf_validations",
-            ["task_id", "submission_id", "preparation_id", "document_id", "id"],
+        CheckConstraint(
+            "((((kind)::text = 'rule_document'::text) = (validation_id IS NOT NULL)))",
+            name="bid_review_finding_sources_check",
         ),
-        CheckConstraint("(kind='rule_document')=(validation_id IS NOT NULL)"),
-        fk(
+        CheckConstraint(
+            "((((kind)::text = ANY ((ARRAY['tender_support'::character varying, 'bid_support'::character varying, 'absence_page'::character varying, 'inventory_document'::character varying, 'rule_document'::character varying])::text[])) AND ((ordinal >= 1) AND (ordinal <= 1000))))",
+            name="bid_review_finding_sources_check1",
+        ),
+        CheckConstraint(
+            "((((kind)::text = ANY ((ARRAY['inventory_document'::character varying, 'rule_document'::character varying])::text[])) = (page_id IS NULL)))",
+            name="bid_review_finding_sources_check2",
+        ),
+        CheckConstraint(
+            "((((kind)::text = ANY ((ARRAY['tender_support'::character varying, 'bid_support'::character varying])::text[])) = (quote_sha256 IS NOT NULL)))",
+            name="bid_review_finding_sources_check3",
+        ),
+        CheckConstraint(
+            "((((quote_sha256 IS NULL) AND (start_offset IS NULL) AND (end_offset IS NULL)) OR ((quote_sha256 IS NOT NULL) AND (start_offset IS NOT NULL) AND (end_offset IS NOT NULL) AND (start_offset >= 0) AND (end_offset > start_offset))))",
+            name="bid_review_finding_sources_check4",
+        ),
+        CheckConstraint(
+            "(((quote_sha256 IS NULL) OR ((quote_sha256)::text ~ '^[0-9a-f]{64}$'::text)))",
+            name="bid_review_finding_sources_quote_sha256_check",
+        ),
+        UniqueConstraint(
+            "finding_id",
+            "kind",
+            "ordinal",
+            name="bid_review_finding_sources_finding_id_kind_ordinal_key",
+        ),
+        UniqueConstraint("task_id", "id", name="bid_review_finding_sources_task_id_id_key"),
+        PrimaryKeyConstraint("id", name="bid_review_finding_sources_pkey"),
+        ForeignKeyConstraint(
+            ["task_id"], ["tasks.id"], name="bid_review_finding_sources_task_id_fkey"
+        ),
+        ForeignKeyConstraint(
             ["task_id", "submission_id", "document_id"],
-            "bid_submission_documents",
-            ["task_id", "submission_id", "id"],
+            [
+                "bid_submission_documents.task_id",
+                "bid_submission_documents.submission_id",
+                "bid_submission_documents.id",
+            ],
+            name="bid_review_finding_sources_task_id_submission_id_do_fkey",
         ),
-        fk(
+        ForeignKeyConstraint(
             ["task_id", "submission_id", "page_id"],
-            "bid_document_pages",
-            ["task_id", "submission_id", "id"],
+            [
+                "bid_document_pages.task_id",
+                "bid_document_pages.submission_id",
+                "bid_document_pages.id",
+            ],
+            name="bid_review_finding_sources_task_id_submission_id_pa_fkey",
         ),
-        UniqueConstraint("org_id", "finding_id", "kind", "ordinal"),
+        ForeignKeyConstraint(
+            ["task_id", "submission_id", "preparation_id", "document_id", "validation_id"],
+            [
+                "bid_pdf_validations.task_id",
+                "bid_pdf_validations.submission_id",
+                "bid_pdf_validations.preparation_id",
+                "bid_pdf_validations.document_id",
+                "bid_pdf_validations.id",
+            ],
+            name="bid_review_finding_sources_task_id_submission_id_pr_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["task_id", "submission_id", "review_id", "finding_id"],
+            [
+                "bid_review_findings.task_id",
+                "bid_review_findings.submission_id",
+                "bid_review_findings.review_id",
+                "bid_review_findings.id",
+            ],
+            name="bid_review_finding_sources_task_id_submission_id_re_fkey",
+        ),
         Index(
             "bid_review_absence_page_unique",
-            "org_id",
             "finding_id",
             "page_id",
             unique=True,
-            postgresql_where=text("kind='absence_page'"),
+            postgresql_where=sql_text("((kind)::text = 'absence_page'::text)"),
         ),
         Index(
             "bid_review_inventory_source_unique",
-            "org_id",
             "finding_id",
             "kind",
             "document_id",
             unique=True,
-            postgresql_where=text("kind IN ('inventory_document','rule_document')"),
-        ),
-        CheckConstraint(
-            "kind IN ('tender_support','bid_support','absence_page','inventory_document','rule_document') AND ordinal BETWEEN 1 AND 1000"
-        ),
-        CheckConstraint("(kind IN ('inventory_document','rule_document'))=(page_id IS NULL)"),
-        CheckConstraint("(kind IN ('tender_support','bid_support'))=(quote_sha256 IS NOT NULL)"),
-        CheckConstraint("quote_sha256 IS NULL OR quote_sha256 ~ '^[0-9a-f]{64}$'"),
-        CheckConstraint(
-            "(quote_sha256 IS NULL AND start_offset IS NULL AND end_offset IS NULL) OR (quote_sha256 IS NOT NULL AND start_offset IS NOT NULL AND end_offset IS NOT NULL AND start_offset>=0 AND end_offset>start_offset)"
+            postgresql_where=sql_text(
+                "((kind)::text = ANY ((ARRAY['inventory_document'::character varying, 'rule_document'::character varying])::text[]))"
+            ),
         ),
     )
 
 
-class BidReviewFindingEvent(Tenant, Base):
-    __tablename__ = "bid_review_finding_events"
-    task_id: Mapped[UUID] = mapped_column()
-    submission_id: Mapped[UUID] = mapped_column()
-    review_id: Mapped[UUID] = mapped_column()
-    finding_id: Mapped[UUID] = mapped_column()
-    request_id: Mapped[UUID] = mapped_column()
-    payload_hash: Mapped[str] = mapped_column(String(64))
-    prior_decision_id: Mapped[UUID | None] = mapped_column()
-    revision: Mapped[int] = mapped_column(Integer)
-    action: Mapped[str] = mapped_column(String(20))
-    review_domain: Mapped[str] = mapped_column(String(20))
-    state: Mapped[str] = mapped_column(String(20))
-    expected_input_hash: Mapped[str] = mapped_column(String(64))
-    reason_sha256: Mapped[str] = mapped_column(String(64))
-    reason_encrypted: Mapped[str] = mapped_column(Text)
-    decided_by: Mapped[UUID] = mapped_column()
+class BidReviewFinding(Base):
+    __tablename__ = "bid_review_findings"
+    task_id: Mapped[UUID] = mapped_column(nullable=False)
+    submission_id: Mapped[UUID] = mapped_column(nullable=False)
+    review_id: Mapped[UUID] = mapped_column(nullable=False)
+    obligation_id: Mapped[UUID] = mapped_column(nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    code: Mapped[str] = mapped_column(String(100), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(20), nullable=False)
+    severity: Mapped[str] = mapped_column(String(10), nullable=False)
+    impact: Mapped[str] = mapped_column(String(20), nullable=False)
+    tender_support_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    bid_support_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    search_source_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    rule_document_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    absence_kind: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    absence_coverage: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    absence_method: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    absence_manifest_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    limitation_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    details_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    details_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    id: Mapped[UUID] = mapped_column(nullable=False, primary_key=True, default=uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
     __table_args__ = (
-        *common(),
-        finding_fk(),
-        UniqueConstraint("org_id", "task_id", "submission_id", "review_id", "finding_id", "id"),
-        UniqueConstraint("org_id", "finding_id", "revision"),
-        UniqueConstraint("org_id", "decided_by", "request_id"),
-        fk(["decided_by"], "memberships", ["user_id"]),
-        fk(
-            ["task_id", "submission_id", "review_id", "finding_id", "prior_decision_id"],
-            "bid_review_finding_events",
-            ["task_id", "submission_id", "review_id", "finding_id", "id"],
+        CheckConstraint(
+            "((((tender_support_count >= 1) AND (tender_support_count <= 20)) AND ((bid_support_count >= 0) AND (bid_support_count <= 20)) AND ((search_source_count >= 0) AND (search_source_count <= 1000)) AND ((rule_document_count >= 0) AND (rule_document_count <= 19)) AND ((limitation_count >= 0) AND (limitation_count <= 100))))",
+            name="bid_review_findings_check",
         ),
         CheckConstraint(
-            "revision BETWEEN 2 AND 100000 AND action IN ('classify','dismiss','reopen','confirm') AND review_domain IN ('commercial','technical') AND state IN ('open','dismissed','confirmed')"
+            "((((absence_kind IS NULL) AND (absence_coverage IS NULL) AND (absence_method IS NULL) AND (absence_manifest_sha256 IS NULL) AND (search_source_count = 0) AND ((bid_support_count > 0) OR (rule_document_count > 0))) OR (((absence_kind)::text = 'locations'::text) AND ((absence_coverage)::text = ANY ((ARRAY['required_locations'::character varying, 'all_bid_pages'::character varying, 'partial'::character varying])::text[])) AND ((absence_method)::text = ANY ((ARRAY['local_text'::character varying, 'local_pdf'::character varying, 'ocr'::character varying, 'llm'::character varying, 'human'::character varying])::text[])) AND (absence_manifest_sha256 IS NULL) AND ((search_source_count > 0) OR (((outcome)::text = 'unknown'::text) AND ((absence_coverage)::text = 'partial'::text)))) OR (((absence_kind)::text = 'submission_inventory'::text) AND ((absence_coverage)::text = ANY ((ARRAY['complete_inventory'::character varying, 'partial'::character varying])::text[])) AND ((absence_method)::text = ANY ((ARRAY['manifest_rule'::character varying, 'llm_mapping'::character varying, 'human'::character varying])::text[])) AND ((absence_manifest_sha256)::text ~ '^[0-9a-f]{64}$'::text) AND ((search_source_count >= 1) AND (search_source_count <= 19)))))",
+            name="bid_review_findings_check1",
         ),
         CheckConstraint(
-            "expected_input_hash ~ '^[0-9a-f]{64}$' AND reason_sha256 ~ '^[0-9a-f]{64}$' AND payload_hash ~ '^[0-9a-f]{64}$' AND length(reason_encrypted)>0"
+            "(((((absence_coverage)::text IS DISTINCT FROM 'partial'::text) OR (((outcome)::text = 'unknown'::text) AND (limitation_count > 0))) AND (((outcome)::text <> 'unknown'::text) OR (limitation_count > 0))))",
+            name="bid_review_findings_check2",
         ),
+        CheckConstraint(
+            "((((ordinal >= 1) AND (ordinal <= 10000)) AND ((code)::text ~ '^[a-z][a-z0-9_]{0,99}$'::text)))",
+            name="bid_review_findings_check3",
+        ),
+        CheckConstraint(
+            "((((outcome)::text = ANY ((ARRAY['responded'::character varying, 'deviation'::character varying, 'missing'::character varying, 'unknown'::character varying])::text[])) AND ((severity)::text = ANY ((ARRAY['fatal'::character varying, 'high'::character varying, 'medium'::character varying])::text[])) AND ((impact)::text = ANY ((ARRAY['rejection'::character varying, 'lost_points'::character varying, 'both'::character varying, 'uncertain'::character varying])::text[]))))",
+            name="bid_review_findings_check4",
+        ),
+        CheckConstraint(
+            "(((((outcome)::text <> 'responded'::text) OR (bid_support_count > 0)) AND (((outcome)::text <> 'deviation'::text) OR (bid_support_count > 0) OR (rule_document_count > 0)) AND (((outcome)::text <> ALL ((ARRAY['missing'::character varying, 'unknown'::character varying])::text[])) OR (absence_kind IS NOT NULL)) AND (((outcome)::text <> 'missing'::text) OR (bid_support_count = 0)) AND ((rule_document_count = 0) OR (((code)::text = 'signature_validation_invalid'::text) AND ((outcome)::text = 'deviation'::text)))))",
+            name="bid_review_findings_check5",
+        ),
+        CheckConstraint(
+            "(((length(details_encrypted) > 0) AND ((details_sha256)::text ~ '^[0-9a-f]{64}$'::text)))",
+            name="bid_review_findings_check6",
+        ),
+        UniqueConstraint("review_id", "ordinal", name="bid_review_findings_review_id_ordinal_key"),
+        UniqueConstraint("task_id", "id", name="bid_review_findings_task_id_id_key"),
+        UniqueConstraint(
+            "task_id",
+            "submission_id",
+            "review_id",
+            "id",
+            name="bid_review_findings_task_id_submission_id_review_id__key",
+        ),
+        PrimaryKeyConstraint("id", name="bid_review_findings_pkey"),
+        ForeignKeyConstraint(["task_id"], ["tasks.id"], name="bid_review_findings_task_id_fkey"),
+        ForeignKeyConstraint(
+            ["task_id", "submission_id", "review_id", "obligation_id"],
+            [
+                "bid_review_obligations.task_id",
+                "bid_review_obligations.submission_id",
+                "bid_review_obligations.review_id",
+                "bid_review_obligations.id",
+            ],
+            name="bid_review_findings_task_id_submission_id_review_i_fkey1",
+        ),
+        ForeignKeyConstraint(
+            ["task_id", "submission_id", "review_id"],
+            ["bid_review_runs.task_id", "bid_review_runs.submission_id", "bid_review_runs.id"],
+            name="bid_review_findings_task_id_submission_id_review_id_fkey",
+        ),
+        Index("bid_review_findings_page", "review_id", "ordinal"),
     )

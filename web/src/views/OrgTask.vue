@@ -1,10 +1,10 @@
 <script setup>
-import { useTaskAuthority } from "../task-authority.js";
 import TaskNavigation from "../components/TaskNavigation.vue";
 import { Download, MoreFilled, Search, Upload, UploadFilled } from "@element-plus/icons-vue";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { citationModes, display, documentStatuses, downloadOriginal, errorText, formatTime, jobStatuses, jobTag, label, orgAccess, orgRequest, recalled, remember, warningText } from "../org.js";
+import { request } from "../api.js";
+import { citationModes, display, documentStatuses, downloadOriginal, errorText, formatTime, jobStatuses, jobTag, label, recalled, remember, warningText } from "../org.js";
 import DocumentPreview from "../components/DocumentPreview.vue";
 import ExportPreview from "../components/ExportPreview.vue";
 import JobPanel from "../components/JobPanel.vue";
@@ -15,9 +15,7 @@ const task = ref(null), documents = ref([]), history = ref([]), parseJobs = ref(
 const file = ref(null), fileInput = ref(null), preview = ref(null), reasoning = ref(""), warnings = ref([]), error = ref(""), busy = ref(false), receipt = ref(null);
 const reasoningLevels = ref([]);
 const jobId = ref(recalled(`task.${taskId}`)?.jobId ?? null);
-let accessLost = false, readGeneration = 0;
-const authority = useTaskAuthority(taskId, (exc) => { accessLost = true; readGeneration++; task.value = null; documents.value = []; history.value = []; parseJobs.value = []; exportList.value = null; preview.value = null; receipt.value = null; file.value = null; error.value = errorText(exc); });
-const writable = computed(() => authority.canWrite.value && orgAccess.role && orgAccess.role !== "viewer");
+let readGeneration = 0;
 const currentDocument = computed(() => documents.value.find((item) => item.id === selected.value));
 // The furthest step this task has reached, for orientation only; every action stays explicit.
 const step = computed(() => {
@@ -28,8 +26,8 @@ const step = computed(() => {
 async function load() {
   const run = ++readGeneration;
   try {
-    const results = await Promise.all([orgRequest("GET", `/tasks/${taskId}`), orgRequest("GET", `/tasks/${taskId}/documents`), orgRequest("GET", `/tasks/${taskId}/extractions`), orgRequest("GET", `/tasks/${taskId}/jobs?kind=parse`)]);
-    if (accessLost || run !== readGeneration) return;
+    const results = await Promise.all([request("GET", `/tasks/${taskId}`), request("GET", `/tasks/${taskId}/documents`), request("GET", `/tasks/${taskId}/extractions`), request("GET", `/tasks/${taskId}/jobs?kind=parse`)]);
+    if (run !== readGeneration) return;
     task.value = results[0].data; documents.value = results[1].items; history.value = results[2].items; parseJobs.value = results[3].items;
     if (!selected.value) selected.value = documents.value.find(d => d.id === recalled(`task.${taskId}`)?.documentId)?.id ?? documents.value[0]?.id ?? "";
     if (!jobId.value) jobId.value = parseJobs.value.find(j => ["queued", "running"].includes(j.status))?.id ?? null;
@@ -44,7 +42,7 @@ async function upload() {
   busy.value = true; error.value = "";
   try {
     const body = new FormData(); body.append("file", file.value);
-    receipt.value = (await orgRequest("POST", `/tasks/${taskId}/documents`, body)).data;
+    receipt.value = (await request("POST", `/tasks/${taskId}/documents`, body)).data;
     selected.value = receipt.value.id; preview.value = null; rememberIds(); await load();
   } catch (exc) { error.value = errorText(exc); } finally { busy.value = false; }
 }
@@ -54,7 +52,7 @@ async function run(kind, dry = false, retry = false) {
   try {
     const body = { dry_run: dry, retry };
     if (kind === "extract" && reasoning.value) body.reasoning = reasoning.value;
-    const result = await orgRequest("POST", `/documents/${selected.value}/${kind}`, body);
+    const result = await request("POST", `/documents/${selected.value}/${kind}`, body);
     warnings.value = result.warnings;
     if (dry) { preview.value = result.data; reasoningLevels.value = result.data.reasoning_levels; }
     else { jobId.value = result.data.job_id; rememberIds(); await load(); }
@@ -62,30 +60,29 @@ async function run(kind, dry = false, retry = false) {
   finally { busy.value = false; }
 }
 async function download() { try { await downloadOriginal(`/documents/${selected.value}/download-link`, currentDocument.value.name); } catch (exc) { error.value = errorText(exc); } }
-function changeDocument() { preview.value = null; reasoning.value = ""; reasoningLevels.value = []; warnings.value = []; rememberIds(); if (writable.value) run("extract", true); }
+function changeDocument() { preview.value = null; reasoning.value = ""; reasoningLevels.value = []; warnings.value = []; rememberIds(); run("extract", true); }
 const documentName = (id) => documents.value.find(d => d.id === id)?.name ?? id;
-// Released exports are visible to commercial reviewers only; other roles see no export card.
+
 async function loadExports() {
-  try { exportList.value = (await orgRequest("GET", `/tasks/${taskId}/exports`)).items; }
+  try { exportList.value = (await request("GET", `/tasks/${taskId}/exports`)).items; }
   catch (exc) { exportList.value = null; if (exc.status !== 403) error.value = errorText(exc); }
 }
 async function downloadExport(item) {
   try {
-    const signed = await orgRequest("GET", `/exports/${item.id}/download-link`);
-    const blob = await orgRequest("GET", signed.data.url, undefined, { binary: true });
+    const signed = await request("GET", `/exports/${item.id}/download-link`);
+    const blob = await request("GET", signed.data.url, undefined, { binary: true });
     const url = URL.createObjectURL(blob);
     const anchor = window.document.createElement("a"); anchor.href = url; anchor.download = item.file.name ?? `export-${item.id}.docx`; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (exc) { error.value = errorText(exc); }
 }
 const exportModes = { review_copy: "审阅件", final_section: "正式件" };
-onMounted(async () => { await load(); loadExports(); if (writable.value && selected.value) await run("extract", true); });
+onMounted(async () => { await load(); loadExports(); if (selected.value) await run("extract", true); });
 </script>
 <template>
   <TaskNavigation :task-id="taskId" />
-  <el-alert v-if="authority.access.value?.workflow.state === 'archived'" title="任务已归档，当前只能读取已有记录。" type="info" :closable="false" class="section" />
   <nav class="breadcrumb" aria-label="位置"><RouterLink to="/org/tasks">招标任务</RouterLink><span>/</span><span>{{ task?.name ?? "任务" }}</span></nav>
-  <p v-if="authority.access.value"><RouterLink :to="{path:'/org/products',query:{task:taskId}}">前往产品库核对并选择精确修订</RouterLink> · <RouterLink :to="{path:'/org/features',query:{task:taskId}}">前往功能库核对并选择精确修订</RouterLink> · <RouterLink :to="{path:'/org/profiles',query:{task:taskId}}">前往资料和证照库核对并选择精确修订</RouterLink> · <RouterLink :to="{path:'/org/confidential',query:{task:taskId}}">前往保密字段管理（当前任务）</RouterLink></p>
+  <p v-if="task"><RouterLink :to="{path:'/org/products',query:{task:taskId}}">前往产品库核对并选择精确修订</RouterLink> · <RouterLink :to="{path:'/org/features',query:{task:taskId}}">前往功能库核对并选择精确修订</RouterLink> · <RouterLink :to="{path:'/org/profiles',query:{task:taskId}}">前往资料和证照库核对并选择精确修订</RouterLink> · <RouterLink :to="{path:'/org/confidential',query:{task:taskId}}">前往保密字段管理（当前任务）</RouterLink></p>
   <div class="page-header">
     <div>
       <h2>{{ task?.name ?? "任务" }}</h2>
@@ -98,7 +95,7 @@ onMounted(async () => { await load(); loadExports(); if (writable.value && selec
     <div class="task-main">
       <el-card class="section" shadow="never">
         <template #header><div class="section-title"><h3>招标文件与解析</h3><el-tag v-if="currentDocument" :type="currentDocument.status === 'parsed' ? 'success' : 'info'">{{ label(documentStatuses, currentDocument.status) }}</el-tag></div></template>
-        <form v-if="writable" class="upload" @submit.prevent="upload">
+        <form class="upload" @submit.prevent="upload">
           <label class="dropzone" :class="{ chosen: file }">
             <el-icon :size="22"><UploadFilled /></el-icon>
             <span class="dropzone-text"><strong>{{ file ? file.name : "选择招标文件" }}</strong><span class="hint">{{ file ? "点击可重新选择" : "PDF 或 DOCX，大小与页数由服务器校验" }}</span></span>
@@ -117,20 +114,20 @@ onMounted(async () => { await load(); loadExports(); if (writable.value && selec
         </el-form>
         <p v-if="currentDocument" class="doc-meta">状态：{{ label(documentStatuses, currentDocument.status) }} · 页数 {{ display(currentDocument.page_count) }} · 引用方式 {{ label(citationModes, currentDocument.citation_mode) }}</p>
         <div v-if="selected" class="actions action-bar">
-          <el-button v-if="writable" :type="currentDocument?.status === 'parsed' ? 'default' : 'primary'" :disabled="busy" @click="run('parse')">开始解析</el-button>
+          <el-button :type="currentDocument?.status === 'parsed' ? 'default' : 'primary'" :disabled="busy" @click="run('parse')">开始解析</el-button>
           <DocumentPreview :key="selected" :document-id="selected" :name="currentDocument?.name ?? '招标原件'" />
           <el-button :icon="Download" @click="download">下载招标原件</el-button>
           <el-dropdown trigger="click" @command="moreDocument">
             <el-button :icon="MoreFilled">更多</el-button>
             <template #dropdown><el-dropdown-menu>
-              <el-dropdown-item v-if="writable" command="retry" :disabled="busy">显式重试解析</el-dropdown-item>
-              <el-dropdown-item v-for="job in parseJobs" :key="job.id" :command="job.id" :divided="writable && job === parseJobs[0]">查看解析作业 · {{ label(jobStatuses, job.status) }} · {{ job.id.slice(0, 8) }}</el-dropdown-item>
-              <el-dropdown-item v-if="!parseJobs.length && !writable" disabled>没有解析作业</el-dropdown-item>
+              <el-dropdown-item command="retry" :disabled="busy">显式重试解析</el-dropdown-item>
+              <el-dropdown-item v-for="job in parseJobs" :key="job.id" :command="job.id" :divided="job === parseJobs[0]">查看解析作业 · {{ label(jobStatuses, job.status) }} · {{ job.id.slice(0, 8) }}</el-dropdown-item>
+              <el-dropdown-item v-if="!parseJobs.length" disabled>没有解析作业</el-dropdown-item>
             </el-dropdown-menu></template>
           </el-dropdown>
         </div>
       </el-card>
-      <el-card v-if="writable && selected" class="section" shadow="never">
+      <el-card v-if="selected" class="section" shadow="never">
         <template #header><div class="section-title"><h3>要求抽取</h3><span class="hint">先预检确认档位与范围，再开始抽取；预检不创建作业、不调用模型</span></div></template>
         <el-form label-position="top" class="extract-row" @submit.prevent="run('extract', true)">
           <el-form-item v-if="reasoningLevels.length" label="官方推理档位" class="level">
@@ -172,8 +169,8 @@ onMounted(async () => { await load(); loadExports(); if (writable.value && selec
         </tbody>
       </table></div>
     </el-card>
-    <SimulationPanel v-if="writable && ['admin', 'technical'].includes(orgAccess.role)" :task-id="taskId" :extractions="history" @changed="load" />
-    <ConfidentialPanel v-if="!accessLost" :task-id="taskId" />
+    <SimulationPanel :task-id="taskId" :extractions="history" @changed="load" />
+    <ConfidentialPanel :task-id="taskId" />
     <el-card v-if="exportList" class="section" shadow="never" body-class="flush">
       <template #header><div class="section-title"><h3>导出文件</h3><span class="hint">在线预览按 Word 版式转换成页面，转换只在第一次打开时进行</span></div></template>
       <div class="table-scroll flat"><table class="data-table"><caption class="sr-only">已发布的导出文件</caption>
@@ -209,7 +206,7 @@ onMounted(async () => { await load(); loadExports(); if (writable.value && selec
           <dt>外发遮挡</dt><dd>{{ task.model_redaction_enabled === false ? "已关闭" : "已开启" }}</dd>
         </dl>
       </el-card>
-      <JobPanel :job-id="jobId" :writable="writable" @finished="load" />
+      <JobPanel :job-id="jobId" @finished="load" />
     </aside>
   </div>
 </template>

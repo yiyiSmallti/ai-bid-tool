@@ -183,9 +183,7 @@ def perform(action: str, method: str, path: str, json_output: bool, **kwargs):
     from bid_cli.main import call, emit
 
     command = "platform credential " + action
-    result = safe_result(
-        call(method, "/platform/credentials" + path, platform=True, **kwargs), command
-    )
+    result = safe_result(call(method, "/platform/credentials" + path, **kwargs), command)
     exit_code = result["data"]["error"]["exit_code"] if not result["ok"] else 0
     emit(result, command, json_output, exit_code)
 
@@ -194,8 +192,7 @@ def perform(action: str, method: str, path: str, json_output: bool, **kwargs):
 def list_credentials(
     state: Annotated[Literal["active", "disabled", "removed"] | None, typer.Option()] = None,
     purpose: Annotated[
-        Literal["catalog_llm", "standalone_llm", "vendor_search", "clef_workers_ai", "clef_gateway"]
-        | None,
+        Literal["standalone_llm", "vendor_search", "clef_workers_ai", "clef_gateway"] | None,
         typer.Option(),
     ] = None,
     after_name: Annotated[str | None, typer.Option()] = None,

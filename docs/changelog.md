@@ -6,6 +6,31 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-13: Single-user local installation
+
+- Replace the multi-org migration chain with one baseline revision whose SQL lives in
+  `server/migrations/baseline/`; existing multi-org databases are not converted. Orgs,
+  users, memberships, roles, org row-level security and org composite keys are gone.
+  The database keeps the owner and the runtime `bid_app` role, and human decisions are
+  recorded by timestamp and actor kind.
+- Authenticate with the installation access key (`BID_ACCESS_KEY`): presenting it, or a
+  console session exchanged at `/auth/session`, acts as the human. `bid_` tokens and
+  built-in agents keep their own identity and never receive human-only scopes. Password
+  login, org selection, `X-Org-Id` and the CLI session file are removed.
+- Remove org signup, the platform console, operators and enrollment, org members and
+  invitations, and team collaboration (task members, handover, archival, assignment,
+  discussion, co-sign and review policies). Confirmation, citation and export gates are
+  unchanged.
+- Model configuration uses the user's own provider credentials only; service
+  credentials, Clef and trust anchors are local settings managed in the console.
+  Storage keys drop the org prefix.
+- The annotation renderer protocol becomes `annotation-render-v2` without org, creator,
+  confirmer or co-sign fields. A withdrawn screenshot now removes its rows from stale
+  drafts and reports a `stale_material` gap. Export rendering reads the child's
+  resident memory through `libproc` on macOS.
+- See [ADR 0012](adr/0012-single-user-installation.md) and the
+  [single-user plan](plan/single-user.md).
+
 ## 2026-10-11: Remove billing, prices and task budgets
 
 - Remove balance, recharge-card, price and task-budget storage, APIs, CLI commands,
@@ -35,8 +60,8 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Deactivation refuses the next session/token request, revokes this organization's
   tokens and retains task history; mutation audits exclude invitation links.
 - Add PostgreSQL HTTP and mocked browser acceptance plus reviewed CLI snapshots.
-  See [the approved contract](plan/org-members.md) and
-  [the mechanism](notes/org-members.md).
+  See the approved contract (retained in version-control history) and
+  the mechanism (retained in version-control history).
 
 ## 2026-10-09: Default-on Clef presence triage
 
@@ -153,7 +178,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   enrollment TOTP step for login replay checks; attempts share sign-in failure limits.
 - Prefer deployment factors when present, retain the environment break-glass path
   and include database factors in provider-secrets root rotation. See
-  [Platform operator browser enrollment](notes/operator-enrollment.md).
+  Platform operator browser enrollment (retained in version-control history).
 
 ## 2026-10-08: Sharded CI
 
@@ -170,7 +195,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   account attachment and never replaces an existing password; terminal decisions
   clear the submitted hash.
 - Add daily expiry, platform audit events and pending-review counts. See
-  [Organization self-service application](notes/org-signup.md).
+  Organization self-service application (retained in version-control history).
 
 ## 2026-10-08: Pull-based automatic deployment
 
@@ -626,7 +651,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 - Authorize citation-window tasks before validating query fields or section source selectors.
   Nonmembers and cross-org callers retain 404 responses even for malformed queries; authorized
-  callers retain normal input validation. See [task authority](plan/team-workflow.md#membership-ownership-and-authorization).
+  callers retain normal input validation. See task authority (retained in version-control history).
 - Keep section binding checks separate from expensive citation location during score publication.
   The existing shared draft/rubric batch verifies each distinct Source pair once; insertion still
   verifies every new section quotation strictly. See [scoring pitfalls](notes/score.md#pitfalls).
@@ -641,7 +666,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   but the single-Requirement section gate rejected them as `cross_requirement_citation`. Sections
   now preserve and independently verify every citation across pinned scoring Requirements; items
   retain their single-Requirement contract, and joined or unverifiable citations still fail.
-- Add the [section-source migration](../server/migrations/versions/0046_score_section_sources.py)
+- Add the [section-source migration](https://github.com/yiyiSmallti/ai-bid-tool/blob/4bc6d9b00e9d2716dd2c5b82f9af1822684b742b/server/migrations/versions/0046_score_section_sources.py)
   for ordered section sources, retaining legacy single-source reads, existing
   FORCE RLS and immutable history, with database and application checks over every binding. Complete
   human replacement may select/remove only verified pinned citations and cannot rewrite Source.
@@ -666,14 +691,14 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   negative-deviation and prototype/final-export gates remain enforced.
 - Added co-sign board projections, Chinese console controls, API/CLI commands,
   schema discovery and intended Result snapshots. See
-  [Team workflow](notes/team-workflow.md) for the mechanism and recovery boundaries.
+  Team workflow (retained in version-control history) for the mechanism and recovery boundaries.
 - Preserve `stale_material` as the sole input reason when screenshot withdrawal
   retires a single-domain response review. Use `needs_reconfirmation` when only
   that approval is lost, and reserve `cosign_required` for multi-domain policies.
 - Align database response-item reasons, new and stale draft projections, export
   readiness and board actions without changing approval or Evidence gates. Keep
   the screenshot regression's exact reason assertion and add cross-consumer
-  reason checks; see [Team workflow](notes/team-workflow.md).
+  reason checks; see Team workflow (retained in version-control history).
 - Reuse a review round's immutable, already-validated citation inputs during
   approval checks, retaining the check/score shared citation batch and strict
   changed-source gates without repeated per-card location work.
@@ -683,7 +708,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Use independent professional reviewers in generated-card, simulation and agent
   acceptance flows; require real renewed review after changing a pinned
   requirement. Align stale-export acceptance with the existing blocked-preflight
-  response. See [Team workflow](notes/team-workflow.md).
+  response. See Team workflow (retained in version-control history).
 - Derive completed round summaries from the valid required-domain signature set,
   including the final signing transaction's recheck before the card decision is
   applied. Keep the independent consumption predicate and strict partial-round
@@ -691,12 +716,12 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Allow either authorized required-domain human to finalize the exact complete
   round through the legacy task-content trigger, including Evidence and independent
   disposition decisions. Retain primary-domain authorization for reject,
-  needs-material and reopen; see [Team workflow](notes/team-workflow.md#how-it-works).
+  needs-material and reopen; see Team workflow (retained in version-control history).
 - Granted only the review-round column update privilege needed for PostgreSQL
   row locks; immutable-history triggers still reject updates. Unit deactivation
   uses an authorization epoch without granting platform functions business-table
   access, and task rule changes advance the existing access epoch.
-- Preserved the [new single-domain review contract](plan/team-workflow.md#co-sign-policy-rounds-and-consumption-gates):
+- Preserved the new single-domain review contract (retained in version-control history):
   successful fixture preparation now submits and confirms through the real service,
   while direct SQL denial cases retain their triggers. Independent professional
   fixture reviewers keep unrelated actor-role changes from retiring their reviews.
@@ -745,7 +770,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   resuming console task streams. Failed discussion parent validation retries the
   snapshot without opening a cursorless stream; org reset discards late snapshot
   results and clears task content and unsaved discussion drafts. See the
-  [snapshot and reconnect contract](plan/team-workflow.md#durable-task-events-and-sse).
+  snapshot and reconnect contract (retained in version-control history).
 
 ## 2026-10-05: Team workflow assignment and discussion
 
@@ -759,7 +784,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Added Chinese Element Plus assignment/discussion controls, shared authenticated
   API/local/remote CLI paths, typed discovery and intentional zero-cost Result
   snapshots. Audit and durable events contain metadata only; co-sign remains the
-  approved next slice. See [Team workflow](notes/team-workflow.md).
+  approved next slice. See Team workflow (retained in version-control history).
 
 ## 2026-10-05: Queued agent authority-loss cleanup
 
@@ -822,7 +847,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   Added Chinese Element Plus board/member pages and slice 1 CLI/schema commands.
 - Approved all team-workflow defaults and the ADR 0005 co-sign amendment. Assignment,
   discussion and co-sign execution remain later slices. Added API/PostgreSQL,
-  CLI and mocked-API browser acceptance; see [Team workflow](notes/team-workflow.md).
+  CLI and mocked-API browser acceptance; see Team workflow (retained in version-control history).
 
 ## 2026-10-05: Check and score console assessments
 
@@ -857,7 +882,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 ## 2026-10-05: Built-in agent command orchestration
 
-- Chain [agent migration `0042`](../server/migrations/versions/0042_builtin_agent.py) after [team-workflow migration `0041`](../server/migrations/versions/0041_team_workflow.py); add persistent owner-only principals/sessions/messages/steps/pauses/job links, encrypted receipts and history, org-composite constraints and database actor/fence gates.
+- Chain [agent migration `0042`](https://github.com/yiyiSmallti/ai-bid-tool/blob/4bc6d9b00e9d2716dd2c5b82f9af1822684b742b/server/migrations/versions/0042_builtin_agent.py) after [team-workflow migration `0041`](https://github.com/yiyiSmallti/ai-bid-tool/blob/4bc6d9b00e9d2716dd2c5b82f9af1822684b742b/server/migrations/versions/0041_team_workflow.py); add persistent owner-only principals/sessions/messages/steps/pauses/job links, encrypted receipts and history, org-composite constraints and database actor/fence gates.
 - Register authenticated API and CLI session start/list/show/messages/steps/message/resume/cancel commands with shared Result, invocation schemas, revision checks and endpoint-scoped idempotency.
 - Connect the structured decision adapter and seven protected command services to checkpoint controller jobs, transactional child/queue dispatch and durable recovery wakes. Safe retries reuse uniquely proved owned jobs; unknown paid outcomes pause without redispatch.
 - Apply immutable cumulative session limits to decisions and descendants through the existing task-budget, prepaid and per-job admission/settlement boundary. Preserve fixed input/model/redaction checks, original human review/confirmation, no-memory A01 generation and confirmed-only draft assembly.
@@ -1012,7 +1037,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 ## 2026-10-03: Two-org sandbox and lifecycle acceptance
 
-- Added [sandbox_two_org_acceptance.py](../scripts/sandbox_two_org_acceptance.py) using two synthetic orgs/real worker/gVisor node in development. B receives unknown-resource-equivalent 404 for A runs/task lists/artifact links/job status/cancel/submission/signed links. Runtime DB role reads no sandbox rows without org context; B cannot read/update A. RLS/composite FKs reject unauthorized inserts with successful controls. In-flight cancellation/SIGKILL worker publish no artifacts; containers reap in about 1.5 seconds, subsequent rendering succeeds. Lease-expiry takeover/disconnection/storage fault injection remains unrun.
+- Added [sandbox_two_org_acceptance.py](https://github.com/yiyiSmallti/ai-bid-tool/blob/4bc6d9b00e9d2716dd2c5b82f9af1822684b742b/scripts/sandbox_two_org_acceptance.py) using two synthetic orgs/real worker/gVisor node in development. B receives unknown-resource-equivalent 404 for A runs/task lists/artifact links/job status/cancel/submission/signed links. Runtime DB role reads no sandbox rows without org context; B cannot read/update A. RLS/composite FKs reject unauthorized inserts with successful controls. In-flight cancellation/SIGKILL worker publish no artifacts; containers reap in about 1.5 seconds, subsequent rendering succeeds. Lease-expiry takeover/disconnection/storage fault injection remains unrun.
 
 ## 2026-10-03: Word export layout acceptance
 

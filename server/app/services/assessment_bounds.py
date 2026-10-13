@@ -125,11 +125,10 @@ def digest(value: Any) -> str:
 
 def principal(actor: Identity) -> dict[str, Any]:
     return {
-        "org": str(actor.org_id),
-        "user": str(actor.user_id),
         "token": str(actor.token_id),
         "actor": actor.actor_kind,
-        "role": actor.role,
+        "principal": actor.principal_id,
+        "session": str(actor.session_id),
         "scopes": digest(sorted(actor.scopes)),
     }
 

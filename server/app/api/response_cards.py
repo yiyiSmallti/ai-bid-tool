@@ -1,4 +1,4 @@
-"""Response review routes share the authenticated tenant transaction dependency."""
+"""Response review routes share the authenticated installation transaction."""
 
 from uuid import UUID
 
@@ -7,6 +7,8 @@ from procrastinate.exceptions import ConnectorException
 from psycopg import OperationalError
 
 from app.core.errors import ServiceError
+from app.memory.candidates import dispatch
+from app.memory.feedback import take_pending_jobs
 from app.models.entities import Job
 from app.schemas.contracts import Result
 from app.schemas.response_card_contracts import (
@@ -59,16 +61,13 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
         )
 
     async def dispatch_feedback(session, actor):
-        from app.memory.candidates import dispatch
-        from app.memory.feedback import take_pending_jobs
-
         jobs = take_pending_jobs(session)
         if not jobs:
             return []
         await session.commit()
         warnings = []
         for job in jobs:
-            warnings.extend(await dispatch(db, queue, actor.org_id, job))
+            warnings.extend(await dispatch(db, queue, job))
         return warnings
 
     @router.put("/cards/{card_id}", name="card_update", response_model=Result)
@@ -125,13 +124,13 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
         if job is not None and job.status == "queued" and job.queue_id is None:
             await session.commit()
             try:
-                queue_id = await queue.enqueue(str(actor.org_id), str(job.id))
+                queue_id = await queue.enqueue(str(job.id))
             except (OSError, ConnectorException, OperationalError) as exc:
                 # Dispatch is a boundary: the durable job remains available for explicit retry.
                 raise ServiceError(
                     "queue_unavailable", "Job saved; repeat request to schedule it", 503, 3
                 ) from exc
-            async with db.transaction(actor.org_id) as update:
+            async with db.transaction() as update:
                 saved = await update.get(Job, job.id)
                 if saved is not None:
                     saved.queue_id = queue_id
@@ -149,12 +148,12 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
         if job is not None and job.status == "queued" and job.queue_id is None:
             await session.commit()
             try:
-                queue_id = await queue.enqueue(str(actor.org_id), str(job.id))
+                queue_id = await queue.enqueue(str(job.id))
             except (OSError, ConnectorException, OperationalError) as exc:
                 raise ServiceError(
                     "queue_unavailable", "Job saved; repeat request to schedule it", 503, 3
                 ) from exc
-            async with db.transaction(actor.org_id) as update:
+            async with db.transaction() as update:
                 saved = await update.get(Job, job.id)
                 if saved is not None:
                     saved.queue_id = queue_id

@@ -1,4 +1,4 @@
-"""Immutable, sanitized human feedback and organization-only evaluation samples."""
+"""Immutable, sanitized human feedback and installation-local evaluation samples."""
 
 import hashlib
 import json
@@ -40,20 +40,18 @@ def summarize_edit(before: dict, after: dict) -> str:
     return summary if len(summary) <= 1900 else ""
 
 
-def seal(settings: Settings, org_id: UUID, object_id: UUID, summary: str) -> str:
+def seal(settings: Settings, object_id: UUID, summary: str) -> str:
     return Secrets.for_data(settings).encrypt(
         json.dumps(
-            {"org_id": str(org_id), "object_id": str(object_id), "summary": summary},
-            ensure_ascii=False,
-            sort_keys=True,
+            {"object_id": str(object_id), "summary": summary}, ensure_ascii=False, sort_keys=True
         )
     )
 
 
-def unseal(settings: Settings, org_id: UUID, object_id: UUID, ciphertext: str) -> str:
+def unseal(settings: Settings, object_id: UUID, ciphertext: str) -> str:
     try:
         value = json.loads(Secrets.for_data(settings).decrypt(ciphertext))
-        if value["org_id"] != str(org_id) or value["object_id"] != str(object_id):
+        if value["object_id"] != str(object_id):
             raise ValueError("binding mismatch")
         summary = value["summary"]
         if not isinstance(summary, str) or not 1 <= len(summary) <= 2000:
@@ -80,8 +78,8 @@ async def record_feedback(session, actor, card, before, after, kind, reason=None
     """Called after append_revision, still under the original card/task locks."""
     if actor.actor_kind != "session" or actor.token_id is not None or before.model_job_id is None:
         return None
-    if kind == "card_edited" and not any(
-        getattr(before, key) != getattr(after, key) for key in EDIT_FIELDS
+    if kind == "card_edited" and (
+        not any(getattr(before, key) != getattr(after, key) for key in EDIT_FIELDS)
     ):
         return None
     settings = required_settings(session)
@@ -99,8 +97,6 @@ async def record_feedback(session, actor, card, before, after, kind, reason=None
         if row.quote:
             quotes.add(row.quote)
             sanitized_quote = await sanitize(session, actor, row.quote, settings)
-            # An all-secret quote has no material text left to copy; matching its
-            # generic mask would hide unrelated sensitive-value classifications.
             if reusable_text(sanitized_quote):
                 quotes.add(sanitized_quote)
 
@@ -113,7 +109,7 @@ async def record_feedback(session, actor, card, before, after, kind, reason=None
         return text
 
     if kind == "card_edited":
-        old, new = {}, {}
+        old, new = ({}, {})
         changed = [key for key in EDIT_FIELDS if getattr(before, key) != getattr(after, key)]
         for key in changed:
             old[key] = await clean(str(getattr(before, key) or ""))
@@ -133,39 +129,35 @@ async def record_feedback(session, actor, card, before, after, kind, reason=None
         raise not_found()
     event = MemoryFeedbackEvent(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=card.task_id,
         document_id=extraction.document_id,
         model_job_id=before.model_job_id,
         card_id=card.id,
         before_revision_id=before.id,
         after_revision_id=after.id,
-        actor_user_id=actor.user_id,
         actor_kind="session",
         kind=kind,
         review_domain=before.review_domain,
         sanitized_sha256=digest(summary),
         sanitizer_version=SANITIZER_VERSION + ":" + safety_version,
     )
-    event.encrypted_summary = seal(settings, actor.org_id, event.id, summary)
+    event.encrypted_summary = seal(settings, event.id, summary)
     session.add(event)
     await session.flush()
     sample = MemoryEvalSample(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=card.task_id,
         feedback_event_id=event.id,
         card_id=card.id,
         before_revision_id=before.id,
         after_revision_id=after.id,
         label=kind,
-        actor_user_id=actor.user_id,
         generator_version=GENERATOR_VERSION,
         sanitized_sha256=event.sanitized_sha256,
         review_state="unreviewed",
         review_revision=1,
     )
-    sample.encrypted_summary = seal(settings, actor.org_id, sample.id, summary)
+    sample.encrypted_summary = seal(settings, sample.id, summary)
     session.add(sample)
     await session.flush()
     job = None
@@ -195,13 +187,13 @@ async def record_feedback(session, actor, card, before, after, kind, reason=None
 
 async def read_access(session, actor, task_id, *, evaluation=False, review=False):
     scope = "memory:eval:review" if review else "memory:eval:read" if evaluation else "memory:read"
-    from app.services.task_workflow import access as task_access
+    from app.services.task_access import access as task_access
 
     await task_access(session, actor, task_id, scope=scope, write=review, lock=review)
     actor = await access(session, actor, scope)
     actor.require("card:read")
-    if evaluation and (actor.role != "admin" or actor.actor_kind != "session" or actor.token_id):
-        raise ServiceError("forbidden", "Administrator human session required", 403, 4)
+    if evaluation and (actor.actor_kind != "session" or actor.token_id):
+        raise ServiceError("forbidden", "Human session required", 403, 4)
     if await session.get(Task, task_id) is None:
         raise not_found()
     return actor
@@ -270,7 +262,7 @@ async def show_sample(session, actor, sample_id, settings):
     if sample is None:
         raise not_found()
     await read_access(session, actor, sample.task_id, evaluation=True)
-    summary = unseal(settings, actor.org_id, sample.id, sample.encrypted_summary)
+    summary = unseal(settings, sample.id, sample.encrypted_summary)
     if digest(summary) != sample.sanitized_sha256:
         raise ServiceError("memory_feedback_integrity", "Feedback integrity check failed", 500, 4)
     return Result(
@@ -301,7 +293,7 @@ async def review_sample(session, actor, sample_id, body, settings):
     await reject_sensitive(session, actor, [body.reason], settings)
     sample.review_state = "accepted" if body.action == "accept" else "excluded"
     sample.review_revision += 1
-    sample.reviewed_by, sample.reviewed_at = actor.user_id, datetime.now(UTC)
+    sample.reviewed_at = datetime.now(UTC)
     sample.review_reason_sha256 = digest(body.reason)
     audit(
         session,

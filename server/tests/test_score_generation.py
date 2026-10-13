@@ -1,7 +1,7 @@
 """Rubric generation boundaries and PostgreSQL input-scope acceptance.
 
 The DB-free cases cover the full outbound/redaction/untrusted-output boundary.  The
-PostgreSQL cases intentionally use the normal migrated RLS runtime; a DB-free local
+PostgreSQL cases intentionally use the normal migrated database runtime; a DB-free local
 run may select only the ``not db`` cases by file/function name.
 """
 
@@ -30,7 +30,7 @@ from app.services.extraction import locate_source_citation_span
 from cryptography.fernet import Fernet
 from sqlalchemy import select
 from test_check_combined import semantic_llm
-from test_rls import seeded as seeded  # noqa: F401
+from test_response_card_db import seeded as seeded
 from test_score_api import RubricVendor
 from test_score_provider import Accounting
 from test_score_review import replacement
@@ -146,7 +146,7 @@ async def test_two_stage_docx_summary_quote_does_not_ambiguous_sent_citation(tmp
     outbound = score_generation.build_outbound(secret, [], [])
     sent = outbound["context"]["texts"][0]["text"]
     assert sent.count(source) == 2
-    assert "要求摘要：" in sent and "来源位置：" in sent and "招标原文：" in sent
+    assert "要求摘要：" in sent and "来源位置：" in sent and ("招标原文：" in sent)
     vendor = RubricVendor()
     provider = HTTPRubricProvider(
         semantic_llm(
@@ -176,11 +176,7 @@ async def test_two_stage_docx_summary_quote_does_not_ambiguous_sent_citation(tmp
     assert vendor.stages == ["structure", "items"]
     assert len(accounting.completed) == 2
     assert len(vendor.requests) == 2
-    citations = [
-        accepted["overall_citations"][0],
-        accepted["sections"][0],
-        accepted["items"][0],
-    ]
+    citations = [accepted["overall_citations"][0], accepted["sections"][0], accepted["items"][0]]
     spans = []
     start = row["source_original"].index(source)
     for citation in citations:
@@ -298,9 +294,8 @@ async def test_two_stage_generation_keeps_items_for_existing_human_review_contra
     assert accepted["normalization_errors"] == []
     assert len(accepted["items"]) == requirement_count
     assert accepted["unresolved_requirement_ids"] == []
-    assert vendor.stages == ["structure", *(["items"] * requirement_count)]
+    assert vendor.stages == ["structure", *["items"] * requirement_count]
     assert len(accounting.completed) == requirement_count + 1
-
     sections = [{**section, "id": str(uuid4())} for section in accepted["sections"]]
     by_key = {section["key"]: section["id"] for section in sections}
     report = {
@@ -370,7 +365,6 @@ def test_outbound_redaction_and_dual_citation_acceptance_use_local_ids_only():
     assert "Synthetic Secret" not in sent
     assert outbound["requirements"] == {str(PROVIDER_REQUIREMENT): str(REAL_REQUIREMENT)}
     assert "condition" not in str(outbound)
-
     secret = fixed_secret()
     structure = verified_structure(secret, outbound)
     batch = RubricAnsweredBatch(
@@ -399,7 +393,6 @@ def test_rubric_short_citation_repeated_outside_source_accepts_both_stages(repea
     row = secret["requirements"][0]
     row["text"] = row["source"]["quote"] = source
     outbound = score_generation.build_outbound(secret, [], [])
-
     structure = verified_structure(secret, outbound)
     assert structure["overall_citations"] == [
         {
@@ -422,7 +415,6 @@ def test_rubric_short_citation_repeated_outside_source_accepts_both_stages(repea
 
 
 def test_invalid_or_ambiguous_structure_citation_fails_before_items():
-    # Both full Sources must have boundaries; extraction can otherwise prefer one.
     secret = fixed_secret(source_original="内存 64 GB 得 5 分。\n重复说明：内存 64 GB 得 5 分。")
     outbound = score_generation.build_outbound(secret, [], [])
     with pytest.raises(ServiceError) as failure:
@@ -471,9 +463,7 @@ def test_untrusted_candidate_attacks_remain_unresolved(attack, expected_error):
         structure_hash=structure["structure_hash"],
         output=RubricItemsWireOutput(items=wire["items"]),
     )
-
     accepted = score_generation.accept_batches(secret, outbound, structure, [batch])
-
     assert expected_error in accepted["normalization_errors"]
     assert accepted["unresolved_requirement_ids"] == [str(REAL_REQUIREMENT)]
     assert "untrusted-sensitive-ref" not in str(accepted)
@@ -506,14 +496,9 @@ def test_cross_requirement_ref_cannot_bind_a_model_uuid_to_another_source():
         structure_hash=structure["structure_hash"],
         output=RubricItemsWireOutput(items=wire["items"]),
     )
-
     accepted = score_generation.accept_batches(secret, outbound, structure, [batch])
-
     assert "invalid_item_citation" in accepted["normalization_errors"]
-    assert set(accepted["unresolved_requirement_ids"]) == {
-        str(REAL_REQUIREMENT),
-        str(second_real),
-    }
+    assert set(accepted["unresolved_requirement_ids"]) == {str(REAL_REQUIREMENT), str(second_real)}
 
 
 def test_no_completed_item_batch_retains_verified_structure_and_unresolved_requirements():
@@ -549,29 +534,20 @@ async def test_redacted_source_location_is_a_zero_call_admission_blocker():
     )
     assert outbound["redacted_requirements"] == [str(REAL_REQUIREMENT)]
     fixed = SimpleNamespace(
-        manifest={"model_redaction_enabled": True},
-        secret={"outbound": outbound},
+        manifest={"model_redaction_enabled": True}, secret={"outbound": outbound}
     )
-    body = RubricGenerateRequest(
-        extraction_job_id=uuid4(),
-        dry_run=True,
-    )
-
+    body = RubricGenerateRequest(extraction_job_id=uuid4(), dry_run=True)
     preview = await score_generation.preview_cost(None, fixed, object(), body, SimpleNamespace())
-
     assert preview["admission_blocker"] == "sensitive_scoring_source"
     assert preview["estimated_cost"]["llm_tokens"] == 0
 
 
 async def test_postgres_snapshot_selects_only_scoring_and_omits_condition(seeded):
-    """Real RLS/query gate: fixed scoring rows only, with no free condition payload."""
-
-    org = seeded["orgs"][0]
-    user = seeded["users"][0]
-    ids = seeded["ids"][org]
+    """Real database/query gate: fixed scoring rows only, with no free condition payload."""
+    ids = seeded["ids"]
     db = Database(Settings())
     try:
-        async with db.transaction(org) as session:
+        async with db.transaction() as session:
             from app.models.entities import Requirement
 
             requirement = await session.scalar(
@@ -580,42 +556,12 @@ async def test_postgres_snapshot_selects_only_scoring_and_omits_condition(seeded
             requirement.category = "scoring"
             requirement.condition = {"forbidden": "must never leave"}
             extraction_id = requirement.job_id
-        actor = Identity(
-            user,
-            org,
-            {"task:read", "score:rubric:generate"},
-            "technical",
-        )
-        async with db.transaction(org) as session:
+        actor = Identity({"task:read", "score:rubric:generate"})
+        async with db.transaction() as session:
             fixed = await score_inputs.snapshot(session, actor, ids["task"], extraction_id)
         assert len(fixed.secret["requirements"]) == 1
         assert "condition" not in fixed.secret["requirements"][0]
         assert fixed.manifest["scope"] == "scoring_requirements"
         assert fixed.manifest["requirements"][0]["requirement_id"] == str(requirement.id)
-    finally:
-        await db.engine.dispose()
-
-
-async def test_postgres_snapshot_hides_another_tenants_task(seeded):
-    org_a, org_b = seeded["orgs"]
-    user_a = seeded["users"][0]
-    ids_b = seeded["ids"][org_b]
-    db = Database(Settings())
-    try:
-        actor = Identity(
-            user_a,
-            org_a,
-            {"task:read", "score:rubric:generate"},
-            "technical",
-        )
-        with pytest.raises(ServiceError) as hidden:
-            async with db.transaction(org_a) as session:
-                await score_inputs.snapshot(
-                    session,
-                    actor,
-                    ids_b["task"],
-                    uuid4(),
-                )
-        assert hidden.value.code == "not_found"
     finally:
         await db.engine.dispose()

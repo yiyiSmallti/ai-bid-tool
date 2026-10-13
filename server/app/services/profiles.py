@@ -27,7 +27,6 @@ def revision_data(row: OrgProfileRevision) -> dict:
 def snapshot_data(row: TaskOrgProfile, revision: OrgProfileRevision) -> dict:
     return TaskOrgProfileSnapshot(
         id=row.id,
-        org_id=row.org_id,
         task_id=row.task_id,
         profile_revision_id=revision.id,
         revision=revision.revision,

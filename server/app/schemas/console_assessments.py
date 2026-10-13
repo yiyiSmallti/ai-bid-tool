@@ -106,7 +106,6 @@ class ActionAvailability(Contract):
 
     action: Action
     allowed: bool
-    required_role: Literal["admin", "bidder", "technical"] | None = None
     review_domain: ReviewDomain | None = None
     blocker_codes: list[Code] = Field(default_factory=list, max_length=20)
 
@@ -127,7 +126,6 @@ class DraftChoice(Contract):
 
 
 class AssessmentInputsData(Contract):
-    org_id: UUID
     task_id: UUID
     extraction_job_id: UUID
     document_id: UUID
@@ -276,7 +274,6 @@ class Notice(Contract):
 
 class ReportHeader(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     job_id: UUID
     extraction_job_id: UUID
@@ -351,7 +348,6 @@ class RubricCompletenessSummary(Contract):
 
 class RubricSummaryData(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     extraction_job_id: UUID
     document_id: UUID
@@ -597,7 +593,7 @@ class CitationContextData(Contract):
 class ConsoleAssessmentReads(Protocol):
     """Trusted Identity comes from authentication, never a JSON body.
 
-    Implementations own read-only org transactions, parent/dependency authorization,
+    Implementations own read-only transactions, parent/dependency authorization,
     source verification, stable cursors and the encoded Result byte limit. They must
     page before materializing child text. Summary reads never invoke a Provider.
     """

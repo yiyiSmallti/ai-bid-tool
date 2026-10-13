@@ -1,7 +1,7 @@
 """Persist invalid numeric candidates, inspect them, then repair through human review.
 
 Failures to prevent: lost generated candidates/usage, silently corrected numeric
-values, unreadable score or console views, cross-org leakage, and confirmation
+values, unreadable score or console views, cross-task leakage, and confirmation
 through either HTTP or direct SQL when normalization error metadata is omitted.
 """
 
@@ -14,7 +14,7 @@ import pytest
 from app.models.score import ScoreRubricDecision
 from app.schemas.score_contracts import RubricReviseRequest
 from app.services import response_cards, score_generation
-from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
+from app.services.auth import HUMAN_SCOPES, Identity, set_actor_context
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from test_check_combined import semantic_llm
@@ -64,7 +64,7 @@ async def generate_candidate(case, monkeypatch, target, changes):
     )
     assert response.status_code == 200, response.text
     case["rubric"] = response.json()["data"]
-    return terminal, case["rubric"]
+    return (terminal, case["rubric"])
 
 
 def assert_values_preserved(subject, changes):
@@ -136,25 +136,19 @@ async def test_numeric_candidate_survives_views_and_human_correction(
         result = await case["api"].get(path, headers=case["header"])
         assert result.status_code == 200, result.text
         views[part] = result.json()
-        assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
-    assert (await case["api"].get(base(case), headers=case["headers"][1])).status_code == 404
     assert (
         await case["api"].get(
             "/v4" + base(case) + "?view=console&part=replacement", headers=case["header"]
         )
     ).status_code == 404
-
     report = await classify_all(case)
     subject = report["rubric"] if target == "rubric" else report[target][0]
     suffix = "" if target == "rubric" else f"/{target}/{subject['id']}"
     denied = await case["api"].post(
-        base(case) + suffix + "/decisions",
-        headers=case["header"],
-        json=decision(report, subject),
+        base(case) + suffix + "/decisions", headers=case["header"], json=decision(report, subject)
     )
     assert denied.status_code == 409, denied.text
     assert denied.json()["data"]["error"]["code"] == "rubric_incomplete"
-
     body = replacement(report)
     body.update(overall_aggregation="sum", overall_cap=None)
     body["overall_score_range"] = {"minimum": "0", "maximum": "5"}
@@ -176,7 +170,6 @@ async def test_numeric_candidate_survives_views_and_human_correction(
         saved_replacement.json()["data"]["replacement"]
     ) == RubricReviseRequest.model_validate(body)
     views["replacement"] = saved_replacement.json()
-    assert (await case["api"].get(replacement_path, headers=case["headers"][1])).status_code == 404
     revised = await confirm_contents(case, revised)
     assert revised["rubric"]["completeness"]["complete"]
     confirmed = await case["api"].post(
@@ -235,7 +228,7 @@ async def test_database_confirmation_checks_numbers_without_error_metadata(
         if target == "rubric"
         else await classify_all(case, report)
     )
-    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         errors = await session.scalar(
             text("SELECT normalization_errors FROM score_rubric_sets WHERE id=:id"),
             {"id": UUID(report["rubric"]["id"])},
@@ -243,19 +236,13 @@ async def test_database_confirmation_checks_numbers_without_error_metadata(
         assert errors == []
     subject = report["rubric"] if target == "rubric" else report[target][0]
     with pytest.raises(IntegrityError) as failure:
-        async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
-            actor = Identity(
-                case["tenants"]["users"][0],
-                case["tenants"]["orgs"][0],
-                ROLE_SCOPES["bidder"],
-                "bidder",
-            )
+        async with case["app"].state.db.transaction() as session:
+            actor = Identity(HUMAN_SCOPES)
             await set_actor_context(session, actor)
             reason = "Synthetic direct numeric confirmation bypass"
             session.add(
                 ScoreRubricDecision(
                     id=uuid4(),
-                    org_id=actor.org_id,
                     task_id=UUID(case["task"]),
                     rubric_id=UUID(report["rubric"]["id"]),
                     section_id=UUID(subject["id"]) if target == "sections" else None,
@@ -266,7 +253,6 @@ async def test_database_confirmation_checks_numbers_without_error_metadata(
                     reason=reason,
                     reason_sha256=response_cards.quote_hash(reason),
                     expected_input_hash=report["rubric"]["input_hash"],
-                    decided_by=actor.user_id,
                     actor_kind="session",
                 )
             )

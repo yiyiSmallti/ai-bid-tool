@@ -11,12 +11,11 @@ from uuid import UUID, uuid4
 
 import pymupdf
 import pytest
-from app.api.main import create_app
 from app.core.config import Settings
 from app.core.security import Secrets
 from app.models.bid_review import BidDocumentPage
 from app.models.bid_signature import BidPDFValidation, BidPreparationTrust, BidSigningCandidate
-from app.models.entities import Membership, UsageRecord
+from app.models.entities import UsageRecord
 from bid_signature_fixtures import (
     gm_fixture,
     modified_pdf,
@@ -24,25 +23,11 @@ from bid_signature_fixtures import (
     standard_fixture,
     unsigned_pdf,
 )
-from conftest import FakeQueue
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.orm import Session
-from test_bid_review_upload_db import PDF, error, preview, result, run, submit, task, upload
-from test_platform_auth import platform_settings, sign_in
+from test_bid_review_upload_db import PDF, preview, result, run, submit, task, upload
 
 QUOTE = "★ 法定代表人签字并加盖公章，填写日期，每页电子签章。"
-
-
-@pytest.fixture
-def application(tenants, operator, tmp_path):
-    return create_app(platform_settings(tmp_path), queue=FakeQueue())
-
-
-async def operator_header(api):
-    response = await sign_in(api)
-    assert response.status_code == 200, response.text
-    return {"Authorization": "Bearer " + response.json()["data"]["session"]}
 
 
 async def anchor(api, header, content):
@@ -93,12 +78,12 @@ def mutation(content, case):
     return content
 
 
-async def prepare_one(api, headers, application, tenants, content, *, files=None):
-    task_id = await task(api, headers[0])
+async def prepare_one(api, headers, application, content, *, files=None):
+    task_id = await task(api, headers)
     uploaded = result(
         await upload(
             api,
-            headers[0],
+            headers,
             task_id,
             files
             or [
@@ -107,13 +92,13 @@ async def prepare_one(api, headers, application, tenants, content, *, files=None
             ],
         )
     )
-    receipt = result(await preview(api, headers[0], task_id, uploaded["id"]))
+    receipt = result(await preview(api, headers, task_id, uploaded["id"]))
     request_id = str(uuid4())
     accepted = result(
-        await submit(api, headers[0], task_id, uploaded["id"], receipt, request_id=request_id)
+        await submit(api, headers, task_id, uploaded["id"], receipt, request_id=request_id)
     )
-    await run(application, tenants["orgs"][0], accepted["job_id"])
-    detail = result(await api.get(f"/v4/bid-submissions/{uploaded['id']}", headers=headers[0]))
+    await run(application, accepted["job_id"])
+    detail = result(await api.get(f"/v4/bid-submissions/{uploaded['id']}", headers=headers))
     assert detail["preparation"]["status"] == "succeeded"
     return uploaded, detail, receipt, request_id, accepted, task_id
 
@@ -143,7 +128,7 @@ async def prepare_one(api, headers, application, tenants, content, *, files=None
     ],
 )
 async def test_gm_signature_dimensions_through_http_worker(
-    case, api, headers, application, tenants, tmp_path
+    case, api, headers, application, tmp_path
 ):
     purposes = {
         "purpose_email": ("1.3.6.1.5.5.7.3.2", "1.3.6.1.5.5.7.3.4"),
@@ -152,8 +137,7 @@ async def test_gm_signature_dimensions_through_http_worker(
     fixture = gm_fixture(
         expired=case == "expired", not_yet_valid=case == "not_yet_valid", signer_purposes=purposes
     )
-    ops = await operator_header(api)
-    await anchor(api, ops, fixture.root_der)
+    await anchor(api, headers, fixture.root_der)
     args = {"attrs": False, "direct_digest": True} if case == "direct" else {}
     if case in {"wrong_digest", "wrong_signature", "wrong_user_id"}:
         args[case] = True
@@ -174,7 +158,7 @@ async def test_gm_signature_dimensions_through_http_worker(
             fixture, base=content, embedded_digest=True, subfilter="GM.sm2cms.detached"
         )
     content = modified_pdf(content) if case == "tampered" else mutation(content, case)
-    uploaded, detail, *_ = await prepare_one(api, headers, application, tenants, content)
+    uploaded, detail, *_ = await prepare_one(api, headers, application, content)
     doc = next(row for row in detail["submission"]["documents"] if row["role"] == "bid")
     validation = next(
         row for row in detail["signature_validations"] if row["document_id"] == doc["id"]
@@ -228,7 +212,7 @@ async def test_gm_signature_dimensions_through_http_worker(
         assert validation["final_revision"]["modified_after_last_signature"] is True
     candidates = detail["signing_candidates"]
     assert candidates and candidates[0]["applicability"] == "unknown"
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         page = await session.get(BidDocumentPage, UUID(candidates[0]["page_id"]))
         assert page is not None
         envelope = json.loads(Secrets.for_data(Settings()).decrypt(page.text_encrypted))
@@ -238,61 +222,48 @@ async def test_gm_signature_dimensions_through_http_worker(
             == candidate["quote"]
         )
         assert await session.scalar(select(func.count()).select_from(UsageRecord)) == 0
-    error(await api.get(f"/v4/bid-submissions/{uploaded['id']}", headers=headers[1]), status=404)
-    error(
-        await api.get(
-            f"/v4/bid-submissions/{uploaded['id']}/signing-candidates", headers=headers[1]
-        ),
-        status=404,
-    )
     (tmp_path / f"signature-{case}-receipt.json").write_text(
         json.dumps(detail, ensure_ascii=False, indent=2)
     )
 
 
 async def test_snapshot_disable_retry_and_restricted_projection(
-    api, headers, application, tenants, admin_engine, caplog, tmp_path
+    api, headers, application, caplog, tmp_path
 ):
     fixture = gm_fixture()
-    ops = await operator_header(api)
-    root = await anchor(api, ops, fixture.root_der)
+    root = await anchor(api, headers, fixture.root_der)
     content = signed_pdf(fixture, subfilter="GM.sm2cms.detached")
     uploaded, detail, receipt, request_id, accepted, task_id = await prepare_one(
-        api, headers, application, tenants, content
+        api, headers, application, content
     )
     replay = result(
-        await submit(api, headers[0], task_id, uploaded["id"], receipt, request_id=request_id)
+        await submit(api, headers, task_id, uploaded["id"], receipt, request_id=request_id)
     )
     assert replay["job_id"] == accepted["job_id"]
-    disabled = await api.post(f"/platform/trust-anchors/{root['id']}/disable", headers=ops)
+    disabled = await api.post(f"/platform/trust-anchors/{root['id']}/disable", headers=headers)
     assert disabled.status_code == 200
-    assert (
-        result(await api.get(f"/v4/bid-submissions/{uploaded['id']}", headers=headers[0])) == detail
-    )
-    _, later, *_ = await prepare_one(api, headers, application, tenants, content)
+    assert result(await api.get(f"/v4/bid-submissions/{uploaded['id']}", headers=headers)) == detail
+    _, later, *_ = await prepare_one(api, headers, application, content)
 
     def signed(data):
         return next(row for row in data["signature_validations"] if row["signatures"])
 
     assert signed(detail)["trust_store_sha256"] != signed(later)["trust_store_sha256"]
     assert signed(later)["signatures"][0]["trust_status"] == "unknown"
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         for model in (BidPreparationTrust, BidPDFValidation, BidSigningCandidate):
             rows = list((await session.scalars(select(model))).all())
             assert rows
             if hasattr(rows[0], "details_encrypted"):
                 assert "SYNTHETIC GM Signer" not in rows[0].details_encrypted
-    async with application.state.db.transaction(tenants["orgs"][1]) as session:
-        for model in (BidPreparationTrust, BidPDFValidation, BidSigningCandidate):
-            assert await session.scalar(select(func.count()).select_from(model)) == 0
     for table in ("bid_preparation_trust", "bid_pdf_validations", "bid_signing_candidates"):
         with pytest.raises(DBAPIError):
-            async with application.state.db.transaction(tenants["orgs"][0]) as session:
+            async with application.state.db.transaction() as session:
                 await session.execute(text(f"DELETE FROM {table}"))
     issued = result(
         await api.post(
             "/v4/tokens",
-            headers=headers[0],
+            headers=headers,
             json={
                 "name": "Synthetic signature advisory token",
                 "expires_at": "2030-01-01T00:00:00Z",
@@ -300,7 +271,7 @@ async def test_snapshot_disable_retry_and_restricted_projection(
             },
         )
     )
-    token_header = {**headers[0], "Authorization": "Bearer " + issued["token"]}
+    token_header = {**headers, "Authorization": "Bearer " + issued["token"]}
     token_response = await api.get(f"/v4/bid-submissions/{uploaded['id']}", headers=token_header)
     token_detail = result(token_response)
     assert (
@@ -314,26 +285,12 @@ async def test_snapshot_disable_retry_and_restricted_projection(
         )
     )
     assert all(row["quote"] is None for row in token_candidates["items"])
-    with Session(admin_engine) as session, session.begin():
-        member = session.scalar(
-            select(Membership).where(
-                Membership.org_id == tenants["orgs"][0], Membership.user_id == tenants["users"][0]
-            )
-        )
-        member.role = "technical"
-    restricted_response = await api.get(f"/v4/bid-submissions/{uploaded['id']}", headers=headers[0])
-    restricted = result(restricted_response)
-    assert "SYNTHETIC GM Signer" not in restricted_response.text
-    assert "SYNTHETIC GM Root" not in restricted_response.text
-    assert all(row["quote"] is None for row in restricted["signing_candidates"])
     assert "SYNTHETIC GM Signer" not in caplog.text and QUOTE not in caplog.text
-    (tmp_path / "restricted-signature-receipt.json").write_text(json.dumps(restricted, indent=2))
+    (tmp_path / "restricted-signature-receipt.json").write_text(json.dumps(token_detail, indent=2))
 
 
-async def test_unsigned_pdf_is_not_applicable(api, headers, application, tenants):
-    _, detail, *_ = await prepare_one(
-        api, headers, application, tenants, unsigned_pdf(empty_widget=True)
-    )
+async def test_unsigned_pdf_is_not_applicable(api, headers, application):
+    _, detail, *_ = await prepare_one(api, headers, application, unsigned_pdf(empty_widget=True))
     assert all(
         row["status"] == "not_applicable" and not row["signatures"]
         for row in detail["signature_validations"]
@@ -341,12 +298,11 @@ async def test_unsigned_pdf_is_not_applicable(api, headers, application, tenants
 
 
 @pytest.mark.parametrize("algorithm", ["rsa", "ecdsa"])
-async def test_standard_detached_through_http_worker(algorithm, api, headers, application, tenants):
+async def test_standard_detached_through_http_worker(algorithm, api, headers, application):
     root, builder = standard_fixture(algorithm)
-    ops = await operator_header(api)
-    await anchor(api, ops, root)
+    await anchor(api, headers, root)
     content = signed_pdf(subfilter="adbe.pkcs7.detached", cms_builder=builder)
-    _, detail, *_ = await prepare_one(api, headers, application, tenants, content)
+    _, detail, *_ = await prepare_one(api, headers, application, content)
     signature = next(row for row in detail["signature_validations"] if row["signatures"])[
         "signatures"
     ][0]
@@ -354,18 +310,17 @@ async def test_standard_detached_through_http_worker(algorithm, api, headers, ap
     assert signature["trust_status"] == "trusted"
 
 
-async def test_local_uploaded_intermediate_is_required(api, headers, application, tenants):
+async def test_local_uploaded_intermediate_is_required(api, headers, application):
     from dataclasses import replace
 
     fixture = gm_fixture(chain=True)
     assert fixture.intermediate_der is not None
     # Match the owner-described profile: the PDF embeds only the signer cert.
     content = signed_pdf(replace(fixture, intermediate_der=None), subfilter="GM.sm2cms.detached")
-    ops = await operator_header(api)
-    await anchor(api, ops, fixture.root_der)
-    _, missing, *_ = await prepare_one(api, headers, application, tenants, content)
-    await anchor(api, ops, fixture.intermediate_der)
-    _, complete, *_ = await prepare_one(api, headers, application, tenants, content)
+    await anchor(api, headers, fixture.root_der)
+    _, missing, *_ = await prepare_one(api, headers, application, content)
+    await anchor(api, headers, fixture.intermediate_der)
+    _, complete, *_ = await prepare_one(api, headers, application, content)
     for detail, trust in ((missing, "unknown"), (complete, "trusted")):
         signature = next(row for row in detail["signature_validations"] if row["signatures"])[
             "signatures"
@@ -374,18 +329,17 @@ async def test_local_uploaded_intermediate_is_required(api, headers, application
 
 
 async def test_failed_preparation_retry_keeps_admitted_trust(
-    api, headers, application, tenants, monkeypatch
+    api, headers, application, monkeypatch
 ):
     from app.core.errors import ServiceError
 
     fixture = gm_fixture()
-    ops = await operator_header(api)
-    root = await anchor(api, ops, fixture.root_der)
-    task_id = await task(api, headers[0])
+    root = await anchor(api, headers, fixture.root_der)
+    task_id = await task(api, headers)
     uploaded = result(
         await upload(
             api,
-            headers[0],
+            headers,
             task_id,
             [
                 ("tender.pdf", PDF, tender()),
@@ -393,34 +347,34 @@ async def test_failed_preparation_retry_keeps_admitted_trust(
             ],
         )
     )
-    receipt = result(await preview(api, headers[0], task_id, uploaded["id"]))
-    accepted = result(await submit(api, headers[0], task_id, uploaded["id"], receipt))
+    receipt = result(await preview(api, headers, task_id, uploaded["id"]))
+    accepted = result(await submit(api, headers, task_id, uploaded["id"], receipt))
     real_put = application.state.storage.put
 
-    async def failing_put(org, key, content):
+    async def failing_put(key, content):
         if "/pages/" in key:
             raise ServiceError("synthetic_storage_failure", "Synthetic storage failure", 500, 4)
-        await real_put(org, key, content)
+        await real_put(key, content)
 
     monkeypatch.setattr(application.state.storage, "put", failing_put)
-    await run(application, tenants["orgs"][0], accepted["job_id"])
-    failed = result(await api.get(f"/v4/bid-submissions/{uploaded['id']}", headers=headers[0]))
+    await run(application, accepted["job_id"])
+    failed = result(await api.get(f"/v4/bid-submissions/{uploaded['id']}", headers=headers))
     assert failed["preparation"]["status"] == "failed" and not failed["signature_validations"]
     assert (
-        await api.post(f"/platform/trust-anchors/{root['id']}/disable", headers=ops)
+        await api.post(f"/platform/trust-anchors/{root['id']}/disable", headers=headers)
     ).status_code == 200
     monkeypatch.setattr(application.state.storage, "put", real_put)
-    new_receipt = result(await preview(api, headers[0], task_id, uploaded["id"]))
+    new_receipt = result(await preview(api, headers, task_id, uploaded["id"]))
     assert new_receipt["input_hash"] == receipt["input_hash"]
     request_id = str(uuid4())
     retried = result(
         await submit(
-            api, headers[0], task_id, uploaded["id"], new_receipt, retry=True, request_id=request_id
+            api, headers, task_id, uploaded["id"], new_receipt, retry=True, request_id=request_id
         )
     )
     assert retried["job_id"] == accepted["job_id"]
-    await run(application, tenants["orgs"][0], accepted["job_id"])
-    detail = result(await api.get(f"/v4/bid-submissions/{uploaded['id']}", headers=headers[0]))
+    await run(application, accepted["job_id"])
+    detail = result(await api.get(f"/v4/bid-submissions/{uploaded['id']}", headers=headers))
     assert detail["preparation"]["status"] == "succeeded"
     signature = next(row for row in detail["signature_validations"] if row["signatures"])[
         "signatures"
@@ -430,7 +384,7 @@ async def test_failed_preparation_retry_keeps_admitted_trust(
         result(
             await submit(
                 api,
-                headers[0],
+                headers,
                 task_id,
                 uploaded["id"],
                 new_receipt,
@@ -440,31 +394,28 @@ async def test_failed_preparation_retry_keeps_admitted_trust(
         )["job_id"]
         == accepted["job_id"]
     )
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(BidPreparationTrust)) == 1
         assert await session.scalar(select(func.count()).select_from(BidPDFValidation)) == 2
 
 
-async def test_signature_relational_and_immutable_boundaries(api, headers, application, tenants):
-    from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
+async def test_signature_relational_and_immutable_boundaries(api, headers, application):
+    from app.services.auth import HUMAN_SCOPES, Identity, set_actor_context
 
-    for i in (0, 1):
-        local_headers = [headers[i], headers[1 - i]]
-        local_tenants = {"orgs": [tenants["orgs"][i], tenants["orgs"][1 - i]]}
-        await prepare_one(api, local_headers, application, local_tenants, signed_pdf())
-    actor = Identity(tenants["users"][0], tenants["orgs"][0], set(ROLE_SCOPES["admin"]), "admin")
+    await prepare_one(api, headers, application, signed_pdf())
+    other_task = UUID(await task(api, headers))
+    actor = Identity(scopes=set(HUMAN_SCOPES))
     for model in (BidPreparationTrust, BidPDFValidation, BidSigningCandidate):
-        async with application.state.db.transaction(tenants["orgs"][1]) as session:
+        async with application.state.db.transaction() as session:
             row = await session.scalar(select(model).limit(1))
+            assert row is not None
             values = {column.name: getattr(row, column.name) for column in model.__table__.columns}
-        values |= {"id": uuid4(), "org_id": actor.org_id}
-        if "created_by" in values:
-            values["created_by"] = actor.user_id
+        values |= {"id": uuid4(), "task_id": other_task, "preparation_id": uuid4()}
         with pytest.raises(DBAPIError) as rejected:
-            async with application.state.db.transaction(actor.org_id) as session:
+            async with application.state.db.transaction() as session:
                 await set_actor_context(session, actor)
                 await session.execute(model.__table__.insert().values(**values))
         assert rejected.value.orig.sqlstate == "23503"
         with pytest.raises(DBAPIError):
-            async with application.state.db.transaction(actor.org_id) as session:
+            async with application.state.db.transaction() as session:
                 await session.execute(text(f"UPDATE {model.__tablename__} SET id=id"))

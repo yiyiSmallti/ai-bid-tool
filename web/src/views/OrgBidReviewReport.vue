@@ -4,14 +4,15 @@ import { useRoute } from "vue-router";
 import TaskNavigation from "../components/TaskNavigation.vue";
 import JobPanel from "../components/JobPanel.vue";
 import BidReportRow from "../components/BidReportRow.vue";
-import { orgAccess, formatTime } from "../org.js";
+import { request } from "../api.js";
+import { formatTime } from "../org.js";
 import { reviewError } from "../bid-review.js";
-import { checkedReportPage, downloadReport, invalidReport, reportRequest, reportSections } from "../bid-review-report.js";
+import { checkedReportPage, downloadReport, invalidReport, reportSections } from "../bid-review-report.js";
 const route = useRoute();
 const taskId = computed(() => String(route.params.taskId)), reviewId = computed(() => String(route.params.reviewId));
 const metadata = ref(null), snapshotId = ref(""), history = ref([]), historyCursor = ref(null), preview = ref(null), consent = ref(false), retry = ref(false), busy = ref(false), error = ref(""), jobId = ref(""), jobAttempt = ref(0), downloaded = ref(false);
 const pages = reactive({});
-const canRender = computed(() => metadata.value?.projection === "protected" && ["admin", "bidder"].includes(orgAccess.role));
+const canRender = computed(() => metadata.value?.projection === "protected");
 const stale = computed(() => Boolean(snapshotId.value && metadata.value?.current_decisions_snapshot_sha256 && metadata.value.current_decisions_snapshot_sha256 !== metadata.value.decisions_snapshot_sha256));
 const expired = computed(() => !preview.value || Date.parse(preview.value.expires_at) <= Date.now());
 const artifacts = computed(() => metadata.value?.artifacts?.filter(row => row.format === "docx") ?? []);
@@ -24,7 +25,7 @@ function clearPages() { metadata.value = null; for (const key of Object.keys(pag
 async function readSection(key, cursor = null, trail = [], token = epoch) {
   const chosen = snapshotId.value, query = new URLSearchParams({ section: key, limit: "50" });
   if (chosen) query.set("snapshot_id", chosen); if (cursor) query.set("cursor", cursor);
-  const response = await reportRequest("GET", `/bid-reviews/${encodeURIComponent(reviewId.value)}/report?${query}`, undefined, { signal: controller.signal });
+  const response = await request("GET", `/bid-reviews/${encodeURIComponent(reviewId.value)}/report?${query}`, undefined, { signal: controller.signal });
   if (token !== epoch || chosen !== snapshotId.value) return;
   checkedReportPage(response, taskId.value, reviewId.value, key, chosen || null);
   if (metadata.value && ["input_hash", "report_input_hash", "decisions_snapshot_sha256", "projection"].some(field => metadata.value[field] !== response.data[field])) { clearPages(); invalidate(); throw invalidReport(); }
@@ -33,7 +34,7 @@ async function readSection(key, cursor = null, trail = [], token = epoch) {
 }
 async function historyPage(more = false, token = epoch) {
   const query = new URLSearchParams({ limit: "50" }); if (more && historyCursor.value) query.set("cursor", historyCursor.value);
-  const response = await reportRequest("GET", `/bid-reviews/${encodeURIComponent(reviewId.value)}/reports?${query}`, undefined, { signal: controller.signal });
+  const response = await request("GET", `/bid-reviews/${encodeURIComponent(reviewId.value)}/reports?${query}`, undefined, { signal: controller.signal });
   if (token !== epoch) return;
   if (response.data.review_id !== reviewId.value || response.data.task_id !== taskId.value || response.items.length > 50 || !(response.data.next_cursor === null || typeof response.data.next_cursor === "string") || response.items.some(row => typeof row.snapshot_id !== "string")) throw invalidReport();
   if (more && response.data.next_cursor === historyCursor.value) throw invalidReport();
@@ -57,9 +58,9 @@ async function inspect() {
     invalidate();
     // Rendering always freezes the decisions current at this new preview.
     const query = new URLSearchParams({ section: "overall", limit: "50" });
-    const current = checkedReportPage(await reportRequest("GET", `/bid-reviews/${encodeURIComponent(reviewId.value)}/report?${query}`, undefined, { signal: controller.signal }), taskId.value, reviewId.value, "overall");
+    const current = checkedReportPage(await request("GET", `/bid-reviews/${encodeURIComponent(reviewId.value)}/report?${query}`, undefined, { signal: controller.signal }), taskId.value, reviewId.value, "overall");
     await historyPage();
-    const response = await reportRequest("POST", `/bid-reviews/${encodeURIComponent(reviewId.value)}/artifacts`, { request_id: requestId, report_id: reviewId.value, dry_run: true, expected_decisions_snapshot_sha256: current.data.decisions_snapshot_sha256 }, { signal: controller.signal });
+    const response = await request("POST", `/bid-reviews/${encodeURIComponent(reviewId.value)}/artifacts`, { request_id: requestId, report_id: reviewId.value, dry_run: true, expected_decisions_snapshot_sha256: current.data.decisions_snapshot_sha256 }, { signal: controller.signal });
     const fixed = response.data;
     if (fixed.report_id !== reviewId.value || fixed.decisions_snapshot_sha256 !== current.data.decisions_snapshot_sha256 || fixed.report_input_hash !== current.data.report_input_hash || fixed.preflight?.input_hash !== fixed.input_hash || fixed.preflight.planned_calls !== 0 || !Number.isFinite(Date.parse(fixed.expires_at)) || typeof fixed.preflight_token !== "string") throw invalidReport();
     preview.value = fixed; expiryTimer = setTimeout(() => { invalidate(); error.value = "预检已过期，请重新预检"; }, Math.max(0, Date.parse(fixed.expires_at) - Date.now()));
@@ -69,7 +70,7 @@ async function submit() {
   if (!canRender.value || !consent.value || expired.value || preview.value.admission_blockers?.length || retryAvailable.value && !retry.value) return;
   await operate(async () => {
     const fixed = preview.value;
-    const response = await reportRequest("POST", `/bid-reviews/${encodeURIComponent(reviewId.value)}/artifacts`, { request_id: requestId, report_id: reviewId.value, dry_run: false, retry: retryAvailable.value && retry.value, expected_input_hash: fixed.input_hash, preflight_token: fixed.preflight_token, expected_decisions_snapshot_sha256: fixed.decisions_snapshot_sha256 }, { signal: controller.signal });
+    const response = await request("POST", `/bid-reviews/${encodeURIComponent(reviewId.value)}/artifacts`, { request_id: requestId, report_id: reviewId.value, dry_run: false, retry: retryAvailable.value && retry.value, expected_input_hash: fixed.input_hash, preflight_token: fixed.preflight_token, expected_decisions_snapshot_sha256: fixed.decisions_snapshot_sha256 }, { signal: controller.signal });
     if (typeof response.data.job_id !== "string") throw invalidReport();
     completedJobs.delete(response.data.job_id); jobAttempt.value++; jobId.value = response.data.job_id; invalidate();
   });
@@ -85,8 +86,8 @@ async function nextSection(key) { const page = pages[key]; await operate(() => r
 async function previousSection(key) { const page = pages[key], trail = [...page.trail], cursor = trail.pop(); await operate(() => readSection(key, cursor, trail)); }
 async function download(artifact) { downloaded.value = false; await operate(async () => { await downloadReport(artifact, taskId.value, reviewId.value, controller.signal); downloaded.value = true; }); }
 watch([taskId, reviewId], () => { snapshotId.value = ""; jobId.value = ""; load(); }, { immediate: true });
-window.addEventListener("bid:org-reset", load);
-onBeforeUnmount(() => { epoch++; controller?.abort(); invalidate(); clearPages(); history.value = []; window.removeEventListener("bid:org-reset", load); });
+window.addEventListener("bid:session-reset", load);
+onBeforeUnmount(() => { epoch++; controller?.abort(); invalidate(); clearPages(); history.value = []; window.removeEventListener("bid:session-reset", load); });
 </script>
 <template>
   <TaskNavigation :task-id="taskId" />
@@ -100,7 +101,7 @@ onBeforeUnmount(() => { epoch++; controller?.abort(); invalidate(); clearPages()
       <el-select v-model="snapshotId" aria-label="报告快照选择" style="width:min(540px,100%)" :disabled="busy" @change="chooseSnapshot"><el-option label="当前决定（待渲染）" value="" /><el-option v-for="row in history" :key="row.snapshot_id" :value="row.snapshot_id" :disabled="row.artifact_status !== 'ready'" :label="`${artifactStatus(row.artifact_status)} · ${formatTime(row.created_at)} · ${row.snapshot_id}`" /></el-select>
       <el-button v-if="historyCursor" :disabled="busy" @click="operate(() => historyPage(true))">更多历史快照</el-button>
       <p>快照编号 <code>{{ metadata.snapshot_id ?? '尚未创建；显式提交渲染后固定' }}</code></p><p>决定快照哈希 <code>{{ metadata.decisions_snapshot_sha256 }}</code></p><p>报告数据哈希 <code>{{ metadata.report_input_hash }}</code></p>
-      <p v-if="metadata.projection !== 'protected'">当前显示隐私清理后的报告；受保护报告与 Word 需要有原件读取权限的商务成员或管理员本人操作。</p>
+      <p v-if="metadata.projection !== 'protected'">当前显示隐私清理后的报告；受保护报告与 Word 需要本人登录控制台后操作。</p>
     </el-card>
     <el-card v-for="section in reportSections" :key="section.key" class="section" shadow="never" :data-testid="`report-section-${section.key}`"><template #header><div class="section-title"><h3>{{ section.title }}</h3><el-button v-if="!pages[section.key]" size="small" :disabled="busy" @click="operate(() => readSection(section.key))">查看本节</el-button></div></template>
       <template v-if="pages[section.key]"><BidReportRow v-for="(row,index) in pages[section.key].rows" :key="index" :row="row" /><p v-if="!pages[section.key].rows.length">本节没有逐项记录；不代表检验通过。</p><div class="actions"><el-button v-if="pages[section.key].trail.length" :disabled="busy" @click="previousSection(section.key)">上一页 {{ section.title }}</el-button><el-button v-if="pages[section.key].next" :disabled="busy" @click="nextSection(section.key)">下一页 {{ section.title }}</el-button></div></template>

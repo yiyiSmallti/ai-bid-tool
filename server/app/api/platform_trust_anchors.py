@@ -1,4 +1,4 @@
-"""Trust-anchor management requires an existing password-and-TOTP platform session."""
+"""Offline trust-anchor settings managed by the installation human."""
 
 from uuid import UUID
 
@@ -11,9 +11,16 @@ from app.schemas.contracts import Result
 from app.services.platform_trust_anchors import PlatformTrustAnchorService
 
 
-def create_router(db: Database, operator):
+def create_router(db: Database, context):
     router = APIRouter(prefix="/platform/trust-anchors")
     service = PlatformTrustAnchorService(db)
+
+    async def human(ctx=Depends(context, scope="function")):
+        from app.services.platform_credentials import require_human
+
+        actor = ctx[1]
+        require_human(actor, "trust-anchor:manage")
+        return actor
 
     async def read_certificate(file: UploadFile) -> bytes:
         try:
@@ -27,7 +34,7 @@ def create_router(db: Database, operator):
         return data
 
     @router.get("", name="platform_trust_anchor_list", response_model=Result)
-    async def list_anchors(actor=Depends(operator)):
+    async def list_anchors(actor=Depends(human)):
         rows = await service.list()
         return Result(
             ok=True,
@@ -36,17 +43,15 @@ def create_router(db: Database, operator):
         )
 
     @router.post("/preview", name="platform_trust_anchor_preview", response_model=Result)
-    async def preview(
-        certificate: UploadFile = File(), label: str = Form(), actor=Depends(operator)
-    ):
+    async def preview(certificate: UploadFile = File(), label: str = Form(), actor=Depends(human)):
         row = await service.preview(await read_certificate(certificate), label)
         return Result(
             ok=True, command="platform trust-anchor preview", data=row.model_dump(mode="json")
         )
 
     @router.post("", name="platform_trust_anchor_add", response_model=Result)
-    async def add(certificate: UploadFile = File(), label: str = Form(), actor=Depends(operator)):
-        row = await service.add(actor.email, await read_certificate(certificate), label)
+    async def add(certificate: UploadFile = File(), label: str = Form(), actor=Depends(human)):
+        row = await service.add(actor, await read_certificate(certificate), label)
         return Result(
             ok=True, command="platform trust-anchor add", data=row.model_dump(mode="json")
         )
@@ -54,8 +59,8 @@ def create_router(db: Database, operator):
     @router.post(
         "/{anchor_id}/disable", name="platform_trust_anchor_disable", response_model=Result
     )
-    async def disable(anchor_id: UUID, actor=Depends(operator)):
-        row = await service.disable(actor.email, anchor_id)
+    async def disable(anchor_id: UUID, actor=Depends(human)):
+        row = await service.disable(actor, anchor_id)
         return Result(
             ok=True, command="platform trust-anchor disable", data=row.model_dump(mode="json")
         )

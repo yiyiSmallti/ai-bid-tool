@@ -18,9 +18,9 @@ async def generation_post(api, header, task, extraction, **body):
     )
 
 
-async def test_preview_hash_binding_before_dispatch(tenants, tmp_path):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        header = headers[0]
+async def test_preview_hash_binding_before_dispatch(database, tmp_path):
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
         first = [requirements[2]["id"]]
         preview = (
@@ -36,7 +36,7 @@ async def test_preview_hash_binding_before_dispatch(tenants, tmp_path):
         )
         assert changed.status_code == 409, changed.text
         assert changed.json()["data"]["error"]["code"] == "generation_input_changed"
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             assert (
                 await session.scalar(
                     select(func.count()).select_from(Job).where(Job.kind == "card_generate")

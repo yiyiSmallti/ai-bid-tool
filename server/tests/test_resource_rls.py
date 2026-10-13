@@ -1,3 +1,5 @@
+"""Resource version bindings, immutable history and source descriptor gates."""
+
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -31,53 +33,27 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 from task_fixtures import actor_context_async, finish_scope, seed_task
 
-TABLES = (
-    "products",
-    "product_revisions",
-    "task_resources",
-    "audit_logs",
-    "features",
-    "feature_revisions",
-    "task_features",
-    "certificates",
-    "certificate_revisions",
-    "task_certificates",
-    "org_profiles",
-    "org_profile_revisions",
-    "task_org_profiles",
-    "certificate_files",
-    "templates",
-    "template_revisions",
-    "task_templates",
-    "evidence_sources",
-)
-
 
 @pytest.fixture
-def resource_rows(tenants, admin_engine):
+def resource_rows(admin_engine):
     ids = {}
     with Session(admin_engine) as session, session.begin():
-        for org, user in zip(tenants["orgs"], tenants["users"], strict=True):
-            task = Task(id=uuid4(), org_id=org, created_by=user, name="Synthetic RLS task")
+        for group in range(2):
+            task = Task(id=uuid4(), name="Synthetic resource task")
             seed_task(session, task)
-            product = Product(id=uuid4(), org_id=org, created_by=user, current_revision=1)
+            product = Product(id=uuid4(), current_revision=1)
             session.add_all([task, product])
             session.flush()
             revision = ProductRevision(
-                id=uuid4(),
-                org_id=org,
-                product_id=product.id,
-                revision=1,
-                data={"name": "Synthetic"},
+                id=uuid4(), product_id=product.id, revision=1, data={"name": "Synthetic"}
             )
             session.add(revision)
             session.flush()
-            feature = Feature(id=uuid4(), org_id=org, created_by=user, current_revision=1)
+            feature = Feature(id=uuid4(), current_revision=1)
             session.add(feature)
             session.flush()
             feature_revision = FeatureRevision(
                 id=uuid4(),
-                org_id=org,
                 feature_id=feature.id,
                 product_id=product.id,
                 revision=1,
@@ -92,34 +68,21 @@ def resource_rows(tenants, admin_engine):
             session.flush()
             feature_snapshot = TaskFeature(
                 id=uuid4(),
-                org_id=org,
                 task_id=task.id,
                 feature_id=feature.id,
                 feature_revision_id=feature_revision.id,
             )
             session.add(feature_snapshot)
             snapshot = TaskResource(
-                id=uuid4(),
-                org_id=org,
-                task_id=task.id,
-                product_id=product.id,
-                product_revision_id=revision.id,
+                id=uuid4(), task_id=task.id, product_id=product.id, product_revision_id=revision.id
             )
-            event = AuditLog(
-                id=uuid4(),
-                org_id=org,
-                actor_user_id=user,
-                action="synthetic",
-                object_id=product.id,
-                details={},
-            )
+            event = AuditLog(id=uuid4(), action="synthetic", object_id=product.id, details={})
             session.add_all([snapshot, event])
-            certificate = Certificate(id=uuid4(), org_id=org, created_by=user, current_revision=1)
+            certificate = Certificate(id=uuid4(), current_revision=1)
             session.add(certificate)
             session.flush()
             certificate_revision = CertificateRevision(
                 id=uuid4(),
-                org_id=org,
                 certificate_id=certificate.id,
                 revision=1,
                 data={
@@ -134,10 +97,8 @@ def resource_rows(tenants, admin_engine):
             session.flush()
             certificate_file = CertificateFile(
                 id=uuid4(),
-                org_id=org,
                 certificate_id=certificate.id,
                 certificate_revision_id=certificate_revision.id,
-                created_by=user,
                 file={
                     "name": "synthetic.pdf",
                     "sha256": "a" * 64,
@@ -145,23 +106,21 @@ def resource_rows(tenants, admin_engine):
                     "page_count": 1,
                     "media_type": "application/pdf",
                 },
-                storage_key=f"org/{org}/certificate/{certificate.id}/{certificate_revision.id}/{'a' * 64}.pdf",
+                storage_key=f"certificate/{certificate.id}/{certificate_revision.id}/{'a' * 64}.pdf",
             )
             session.add(certificate_file)
             certificate_snapshot = TaskCertificate(
                 id=uuid4(),
-                org_id=org,
                 task_id=task.id,
                 certificate_id=certificate.id,
                 certificate_revision_id=certificate_revision.id,
             )
             session.add(certificate_snapshot)
-            profile = OrgProfile(id=uuid4(), org_id=org, created_by=user, current_revision=1)
+            profile = OrgProfile(id=uuid4(), current_revision=1)
             session.add(profile)
             session.flush()
             profile_revision = OrgProfileRevision(
                 id=uuid4(),
-                org_id=org,
                 profile_id=profile.id,
                 revision=1,
                 data={
@@ -175,19 +134,17 @@ def resource_rows(tenants, admin_engine):
             session.flush()
             profile_snapshot = TaskOrgProfile(
                 id=uuid4(),
-                org_id=org,
                 task_id=task.id,
                 profile_id=profile.id,
                 profile_revision_id=profile_revision.id,
             )
             session.add(profile_snapshot)
-            template = Template(id=uuid4(), org_id=org, created_by=user, current_revision=1)
+            template = Template(id=uuid4(), current_revision=1)
             session.add(template)
             session.flush()
             template_revision_id = uuid4()
             template_revision = TemplateRevision(
                 id=template_revision_id,
-                org_id=org,
                 template_id=template.id,
                 revision=1,
                 data={"name": "Synthetic template"},
@@ -197,13 +154,12 @@ def resource_rows(tenants, admin_engine):
                     "size_bytes": 1,
                     "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 },
-                storage_key=f"org/{org}/template/{template.id}/{template_revision_id}/{'a' * 64}.docx",
+                storage_key=f"template/{template.id}/{template_revision_id}/{'a' * 64}.docx",
             )
             session.add(template_revision)
             session.flush()
             template_snapshot = TaskTemplate(
                 id=uuid4(),
-                org_id=org,
                 task_id=task.id,
                 template_id=template.id,
                 template_revision_id=template_revision.id,
@@ -213,13 +169,11 @@ def resource_rows(tenants, admin_engine):
             source_id = uuid4()
             source = EvidenceSource(
                 id=source_id,
-                org_id=org,
                 task_id=task.id,
                 task_certificate_id=certificate_snapshot.id,
                 certificate_id=certificate.id,
                 certificate_revision_id=certificate_revision.id,
                 certificate_file_id=certificate_file.id,
-                created_by=user,
                 page=1,
                 preview={
                     "name": "synthetic.png",
@@ -229,11 +183,11 @@ def resource_rows(tenants, admin_engine):
                     "width_px": 1,
                     "height_px": 1,
                 },
-                storage_key=f"org/{org}/evidence-source/{source_id}/{'b' * 64}.png",
+                storage_key=f"evidence-source/{source_id}/{'b' * 64}.png",
                 rendered_at=datetime.now(UTC),
             )
             session.add(source)
-            ids[org] = {
+            ids[group] = {
                 "evidence_source": source.id,
                 "template": template.id,
                 "template_revision": template_revision.id,
@@ -255,109 +209,24 @@ def resource_rows(tenants, admin_engine):
                 "feature_snapshot": feature_snapshot.id,
             }
             finish_scope(session)
-    return {**tenants, "ids": ids}
+    return {"ids": ids}
 
 
-@pytest.mark.parametrize("table", TABLES)
-async def test_new_tables_fail_closed_and_reject_foreign_inserts(
-    table, resource_rows, admin_engine
-):
-    org_a, org_b = resource_rows["orgs"]
+async def test_snapshot_rejects_another_product_revision(resource_rows):
+    group = 0
+    own = resource_rows["ids"][group]
     db = Database(Settings())
     try:
-        async with db.transaction(org_a) as session:
-            assert set(
-                (await session.execute(text(f'SELECT org_id FROM "{table}"'))).scalars()
-            ) == {org_a}
-        async with db.transaction() as session:
-            assert (await session.execute(text(f'SELECT id FROM "{table}"'))).all() == []
-        model = Base.metadata.tables[table]
-        with admin_engine.connect() as connection:
-            row = dict(
-                connection.execute(select(model).where(model.c.org_id == org_b)).mappings().one()
-            )
-            flags = connection.execute(
-                text(
-                    "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname=:table"
-                ),
-                {"table": table},
-            ).one()
-            assert flags.relrowsecurity and flags.relforcerowsecurity
-            assert (
-                connection.scalar(
-                    text(
-                        "SELECT is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name=:table AND column_name='org_id'"
-                    ),
-                    {"table": table},
-                )
-                == "NO"
-            )
-        row["id"] = uuid4()
-        # Generated columns cannot be written; leave them out so RLS answers the insert.
-        row = {key: value for key, value in row.items() if model.c[key].computed is None}
-        with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org_a) as session:
-                await session.execute(model.insert().values(**row))
-        assert error.value.orig.sqlstate == "42501"
         with pytest.raises(DBAPIError) as error:
             async with db.transaction() as session:
-                await session.execute(model.insert().values(**row))
-        assert error.value.orig.sqlstate == "42501"
-        # Even owned history must never be destructively deleted by the runtime.
-        with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org_a) as session:
-                await session.execute(
-                    text(f'DELETE FROM "{table}" WHERE org_id=:org'), {"org": org_a}
-                )
-        assert error.value.orig.sqlstate == "42501"
-        if table in (
-            "products",
-            "task_resources",
-            "features",
-            "task_features",
-            "certificates",
-            "task_certificates",
-            "org_profiles",
-            "task_org_profiles",
-            "templates",
-            "task_templates",
-        ):
-            assignment = (
-                "current_revision=current_revision"
-                if table in ("products", "features", "certificates", "org_profiles", "templates")
-                else "active=active"
-            )
-            async with db.transaction(org_a) as session:
-                result = await session.execute(
-                    text(f'UPDATE "{table}" SET {assignment} WHERE org_id=:org'), {"org": org_b}
-                )
-                assert result.rowcount == 0
-        with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org_a) as session:
-                await session.execute(text(f'UPDATE "{table}" SET org_id=:org'), {"org": org_b})
-        assert error.value.orig.sqlstate == "42501"
-    finally:
-        await db.engine.dispose()
-
-
-async def test_snapshot_rejects_another_product_revision_in_same_org(resource_rows):
-    org = resource_rows["orgs"][0]
-    own = resource_rows["ids"][org]
-    db = Database(Settings())
-    try:
-        with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org) as session:
-                product = Product(
-                    org_id=org, created_by=resource_rows["users"][0], current_revision=1
-                )
+                product = Product(current_revision=1)
                 session.add(product)
                 await session.flush()
-                revision = ProductRevision(org_id=org, product_id=product.id, revision=1, data={})
+                revision = ProductRevision(product_id=product.id, revision=1, data={})
                 session.add(revision)
                 await session.flush()
                 session.add(
                     TaskResource(
-                        org_id=org,
                         task_id=own["task"],
                         product_id=own["product"],
                         product_revision_id=revision.id,
@@ -383,7 +252,7 @@ async def test_snapshot_rejects_another_product_revision_in_same_org(resource_ro
         ("certificate_files", "file='{}'::jsonb"),
         ("template_revisions", "file='{}'::jsonb"),
         ("task_templates", "template_revision_id=template_revision_id"),
-        ("templates", "created_by=created_by"),
+        ("templates", "created_at=created_at"),
         ("org_profile_revisions", "data='{}'::jsonb"),
         ("task_org_profiles", "profile_revision_id=profile_revision_id"),
         ("certificate_revisions", "data='{}'::jsonb"),
@@ -396,42 +265,27 @@ async def test_owned_revision_audit_and_snapshot_payloads_are_immutable(
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(resource_rows["orgs"][0]) as session:
+            async with db.transaction() as session:
                 await session.execute(text(f'UPDATE "{table}" SET {assignment}'))
         assert error.value.orig.sqlstate == "42501"
     finally:
         await db.engine.dispose()
 
 
-@pytest.mark.parametrize(
-    "forgery", ["feature_product", "feature_task", "feature_revision", "feature_current"]
-)
+@pytest.mark.parametrize("forgery", ["feature_revision", "feature_current"])
 async def test_feature_keys_reject_forgery(forgery, resource_rows):
-    org_a, org_b = resource_rows["orgs"]
-    own, other = resource_rows["ids"][org_a], resource_rows["ids"][org_b]
+    first_group, second_group = 0, 1
+    own, other = (resource_rows["ids"][first_group], resource_rows["ids"][second_group])
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org_a) as session:
-                if forgery == "feature_product":
-                    session.add(
-                        FeatureRevision(
-                            org_id=org_a,
-                            feature_id=own["feature"],
-                            product_id=other["product"],
-                            revision=2,
-                            data={"product_id": str(other["product"]), "status": "planned"},
-                        )
-                    )
-                elif forgery in ("feature_task", "feature_revision"):
+            async with db.transaction() as session:
+                if forgery == "feature_revision":
                     session.add(
                         TaskFeature(
-                            org_id=org_a,
-                            task_id=other["task"] if forgery == "feature_task" else own["task"],
+                            task_id=own["task"],
                             feature_id=own["feature"],
-                            feature_revision_id=other["feature_revision"]
-                            if forgery == "feature_revision"
-                            else own["feature_revision"],
+                            feature_revision_id=other["feature_revision"],
                             lot="forged",
                         )
                     )
@@ -449,16 +303,15 @@ async def test_feature_keys_reject_forgery(forgery, resource_rows):
     "data", [{"status": "planned", "product_id": None}, {"status": "unknown"}, {"status": None}]
 )
 async def test_database_rejects_inconsistent_product_and_declared_status(data, resource_rows):
-    org = resource_rows["orgs"][0]
-    own = resource_rows["ids"][org]
+    group = 0
+    own = resource_rows["ids"][group]
     values = {"product_id": str(own["product"]), "status": "planned", **data}
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org) as session:
+            async with db.transaction() as session:
                 session.add(
                     FeatureRevision(
-                        org_id=org,
                         feature_id=own["feature"],
                         product_id=own["product"],
                         revision=2,
@@ -470,20 +323,17 @@ async def test_database_rejects_inconsistent_product_and_declared_status(data, r
         await db.engine.dispose()
 
 
-async def test_snapshot_rejects_another_feature_revision_in_same_org(resource_rows):
-    org = resource_rows["orgs"][0]
-    own = resource_rows["ids"][org]
+async def test_snapshot_rejects_another_feature_revision(resource_rows):
+    group = 0
+    own = resource_rows["ids"][group]
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org) as session:
-                feature = Feature(
-                    org_id=org, created_by=resource_rows["users"][0], current_revision=1
-                )
+            async with db.transaction() as session:
+                feature = Feature(current_revision=1)
                 session.add(feature)
                 await session.flush()
                 revision = FeatureRevision(
-                    org_id=org,
                     feature_id=feature.id,
                     product_id=own["product"],
                     revision=1,
@@ -493,7 +343,6 @@ async def test_snapshot_rejects_another_feature_revision_in_same_org(resource_ro
                 await session.flush()
                 session.add(
                     TaskFeature(
-                        org_id=org,
                         task_id=own["task"],
                         feature_id=own["feature"],
                         feature_revision_id=revision.id,
@@ -505,40 +354,21 @@ async def test_snapshot_rejects_another_feature_revision_in_same_org(resource_ro
         await db.engine.dispose()
 
 
-@pytest.mark.parametrize("forgery", ["product", "task", "revision", "actor", "current_revision"])
+@pytest.mark.parametrize("forgery", ["revision", "current_revision"])
 async def test_composite_keys_and_current_pointer_reject_forgery(forgery, resource_rows):
-    org_a, org_b = resource_rows["orgs"]
-    own, other = resource_rows["ids"][org_a], resource_rows["ids"][org_b]
+    first_group, second_group = 0, 1
+    own, other = (resource_rows["ids"][first_group], resource_rows["ids"][second_group])
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org_a) as session:
-                if forgery == "product":
-                    session.add(
-                        ProductRevision(
-                            org_id=org_a, product_id=other["product"], revision=2, data={}
-                        )
-                    )
-                elif forgery in ("task", "revision"):
+            async with db.transaction() as session:
+                if forgery == "revision":
                     session.add(
                         TaskResource(
-                            org_id=org_a,
-                            task_id=other["task"] if forgery == "task" else own["task"],
+                            task_id=own["task"],
                             product_id=own["product"],
-                            product_revision_id=other["revision"]
-                            if forgery == "revision"
-                            else own["revision"],
+                            product_revision_id=other["revision"],
                             lot="forged",
-                        )
-                    )
-                elif forgery == "actor":
-                    session.add(
-                        AuditLog(
-                            org_id=org_a,
-                            actor_user_id=resource_rows["users"][1],
-                            action="forged",
-                            object_id=own["product"],
-                            details={},
                         )
                     )
                 else:
@@ -551,38 +381,22 @@ async def test_composite_keys_and_current_pointer_reject_forgery(forgery, resour
         await db.engine.dispose()
 
 
-@pytest.mark.parametrize("forgery", ["certificate", "task", "revision", "current_revision"])
+@pytest.mark.parametrize("forgery", ["revision", "current_revision"])
 async def test_certificate_composite_keys_and_current_pointer_reject_forgery(
     forgery, resource_rows
 ):
-    org_a, org_b = resource_rows["orgs"]
-    own, other = resource_rows["ids"][org_a], resource_rows["ids"][org_b]
+    first_group, second_group = 0, 1
+    own, other = (resource_rows["ids"][first_group], resource_rows["ids"][second_group])
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org_a) as session:
-                if forgery == "certificate":
-                    session.add(
-                        CertificateRevision(
-                            org_id=org_a,
-                            certificate_id=other["certificate"],
-                            revision=2,
-                            data={
-                                "kind": "personnel",
-                                "name": "Synthetic",
-                                "number": "SYNTHETIC-ONLY",
-                            },
-                        )
-                    )
-                elif forgery in ("task", "revision"):
+            async with db.transaction() as session:
+                if forgery == "revision":
                     session.add(
                         TaskCertificate(
-                            org_id=org_a,
-                            task_id=other["task"] if forgery == "task" else own["task"],
+                            task_id=own["task"],
                             certificate_id=own["certificate"],
-                            certificate_revision_id=other["certificate_revision"]
-                            if forgery == "revision"
-                            else own["certificate_revision"],
+                            certificate_revision_id=other["certificate_revision"],
                             lot="forged",
                         )
                     )
@@ -596,20 +410,17 @@ async def test_certificate_composite_keys_and_current_pointer_reject_forgery(
         await db.engine.dispose()
 
 
-async def test_snapshot_rejects_another_certificate_revision_in_same_org(resource_rows):
-    org = resource_rows["orgs"][0]
-    own = resource_rows["ids"][org]
+async def test_snapshot_rejects_another_certificate_revision(resource_rows):
+    group = 0
+    own = resource_rows["ids"][group]
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org) as session:
-                certificate = Certificate(
-                    org_id=org, created_by=resource_rows["users"][0], current_revision=1
-                )
+            async with db.transaction() as session:
+                certificate = Certificate(current_revision=1)
                 session.add(certificate)
                 await session.flush()
                 revision = CertificateRevision(
-                    org_id=org,
                     certificate_id=certificate.id,
                     revision=1,
                     data={"kind": "personnel", "name": "Synthetic", "number": "SYNTHETIC-ONLY"},
@@ -618,7 +429,6 @@ async def test_snapshot_rejects_another_certificate_revision_in_same_org(resourc
                 await session.flush()
                 session.add(
                     TaskCertificate(
-                        org_id=org,
                         task_id=own["task"],
                         certificate_id=own["certificate"],
                         certificate_revision_id=revision.id,
@@ -626,6 +436,10 @@ async def test_snapshot_rejects_another_certificate_revision_in_same_org(resourc
                     )
                 )
         assert error.value.orig.sqlstate == "23503"
+        assert (
+            error.value.orig.diag.constraint_name
+            == "task_certificates_certificate_id_certificate_revisi_fkey"
+        )
     finally:
         await db.engine.dispose()
 
@@ -641,49 +455,35 @@ async def test_snapshot_rejects_another_certificate_revision_in_same_org(resourc
     ],
 )
 async def test_database_rejects_invalid_certificate_declarations(patch, resource_rows):
-    org = resource_rows["orgs"][0]
-    own = resource_rows["ids"][org]
+    group = 0
+    own = resource_rows["ids"][group]
     values = {"kind": "qualification", "name": "Synthetic", "number": "SYNTHETIC-ONLY", **patch}
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org) as session:
+            async with db.transaction() as session:
                 session.add(
-                    CertificateRevision(
-                        org_id=org, certificate_id=own["certificate"], revision=2, data=values
-                    )
+                    CertificateRevision(certificate_id=own["certificate"], revision=2, data=values)
                 )
         assert error.value.orig.sqlstate == "23514"
     finally:
         await db.engine.dispose()
 
 
-@pytest.mark.parametrize("forgery", ["profile", "task", "revision", "current_revision"])
+@pytest.mark.parametrize("forgery", ["revision", "current_revision"])
 async def test_profile_composite_keys_and_current_pointer_reject_forgery(forgery, resource_rows):
-    org_a, org_b = resource_rows["orgs"]
-    own, other = resource_rows["ids"][org_a], resource_rows["ids"][org_b]
+    first_group, second_group = 0, 1
+    own, other = (resource_rows["ids"][first_group], resource_rows["ids"][second_group])
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org_a) as session:
-                if forgery == "profile":
-                    session.add(
-                        OrgProfileRevision(
-                            org_id=org_a,
-                            profile_id=other["profile"],
-                            revision=2,
-                            data={"name": "Synthetic"},
-                        )
-                    )
-                elif forgery in ("task", "revision"):
+            async with db.transaction() as session:
+                if forgery == "revision":
                     session.add(
                         TaskOrgProfile(
-                            org_id=org_a,
-                            task_id=other["task"] if forgery == "task" else own["task"],
+                            task_id=own["task"],
                             profile_id=own["profile"],
-                            profile_revision_id=other["profile_revision"]
-                            if forgery == "revision"
-                            else own["profile_revision"],
+                            profile_revision_id=other["profile_revision"],
                             lot="forged",
                         )
                     )
@@ -697,29 +497,23 @@ async def test_profile_composite_keys_and_current_pointer_reject_forgery(forgery
         await db.engine.dispose()
 
 
-async def test_snapshot_rejects_another_profile_revision_in_same_org(resource_rows):
-    org = resource_rows["orgs"][0]
-    own = resource_rows["ids"][org]
+async def test_snapshot_rejects_another_profile_revision(resource_rows):
+    group = 0
+    own = resource_rows["ids"][group]
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org) as session:
-                profile = OrgProfile(
-                    org_id=org, created_by=resource_rows["users"][0], current_revision=1
-                )
+            async with db.transaction() as session:
+                profile = OrgProfile(current_revision=1)
                 session.add(profile)
                 await session.flush()
                 revision = OrgProfileRevision(
-                    org_id=org,
-                    profile_id=profile.id,
-                    revision=1,
-                    data={"name": "Synthetic"},
+                    profile_id=profile.id, revision=1, data={"name": "Synthetic"}
                 )
                 session.add(revision)
                 await session.flush()
                 session.add(
                     TaskOrgProfile(
-                        org_id=org,
                         task_id=own["task"],
                         profile_id=own["profile"],
                         profile_revision_id=revision.id,
@@ -744,18 +538,15 @@ async def test_snapshot_rejects_another_profile_revision_in_same_org(resource_ro
     ],
 )
 async def test_database_rejects_invalid_profile_declarations(patch, resource_rows):
-    org = resource_rows["orgs"][0]
-    own = resource_rows["ids"][org]
+    group = 0
+    own = resource_rows["ids"][group]
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org) as session:
+            async with db.transaction() as session:
                 session.add(
                     OrgProfileRevision(
-                        org_id=org,
-                        profile_id=own["profile"],
-                        revision=2,
-                        data={"name": "Synthetic", **patch},
+                        profile_id=own["profile"], revision=2, data={"name": "Synthetic", **patch}
                     )
                 )
         assert error.value.orig.sqlstate == "23514"
@@ -764,51 +555,19 @@ async def test_database_rejects_invalid_profile_declarations(patch, resource_row
 
 
 @pytest.mark.parametrize(
-    "forgery",
-    [
-        "template_owner",
-        "template_revision",
-        "template_current",
-        "template_task",
-        "template_snapshot",
-        "same_org_revision",
-    ],
+    "forgery", ["template_current", "template_snapshot", "mismatched_revision"]
 )
 async def test_template_foreign_keys_reject_forgery(forgery, resource_rows):
-    own_org, other_org = resource_rows["orgs"]
-    own, other = resource_rows["ids"][own_org], resource_rows["ids"][other_org]
+    first_group, second_group = 0, 1
+    own, other = (resource_rows["ids"][first_group], resource_rows["ids"][second_group])
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(own_org) as session:
-                if forgery == "template_owner":
-                    session.add(
-                        Template(
-                            org_id=own_org, created_by=resource_rows["users"][1], current_revision=1
-                        )
-                    )
-                elif forgery == "template_current":
+            async with db.transaction() as session:
+                if forgery == "template_current":
                     await session.execute(
                         text("UPDATE templates SET current_revision=99 WHERE id=:id"),
                         {"id": own["template"]},
-                    )
-                elif forgery == "template_revision":
-                    identifier = uuid4()
-                    session.add(
-                        TemplateRevision(
-                            id=identifier,
-                            org_id=own_org,
-                            template_id=other["template"],
-                            revision=2,
-                            data={"name": "Synthetic"},
-                            file={
-                                "name": "synthetic.docx",
-                                "sha256": "a" * 64,
-                                "size_bytes": 1,
-                                "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            },
-                            storage_key=f"org/{own_org}/template/{other['template']}/{identifier}/{'a' * 64}.docx",
-                        )
                     )
                 else:
                     template_id = own["template"]
@@ -817,19 +576,13 @@ async def test_template_foreign_keys_reject_forgery(forgery, resource_rows):
                         if forgery == "template_snapshot"
                         else own["template_revision"]
                     )
-                    if forgery == "same_org_revision":
-                        second = Template(
-                            id=uuid4(),
-                            org_id=own_org,
-                            created_by=resource_rows["users"][0],
-                            current_revision=1,
-                        )
+                    if forgery == "mismatched_revision":
+                        second = Template(id=uuid4(), current_revision=1)
                         session.add(second)
                         await session.flush()
                         identifier = uuid4()
                         revision = TemplateRevision(
                             id=identifier,
-                            org_id=own_org,
                             template_id=second.id,
                             revision=1,
                             data={"name": "Synthetic"},
@@ -839,15 +592,14 @@ async def test_template_foreign_keys_reject_forgery(forgery, resource_rows):
                                 "size_bytes": 1,
                                 "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                             },
-                            storage_key=f"org/{own_org}/template/{second.id}/{identifier}/{'a' * 64}.docx",
+                            storage_key=f"template/{second.id}/{identifier}/{'a' * 64}.docx",
                         )
                         session.add(revision)
                         await session.flush()
                         revision_id = identifier
                     session.add(
                         TaskTemplate(
-                            org_id=own_org,
-                            task_id=other["task"] if forgery == "template_task" else own["task"],
+                            task_id=own["task"],
                             template_id=template_id,
                             template_revision_id=revision_id,
                             lot="forged",
@@ -874,8 +626,8 @@ async def test_template_foreign_keys_reject_forgery(forgery, resource_rows):
     ],
 )
 async def test_template_file_constraints_fail_closed(patch, resource_rows):
-    org = resource_rows["orgs"][0]
-    own = resource_rows["ids"][org]
+    group = 0
+    own = resource_rows["ids"][group]
     db = Database(Settings())
     file = {
         "name": "synthetic.docx",
@@ -887,16 +639,15 @@ async def test_template_file_constraints_fail_closed(patch, resource_rows):
     identifier = uuid4()
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org) as session:
+            async with db.transaction() as session:
                 session.add(
                     TemplateRevision(
                         id=identifier,
-                        org_id=org,
                         template_id=own["template"],
                         revision=2,
                         data={"name": "Synthetic"},
                         file=file,
-                        storage_key=f"org/{org}/template/{own['template']}/{identifier}/{'a' * 64}.docx",
+                        storage_key=f"template/{own['template']}/{identifier}/{'a' * 64}.docx",
                     )
                 )
         assert error.value.orig.sqlstate == "23514"
@@ -905,17 +656,16 @@ async def test_template_file_constraints_fail_closed(patch, resource_rows):
 
 
 async def test_template_file_storage_key_cannot_point_to_another_revision(resource_rows):
-    org = resource_rows["orgs"][0]
-    own = resource_rows["ids"][org]
+    group = 0
+    own = resource_rows["ids"][group]
     db = Database(Settings())
     identifier = uuid4()
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org) as session:
+            async with db.transaction() as session:
                 session.add(
                     TemplateRevision(
                         id=identifier,
-                        org_id=org,
                         template_id=own["template"],
                         revision=2,
                         data={"name": "Synthetic"},
@@ -925,7 +675,7 @@ async def test_template_file_storage_key_cannot_point_to_another_revision(resour
                             "size_bytes": 1,
                             "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         },
-                        storage_key=f"org/{org}/template/{own['template']}/{own['template_revision']}/{'a' * 64}.docx",
+                        storage_key=f"template/{own['template']}/{own['template_revision']}/{'a' * 64}.docx",
                     )
                 )
         assert error.value.orig.sqlstate == "23514"
@@ -933,37 +683,35 @@ async def test_template_file_storage_key_cannot_point_to_another_revision(resour
         await db.engine.dispose()
 
 
-@pytest.mark.parametrize("forgery", ["foreign_revision", "wrong_certificate", "foreign_creator"])
+@pytest.mark.parametrize("forgery", ["foreign_revision", "wrong_certificate"])
 async def test_certificate_file_composite_keys_reject_forgery(forgery, resource_rows):
-    org_a, org_b = resource_rows["orgs"]
-    own = resource_rows["ids"][org_a]
-    other = resource_rows["ids"][org_b]
+    first_group, second_group = 0, 1
+    own = resource_rows["ids"][first_group]
+    other = resource_rows["ids"][second_group]
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org_a) as session:
+            async with db.transaction() as session:
                 revision = CertificateRevision(
-                    org_id=org_a,
-                    certificate_id=own["certificate"],
+                    certificate_id=(
+                        other["certificate"]
+                        if forgery == "foreign_revision"
+                        else own["certificate"]
+                    ),
                     revision=2,
                     data={"kind": "qualification", "name": "Synthetic", "number": "SYNTHETIC-ONLY"},
                 )
                 session.add(revision)
                 await session.flush()
-                target_revision = (
-                    other["certificate_revision"] if forgery == "foreign_revision" else revision.id
-                )
+                # A fresh revision avoids UNIQUE(revision_id) masking the binding FK.
+                target_revision = revision.id
                 target_certificate = (
                     other["certificate"] if forgery == "wrong_certificate" else own["certificate"]
                 )
                 session.add(
                     CertificateFile(
-                        org_id=org_a,
                         certificate_id=target_certificate,
                         certificate_revision_id=target_revision,
-                        created_by=resource_rows["users"][1]
-                        if forgery == "foreign_creator"
-                        else resource_rows["users"][0],
                         file={
                             "name": "synthetic.pdf",
                             "sha256": "a" * 64,
@@ -971,7 +719,7 @@ async def test_certificate_file_composite_keys_reject_forgery(forgery, resource_
                             "page_count": 1,
                             "media_type": "application/pdf",
                         },
-                        storage_key=f"org/{org_a}/certificate/{target_certificate}/{target_revision}/{'a' * 64}.pdf",
+                        storage_key=f"certificate/{target_certificate}/{target_revision}/{'a' * 64}.pdf",
                     )
                 )
         assert error.value.orig.sqlstate == "23503"
@@ -1001,14 +749,13 @@ async def test_certificate_file_composite_keys_reject_forgery(forgery, resource_
     ],
 )
 async def test_certificate_file_sql_descriptor_limits(patch, resource_rows):
-    org = resource_rows["orgs"][0]
-    own = resource_rows["ids"][org]
+    group = 0
+    own = resource_rows["ids"][group]
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError):
-            async with db.transaction(org) as session:
+            async with db.transaction() as session:
                 revision = CertificateRevision(
-                    org_id=org,
                     certificate_id=own["certificate"],
                     revision=2,
                     data={"kind": "qualification", "name": "Synthetic", "number": "SYNTHETIC-ONLY"},
@@ -1017,10 +764,8 @@ async def test_certificate_file_sql_descriptor_limits(patch, resource_rows):
                 await session.flush()
                 session.add(
                     CertificateFile(
-                        org_id=org,
                         certificate_id=own["certificate"],
                         certificate_revision_id=revision.id,
-                        created_by=resource_rows["users"][0],
                         file={
                             "name": "synthetic.pdf",
                             "sha256": "a" * 64,
@@ -1029,7 +774,7 @@ async def test_certificate_file_sql_descriptor_limits(patch, resource_rows):
                             "media_type": "application/pdf",
                             **patch,
                         },
-                        storage_key=f"org/{org}/certificate/{own['certificate']}/{revision.id}/{'a' * 64}.pdf",
+                        storage_key=f"certificate/{own['certificate']}/{revision.id}/{'a' * 64}.pdf",
                     )
                 )
     finally:
@@ -1037,14 +782,13 @@ async def test_certificate_file_sql_descriptor_limits(patch, resource_rows):
 
 
 async def test_certificate_file_sql_storage_key_binding(resource_rows):
-    org = resource_rows["orgs"][0]
-    own = resource_rows["ids"][org]
+    group = 0
+    own = resource_rows["ids"][group]
     db = Database(Settings())
     try:
         with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org) as session:
+            async with db.transaction() as session:
                 revision = CertificateRevision(
-                    org_id=org,
                     certificate_id=own["certificate"],
                     revision=2,
                     data={"kind": "qualification", "name": "Synthetic", "number": "SYNTHETIC-ONLY"},
@@ -1053,10 +797,8 @@ async def test_certificate_file_sql_storage_key_binding(resource_rows):
                 await session.flush()
                 session.add(
                     CertificateFile(
-                        org_id=org,
                         certificate_id=own["certificate"],
                         certificate_revision_id=revision.id,
-                        created_by=resource_rows["users"][0],
                         file={
                             "name": "synthetic.pdf",
                             "sha256": "a" * 64,
@@ -1064,7 +806,7 @@ async def test_certificate_file_sql_storage_key_binding(resource_rows):
                             "page_count": 1,
                             "media_type": "application/pdf",
                         },
-                        storage_key=f"org/{org}/certificate/{own['certificate']}/{revision.id}/{'b' * 64}.pdf",
+                        storage_key=f"certificate/{own['certificate']}/{revision.id}/{'b' * 64}.pdf",
                     )
                 )
         assert error.value.orig.sqlstate == "23514"
@@ -1080,7 +822,6 @@ async def test_certificate_file_sql_storage_key_binding(resource_rows):
         "certificate",
         "revision",
         "file",
-        "actor",
         "page",
         "status",
         "confirmed",
@@ -1101,17 +842,20 @@ async def test_certificate_file_sql_storage_key_binding(resource_rows):
 async def test_source_sql_binding_limits_and_permanent_unconfirmed_state(
     change, resource_rows, admin_engine
 ):
-    org, foreign = resource_rows["orgs"]
-    own, other = resource_rows["ids"][org], resource_rows["ids"][foreign]
+    group, foreign = 0, 1
+    own, other = (resource_rows["ids"][group], resource_rows["ids"][foreign])
     table = Base.metadata.tables["evidence_sources"]
     with admin_engine.connect() as connection:
         values = dict(
-            connection.execute(select(table).where(table.c.org_id == org)).mappings().one()
+            connection.execute(select(table).where(table.c.id == own["evidence_source"]))
+            .mappings()
+            .one()
         )
     fresh_snapshot = uuid4()
+    foreign_snapshot = uuid4()
     values["task_certificate_id"] = fresh_snapshot
     values["id"] = uuid4()
-    values["storage_key"] = f"org/{org}/evidence-source/{values['id']}/{'b' * 64}.png"
+    values["storage_key"] = f"evidence-source/{values['id']}/{'b' * 64}.png"
     key_changes = {
         "task": ("task_id", "task"),
         "snapshot": ("task_certificate_id", "certificate_snapshot"),
@@ -1121,15 +865,14 @@ async def test_source_sql_binding_limits_and_permanent_unconfirmed_state(
     }
     if change in key_changes:
         column, key = key_changes[change]
-        values[column] = other[key]
-    elif change == "actor":
-        values["created_by"] = resource_rows["users"][1]
+        # An unoccupied snapshot keeps the source identity index from masking the FK.
+        values[column] = foreign_snapshot if change == "snapshot" else other[key]
     elif change == "page":
         values["page"] = 2
     elif change == "status":
         values["status"] = "confirmed"
     elif change == "confirmed":
-        values["confirmed_by"] = resource_rows["users"][0]
+        values["confirmed_at"] = datetime.now(UTC)
     elif change == "export":
         values["eligible_for_draft_export"] = True
     elif change == "profile":
@@ -1152,29 +895,73 @@ async def test_source_sql_binding_limits_and_permanent_unconfirmed_state(
         values["preview"] = {**values["preview"], **patches[change]}
     db = Database(Settings())
     try:
-        async with db.transaction(org) as session:
-            # This valid pin is setup, not the rejected source under test. The
-            # library selection guard requires its real task owner's authority.
-            await actor_context_async(session, org, resource_rows["users"][0])
+        async with db.transaction() as session:
+            await actor_context_async(session)
             session.add(
                 TaskCertificate(
                     id=fresh_snapshot,
-                    org_id=org,
                     task_id=own["task"],
                     certificate_id=own["certificate"],
                     certificate_revision_id=own["certificate_revision"],
                     lot="Synthetic SQL check",
                 )
             )
+            if change == "snapshot":
+                session.add(
+                    TaskCertificate(
+                        id=foreign_snapshot,
+                        task_id=other["task"],
+                        certificate_id=other["certificate"],
+                        certificate_revision_id=other["certificate_revision"],
+                        lot="Synthetic SQL foreign snapshot",
+                    )
+                )
             await session.flush()
             with pytest.raises(DBAPIError) as error:
                 async with session.begin_nested():
                     await session.execute(table.insert().values(**values))
-            assert error.value.orig.sqlstate == (
-                "23503" if change in key_changes or change == "actor" else "23514"
-            )
-            assert (await session.execute(select(table.c.id))).scalars().all() == [
-                own["evidence_source"]
-            ]
+            assert error.value.orig.sqlstate == ("23503" if change in key_changes else "23514")
+            if change == "snapshot":
+                assert (
+                    error.value.orig.diag.constraint_name
+                    == "evidence_sources_task_certificate_id_task_id_certif_fkey"
+                )
+            assert (
+                await session.execute(select(table.c.id).where(table.c.task_id == own["task"]))
+            ).scalars().all() == [own["evidence_source"]]
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "table",
+    [
+        "products",
+        "product_revisions",
+        "task_resources",
+        "audit_logs",
+        "features",
+        "feature_revisions",
+        "task_features",
+        "certificates",
+        "certificate_revisions",
+        "task_certificates",
+        "org_profiles",
+        "org_profile_revisions",
+        "task_org_profiles",
+        "certificate_files",
+        "templates",
+        "template_revisions",
+        "task_templates",
+        "evidence_sources",
+    ],
+)
+async def test_runtime_cannot_delete_resource_history(table, resource_rows):
+    db = Database(Settings())
+    try:
+        with pytest.raises(DBAPIError) as error:
+            async with db.transaction() as session:
+                await session.execute(text(f'DELETE FROM "{table}"'))
+        assert error.value.orig.sqlstate == "42501"
     finally:
         await db.engine.dispose()

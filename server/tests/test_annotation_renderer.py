@@ -9,7 +9,7 @@ import hashlib
 import json
 import os
 import struct
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
@@ -75,13 +75,11 @@ def candidate_request(renderer, png, crop=None, boxes=None):
             key: ID
             for key in (
                 "id",
-                "org_id",
                 "task_id",
                 "task_certificate_id",
                 "certificate_id",
                 "certificate_revision_id",
                 "certificate_file_id",
-                "created_by",
             )
         },
         "original": original,
@@ -129,7 +127,6 @@ def approved_release(renderer, request, receipt, png):
                 "evidence_id",
                 "card_id",
                 "card_revision_id",
-                "confirmed_by",
                 "candidate_annotation_id",
                 "candidate_rendition_id",
             )
@@ -149,9 +146,6 @@ def approved_release(renderer, request, receipt, png):
             "state": "confirmed",
             "source_binding_sha256": "c" * 64,
         },
-        "decision_kind": "single_domain",
-        "review_domain": "commercial",
-        "co_sign": None,
         "card_content_sha256": "d" * 64,
         "evidence_binding_sha256": "e" * 64,
         "approval_binding_sha256": "0" * 64,
@@ -266,7 +260,11 @@ async def test_release_rejects_changed_approval_and_pixels(renderer):
     candidate, receipt = await renderer.render(source, request)
     marked, release = approved_release(renderer, request, receipt, candidate)
     changed = release.model_copy(
-        update={"approval": release.approval.model_copy(update={"confirmed_by": UUID(int=2)})}
+        update={
+            "approval": release.approval.model_copy(
+                update={"confirmed_at": NOW + timedelta(seconds=1)}
+            )
+        }
     )
     with pytest.raises(ProviderFailure):
         await renderer._exchange(marked, changed)
@@ -370,7 +368,6 @@ async def test_vendor_content_plane_excludes_upstream_footer_and_padding(rendere
         **{
             key: str(ID)
             for key in (
-                "org_id",
                 "task_id",
                 "extraction_job_id",
                 "asset_id",

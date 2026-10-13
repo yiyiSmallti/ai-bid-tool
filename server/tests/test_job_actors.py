@@ -1,28 +1,28 @@
 """Real database job provenance gates, including actorless local worker jobs.
 
-Failure modes: reset custom GUCs reject system jobs; worker provenance invents a
+Failure modes: reset custom GUCs invent provenance; worker provenance invents a
 human; absent authentication accepts claimed grants; actorless jobs admit vendor
-calls; snapshots change after submission; missing tenant context bypasses RLS.
+calls; unsupported actor kinds enter the ledger; snapshots change after submission.
 """
 
 import json
+from datetime import timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from app.jobs.execution import authorized_job
+from app.jobs.execution import JobExecution, authorized_job
 from app.models.entities import Job, VendorCall
 from app.providers.base import ProviderFailure
 from app.schemas.preflight_contracts import CallPlan
-from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
+from app.services.auth import HUMAN_SCOPES, Identity, set_actor_context
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_api import create_document
 
 
-def local_job(org, task, document, **fields):
+def local_job(task, document, **fields):
     return Job(
         id=uuid4(),
-        org_id=org,
         task_id=UUID(task),
         document_id=UUID(document),
         kind="parse",
@@ -32,36 +32,35 @@ def local_job(org, task, document, **fields):
     )
 
 
-@pytest.mark.parametrize("kind", [None, "", "worker", "system"])
+@pytest.mark.parametrize("kind", [None, "", "worker"])
 async def test_actorless_job_stays_actorless_and_cannot_dispatch(
-    api, headers, application, tenants, tmp_path, pdf_bytes, kind
+    api, headers, application, tmp_path, pdf_bytes, kind
 ):
-    task, document = await create_document(api, headers[0], pdf_bytes)
-    org = tenants["orgs"][0]
-    async with application.state.db.transaction(org) as session:
+    task, document = await create_document(api, headers, pdf_bytes)
+    async with application.state.db.transaction() as session:
         if kind is not None:
             await session.execute(
                 text(
                     "SELECT set_config('app.actor_kind',:kind,true), "
-                    "set_config('app.actor_user_id','',true), "
                     "set_config('app.actor_token_id','',true), "
                     "set_config('app.actor_scopes','[]',true)"
                 ),
                 {"kind": kind},
             )
-        job = local_job(org, task, document)
+        job = local_job(task, document)
         session.add(job)
         await session.flush()
         await session.refresh(job)
-        assert job.actor_user_id is None and job.actor_token_id is None
-        assert job.actor_kind is None and job.actor_scopes == []
-        with pytest.raises(ProviderFailure, match="authorized identity"):
+        assert job.actor_token_id is None
+        assert job.actor_kind == (kind or None)
+        assert job.actor_scopes == []
+        with pytest.raises(ProviderFailure, match="authorized identity") as denied:
             await authorized_job(session, job)
-        job.status = "succeeded"
-    async with application.state.db.transaction(tenants["orgs"][1]) as session:
-        assert await session.get(Job, job.id) is None
-    async with application.state.db.transaction() as session:
-        assert await session.get(Job, job.id) is None
+        assert denied.value.code == "job_actor_required"
+        job.status = "running"
+        job.lease_until = await session.scalar(text("SELECT clock_timestamp()")) + timedelta(
+            minutes=5
+        )
     quote = CallPlan(
         capability="llm",
         provider="synthetic",
@@ -69,11 +68,28 @@ async def test_actorless_job_stays_actorless_and_cannot_dispatch(
         version="1",
         request_sha256="a" * 64,
     )
-    with pytest.raises(DBAPIError, match="authenticated job"):
-        async with application.state.db.transaction(org) as session:
+    execution = JobExecution(
+        application.state.processor.settings,
+        application.state.db,
+        job.id,
+        job.run_id,
+    )
+    with pytest.raises(ProviderFailure, match="authorized identity") as denied:
+        await execution.admit(quote)
+    assert denied.value.code == "job_actor_required"
+    async with application.state.db.transaction() as session:
+        saved = await session.get(Job, job.id)
+        assert saved is not None
+        assert saved.actor_kind == (kind or None) and saved.actor_scopes == []
+        assert not await session.scalar(
+            text("SELECT EXISTS (SELECT FROM vendor_calls WHERE job_id=:id)"),
+            {"id": job.id},
+        )
+        saved.status = "succeeded"
+    with pytest.raises(DBAPIError, match="live job execution lease") as denied:
+        async with application.state.db.transaction() as session:
             session.add(
                 VendorCall(
-                    org_id=org,
                     task_id=UUID(task),
                     job_id=job.id,
                     run_id=job.run_id,
@@ -83,71 +99,79 @@ async def test_actorless_job_stays_actorless_and_cannot_dispatch(
                 )
             )
             await session.flush()
+    assert denied.value.orig.sqlstate == "23514"
     (tmp_path / f"actorless-{kind or 'unset'}.json").write_text(
         json.dumps(
             {
                 "job_id": str(job.id),
-                "actor_user_id": None,
+                "actor_kind": kind or None,
                 "status": "succeeded",
+                "dispatch_error": "job_actor_required",
                 "vendor_admission": "rejected",
-                "cross_org": "hidden",
-                "missing_org": "hidden",
             }
         )
     )
 
 
-@pytest.mark.parametrize("kind", ["", "worker"])
-async def test_actorless_context_cannot_claim_a_submitter(
-    api, headers, application, tenants, pdf_bytes, kind
-):
-    task, document = await create_document(api, headers[0], pdf_bytes)
-    org, user = tenants["orgs"][0], tenants["users"][0]
-    with pytest.raises(DBAPIError, match="authenticated job actor required"):
-        async with application.state.db.transaction(org) as session:
+async def test_system_job_kind_is_rejected_by_actor_shape(api, headers, application, pdf_bytes):
+    task, document = await create_document(api, headers, pdf_bytes)
+    with pytest.raises(DBAPIError, match="job_actor_shape") as denied:
+        async with application.state.db.transaction() as session:
             await session.execute(
                 text(
-                    "SELECT set_config('app.actor_kind',:kind,true), "
-                    "set_config('app.actor_user_id','',true)"
-                ),
+                    "SELECT set_config('app.actor_kind','system',true), "
+                    "set_config('app.actor_token_id','',true), "
+                    "set_config('app.actor_scopes','[]',true)"
+                )
+            )
+            session.add(local_job(task, document))
+            await session.flush()
+    assert denied.value.orig.sqlstate == "23514"
+
+
+@pytest.mark.parametrize(
+    ("kind", "message"),
+    [
+        ("", "authenticated job actor required"),
+        ("worker", "job actor does not match authenticated actor"),
+    ],
+)
+async def test_actorless_context_cannot_claim_a_submitter(
+    api, headers, application, pdf_bytes, kind, message
+):
+    task, document = await create_document(api, headers, pdf_bytes)
+    with pytest.raises(DBAPIError, match=message) as denied:
+        async with application.state.db.transaction() as session:
+            await session.execute(
+                text("SELECT set_config('app.actor_kind',:kind,true)"),
                 {"kind": kind},
             )
             session.add(
                 local_job(
-                    org,
                     task,
                     document,
-                    actor_user_id=user,
                     actor_kind="session",
                     actor_scopes=["req:extract"],
                 )
             )
             await session.flush()
+    assert denied.value.orig.sqlstate == "42501"
 
 
-async def test_job_actor_snapshot_is_truthful_and_immutable(
-    api, headers, application, tenants, pdf_bytes
-):
-    task, document = await create_document(api, headers[0], pdf_bytes)
-    org, user = tenants["orgs"][0], tenants["users"][0]
-    actor = Identity(user, org, ROLE_SCOPES["admin"], "admin")
-    async with application.state.db.transaction(org) as session:
+async def test_job_actor_snapshot_is_truthful_and_immutable(api, headers, application, pdf_bytes):
+    task, document = await create_document(api, headers, pdf_bytes)
+    actor = Identity(scopes=set(HUMAN_SCOPES))
+    async with application.state.db.transaction() as session:
         await set_actor_context(session, actor)
-        job = local_job(org, task, document)
+        job = local_job(task, document)
         session.add(job)
         await session.flush()
         await session.refresh(job)
-        assert job.actor_user_id == user and job.actor_kind == "session"
+        assert job.actor_kind == "session"
         assert set(job.actor_scopes) == actor.scopes
-    with pytest.raises(DBAPIError, match="job actor is immutable"):
-        async with application.state.db.transaction(org) as session:
+    with pytest.raises(DBAPIError, match="job actor is immutable") as denied:
+        async with application.state.db.transaction() as session:
             await session.execute(
                 text("UPDATE jobs SET actor_scopes='[]' WHERE id=:id"), {"id": job.id}
             )
-    with pytest.raises(DBAPIError, match="job actor is not active"):
-        async with application.state.db.transaction(org) as session:
-            await set_actor_context(
-                session, Identity(tenants["users"][1], org, actor.scopes, "admin")
-            )
-            session.add(local_job(org, task, document))
-            await session.flush()
+    assert denied.value.orig.sqlstate == "23514"

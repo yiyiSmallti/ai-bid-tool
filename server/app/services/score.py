@@ -49,8 +49,8 @@ from app.services import drafts, score_generation, score_inputs, score_normaliza
 from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.extraction import locate_sent_source_quote
+from app.services.task_access import access as task_access
 from app.services.task_authorization import task_authorized
-from app.services.task_workflow import access as task_access
 from app.services.versioned import audit
 
 
@@ -195,7 +195,6 @@ async def require_section_sources(
             )
             .where(
                 ScoreRubricSection.rubric_id == row.id,
-                ScoreRubricSection.org_id == row.org_id,
                 ScoreRubricSection.task_id == row.task_id,
             )
         )
@@ -233,11 +232,7 @@ async def require_section_sources(
             cards.fail("rubric_input_changed", "The section source binding has changed", 409)
         for citation in sources:
             requirement = requirements.get(UUID(citation["requirement_id"]))
-            if (
-                requirement is None
-                or requirement.org_id != row.org_id
-                or requirement.task_id != row.task_id
-            ):
+            if requirement is None or requirement.task_id != row.task_id:
                 raise not_found()
             chunk = chunks.get(requirement.chunk_id)
             if (
@@ -287,10 +282,7 @@ def require_confirmed_section_sources(report, reviews):
 
 async def set_revision(session: AsyncSession, row: ScoreRubricSet) -> int:
     return int(
-        await session.scalar(
-            text("SELECT rubric_revision(:org,:rubric)"), {"org": row.org_id, "rubric": row.id}
-        )
-        or 1
+        await session.scalar(text("SELECT rubric_revision(:rubric)"), {"rubric": row.id}) or 1
     )
 
 
@@ -345,7 +337,6 @@ async def review_state(
         "state": state,
         "revision": revision,
         "review_domain": classification.review_domain if classification else None,
-        "confirmed_by": current.decided_by if current and current.action == "confirm" else None,
         "confirmed_at": current.decided_at if current and current.action == "confirm" else None,
     }
 
@@ -377,14 +368,13 @@ async def coverage_view(session: AsyncSession, row: ScoreRubricCoverage) -> dict
     active = latest is not None and latest.action != "reopen"
     return RubricRequirementCoverageView.model_validate(
         {
-            **fields(row, ("id", "org_id", "task_id", "rubric_id", "requirement_id", "source")),
+            **fields(row, ("id", "task_id", "rubric_id", "requirement_id", "source")),
             "disposition": latest.action if active and latest else "pending",
             "rubric_item_ids": mapped,
             "canonical_requirement_id": latest.canonical_requirement_id
             if active and latest
             else None,
             "reason": latest.reason if active and latest else None,
-            "decided_by": latest.decided_by if active and latest else None,
             "decided_at": latest.decided_at if active and latest else None,
             "revision": latest.revision if latest else 1,
         }
@@ -407,7 +397,6 @@ async def report_data(session: AsyncSession, row: ScoreRubricSet) -> dict:
                     section,
                     (
                         "id",
-                        "org_id",
                         "task_id",
                         "rubric_id",
                         "key",
@@ -445,7 +434,6 @@ async def report_data(session: AsyncSession, row: ScoreRubricSet) -> dict:
                     item,
                     (
                         "id",
-                        "org_id",
                         "task_id",
                         "rubric_id",
                         "section_id",
@@ -485,7 +473,6 @@ async def report_data(session: AsyncSession, row: ScoreRubricSet) -> dict:
             row,
             (
                 "id",
-                "org_id",
                 "task_id",
                 "extraction_job_id",
                 "document_id",
@@ -603,7 +590,6 @@ def cursor_read(
         data = TokenSigner.for_tokens(settings).open(cursor)
         expected = {
             "kind": "rubric_cursor",
-            "org_id": str(actor.org_id),
             "task_id": str(task_id),
             "rubric_id": str(rubric_id) if rubric_id else None,
         }
@@ -634,7 +620,6 @@ def page(
         next_cursor = TokenSigner.for_tokens(settings).issue(
             {
                 "kind": "rubric_cursor",
-                "org_id": str(actor.org_id),
                 "task_id": str(task_id),
                 "rubric_id": str(rubric_id) if rubric_id else None,
                 "created_at": last[0].isoformat(),
@@ -664,7 +649,7 @@ async def list_rubrics(
     if not 1 <= limit <= 200:
         cards.fail("invalid_input", "Limit must be between 1 and 200")
     anchor = cursor_read(settings, actor, task_id, None, cursor)
-    conditions = [ScoreRubricSet.task_id == task_id, ScoreRubricSet.org_id == actor.org_id]
+    conditions = [ScoreRubricSet.task_id == task_id]
     for row in await session.scalars(select(ScoreRubricSet).where(*conditions)):
         await require_dependencies(session, actor, row)
     total = (
@@ -690,7 +675,6 @@ async def list_rubrics(
         next_cursor = TokenSigner.for_tokens(settings).issue(
             {
                 "kind": "rubric_cursor",
-                "org_id": str(actor.org_id),
                 "task_id": str(task_id),
                 "rubric_id": None,
                 "created_at": last.created_at.isoformat(),
@@ -717,7 +701,6 @@ async def human_set(
         task_id,
         scope="score:rubric:review",
         write=True,
-        domain={"bidder": "commercial", "technical": "technical"}.get(actor.role),
     )
     actor, row = await get_set(session, actor, task_id, rubric_id, lock=True)
     actor = await access(session, actor, "score:rubric:review")
@@ -736,13 +719,6 @@ def cas(body, row: ScoreRubricSet, revision: int) -> None:
         cards.fail("rubric_input_changed", "Rubric input hash changed", 409)
     if body.expected_revision != revision:
         cards.fail("revision_conflict", "Read the current revision before reviewing", 409)
-
-
-def human_role(actor: Identity, role: str | None) -> None:
-    if role is None:
-        cards.fail("unclassified", "Assign a review domain before deciding", 409)
-    if actor.role != role:
-        cards.fail("forbidden", "Review role does not match the stored domain", 403, 4)
 
 
 async def require_candidate(session: AsyncSession, row: ScoreRubricSet) -> None:
@@ -770,7 +746,6 @@ async def subject(
 async def review_values(session: AsyncSession, actor: Identity, row: ScoreRubricSet, body) -> dict:
     return {
         "id": uuid4(),
-        "org_id": actor.org_id,
         "task_id": row.task_id,
         "rubric_id": row.id,
         "revision": body.expected_revision + 1,
@@ -778,7 +753,6 @@ async def review_values(session: AsyncSession, actor: Identity, row: ScoreRubric
         "reason": body.reason,
         "reason_sha256": cards.quote_hash(body.reason),
         "expected_input_hash": body.expected_input_hash,
-        "decided_by": actor.user_id,
         "actor_kind": "session",
     }
 
@@ -883,7 +857,6 @@ def review_denials(function):
                 bound.task_id,
                 scope="score:rubric:review",
                 write=True,
-                domain={"bidder": "commercial", "technical": "technical"}.get(actor.role),
             )
             await validate_review_text(
                 arguments["session"],
@@ -950,7 +923,6 @@ async def classify_rubric(
 ) -> dict:
     actor, row = await human_set(session, actor, task_id, rubric_id)
     await subject(session, row, section_id=section_id, item_id=item_id)
-    human_role(actor, "admin")
     await require_candidate(session, row)
     current = await review_state(session, row, section_id, item_id)
     cas(body, row, current["revision"])
@@ -980,9 +952,8 @@ async def decide_subject(
     entry = await subject(session, row, section_id=section_id, item_id=item_id)
     await require_candidate(session, row)
     current = await review_state(session, row, section_id, item_id)
-    human_role(
-        actor, {"commercial": "bidder", "technical": "technical"}.get(current["review_domain"])
-    )
+    if current["review_domain"] is None:
+        cards.fail("unclassified", "Assign a review domain before deciding", 409)
     cas(body, row, current["revision"])
     if (
         body.action == "reopen"
@@ -1076,7 +1047,6 @@ async def decide_coverage(
     )
     if entry is None:
         raise not_found()
-    human_role(actor, "bidder")
     await require_candidate(session, row)
     current = await coverage_view(session, entry)
     cas(body, row, current["revision"])
@@ -1113,7 +1083,6 @@ async def decide_coverage(
         session.add(
             ScoreRubricCoverageItem(
                 id=uuid4(),
-                org_id=actor.org_id,
                 task_id=row.task_id,
                 rubric_id=row.id,
                 coverage_decision_id=event.id,
@@ -1128,7 +1097,6 @@ async def decide_coverage(
                 event,
                 (
                     "id",
-                    "org_id",
                     "task_id",
                     "rubric_id",
                     "requirement_id",
@@ -1136,7 +1104,6 @@ async def decide_coverage(
                     "action",
                     "canonical_requirement_id",
                     "reason",
-                    "decided_by",
                     "decided_at",
                     "actor_kind",
                 ),
@@ -1159,7 +1126,6 @@ async def decide_rubric(
     console: bool = False,
 ) -> dict:
     actor, row = await human_set(session, actor, task_id, rubric_id)
-    human_role(actor, "bidder")
     current = await review_state(session, row)
     cas(body, row, current["revision"])
     if (body.action == "confirm") != (current["state"] == "candidate"):
@@ -1258,7 +1224,6 @@ async def rubric_history(
             )
             keys = (
                 "id",
-                "org_id",
                 "task_id",
                 "rubric_id",
                 "requirement_id",
@@ -1266,7 +1231,6 @@ async def rubric_history(
                 "action",
                 "canonical_requirement_id",
                 "reason",
-                "decided_by",
                 "decided_at",
                 "actor_kind",
             )
@@ -1282,7 +1246,6 @@ async def rubric_history(
         next_cursor = TokenSigner.for_tokens(settings).issue(
             {
                 "kind": "rubric_cursor",
-                "org_id": str(actor.org_id),
                 "task_id": str(task_id),
                 "rubric_id": str(rubric_id),
                 "created_at": last.created_at.isoformat(),
@@ -1319,13 +1282,8 @@ async def revise_rubric(
     console: bool = False,
 ) -> dict:
     actor, prior = await human_set(session, actor, task_id, rubric_id)
-    if actor.role not in {"bidder", "technical"}:
-        cards.fail(
-            "forbidden", "Only responsible bidder or technical sessions can revise rubrics", 403, 4
-        )
     cas(body, prior, await set_revision(session, prior))
     current = await report_data(session, prior)
-    own_domain = {"bidder": "commercial", "technical": "technical"}[actor.role]
     fixed_coverage = {UUID(entry["requirement_id"]): entry for entry in current["coverage"]}
     if {entry.requirement_id for entry in body.coverage} != set(fixed_coverage):
         cards.fail(
@@ -1364,36 +1322,9 @@ async def revise_rubric(
             select(ScoreRubricItem).where(ScoreRubricItem.rubric_id == prior.id)
         )
     }
-    domains = {
-        UUID(entry["id"]): entry["review_domain"]
-        for entry in [*current["sections"], *current["items"]]
-    }
-    section_fields = (
-        "key",
-        "title",
-        "order",
-        "aggregation",
-        "aggregation_rule_text",
-        "score_range",
-        "weight",
-        "cap",
-        "included_in_overall_total",
-        "ambiguity_reason",
-    )
-    item_fields = (
-        "requirement_id",
-        "key",
-        "title",
-        "rule_text",
-        "order",
-        "assessment_mode",
-        "score_range",
-        "weight",
-        "ambiguity_reason",
-    )
-    for replacements, originals, keys, source_key in (
-        (body.sections, old_sections, section_fields, "source_section_id"),
-        (body.items, old_items, item_fields, "source_item_id"),
+    for replacements, originals, source_key in (
+        (body.sections, old_sections, "source_section_id"),
+        (body.items, old_items, "source_item_id"),
     ):
         seen = set()
         for entry in replacements:
@@ -1418,56 +1349,6 @@ async def revise_rubric(
                         409,
                     )
                 seen.add(source_id)
-                if domains[source_id] != own_domain:
-                    replacement = entry.model_dump()
-                    changed_sources = (
-                        entry.model_dump(mode="json")["sources"]
-                        != [
-                            {
-                                "requirement_id": citation["requirement_id"],
-                                "quote": citation["quote"],
-                            }
-                            for citation in section_sources(previous)
-                        ]
-                        if isinstance(previous, ScoreRubricSection)
-                        else previous.source
-                        != fixed_coverage[replacement["requirement_id"]]["source"]
-                    )
-                    if changed_sources or any(
-                        not same_revision_value(key, replacement[key], getattr(previous, key))
-                        for key in keys
-                    ):
-                        cards.fail(
-                            "forbidden",
-                            "Other review domains must remain unchanged in a replacement",
-                            403,
-                            4,
-                        )
-                if isinstance(previous, ScoreRubricItem):
-                    prior_section = old_sections[previous.section_id]
-                    if (
-                        domains[source_id] != own_domain
-                        and entry.model_dump()["section_key"] != prior_section.key
-                    ):
-                        cards.fail(
-                            "forbidden",
-                            "Other review domains cannot be moved between sections",
-                            403,
-                            4,
-                        )
-        if any(
-            domains[source_id] != own_domain and source_id not in seen for source_id in originals
-        ):
-            cards.fail("forbidden", "Replacement cannot remove other review domains", 403, 4)
-    if actor.role != "bidder":
-        for key in (
-            "overall_aggregation",
-            "overall_rule_text",
-            "overall_score_range",
-            "overall_cap",
-        ):
-            if not same_revision_value(key, body.model_dump()[key], getattr(prior, key)):
-                cards.fail("forbidden", "Only bidder may revise the overall aggregation", 403, 4)
     verified_sources = {
         (citation["requirement_id"], citation["quote"]): citation
         for section in old_sections.values()
@@ -1503,7 +1384,6 @@ async def revise_rubric(
     ) + 1
     row = ScoreRubricSet(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=task_id,
         job_id=prior.job_id,
         run_id=prior.run_id,
@@ -1524,7 +1404,6 @@ async def revise_rubric(
         else None,
         overall_cap=body.overall_cap,
         normalization_errors=[],
-        actor_user_id=actor.user_id,
         actor_token_id=None,
         actor_kind="session",
     )
@@ -1540,7 +1419,6 @@ async def revise_rubric(
         payload["cap"] = entry.cap
         section = ScoreRubricSection(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task_id,
             rubric_id=row.id,
             **payload,
@@ -1565,7 +1443,6 @@ async def revise_rubric(
         session.add(
             ScoreRubricItem(
                 id=uuid4(),
-                org_id=actor.org_id,
                 task_id=task_id,
                 rubric_id=row.id,
                 section_id=section_ids[entry.section_key],
@@ -1578,7 +1455,6 @@ async def revise_rubric(
         session.add(
             ScoreRubricCoverage(
                 id=uuid4(),
-                org_id=actor.org_id,
                 task_id=task_id,
                 rubric_id=row.id,
                 requirement_id=requirement_id,
@@ -1592,7 +1468,6 @@ async def revise_rubric(
     )
     event = ScoreRubricRevisionEvent(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=task_id,
         rubric_id=row.id,
         prior_rubric_id=prior.id,
@@ -1604,7 +1479,6 @@ async def revise_rubric(
         reason_sha256=cards.quote_hash(body.reason),
         replacement_snapshot=replacement_snapshot,
         snapshot_sha256=snapshot_sha256,
-        revised_by=actor.user_id,
         actor_kind="session",
     )
     session.add(event)

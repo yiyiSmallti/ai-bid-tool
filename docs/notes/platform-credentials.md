@@ -2,95 +2,79 @@
 kind: reference
 ---
 
-# Platform credential authority
+# Local service credential settings
 
-## Problem
+## Boundary
 
-Operator-managed vendor keys must have one revocable authority across API, workers and
-standalone adapters. Tenant SQL must not read ciphertext or impersonate credential
-administration. The global-table and role exception is defined by
-[ADR 0006](../adr/0006-platform-credentials.md); request shapes, state transitions and
-error codes are defined by the [credential contract](../plan/platform-credentials.md).
+Service credentials are encrypted installation settings under
+[ADR 0012](../adr/0012-single-user-installation.md). Model configuration keeps its
+own revision-bound keys as described in [provider configuration](provider-config.md).
+The human manages service credentials using ordinary access-key authentication
+and `credential:manage`; tokens and agents cannot use that scope.
 
 ## Usage
 
-Use the platform console Credentials page or `bid platform credential` after platform
-password-and-TOTP login. Create and replace accept a key once; all responses expose only
-its fingerprint and last four characters. The CLI reads secrets from owner-only regular
-files, never command-line key arguments. Setup, legacy import and rotation steps are in
-[the development guide](../guides/development.md#manage-platform-credentials).
+`bid platform credential` exposes list, show, create, replace, set-active, remove,
+test, and import-env. Routes remain `/platform/credentials` and return Result.
+The authoritative inputs and projections are
+[platform_credentials.py](../../server/app/schemas/platform_credentials.py).
+Credential purposes are `standalone_llm`, `vendor_search`, `clef_workers_ai`, and
+`clef_gateway`; provider and endpoint must match the purpose. Each service has
+at most one nonremoved credential. A name is immutable and reserved after removal.
 
-## How it works
+Writes require an expected revision after creation. Replacement changes secret
+version and revision; activation changes revision after validating the bound
+secret. Removal is terminal and removes the stored ciphertext. Safe projections
+contain routing identity, state, revision, secret version, fingerprint, suffix,
+timestamps, and service consumers; they contain no raw key or ciphertext.
 
-`CredentialConnections` keeps independent management and reader pools. Every checkout
-checks the exact restricted login role, its privileges and role memberships. The tenant
-pool has neither table access nor credential-function execution. Fixed security-definer
-functions use a separate non-login owner, a fixed search path and explicit grants.
-Credential audit writes and mutations commit together; the existing tenant audit writer
-cannot forge `credential.*` events that authorize probes.
+CLI input files contain no secrets. The CLI reads secrets from the supported
+environment name or caller-owned mode-0600 key file and submits them separately.
+Import manifests explicitly map supported environment names to service purposes.
+Imports are batch atomic; a dry run validates without writes. Replays skip only
+identical routing identity, state, and secret. Conflicts fail the batch.
 
-`ProviderSecrets` encrypts a typed envelope in the BYOK secrets domain. Its immutable
-identity includes the row UUID, name, purpose, provider, canonical endpoint and secret
-version. Decryption compares each field; moving a ciphertext across rows or domains
-fails. Replacing a vendor key changes only the credential's revisions. Removing it erases
-online ciphertext and permanently retains the name as a tombstone.
+## Resolution
 
-Catalog jobs pin model identity and revision, while search pins a service credential UUID.
-Adapters store references and resolve again immediately before every outbound attempt,
-including retries.
-Admission waits do not extend the lifetime of a prior key decision.
-Completed
-result caches do not issue requests.
-No key, ciphertext or availability decision is cached
-between calls, and failures never select an environment key or another provider.
+[PlatformCredentialResolver](../../server/app/services/platform_credentials.py)
+uses the runtime `Database`. Readiness exposes safe presence and state without
+decryption. Each real call resolves committed state anew; no cached plaintext,
+environment fallback, or alternate credential may bypass disabled or removed
+state. Cipher envelopes bind UUID, secret version, name, purpose, provider, and
+endpoint. The independent `BID_SECRETS_KEY` decrypts only a matching envelope.
 
-Import preflight is read-only. The trusted service compares the actual decrypted key;
-the final transaction locks rows and checks revisions, identities, states and conflicts.
-An entire batch commits or rolls back. Legacy vendor variables are rejected by startup
-even when the database already contains the same value.
+The fixed baseline functions in
+[00_functions_core.sql](../../server/migrations/baseline/00_functions_core.sql)
+implement management, service resolution, and probe resolution. Activation and
+import checks use `platform_credential_resolve_human`, which requires the human
+actor, expected revision, and explicit `activate` or `import` purpose. It permits
+a disabled credential for that check and rejects removed credentials.
 
-Metadata probes first commit an authorization event. The reader then checks its bound
-revision and short lifetime. Only the official OpenAI and Anthropic model-list operations
-are allowlisted; compatible endpoints and Perplexity return `unsupported`. Endpoint
-semantics follow the [OpenAI models API](https://developers.openai.com/api/reference/resources/models/methods/list)
-and [Anthropic models API](https://platform.claude.com/docs/en/api/models/list).
-The transport pins a public DNS address while preserving Host/TLS identity, rejects
-redirects, bounds the deadline and response size, and projects a fixed outcome only.
-Database locks and recent audit events enforce limits across replicas. A saved start
-without a finish represents an interrupted probe, not success.
+Authentication probes admit one revision-bound receipt and a bounded,
+allowlisted metadata request. They do not submit business content or prove
+model capabilities. A disabled credential may be tested; a removed credential
+may not. Completion consumes the receipt, and rate limits prevent repeated
+unbounded checks. Errors use fixed codes and text without vendor response bodies,
+request IDs, headers, or secrets.
 
-Root rotation reads current and previous secrets keys, validates every binding and uses
-compare-and-swap maintenance functions. Platform rewrites append an audit in the same
-transaction. BYOK history remains immutable to the runtime role; its migration-owner
-maintenance function can only replace ciphertext while preserving the historical row.
-The trusted maintenance caller verifies plaintext equivalence before invoking it.
+## Root-key rotation
 
-## Pitfalls
+`bid-admin rotate-encryption --scope provider-secrets` validates and rewraps
+service ciphertext and every historical provider revision. It preserves envelope
+bindings, vendor values, public fingerprints, secret versions, and revisions.
+The owner performs fixed compare-and-swap rewrap functions; the runtime cannot
+update revision ciphertext. Reports expose counts and failure classification.
+A repeated successful pass rewrites nothing. Retain previous root keys until all
+rows validate under the current key and backup recovery requirements are met.
 
-- A metadata probe proves authentication only, not generation or model access.
-- Unsupported means that no safe probe is implemented; it is never reported as passed.
-- A call already resolved and sent may complete after disable/remove. Emergency
-  revocation also requires the vendor to revoke the old key.
-- A removed service may be replaced under a new name and UUID. Old queued jobs must be
-  resubmitted; they never silently bind to the replacement.
-- Database or audit failures stop the operation. Re-read metadata after an uncertain
-  commit before retrying a mutation with an expected revision.
-- Root rotation is not vendor-key recovery. Old backups may retain ciphertext and need
-  retired keys for recovery; online tombstones do not erase those backups.
-- Do not deploy an old env-reading worker alongside this authority or destructively
-  downgrade the migration. Recovery keeps the table and audit history and repairs forward.
+## Implementation
 
-## Code
-
-- [0038_platform_credentials.py](../../server/migrations/versions/0038_platform_credentials.py):
-  table, roles, fixed management/resolver functions and maintenance privileges.
-- [platform_credentials.py](../../server/app/schemas/platform_credentials.py): wire models
-  and private resolver interfaces.
-- [credential_db.py](../../server/app/core/credential_db.py): independent connection boundary.
-- [platform_credentials.py service](../../server/app/services/platform_credentials.py):
-  write-only management, import comparison, audit and per-call resolution.
-- [provider_secrets.py](../../server/app/core/provider_secrets.py): bound encryption/keyring.
-- [credential_probe.py](../../server/app/providers/credential_probe.py): metadata transport.
-- [admin.py](../../server/app/admin.py): provider-secrets rotation.
-- [platform_credentials.py CLI](../../cli/bid_cli/platform_credentials.py): protected-file
-  inputs and safe error projection.
+- [Service and resolver](../../server/app/services/platform_credentials.py),
+  [cipher](../../server/app/core/provider_secrets.py), and
+  [probe adapter](../../server/app/providers/credential_probe.py).
+- [HTTP routes](../../server/app/api/platform_credentials.py),
+  [CLI commands](../../cli/bid_cli/platform_credentials.py), and
+  [rotation command](../../server/app/admin.py).
+- [API acceptance](../../server/tests/test_platform_credentials_api.py),
+  [DB lifecycle](../../server/tests/test_platform_credentials_db.py), and
+  [rotation acceptance](../../server/tests/test_platform_credentials_rotation.py).

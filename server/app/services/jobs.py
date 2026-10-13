@@ -12,7 +12,6 @@ from app.models.entities import Job
 from app.providers.storage import Storage
 from app.schemas.contracts import Result
 from app.services.auth import Identity
-from app.services.sandbox import guard_job as sandbox_guard_job
 from app.services.task_authorization import task_authorized
 
 FIELDS = ("id", "kind", "status", "result", "error", "attempts", "reasoning")
@@ -31,7 +30,7 @@ async def agent_access(session, identity, job):
             raise not_found()
         return None
     row = await session.get(AgentSession, linked.session_id)
-    if row is None or identity.user_id != row.owner_user_id:
+    if row is None:
         raise not_found()
     if (
         identity.actor_kind == "agent"
@@ -48,7 +47,6 @@ async def agent_access(session, identity, job):
             .where(
                 AgentSession.id == identity.session_id,
                 AgentSession.principal_id == identity.principal_id,
-                AgentSession.owner_user_id == identity.user_id,
                 AgentJobLink.job_id == job.id,
                 AgentJobLink.owned.is_(False),
             )
@@ -124,7 +122,10 @@ async def read_access(
         from app.services.annotations import check_job_access
 
         await check_job_access(session, identity, job)
-    await sandbox_guard_job(session, identity, job)
+    if job.kind == "sandbox":
+        from app.services.sandbox import guard_job as sandbox_guard_job
+
+        await sandbox_guard_job(session, identity, job)
     if job.kind in {"screenshot_render", "screenshot_analyze"}:
         from app.services.screenshot_jobs import check_job_access
 
@@ -165,16 +166,14 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         command="job status",
         data=jsonable_encoder({field: getattr(job, field) for field in FIELDS}),
     ).model_dump(mode="json")
-    from app.services.agent_tools import provenance
+    if job.initiated_by in {"builtin_agent", "external_agent"}:
+        from app.services.agent_tools import provenance
 
-    origin = await provenance(session, job.id)
-    if origin is not None:
-        payload["data"]["agent_provenance"] = origin
+        origin = await provenance(session, job.id)
+        if origin is not None:
+            payload["data"]["agent_provenance"] = origin
     payload["cost"] = await job_cost(session, job.id)
     if job.kind in {"screenshot_render", "screenshot_analyze"}:
-        from app.services.screenshot_jobs import check_job_access
-
-        await check_job_access(session, identity, job)
         payload["data"]["result"] = _public_result(job)
         payload["ok"] = job.result.get("completion") != "partial"
 
@@ -182,14 +181,8 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         identity.require("task:read")
         payload["data"]["result"] = _public_result(job)
     if job.kind == "screenshot_search":
-        from app.services.vendor_search import check_job_access as search_access
-
-        await search_access(session, identity, job)
         payload["data"]["result"] = _public_result(job)
     if job.kind == "prototype_generate":
-        from app.services.prototype_generation import check_job_access as prototype_access
-
-        await prototype_access(session, identity, job)
         payload["data"]["result"] = _public_result(job)
 
     if job.kind == "sandbox" and job.status in {"failed", "cancelled"}:
@@ -228,16 +221,8 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
     if job.kind in {"draft", "card_generate"}:
         identity.require("draft:read" if job.kind == "draft" else "card:read")
         identity.require("task:read")
-        if job.kind == "card_generate":
-            from app.services.card_generation import check_input_access
-
-            await check_input_access(
-                session, identity, job.task_id, job.result["submission"]["input_manifest"]
-            )
-        if job.result.get("draft_id"):
-            from app.services.drafts import show_draft
-
-            await show_draft(session, identity, UUID(job.result["draft_id"]), storage)
+        # read_access already built this draft's read graph and re-checked the fixed
+        # card inputs; repeating either here only duplicated that work.
         if job.result.get("completion") == "partial":
             payload["ok"] = False
         payload["warnings"] = job.result.get("warnings", [])
@@ -363,7 +348,10 @@ async def cancel(session: AsyncSession, identity: Identity, job_id: UUID, storag
                 job.id,
                 {"task_id": str(job.task_id), "kind": job.kind},
             )
-    await sandbox_guard_job(session, identity, job, cancel=True)
+    if job.kind == "sandbox":
+        from app.services.sandbox import guard_job as sandbox_guard_job
+
+        await sandbox_guard_job(session, identity, job, cancel=True)
     if job.status not in {"cancelled", "queued", "running"}:
         raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)
     if job.kind in {"score_rubric", "score"} and job.status != "cancelled":

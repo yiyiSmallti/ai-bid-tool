@@ -26,7 +26,7 @@ from app.schemas.sandbox_contracts import (
 )
 from pydantic import ValidationError
 
-from bid_cli.client import Client
+from bid_cli.client import Client, credential
 
 JSON_INPUT_LIMIT = 64 * 1024
 HTML_INPUT_LIMIT = 4 * 1024 * 1024
@@ -408,11 +408,7 @@ async def fetch_artifact(api: Client, artifact_id: UUID) -> tuple[SandboxArtifac
             "invalid_download_link", "Server returned an unsafe download link", 502, 4
         ) from None
 
-    saved = api.state.load()
-    headers = {
-        "Authorization": f"Bearer {saved['session']}",
-        "X-Org-Id": saved["org_id"],
-    }
+    headers = {"Authorization": f"Bearer {credential()}"}
     content = bytearray()
     try:
         async with api.transport() as http:

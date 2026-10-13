@@ -23,15 +23,14 @@ return 409 without appending history. An omitted selection revision resolves the
 current revision while holding a shared product lock in the same transaction.
 
 `task_resources` references the immutable revision, rather than duplicating JSON.
-A task lock serializes selection changes. The active slot is `(org, task, product,
-lot)`: different products and lots are allowed. An identical active revision returns
+A task lock serializes selection changes. The active slot is `(task, product, lot)`: different products and lots are allowed. An identical active revision returns
 the same ID with `duplicate=true`. Replacement closes the previous selection and
 appends a new one. History includes closed rows and separately lists active IDs.
 Replacement with an older explicit revision is allowed and recorded; no automatic
 upgrade occurs when shared metadata changes.
 
-All four new tables have NOT NULL `org_id`, composite tenant foreign keys and FORCE
-RLS. Runtime grants allow inserts and reads, updates only to products and the
+Resource and revision foreign keys bind each selection to its exact parent.
+Runtime grants allow inserts and reads, updates only to products and the
 selection's active flag, and no deletes. Revisions and audit records are immutable
 under the runtime role. Audit details contain actor and old/new IDs, not copied
 metadata. New API dependencies commit before sending a success response; any
@@ -53,6 +52,6 @@ backup, encryption and audit retention. The migration refuses destructive downgr
   products, features, certificates, profiles and templates; `VersionedKind` names each
   one's tables, scopes and audit actions.
 - `server/app/services/resources.py`: the product kind and its views.
-- `server/migrations/versions/0003_versioned_products.py`: isolation and privileges.
+- `server/migrations/baseline/`: authoritative tables, constraints and runtime grants.
 - `server/tests/test_resources.py`, `test_resource_rls.py`: functional/concurrent/DB tests.
 - `server/tests/test_runtime_integration.py`: genuine local and remote CLI transports.

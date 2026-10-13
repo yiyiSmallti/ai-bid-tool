@@ -73,7 +73,6 @@ from app.schemas.console_assessments import (
 )
 from app.schemas.contracts import (
     JobAction,
-    Login,
     Result,
     TaskCreate,
     TokenCreate,
@@ -111,22 +110,6 @@ from app.schemas.memory_contracts import (
     MemoryRetrievalData,
     MemoryRetrievalRequest,
     MemoryUpdate,
-)
-from app.schemas.org_signup import (
-    OrgApplicationApprove,
-    OrgApplicationDecision,
-    OrgApplicationListQuery,
-    OrgApplicationReject,
-    OrgApplicationView,
-)
-from app.schemas.platform_contracts import (
-    OrgLookup,
-    PasswordSetup,
-    PlatformLogin,
-    PlatformModelSet,
-    PlatformModelTest,
-    PlatformOrgActive,
-    PlatformOrgCreate,
 )
 from app.schemas.platform_credentials import (
     CredentialCreateInput,
@@ -221,45 +204,20 @@ from app.schemas.screenshot_contracts import (
     VendorSearchInput,
 )
 from app.schemas.simulation_contracts import ProductSimulationInput
-from app.schemas.team_workflow import (
-    AssignmentData,
+from app.schemas.task_board import (
     BoardActivityView,
     BoardData,
     BoardJobView,
     BoardQuery,
     BoardRow,
-    CommentData,
-    CommentMessageView,
-    CommentReplyCreate,
-    CommentThreadCreate,
-    CommentThreadView,
-    CoSignData,
-    CoSignOpen,
-    CoSignPolicyData,
-    CoSignSignatureView,
-    CoSignSignRequest,
     EventReplayData,
     EventReplayQuery,
-    MemberCandidateView,
     PageQuery,
-    RequirementAssignmentSet,
-    RequirementCoSignPolicySet,
-    ReviewRoundData,
-    SignoffsData,
     TaskEventView,
-    TaskMemberData,
-    TaskMemberSet,
-    TaskMemberView,
-    TaskOwnerHandover,
     TaskProgressData,
     TaskProgressQuery,
-    TaskRuleData,
-    TaskRuleSet,
-    TaskWorkflowData,
-    ThreadCreatedData,
-    WorkflowMutation,
 )
-from app.schemas.team_workflow import PageData as WorkflowPageData
+from app.schemas.task_board import PageData as BoardPageData
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 from pydantic import TypeAdapter
 
@@ -293,9 +251,6 @@ from bid_cli.management_providers import COMMAND_ITEMS as PROVIDER_COMMAND_ITEMS
 from bid_cli.management_templates import COMMAND_DATA as TEMPLATE_COMMAND_DATA
 from bid_cli.management_templates import COMMAND_INPUTS as TEMPLATE_COMMAND_INPUTS
 from bid_cli.management_templates import COMMAND_ITEMS as TEMPLATE_COMMAND_ITEMS
-from bid_cli.org_members import COMMAND_DATA as ORG_MEMBER_DATA
-from bid_cli.org_members import COMMAND_INPUTS as ORG_MEMBER_INPUTS
-from bid_cli.org_members import COMMAND_ITEMS as ORG_MEMBER_ITEMS
 from bid_cli.platform_clef import COMMAND_DATA as CLEF_DATA
 from bid_cli.platform_clef import COMMAND_INPUTS as CLEF_INPUTS
 from bid_cli.platform_trust_anchors import COMMAND_DATA as TRUST_ANCHOR_DATA
@@ -365,8 +320,6 @@ COMMANDS = {
     "export download": None,
     "export provenance": None,
     "export template-sample": None,
-    "login": Login,
-    "org use": None,
     "task create": TaskCreate,
     "task list": None,
     "resource product add": ProductCreate,
@@ -409,17 +362,6 @@ COMMANDS = {
     "job wait": None,
     "job cancel": None,
     "token create": TokenCreate,
-    "platform login": PlatformLogin,
-    "platform org list": None,
-    "platform operator list": None,
-    "platform org application list": OrgApplicationListQuery,
-    "platform org application approve": OrgApplicationApprove,
-    "platform org application reject": OrgApplicationReject,
-    "platform org create": PlatformOrgCreate,
-    "platform org set-active": PlatformOrgActive,
-    "platform model list": None,
-    "platform model set": PlatformModelSet,
-    "platform model test": None,
     "platform credential list": CredentialListQuery,
     "platform credential show": None,
     "platform credential create": CredentialCreateInput,
@@ -428,10 +370,6 @@ COMMANDS = {
     "platform credential remove": CredentialRemove,
     "platform credential test": CredentialTest,
     "platform credential import-env": CredentialImportManifest,
-    "platform usage": None,
-    "platform audit": None,
-    "auth setup-password": PasswordSetup,
-    "auth orgs": OrgLookup,
     "schema": None,
     "screenshot prepare": ScreenshotPrepareInput,
     "screenshot add": ScreenshotIngest,
@@ -603,59 +541,19 @@ OUTPUTS = (
 )
 
 
-WORKFLOW_COMMANDS = {
-    "task workflow": None,
+BOARD_COMMANDS = {
     "task progress": TaskProgressQuery,
-    "task member list": PageQuery,
-    "task member candidates": PageQuery,
-    "task member set": TaskMemberSet,
-    "task member remove": WorkflowMutation,
-    "task handover": TaskOwnerHandover,
-    "task archive": WorkflowMutation,
-    "task unarchive": WorkflowMutation,
     "task board": BoardQuery,
     "task activity": PageQuery,
     "task events": EventReplayQuery,
-    "card assign": RequirementAssignmentSet,
-    "card thread list": PageQuery,
-    "card thread create": CommentThreadCreate,
-    "card comment list": PageQuery,
-    "card comment add": CommentReplyCreate,
-    "task review-rule show": None,
-    "task review-rule set": TaskRuleSet,
-    "card policy show": None,
-    "card policy set": RequirementCoSignPolicySet,
-    "card signoff list": PageQuery,
-    "card review-round open": CoSignOpen,
-    "card signoff add": CoSignSignRequest,
 }
-COMMANDS.update(WORKFLOW_COMMANDS)
+COMMANDS.update(BOARD_COMMANDS)
 OUTPUTS.update(
     {
-        "task workflow": TypeAdapter(TaskWorkflowData),
         "task progress": TypeAdapter(TaskProgressData),
-        "task member list": TypeAdapter(WorkflowPageData),
-        "task member candidates": TypeAdapter(WorkflowPageData),
-        "task member set": TypeAdapter(TaskMemberData),
-        "task member remove": TypeAdapter(TaskWorkflowData),
-        "task handover": TypeAdapter(TaskWorkflowData),
-        "task archive": TypeAdapter(TaskWorkflowData),
-        "task unarchive": TypeAdapter(TaskWorkflowData),
         "task board": TypeAdapter(BoardData),
-        "task activity": TypeAdapter(WorkflowPageData),
+        "task activity": TypeAdapter(BoardPageData),
         "task events": TypeAdapter(EventReplayData),
-        "card assign": TypeAdapter(AssignmentData),
-        "card thread list": TypeAdapter(WorkflowPageData),
-        "card thread create": TypeAdapter(ThreadCreatedData),
-        "card comment list": TypeAdapter(WorkflowPageData),
-        "card comment add": TypeAdapter(CommentData),
-        "task review-rule show": TypeAdapter(TaskRuleData),
-        "task review-rule set": TypeAdapter(TaskRuleData),
-        "card policy show": TypeAdapter(CoSignPolicyData),
-        "card policy set": TypeAdapter(CoSignPolicyData),
-        "card signoff list": TypeAdapter(SignoffsData),
-        "card review-round open": TypeAdapter(ReviewRoundData),
-        "card signoff add": TypeAdapter(CoSignData),
     }
 )
 
@@ -772,7 +670,6 @@ COMMANDS.update(
     {
         "task create": TaskCreate,
         "provider test": ProviderTest,
-        "platform model test": PlatformModelTest,
         "product simulate": ProductSimulationInput,
     }
 )
@@ -789,8 +686,6 @@ COMMANDS.update(CONFIDENTIAL_COMMAND_INPUTS)
 COMMANDS.update(ATTACHMENT_INPUTS)
 COMMANDS.update(REVIEW_INPUTS)
 COMMANDS.update(CLEF_INPUTS)
-COMMANDS.update(ORG_MEMBER_INPUTS)
-OUTPUTS.update({name: TypeAdapter(model) for name, model in ORG_MEMBER_DATA.items()})
 OUTPUTS.update({name: TypeAdapter(model) for name, model in CLEF_DATA.items()})
 COMMANDS.update(TRUST_ANCHOR_INPUTS)
 OUTPUTS.update({name: TypeAdapter(model) for name, model in TRUST_ANCHOR_DATA.items()})
@@ -857,12 +752,6 @@ def command_schema(app=None, version: str = "5.0") -> dict:
 
     commands = dict(COMMANDS)
     outputs = dict(OUTPUTS)
-    outputs.update(
-        {
-            "platform org application approve": TypeAdapter(OrgApplicationDecision),
-            "platform org application reject": TypeAdapter(OrgApplicationDecision),
-        }
-    )
     if version == "5.0":
         from app.schemas.management_pages import PageData as ManagementPageData
 
@@ -902,7 +791,6 @@ def command_schema(app=None, version: str = "5.0") -> dict:
                 "product simulate": ProductSimulationInput,
                 "task create": TaskCreate,
                 "provider test": ProviderTest,
-                "platform model test": PlatformModelTest,
             }
         )
         outputs.update({})
@@ -952,8 +840,7 @@ def command_schema(app=None, version: str = "5.0") -> dict:
             "5": "partial",
         },
     }
-    workflow_items = {
-        "platform org application list": OrgApplicationView,
+    board_items = {
         "req review-list": RequirementReviewView,
         "req review-history": RequirementReviewEvent,
         "req rejected": RejectedItemView,
@@ -962,13 +849,8 @@ def command_schema(app=None, version: str = "5.0") -> dict:
         "task progress": BoardJobView,
         "task activity": BoardActivityView,
         "task events": TaskEventView,
-        "task member list": TaskMemberView,
-        "task member candidates": MemberCandidateView,
-        "card thread list": CommentThreadView,
-        "card comment list": CommentMessageView,
-        "card signoff list": CoSignSignatureView,
     }
-    for name, model in workflow_items.items():
+    for name, model in board_items.items():
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()
     for name, model in (
@@ -982,7 +864,6 @@ def command_schema(app=None, version: str = "5.0") -> dict:
         | MEMORY_COMMAND_ITEMS
         | PROVIDER_COMMAND_ITEMS
         | CONFIDENTIAL_COMMAND_ITEMS
-        | ORG_MEMBER_ITEMS
     ).items():
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()

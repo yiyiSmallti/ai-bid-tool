@@ -1,21 +1,19 @@
 ---
 kind: plan
-status: approved; environment decisions pending
+status: superseded by ADR 0012
 ---
 
 # Production deployment plan
 
-This plan defines the first production environment and its release gates.
-The owner
-approved it with the recommended defaults; environment decisions, separate deployment
-authorization and recorded acceptance are still required before execution or go-live.
-Actual release identifiers, configuration hashes
-and results belong in a restricted release record outside `docs/`.
-
-The approved default is a Linux application host with separately operated PostgreSQL
-and private S3-compatible storage, plus a dedicated Linux sandbox execution node when
-browser capture is enabled. Start with a new production database and only synthetic
-acceptance orgs (organizations/tenants); do not copy development business data.
+This hosted-deployment proposal is superseded by
+[ADR 0012](../adr/0012-single-user-installation.md). Its hosted topology and
+multi-person acceptance requirements below are retained as historical planning,
+not instructions for a single-user installation. Restoring hosted operation
+requires a new decision. Local operation follows the
+[development guide](../guides/development.md); desktop packaging, bundled runtimes
+and signing remain outside [the single-user cutover](single-user.md#out-of-scope).
+The baseline and runtime pointers below identify current source locations without
+authorizing this former deployment model.
 
 ## Repository basis and release prerequisites
 
@@ -121,15 +119,11 @@ nor operator identities/TOTP seeds belong in `platform_credentials`.
 Never put secret values in repository files, command arguments, release evidence,
 terminal transcripts, logs, screenshots or support bundles. Exclude request bodies,
 Authorization/Cookie headers, signed-link query strings, database URLs and expanded
-environment dumps. Provision an allowlisted operator privately through the
-`app.admin platform-enroll EMAIL` link and browser flow in
-[Run the platform console](../guides/development.md#run-the-platform-console).
-The host command's link is sensitive and must not run in a recorded CI job or
-ordinary deployment log. Keep `BID_PLATFORM_TOTP_SECRETS` as the deployment-managed
-break-glass alternative: privately run `app.admin platform-totp`, inject the factor
-and restart. Such an override wins over the stored factor and blocks its browser
-enrollment until removed. Neither authentication path stores factors in
-`platform_credentials`.
+environment dumps. Configure the local operator through
+[Run the platform console](../guides/development.md#run-the-platform-console):
+`BID_PLATFORM_ADMIN_EMAILS` and `BID_PLATFORM_TOTP_SECRETS` are the authentication
+source. Keep the password and factor private; authentication factors do not belong
+in `platform_credentials`.
 
 For a fresh environment, follow
 [Manage platform credentials](../guides/development.md#manage-platform-credentials):
@@ -167,24 +161,20 @@ revocation must not be undone by serving an older env-reading release.
 
 ## Database provisioning and recovery
 
-Provision a private PostgreSQL database with UTF-8 encoding and pgvector availability
-matching the [Compose database image](../../deploy/docker-compose.yml). Verify extension
-availability separately; [the initial migration](../../server/migrations/versions/0001_tenant_foundation.py)
-establishes tenant tables/RLS and does not install pgvector or deliver vector retrieval.
-Use direct session-capable connections for migrations and the queue; qualify any
-connection pooler against transaction org context, advisory locks and queue behavior.
+For the current installation, database provisioning follows
+[the development guide](../guides/development.md#provision-a-development-database).
+[The single-user baseline revision](../../server/migrations/versions/0001_single_user_baseline.py)
+replaces the former tenant foundation. Migration and queue connections need session
+semantics; qualify any pooler against actor context, advisory locks and queue behavior.
 Keep production durability enabled. CI's disposable-database settings that disable
 `fsync`, `synchronous_commit` and `full_page_writes` must never be copied to production.
 
-Use the approved [database role/function matrix](platform-credentials.md#database-roles-and-functions)
-as the authority for grants and forbidden access; the rationale belongs to
-[ADR 0006](../adr/0006-platform-credentials.md). The deployment operator must compare
-the provisioned roles to that matrix and run
-[`Database.verify_role`](../../server/app/core/db.py) and
-[credential connection verification](../../server/app/core/credential_db.py) through
-the actual service identities. Check the tenant login is `bid_app`, not an owner,
-superuser or BYPASSRLS role. Keep both function owners, `bid_platform_fn` and
-`bid_platform_credentials_fn`, without login credentials or runtime role memberships.
+The current role boundary is defined by [ADR 0012](../adr/0012-single-user-installation.md):
+migration owner and runtime `bid_app`. The former dedicated platform/credential
+connection checks are removed. API and worker use
+[`Database.verify_role`](../../server/app/core/db.py), which rejects superuser,
+BYPASSRLS and application-table ownership. The stage table below records the
+superseded hosted proposal and must not be used to provision single-user roles.
 
 | Execution stage | Connection delivery | Deployment verification |
 | --- | --- | --- |
@@ -417,22 +407,10 @@ Decide
 their retention/disablement before inviting business users; retain acceptance records
 without copying confidential content into evidence bundles.
 
-If the owner later requires legacy business data, treat it as a separately approved
-migration with inventory, consent, matching encrypted objects/keyrings, recovery point
-and downtime. Follow [team-workflow cutover](../notes/team-workflow.md#usage):
-
-```sh
-python -m app.admin team-workflow preflight --org-id ORG_UUID
-python -m app.admin team-workflow import --org-id ORG_UUID --mapping REVIEWED_MAPPING_FILE
-python -m app.admin team-workflow cutover --org-id ORG_UUID --workers-drained
-```
-
-Prepare the reviewed mapping with explicit owners/members under
-[`ReviewedMapping`](../../server/app/team_workflow_admin.py). Stop old API admissions
-and workers, resolve unfinished jobs/unsettled calls, and require a clean preflight
-before cutover. These commands repair task authorization; they do not transfer a
-development database or infer human approvals. Fresh tasks use their normal atomic
-workflow creation and do not need a fabricated legacy import.
+Existing multi-org data is not converted by the
+[single-user installation decision](../adr/0012-single-user-installation.md).
+Any future data import requires a separate approved inventory, encrypted-object
+and keyring mapping, recovery point and validation plan.
 
 ## Rollback and incident recovery
 
@@ -472,16 +450,17 @@ inspection. Existing controls remain defined in the linked contracts.
   task membership/archival/review-domain enforcement, platform password plus TOTP,
   and trusted-proxy authentication limits. API tokens must fail to obtain human-only
   confirmation/export or `token:create`; inspect
-  [token constraints](../../server/migrations/versions/0051_token_creation_scope.py)
-  and [team-workflow authority](../notes/team-workflow.md#how-it-works). Track any
+  [`api_tokens.token_forbidden_creation_scope`](../../server/migrations/baseline/10_tables.sql)
+  and [Task access](../../server/app/services/task_access.py). Track any
   remaining token-management interface limitations through roadmap F05.
 - [ ] **RLS and credential functions:** complete the database gate as `bid_app`, with
   two orgs and missing context, plus dedicated-role positive/negative tests. Verify
   cross-org summary functions expose no business content and credential metadata
   never reveals ciphertext or plaintext. Test disabled credentials fail closed.
 - [ ] **Human gates and authentic materials:** unconfirmed or stale evidence cannot
-  enter confirmed response/export paths; prototype final-use decisions and complete
-  co-sign rules remain enforced. Review
+  enter confirmed response/export paths; prototype final-use decisions and single-domain
+  human/material/B02 gates remain enforced. The legacy response-round trigger
+  compatibility blocker is tracked in [Known defects](roadmap.md#known-defects). Review
   [human-section exports](../notes/human-section-exports.md) and
   [screenshot evidence](../notes/screenshot-evidence.md); search/model output never
   becomes authentic hardware evidence without the required source and human checks.
@@ -524,8 +503,8 @@ Use the [known-defects register](roadmap.md#known-defects) to resolve or restric
 
 [sandbox_proxy_acceptance.py](../../scripts/sandbox_proxy_acceptance.py) exercises
 synthetic broker attacks but does not establish kernel egress policy.
-[sandbox_two_org_acceptance.py](../../scripts/sandbox_two_org_acceptance.py) kills and
-restarts a worker and is development-only.
+The former two-org driver was removed by ADR 0012. Current sandbox lifecycle and
+fault requirements are in [sandbox acceptance](sandbox.md#end-to-end-acceptance-after-approval).
 [sandbox_colima_acceptance.py](../../scripts/sandbox_colima_acceptance.py) targets a
 prepared Colima environment; reproduce its relevant gates on the selected Linux node.
 None should be run unreviewed against an active production instance.

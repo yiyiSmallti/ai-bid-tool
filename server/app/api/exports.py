@@ -18,13 +18,13 @@ from app.schemas.export_contracts import (
     ExportPrepare,
     ExportRelease,
 )
-from app.services import exports, page_previews
+from app.services import exports
 from app.services.versioned import audit
 
 
 def create_router(context, db, storage, queue, settings, crypto):
     router = APIRouter()
-    storage = exports.ExportStorage(storage)
+    raw_storage = storage
 
     def result(command, data=None, items=None, *, partial=False):
         return Result(
@@ -36,6 +36,8 @@ def create_router(context, db, storage, queue, settings, crypto):
 
     @router.post("/export-template-bindings", name="export_binding_create", response_model=Result)
     async def binding_create(body: ExportBindingCreate, ctx=Depends(context, scope="function")):
+        storage = exports.ExportStorage(raw_storage)
+
         return result(
             "export binding create", await exports.create_binding(ctx[0], ctx[1], body, storage)
         )
@@ -49,6 +51,8 @@ def create_router(context, db, storage, queue, settings, crypto):
 
     @router.post("/tasks/{task_id}/export-runs", name="export_prepare", response_model=Result)
     async def prepare(task_id: UUID, body: ExportPrepare, ctx=Depends(context, scope="function")):
+        storage = exports.ExportStorage(raw_storage)
+
         session, actor = ctx
         data, job = await exports.submit_export(session, actor, task_id, body, storage, settings)
         if body.dry_run and not data["ready"]:
@@ -62,12 +66,12 @@ def create_router(context, db, storage, queue, settings, crypto):
         if job is not None and job.status == "queued" and job.queue_id is None:
             await session.commit()
             try:
-                queue_id = await queue.enqueue(str(actor.org_id), str(job.id))
+                queue_id = await queue.enqueue(str(job.id))
             except (OSError, ConnectorException, OperationalError) as exc:
                 raise ServiceError(
                     "queue_unavailable", "Export job saved; repeat request to schedule it", 503, 3
                 ) from exc
-            async with db.transaction(actor.org_id) as update:
+            async with db.transaction() as update:
                 saved = await update.get(Job, job.id)
                 if saved is not None:
                     saved.queue_id = queue_id
@@ -75,18 +79,24 @@ def create_router(context, db, storage, queue, settings, crypto):
 
     @router.get("/export-runs/{run_id}", name="export_run_show", response_model=Result)
     async def run_show(run_id: UUID, ctx=Depends(context, scope="function")):
+        storage = exports.ExportStorage(raw_storage)
+
         actor, run = await exports.get_run(ctx[0], ctx[1], run_id)
         return result("export run show", await exports.run_view(ctx[0], actor, run, storage))
 
     @router.post("/export-runs/{run_id}/release", name="export_release", response_model=Result)
     async def release(run_id: UUID, body: ExportRelease, ctx=Depends(context, scope="function")):
+        storage = exports.ExportStorage(raw_storage)
+
         view = await exports.release(ctx[0], ctx[1], run_id, body, storage)
         return result("export release", view, partial=view["completion"] == "partial")
 
     @router.get("/tasks/{task_id}/exports", name="export_list", response_model=Result)
     async def list_exports(task_id: UUID, ctx=Depends(context, scope="function")):
+        storage = exports.ExportStorage(raw_storage)
+
         session, actor = ctx
-        from app.services.task_workflow import access as task_access
+        from app.services.task_access import access as task_access
 
         await task_access(session, actor, task_id, scope="export")
         actor = await exports.human_access(session, actor)
@@ -100,6 +110,8 @@ def create_router(context, db, storage, queue, settings, crypto):
 
     @router.get("/exports/{export_id}", name="export_show", response_model=Result)
     async def show(export_id: UUID, ctx=Depends(context, scope="function")):
+        storage = exports.ExportStorage(raw_storage)
+
         actor, row = await exports.get_export(ctx[0], ctx[1], export_id)
         return result("export show", await exports.export_view(ctx[0], actor, row, storage))
 
@@ -107,6 +119,9 @@ def create_router(context, db, storage, queue, settings, crypto):
     async def open_preview(
         export_id: UUID, retry: bool = False, ctx=Depends(context, scope="function")
     ):
+        storage = exports.ExportStorage(raw_storage)
+        from app.services import page_previews
+
         session, actor = ctx
         data, job = await page_previews.submit_export_preview(
             session, actor, export_id, storage, settings, retry=retry
@@ -114,12 +129,12 @@ def create_router(context, db, storage, queue, settings, crypto):
         if job.status == "queued" and job.queue_id is None:
             await session.commit()
             try:
-                queue_id = await queue.enqueue(str(actor.org_id), str(job.id))
+                queue_id = await queue.enqueue(str(job.id))
             except (OSError, ConnectorException, OperationalError) as exc:
                 raise ServiceError(
                     "queue_unavailable", "Preview job saved; repeat request to schedule it", 503, 3
                 ) from exc
-            async with db.transaction(actor.org_id) as update:
+            async with db.transaction() as update:
                 saved = await update.get(Job, job.id)
                 if saved is not None:
                     saved.queue_id = queue_id
@@ -127,6 +142,9 @@ def create_router(context, db, storage, queue, settings, crypto):
 
     @router.get("/exports/{export_id}/preview", name="export_preview_show", response_model=Result)
     async def show_preview(export_id: UUID, ctx=Depends(context, scope="function")):
+        storage = exports.ExportStorage(raw_storage)
+        from app.services import page_previews
+
         return result(
             "export preview",
             await page_previews.show_export_preview(ctx[0], ctx[1], export_id, storage),
@@ -139,6 +157,9 @@ def create_router(context, db, storage, queue, settings, crypto):
         zoom: int = Query(1, ge=1, le=2),
         ctx=Depends(context, scope="function"),
     ):
+        storage = exports.ExportStorage(raw_storage)
+        from app.services import page_previews
+
         png = await page_previews.export_page(
             ctx[0], ctx[1], export_id, page, zoom, storage, settings
         )
@@ -152,13 +173,14 @@ def create_router(context, db, storage, queue, settings, crypto):
         "/exports/{export_id}/download-link", name="export_download_link", response_model=Result
     )
     async def download_link(export_id: UUID, ctx=Depends(context, scope="function")):
+        storage = exports.ExportStorage(raw_storage)
+
         session, actor = ctx
         actor, row = await exports.get_export(session, actor, export_id)
         actor, _ = await exports.download_gate(session, actor, row, storage)
         signature = crypto.issue(
             {
                 "kind": "export_docx",
-                "org_id": str(actor.org_id),
                 "export_id": str(row.id),
                 "file_sha256": row.file_sha256,
             },
@@ -187,6 +209,8 @@ def create_router(context, db, storage, queue, settings, crypto):
 
     @router.get("/exports/{export_id}/download", name="export_download")
     async def download(export_id: UUID, signature: str, ctx=Depends(context, scope="function")):
+        storage = exports.ExportStorage(raw_storage)
+
         session, actor = ctx
         actor, row = await exports.get_export(session, actor, export_id)
         try:
@@ -195,7 +219,6 @@ def create_router(context, db, storage, queue, settings, crypto):
             raise not_found() from None
         if (
             signed.get("kind") != "export_docx"
-            or signed.get("org_id") != str(actor.org_id)
             or signed.get("export_id") != str(row.id)
             or signed.get("file_sha256") != row.file_sha256
         ):

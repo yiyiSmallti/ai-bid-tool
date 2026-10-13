@@ -1,4 +1,4 @@
-"""Official reasoning levels end to end: catalog, submission, per-level requests, history."""
+"""Configured reasoning levels through submission, provider requests and history."""
 
 import json
 import re
@@ -8,13 +8,13 @@ import pymupdf
 import pytest
 from app.api.main import create_app
 from app.core.config import Settings
-from conftest import FakeQueue, seed_platform_credential
+from app.providers.llm import OpenAICompatibleExtractor
+from conftest import FakeQueue, credential_app
 from fakes import FakeLLM
+from pydantic import SecretStr
 from test_api import create_document
 from test_job_boundaries import session_for
 from test_llm_providers import GOOD_ITEMS
-from test_platform_api import org_header
-from test_platform_auth import OPERATOR, platform_settings, sign_in
 
 LEVELS = [
     {
@@ -34,18 +34,6 @@ LEVELS = [
         "batch_chars": 1000,
     },
 ]
-GLM = {
-    "id": "glm",
-    "capability": "llm_extract",
-    "provider": "openai",
-    "model": "glm-synthetic",
-    "base_url": "https://llm.example.test/v1",
-    "credential": "main",
-    "default": True,
-    "enabled": True,
-    "reasoning": LEVELS,
-    "default_reasoning": "max",
-}
 
 
 def two_page_tender() -> bytes:
@@ -81,34 +69,31 @@ class Vendor:
 
 
 @pytest.fixture
-async def glm(operator, tmp_path, monkeypatch, tenants):
+async def glm(database, tmp_path):
     vendor = Vendor()
-    app = create_app(
-        platform_settings(tmp_path), queue=FakeQueue(), llm_transport=httpx.MockTransport(vendor)
+    settings = Settings(
+        data_dir=tmp_path,
+        llm_provider="openai",
+        llm_model="glm-synthetic",
+        llm_base_url="https://llm.example.test/v1",
+        llm_api_key=SecretStr("synthetic-key"),
     )
-    async with (
-        app.router.lifespan_context(app),
-        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
-    ):
-        ops = {"Authorization": f"Bearer {(await sign_in(api)).json()['data']['session']}"}
-        await seed_platform_credential(
-            app.state.processor.settings, provider="openai", endpoint=GLM["base_url"]
-        )
-        saved = await api.post("/platform/models", headers=ops, json=GLM)
-        assert saved.status_code == 200, saved.text
-        org = tenants["orgs"][0]
-        header = await org_header(api, org, "a@example.test")
+    llm = OpenAICompatibleExtractor(settings, httpx.MockTransport(vendor))
+    llm.reasoning_levels = {level["name"]: level for level in LEVELS}
+    llm.default_reasoning = "max"
+    app = await credential_app(settings, llm=llm, queue=FakeQueue())
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         task, document = await create_document(api, header, two_page_tender())
         parsed = await api.post(f"/documents/{document}/parse", headers=header, json={})
-        await app.state.processor(str(org), parsed.json()["data"]["job_id"])
-        yield (api, app, vendor, header, ops, task, document)
+        await app.state.processor(parsed.json()["data"]["job_id"])
+        yield (api, app, vendor, header, header, task, document)
 
 
 async def extract(api, app, header, document, **body):
     response = await api.post(f"/documents/{document}/extract", headers=header, json=body)
     assert response.status_code == 200, response.text
     data = response.json()["data"]
-    await app.state.processor(header["X-Org-Id"], data["job_id"])
+    await app.state.processor(data["job_id"])
     return data
 
 
@@ -198,80 +183,18 @@ async def test_unknown_levels_and_parse_levels_are_rejected(glm):
     assert vendor.bodies == []
 
 
-async def test_catalog_validates_levels_and_tests_each_one(glm):
-    api, _, vendor, _, ops, _, _ = glm
-    for broken in (
-        {**GLM, "default_reasoning": "medium"},
-        {**GLM, "reasoning": [LEVELS[0], LEVELS[0]], "default_reasoning": "low"},
-        {**GLM, "reasoning": [], "default_reasoning": "max"},
-        {**GLM, "default_reasoning": None},
-    ):
-        response = await api.post("/platform/models", headers=ops, json=broken)
-        assert response.status_code == 422, broken
-
-    listed = (await api.get("/platform/models", headers=ops)).json()["items"]
-    [model] = [m for m in listed if m["id"] == "glm"]
-    assert [level["name"] for level in model["reasoning"]] == ["low", "high", "max"]
-    assert model["default_reasoning"] == "max"
-
-    created = await api.post(
-        "/platform/orgs",
-        headers=ops,
-        json={"name": "Synthetic reasoning probe", "admin_email": OPERATOR},
-    )
-    assert created.status_code == 200, created.text
-    test_org = created.json()["data"]["org_id"]
-    probe = await api.post(
-        "/v4/platform/models/glm/test", headers=ops, json={"test_org_id": test_org}
-    )
-    assert probe.status_code == 200, probe.text
-    tested = probe.json()["data"]
-    assert tested["passed"] is True
-    assert [(level["reasoning"], level["passed"]) for level in tested["levels"]] == [
-        ("low", True),
-        ("high", True),
-        ("max", True),
-    ]
-    assert sorted(b["reasoning_effort"] for b in vendor.bodies) == ["high", "low", "max"]
-
-
-async def test_models_without_levels_ignore_the_level_with_a_warning(tenants, tmp_path, pdf_bytes):
+async def test_models_without_levels_ignore_the_level_with_a_warning(database, tmp_path, pdf_bytes):
     app = create_app(Settings(data_dir=tmp_path), llm=FakeLLM(), queue=FakeQueue())
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         parsed = await api.post(f"/documents/{document}/parse", headers=header, json={})
-        await app.state.processor(header["X-Org-Id"], parsed.json()["data"]["job_id"])
+        await app.state.processor(parsed.json()["data"]["job_id"])
         response = await api.post(
             f"/documents/{document}/extract", headers=header, json={"reasoning": "high"}
         )
         body = response.json()
         assert response.status_code == 200 and body["data"]["reasoning"] is None
         assert any("no reasoning levels" in warning for warning in body["warnings"])
-        await app.state.processor(header["X-Org-Id"], body["data"]["job_id"])
+        await app.state.processor(body["data"]["job_id"])
         status = (await api.get(f"/jobs/{body['data']['job_id']}", headers=header)).json()["data"]
         assert status["status"] == "succeeded" and status["reasoning"] is None
-
-
-async def test_model_without_a_credential_is_rejected_before_testing(glm):
-    api, _, vendor, _, ops, _, _ = glm
-    claude = {
-        **GLM,
-        "id": "claude",
-        "provider": "anthropic",
-        "model": "claude-synthetic",
-        "base_url": None,
-        "credential": "absent",
-        "default": False,
-        "reasoning": [{"name": "low", "effort": "low"}, {"name": "high", "effort": "high"}],
-        "default_reasoning": "high",
-    }
-    # ADR 0006 requires a matching active credential before a new catalog row exists.
-    rejected = await api.post("/platform/models", headers=ops, json=claude)
-    assert rejected.status_code == 409
-    assert rejected.json()["data"]["error"]["code"] == "credential_reference_mismatch"
-    assert rejected.json()["data"]["error"]["exit_code"] == 2
-    models = (await api.get("/platform/models", headers=ops)).json()["items"]
-    assert all(model["id"] != "claude" for model in models)
-    tested = await api.post("/platform/models/claude/test", headers=ops, json={"dry_run": True})
-    assert tested.status_code == 404 and tested.json()["data"]["error"]["code"] == "not_found"
-    assert vendor.bodies == []

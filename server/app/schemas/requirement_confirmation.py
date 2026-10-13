@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.contracts import CONTRACT_VERSION, Category, Contract, Cost, Result, Source
 from app.schemas.screenshot_contracts import Sha256
-from app.schemas.team_workflow import (
+from app.schemas.task_board import (
     BoardBlocker,
     BoardBucket,
     BoardCounts,
@@ -134,14 +134,11 @@ class ManualEntryPreview(Contract):
 
 
 class RequirementActorHint(Contract):
-    user_id: UUID | None
-    basis: Literal["assignee", "owner", "owner_recovery"]
-    action: Literal["confirm_requirement", "repair_requirement", "assign", "unarchive"]
+    action: Literal["confirm_requirement", "repair_requirement", "view"]
     can_current_actor_act: bool
 
 
 class RequirementReviewView(Contract):
-    org_id: UUID
     task_id: UUID
     extraction_job_id: UUID
     requirement_id: UUID
@@ -153,7 +150,7 @@ class RequirementReviewView(Contract):
     state: ReviewState
     citation_valid: bool
     source_pin: VerifiedRequirementSource | None
-    confirmed_by_user_id: UUID | None = None
+
     confirmed_at: AwareDatetime | None = None
     rejected_item: RejectedItemRef | None = None
     next_actor: RequirementActorHint | None
@@ -161,10 +158,8 @@ class RequirementReviewView(Contract):
     @model_validator(mode="after")
     def confirmation_metadata(self):
         confirmed = self.state == "confirmed"
-        if confirmed != (self.confirmed_by_user_id is not None) or confirmed != (
-            self.confirmed_at is not None
-        ):
-            raise ValueError("only current confirmations expose a current confirmer and time")
+        if confirmed != (self.confirmed_at is not None):
+            raise ValueError("only current confirmations expose a confirmation time")
         if confirmed and (not self.citation_valid or self.source_pin is None):
             raise ValueError("confirmation requires a currently verified source binding")
         if not confirmed and self.next_actor is None:
@@ -197,7 +192,6 @@ class ReviewSummary(Contract):
 
 
 class RequirementSetView(Contract):
-    org_id: UUID
     task_id: UUID
     extraction_job_id: UUID
     document_id: UUID
@@ -299,7 +293,7 @@ class ConfirmationReceiptItem(Contract):
 
 class RequirementReviewEvent(Contract):
     id: UUID
-    org_id: UUID
+
     task_id: UUID
     extraction_job_id: UUID
     requirement_id: UUID
@@ -310,7 +304,7 @@ class RequirementReviewEvent(Contract):
     review_hash: Sha256
     source_pin: VerifiedRequirementSource | None
     actor_kind: Literal["session", "worker", "migration"]
-    actor_user_id: UUID | None
+
     reason_sha256: Sha256 | None
     request_id: UUID | None
     occurred_at: AwareDatetime
@@ -340,8 +334,6 @@ class RequirementBoardQuery(Contract):
     bucket: ReviewBucket | None = None
     category: Category | None = None
     starred: bool | None = None
-    owner_user_id: UUID | None = None
-    unassigned: bool = False
     review_domain: Literal["commercial", "technical"] | None = None
     blocker: BoardBlocker | Literal["requirement_unconfirmed", "requirement_invalidated"] | None = (
         None
@@ -349,12 +341,6 @@ class RequirementBoardQuery(Contract):
     mine: bool = False
     cursor: Cursor | None = None
     limit: int = Field(default=50, strict=True, ge=1, le=100)
-
-    @model_validator(mode="after")
-    def assignee_filter(self):
-        if self.unassigned and self.owner_user_id is not None:
-            raise ValueError("unassigned and owner_user_id filters are mutually exclusive")
-        return self
 
 
 class RequirementBoardOverlay(Contract):
@@ -384,7 +370,7 @@ class RequirementBoardCounts(Contract):
 
 class RequirementActivityView(Contract):
     id: UUID
-    actor_user_id: UUID | None
+
     action: Literal[
         "requirement.manual_added",
         "requirement.confirmed",
@@ -406,8 +392,7 @@ class RequirementBoardData(Contract):
 
     @model_validator(mode="after")
     def same_scope(self):
-        if (self.board.org_id, self.board.task_id, self.board.extraction_job_id) != (
-            self.scope.org_id,
+        if (self.board.task_id, self.board.extraction_job_id) != (
             self.scope.task_id,
             self.scope.extraction_job_id,
         ):
@@ -437,7 +422,7 @@ class RequirementProgressData(Contract):
 
     @model_validator(mode="after")
     def same_task(self):
-        if (self.progress.org_id, self.progress.task_id) != (self.scope.org_id, self.scope.task_id):
+        if self.progress.task_id != self.scope.task_id:
             raise ValueError("progress and requirement scope must belong to one task")
         return self
 

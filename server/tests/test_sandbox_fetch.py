@@ -13,7 +13,6 @@ import hashlib
 import io
 import json
 import zipfile
-from uuid import uuid4
 
 import httpx
 import pytest
@@ -66,7 +65,6 @@ def broker(tmp_path, handler, *, urls=None, resolver=public_dns, limits=None, bu
     return FetchBroker(
         PolicySource(policy_file(tmp_path, urls)),
         "vendor-v1",
-        uuid4(),
         quota=SQLiteFetchQuota(tmp_path / "quota.sqlite3"),
         transport=httpx.MockTransport(handler),
         resolver=resolver,
@@ -291,47 +289,47 @@ async def test_invalid_size_type_or_response_status(tmp_path, headers, status):
         await fetch.fetch(MAIN)
 
 
-async def test_persistent_org_quota_and_origin_leases(tmp_path):
+async def test_persistent_installation_quota_and_origin_leases(tmp_path):
     path = tmp_path / "quota.sqlite3"
-    org = uuid4()
     for _ in range(60):
-        async with SQLiteFetchQuota(path).acquire(org, "https://vendor.example"):
+        async with SQLiteFetchQuota(path).acquire("https://vendor.example"):
             pass
-    with pytest.raises(FetchDenied, match="org_rate_limit"):
-        async with SQLiteFetchQuota(path).acquire(org, "https://vendor.example"):
+    with pytest.raises(FetchDenied, match="fetch_rate_limit"):
+        async with SQLiteFetchQuota(path).acquire("https://vendor.example"):
             pass
-    # An open policy keeps an organization window, at its own configured limit.
+    # An open policy keeps an installation window, at its own configured limit.
     open_quota = SQLiteFetchQuota(path, open_requests_per_minute=62)
     for _ in range(2):
-        async with open_quota.acquire(org, "https://vendor.example", open_egress=True):
+        async with open_quota.acquire("https://vendor.example", open_egress=True):
             pass
-    with pytest.raises(FetchDenied, match="org_rate_limit"):
-        async with open_quota.acquire(org, "https://vendor.example", open_egress=True):
+    with pytest.raises(FetchDenied, match="fetch_rate_limit"):
+        async with open_quota.acquire("https://vendor.example", open_egress=True):
             pass
     with pytest.raises(ValueError):
         SQLiteFetchQuota(path, open_requests_per_minute=0)
+    path = tmp_path / "leases.sqlite3"
     impatient = SQLiteFetchQuota(path, origin_wait_seconds=0.2)
-    async with SQLiteFetchQuota(path).acquire(uuid4(), "https://vendor.example"):
-        async with SQLiteFetchQuota(path).acquire(uuid4(), "https://vendor.example"):
+    async with SQLiteFetchQuota(path).acquire("https://vendor.example"):
+        async with SQLiteFetchQuota(path).acquire("https://vendor.example"):
             with pytest.raises(FetchDenied, match="origin_concurrency_limit"):
-                async with impatient.acquire(uuid4(), "https://vendor.example"):
+                async with impatient.acquire("https://vendor.example"):
                     pass
 
     # A third request for a full origin waits for a released lease instead of failing.
     order = []
 
     async def holder():
-        async with SQLiteFetchQuota(path).acquire(uuid4(), "https://other.example"):
+        async with SQLiteFetchQuota(path).acquire("https://other.example"):
             order.append("held")
             await asyncio.sleep(0.3)
         order.append("released")
 
     async def waiter():
         await asyncio.sleep(0.05)
-        async with SQLiteFetchQuota(path).acquire(uuid4(), "https://other.example"):
+        async with SQLiteFetchQuota(path).acquire("https://other.example"):
             order.append("acquired")
 
-    async with SQLiteFetchQuota(path).acquire(uuid4(), "https://other.example"):
+    async with SQLiteFetchQuota(path).acquire("https://other.example"):
         await asyncio.gather(holder(), waiter())
     assert order == ["held", "released", "acquired"]
 
@@ -400,7 +398,6 @@ def open_broker(tmp_path, handler, *, resolver=public_dns):
     return source, FetchBroker(
         source,
         "dev-open-v1",
-        uuid4(),
         quota=SQLiteFetchQuota(tmp_path / "quota.sqlite3"),
         transport=httpx.MockTransport(handler),
         resolver=resolver,

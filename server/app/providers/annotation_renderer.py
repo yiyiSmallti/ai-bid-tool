@@ -258,9 +258,9 @@ class AnnotationRenderer(ScreenshotRenderer):
         normalized = _dump(request)
         if isinstance(normalized, dict):
             identity = normalized.get("renderer")
-            if normalized.get("protocol") != "annotation-render-v1" or (
+            if normalized.get("protocol") != "annotation-render-v2" or (
                 isinstance(identity, dict)
-                and identity.get("protocol_version") != "annotation-render-v1"
+                and identity.get("protocol_version") != "annotation-render-v2"
             ):
                 raise _failure(
                     "Annotation renderer protocol is unsupported", code="unsupported_protocol"

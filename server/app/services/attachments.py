@@ -1,6 +1,6 @@
 """Immutable attachment revisions, human decisions, and exact declaration/task pins.
 
-Every public resolver rechecks live membership. Storage publication is deliberately
+Every public resolver rechecks the installation actor and scopes. Storage publication is deliberately
 not compensated by deletion: the operational stage receipt identifies retained
 ciphertext even when the enclosing database transaction cannot commit.
 """
@@ -13,7 +13,7 @@ from typing import NoReturn
 from uuid import UUID, uuid4
 
 from cryptography.fernet import InvalidToken
-from sqlalchemy import String, cast, func, literal, or_, text, true, tuple_
+from sqlalchemy import String, cast, literal, or_, text, true, tuple_
 from sqlalchemy import select as sql_select
 
 from app.core.config import Settings
@@ -28,10 +28,10 @@ from app.models.attachments import (
     ProfileAttachmentLink,
     TaskAttachment,
 )
-from app.models.entities import AuditLog, Membership, OrgProfileRevision, TaskOrgProfile, User
+from app.models.entities import AuditLog, OrgProfileRevision, TaskOrgProfile
 from app.schemas import attachment_contracts as c
 from app.schemas.certificate_file_contracts import CertificateScanFile
-from app.services import task_workflow
+from app.services import task_access
 from app.services.auth import set_actor_context
 from app.services.evidence_sources import RENDER_SLOTS
 from app.services.versioned import audit
@@ -59,8 +59,12 @@ def view(model, **values):
 
 
 async def access(session, actor, scope="attachment:read"):
-    live = await task_workflow.live_actor(session, actor)
+    live = await task_access.live_actor(session, actor)
     live.require(scope)
+    if scope in c.HUMAN_ONLY_SCOPES and (
+        live.session_id is not None or live.principal_id is not None
+    ):
+        fail("forbidden", "A human installation session is required", 403, 4)
     await set_actor_context(session, live)
     return live
 
@@ -75,26 +79,6 @@ async def required(session, model, identifier, *, lock=False):
     return row
 
 
-async def eligible(session, user_id):
-    return bool(
-        await session.scalar(
-            sql_select(Membership.id)
-            .join(User, User.id == Membership.user_id)
-            .where(
-                Membership.user_id == user_id,
-                Membership.active.is_(True),
-                Membership.role.in_(["admin", "bidder"]),
-                User.active.is_(True),
-            )
-        )
-    )
-
-
-async def assigned(session, user_id):
-    if not await eligible(session, user_id):
-        fail("reviewer_unavailable", "Assign a live administrator or bidder")
-
-
 def state(root, expected):
     if not root.active:
         fail("archive_inactive", "Archive is inactive")
@@ -105,13 +89,14 @@ def state(root, expected):
 async def replay(session, actor, command, body, extra=None):
     payload_hash = digest({"body": body.model_dump(mode="json"), "binding": extra})
     # Covers an absent root as well as existing roots and serializes divergent replays.
-    key = f"{actor.org_id}/{actor.user_id}/{command}/{body.request_id}"
+    key = f"{actor.actor_kind}/{actor.token_id}/{command}/{body.request_id}"
     await session.execute(
         text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": key}
     )
     old = await session.scalar(
         sql_select(AuditLog).where(
-            AuditLog.actor_user_id == actor.user_id,
+            AuditLog.actor_kind == actor.actor_kind,
+            AuditLog.actor_token_id == actor.token_id,
             AuditLog.action == command,
             AuditLog.details["request_id"].astext == str(body.request_id),
         )
@@ -139,7 +124,6 @@ async def record(
     if not duplicate and command in {
         "attachment.create",
         "attachment.revise",
-        "attachment.assign",
         "attachment.review.approve",
         "attachment.review.reject",
         "attachment.review.revoke",
@@ -159,7 +143,6 @@ async def record(
         if root_id:
             await queue.enqueue_attachment_invalidation_in_transaction(
                 session,
-                org_id=str(actor.org_id),
                 action=command,
                 request_id=str(body.request_id),
                 root_id=str(root_id),
@@ -171,8 +154,7 @@ async def put_retained(session, actor, storage, key, content, identifier):
     # Stage means attempted publication, never success. It survives DB rollback in
     # operational logs and contains no filename, label, signed link or document text.
     logger.info(
-        "attachment_object_staged org_id=%s object_id=%s key=%s sha256=%s",
-        actor.org_id,
+        "attachment_object_staged object_id=%s key=%s sha256=%s",
         identifier,
         key,
         hashlib.sha256(content).hexdigest(),
@@ -181,7 +163,7 @@ async def put_retained(session, actor, storage, key, content, identifier):
         {"object_id": str(identifier), "key": key, "sha256": hashlib.sha256(content).hexdigest()}
     )
     try:
-        await storage.put(actor.org_id, key, content)
+        await storage.put(key, content)
     except ServiceError:
         raise
     except Exception as exc:
@@ -193,16 +175,16 @@ async def put_retained(session, actor, storage, key, content, identifier):
         ) from exc
 
 
-def seal(session, org_id, identifier, value):
+def seal(session, identifier, value):
     return Secrets.for_data(settings_for(session)).encrypt(
-        json.dumps({"org_id": str(org_id), "id": str(identifier), "value": value})
+        json.dumps({"id": str(identifier), "value": value})
     )
 
 
-def unseal(session, org_id, identifier, ciphertext):
+def unseal(session, identifier, ciphertext):
     try:
         value = json.loads(Secrets.for_data(settings_for(session)).decrypt(ciphertext))
-        if value["org_id"] != str(org_id) or value["id"] != str(identifier):
+        if value["id"] != str(identifier):
             raise ValueError("binding")
         return value["value"]
     except (InvalidToken, ValueError, KeyError, TypeError) as exc:
@@ -215,14 +197,11 @@ async def latest_reviews(session, revision_ids):
     if not revision_ids:
         return {}
     parents = (
-        sql_select(AttachmentRevision.id, AttachmentRevision.org_id)
-        .where(AttachmentRevision.id.in_(revision_ids))
-        .subquery()
+        sql_select(AttachmentRevision.id).where(AttachmentRevision.id.in_(revision_ids)).subquery()
     )
     latest = (
         sql_select(AttachmentReview.id)
         .where(
-            AttachmentReview.org_id == parents.c.org_id,
             AttachmentReview.attachment_revision_id == parents.c.id,
         )
         .correlate(parents)
@@ -252,18 +231,15 @@ def review_state(review):
     )
 
 
-def readiness(root, review, reviewer_live=True, blockers=None):
+def readiness(root, review, blockers=None):
     reasons = list(blockers or [])
     decision = review_state(review)
     if not root.active:
         reasons.insert(0, "archive_inactive")
     if decision != "approved":
         reasons.append(f"archive_review_{decision}")
-        if not reviewer_live:
-            reasons.insert(0, "reviewer_unavailable")
     actions = {
         "archive_inactive": "inspect_history",
-        "reviewer_unavailable": "assign_reviewer",
         "archive_review_pending": "review_uploaded_file",
         "archive_review_rejected": "upload_corrected_revision",
         "archive_review_revoked": "review_uploaded_file",
@@ -284,43 +260,7 @@ def readiness(root, review, reviewer_live=True, blockers=None):
         c.AttachmentReadiness,
         blockers=list(dict.fromkeys(reasons)),
         next_action=action,
-        responsible_user_id=root.reviewer_user_id
-        if action in {"review_uploaded_file", "review_page_privacy"}
-        else root.custodian_user_id,
     )
-
-
-async def revision_authors(session, revisions):
-    ids = [r.id for r in revisions]
-    if not ids:
-        return {}
-    rows = (
-        await session.execute(
-            sql_select(
-                AttachmentRevision.id,
-                func.count(AuditLog.id),
-                func.min(cast(AuditLog.actor_user_id, String)),
-            )
-            .join(
-                AuditLog,
-                (AuditLog.org_id == AttachmentRevision.org_id)
-                & (AuditLog.object_id == AttachmentRevision.attachment_id)
-                & (AuditLog.resource_revision_id_text == cast(AttachmentRevision.id, String))
-                & (AuditLog.details["revision"] == func.to_jsonb(AttachmentRevision.revision)),
-            )
-            .where(
-                AttachmentRevision.id.in_(ids),
-                AuditLog.resource_revision_id_text.in_([str(i) for i in ids]),
-                text("audit_logs.action IN ('attachment.create','attachment.revise')"),
-            )
-            .group_by(AttachmentRevision.id)
-        )
-    ).all()
-    authors: dict[UUID, UUID | None] = {i: None for i in ids}
-    for identifier, count, user_id in rows:
-        if count == 1 and user_id:
-            authors[identifier] = UUID(user_id)
-    return authors
 
 
 async def root_summaries(session, roots):
@@ -335,41 +275,22 @@ async def root_summaries(session, roots):
             )
         )
     ).all()
-    authors = await revision_authors(session, revisions)
     by_root = {r.attachment_id: r for r in revisions}
     reviews = await latest_reviews(session, [r.id for r in revisions])
-    live = set(
-        (
-            await session.scalars(
-                sql_select(Membership.user_id)
-                .join(User, User.id == Membership.user_id)
-                .where(
-                    Membership.user_id.in_([r.reviewer_user_id for r in roots]),
-                    Membership.active.is_(True),
-                    Membership.role.in_(["admin", "bidder"]),
-                    User.active.is_(True),
-                )
-            )
-        ).all()
-    )
     return [
         view(
             c.AttachmentSummary,
             id=r.id,
-            org_id=r.org_id,
             current_revision_id=by_root[r.id].id,
             current_revision=r.current_revision,
             revised_at=by_root[r.id].created_at,
-            revised_by=authors[by_root[r.id].id],
             state_version=r.state_version,
             kind=by_root[r.id].kind,
             active=r.active,
-            custodian_user_id=r.custodian_user_id,
-            reviewer_user_id=r.reviewer_user_id,
             review_state=review_state(reviews.get(by_root[r.id].id)),
             latest_review_id=getattr(reviews.get(by_root[r.id].id), "id", None),
             created_at=r.created_at,
-            readiness=readiness(r, reviews.get(by_root[r.id].id), r.reviewer_user_id in live),
+            readiness=readiness(r, reviews.get(by_root[r.id].id)),
         )
         for r in roots
     ]
@@ -378,31 +299,14 @@ async def root_summaries(session, roots):
 async def page_rows(session, actor, query, model, body, purpose, parent=None, *, task_id=None):
     binding = {
         "kind": "attachment_cursor",
-        "org": str(actor.org_id),
-        "actor": str(actor.user_id),
         "token": str(actor.token_id),
-        "role": actor.role,
         "scopes": digest(sorted(actor.scopes)),
         "purpose": purpose,
         "parent": str(parent),
         "filters": body.model_dump(mode="json", exclude={"cursor"}),
     }
-    membership_version = (
-        await session.execute(
-            text(
-                "SELECT id, xmin::text FROM memberships WHERE org_id=:org AND user_id=:user AND active"
-            ),
-            {"org": actor.org_id, "user": actor.user_id},
-        )
-    ).first()
-    if membership_version is None:
-        raise not_found()
-    binding["membership"] = str(membership_version[0])
-    binding["membership_version"] = membership_version[1]
     if task_id:
-        _, workflow, member = await task_workflow.access(session, actor, task_id)
-        binding["access"] = str(workflow.access_epoch)
-        binding["member"] = str(member.id) if member else None
+        await task_access.access(session, actor, task_id)
     signer = TokenSigner.for_tokens(settings_for(session))
     if body.cursor:
         try:
@@ -482,7 +386,6 @@ async def upload(session, actor, body, uploads, storage, *, attachment_id=None):
         if attachment_id
         else None
     )
-    await assigned(session, body.reviewer_user_id)
     if (
         len(uploads) != 1
         or any(option.rotation != 0 for option in body.parts)
@@ -535,17 +438,12 @@ async def upload(session, actor, body, uploads, storage, *, attachment_id=None):
         state(root, body.expected_state_version)
         root.current_revision += 1
         root.state_version += 1
-        root.reviewer_user_id = body.reviewer_user_id
     else:
         root = AttachmentArchive(
             id=uuid4(),
-            org_id=actor.org_id,
-            created_by=actor.user_id,
             current_revision=1,
             state_version=1,
             active=True,
-            custodian_user_id=actor.user_id,
-            reviewer_user_id=body.reviewer_user_id,
         )
         session.add(root)
         await session.flush()
@@ -553,30 +451,26 @@ async def upload(session, actor, body, uploads, storage, *, attachment_id=None):
     descriptor = descriptor.model_copy(update={"name": f"attachment-{revision_id}.pdf"})
     revision = AttachmentRevision(
         id=revision_id,
-        org_id=actor.org_id,
         attachment_id=root.id,
         revision=root.current_revision,
         kind=body.metadata.kind,
-        label_encrypted=seal(session, actor.org_id, revision_id, body.metadata.label),
+        label_encrypted=seal(session, revision_id, body.metadata.label),
         metadata_sha256=meta_hash,
-        created_by=actor.user_id,
         request_id=body.request_id,
         payload_hash=payload_hash,
     )
-    key = f"org/{actor.org_id}/attachment/{root.id}/{revision_id}/{descriptor.sha256}.pdf"
+    key = f"attachment/{root.id}/{revision_id}/{descriptor.sha256}.pdf"
     await put_retained(session, actor, storage, key, upload.content, revision_id)
     session.add(revision)
     await session.flush()
     session.add(
         AttachmentFile(
             id=file_id,
-            org_id=actor.org_id,
             attachment_id=root.id,
             attachment_revision_id=revision_id,
             file=descriptor.model_dump(mode="json"),
             storage_key=key,
-            upload_name_encrypted=seal(session, actor.org_id, file_id, upload.name),
-            created_by=actor.user_id,
+            upload_name_encrypted=seal(session, file_id, upload.name),
         )
     )
     await session.flush()
@@ -607,15 +501,13 @@ async def revision_parts(session, revision_id):
     return root, revision, file, reviews.get(revision_id)
 
 
-def revision_summary(revision, file, review, revised_by=None):
+def revision_summary(revision, file, review):
     return view(
         c.AttachmentRevisionSummary,
         id=revision.id,
-        org_id=revision.org_id,
         attachment_id=revision.attachment_id,
         revision=revision.revision,
         revised_at=revision.created_at,
-        revised_by=revised_by,
         file_id=file.id,
         kind=revision.kind,
         original_sha256=file.file["sha256"],
@@ -624,7 +516,6 @@ def revision_summary(revision, file, review, revised_by=None):
         size_bytes=file.file["size_bytes"],
         review_state=review_state(review),
         latest_review_id=review.id if review else None,
-        created_by=revision.created_by,
         created_at=revision.created_at,
     )
 
@@ -650,42 +541,21 @@ async def revisions(session, actor, attachment_id, query):
     ).all()
     by_revision = {f.attachment_revision_id: f for f in files}
     decisions = await latest_reviews(session, [r.id for r in rows])
-    authors = await revision_authors(session, rows)
-    return data, [
-        revision_summary(r, by_revision[r.id], decisions.get(r.id), authors[r.id]) for r in rows
-    ]
+    return data, [revision_summary(r, by_revision[r.id], decisions.get(r.id)) for r in rows]
 
 
 async def revision(session, actor, revision_id):
     await access(session, actor, "attachment:original:read")
     _, row, file, review = await revision_parts(session, revision_id)
-    authors = await revision_authors(session, [row])
     return view(
         c.AttachmentRevisionView,
-        **revision_summary(row, file, review, authors[row.id]),
+        **revision_summary(row, file, review),
         metadata={
             "kind": row.kind,
-            "label": unseal(session, actor.org_id, row.id, row.label_encrypted),
+            "label": unseal(session, row.id, row.label_encrypted),
         },
         original=file.file,
     )
-
-
-async def assign(session, actor, attachment_id, body):
-    await access(session, actor, "attachment:manage")
-    root = await required(session, AttachmentArchive, attachment_id, lock=True)
-    hash_, old = await replay(session, actor, "attachment.assign", body, str(attachment_id))
-    if old:
-        return await show(session, actor, attachment_id)
-    state(root, body.expected_state_version)
-    await assigned(session, body.custodian_user_id)
-    await assigned(session, body.reviewer_user_id)
-    root.custodian_user_id, root.reviewer_user_id = body.custodian_user_id, body.reviewer_user_id
-    root.state_version += 1
-    await session.flush()
-    receipt = await show(session, actor, attachment_id)
-    await record(session, actor, "attachment.assign", root.id, body, hash_, receipt)
-    return receipt
 
 
 def review_view(row):
@@ -700,10 +570,6 @@ async def review(session, actor, revision_id, body):
     root = await required(session, AttachmentArchive, root.id, lock=True)
     command = f"attachment.review.{body.decision}"
     hash_, old = await replay(session, actor, command, body, str(revision_id))
-    if body.decision != "revoke" and (
-        root.reviewer_user_id != actor.user_id or not await eligible(session, root.reviewer_user_id)
-    ):
-        fail("forbidden", "Only the assigned live reviewer may decide", 403, 4)
     if old:
         return old
     prior = (await latest_reviews(session, [revision_id])).get(revision_id)
@@ -733,7 +599,6 @@ async def review(session, actor, revision_id, body):
     ):
         fail("invalid_review_transition", "Decision is not valid in the current review state")
     row = AttachmentReview(
-        org_id=actor.org_id,
         attachment_id=root.id,
         attachment_revision_id=revision_id,
         file_id=file.id,
@@ -742,7 +607,6 @@ async def review(session, actor, revision_id, body):
         prior_review_id=body.expected_review_id,
         decision=body.decision,
         reason=body.reason,
-        reviewed_by=actor.user_id,
         reviewed_at=datetime.now(UTC),
         request_id=body.request_id,
         payload_hash=hash_,
@@ -831,7 +695,6 @@ async def link_profile(session, actor, profile_revision_id, body):
     if not str(profile.data.get(body.field) or "").strip():
         fail("empty_declaration", "The exact declaration field must be nonempty")
     row = ProfileAttachmentLink(
-        org_id=actor.org_id,
         profile_id=profile.profile_id,
         profile_revision_id=profile.id,
         field=body.field,
@@ -841,7 +704,6 @@ async def link_profile(session, actor, profile_revision_id, body):
         approval_id=body.approval_id,
         active=True,
         state_version=1,
-        created_by=actor.user_id,
         request_id=body.request_id,
         payload_hash=hash_,
     )
@@ -889,7 +751,7 @@ async def selection_context(
     session, actor, selection_id, *, write=False, lock=False, require_active=True
 ):
     selected = await required(session, TaskAttachment, selection_id)
-    _, workflow, _ = await task_workflow.access(
+    await task_access.access(
         session,
         actor,
         selected.task_id,
@@ -919,13 +781,10 @@ async def selection_context(
         reasons.append("archive_inactive")
     if require_active and reasons:
         fail(reasons[0], "The exact attachment selection is no longer usable")
-    if workflow.state == "archived":
-        reasons.append("task_archived")
     return selected, link, profile, root, rev, file, decision, reasons
 
 
 async def selection_contexts(session, selection_ids):
-    from app.models.team_workflow import TaskWorkflow
 
     rows = (
         await session.execute(
@@ -936,7 +795,6 @@ async def selection_contexts(session, selection_ids):
                 AttachmentArchive,
                 AttachmentRevision,
                 AttachmentFile,
-                TaskWorkflow.state,
             )
             .select_from(TaskAttachment)
             .join(
@@ -949,14 +807,13 @@ async def selection_contexts(session, selection_ids):
                 AttachmentRevision, AttachmentRevision.id == TaskAttachment.attachment_revision_id
             )
             .join(AttachmentFile, AttachmentFile.id == TaskAttachment.file_id)
-            .join(TaskWorkflow, TaskWorkflow.task_id == TaskAttachment.task_id)
             .where(TaskAttachment.id.in_(selection_ids))
             .execution_options(populate_existing=True)
         )
     ).all()
     decisions = await latest_reviews(session, [r[4].id for r in rows])
     contexts = {}
-    for selected, link, profile, root, revision, file, task_state in rows:
+    for selected, link, profile, root, revision, file in rows:
         decision = decisions.get(revision.id)
         reasons = []
         if not root.active:
@@ -969,8 +826,6 @@ async def selection_contexts(session, selection_ids):
             reasons.append("profile_selection_changed")
         if not decision or decision.id != selected.approval_id or decision.decision != "approve":
             reasons.append("archive_review_revoked")
-        if task_state == "archived":
-            reasons.append("task_archived")
         contexts[selected.id] = (selected, link, profile, root, revision, file, decision, reasons)
     return contexts
 
@@ -991,7 +846,7 @@ def selection_view(selected, link, root, file, review, reasons, *, pinned_revisi
 
 
 async def select(session, actor, task_id, body):
-    await task_workflow.access(session, actor, task_id, scope="task:attachment", write=True)
+    await task_access.access(session, actor, task_id, scope="task:attachment", write=True)
     actor.require("task:profile")
     actor.require("profile:read")
     profile = await required(session, TaskOrgProfile, body.task_org_profile_id, lock=True)
@@ -1030,7 +885,6 @@ async def select(session, actor, task_id, body):
         previous.state_version += 1
         await session.flush()
     row = TaskAttachment(
-        org_id=actor.org_id,
         task_id=task_id,
         task_org_profile_id=profile.id,
         profile_revision_id=profile.profile_revision_id,
@@ -1044,7 +898,6 @@ async def select(session, actor, task_id, body):
         lot=profile.lot,
         active=True,
         state_version=1,
-        selected_by=actor.user_id,
         selected_at=datetime.now(UTC),
         request_id=body.request_id,
         payload_hash=hash_,
@@ -1059,7 +912,7 @@ async def select(session, actor, task_id, body):
 
 
 async def selections(session, actor, task_id, query):
-    await task_workflow.access(session, actor, task_id, scope="attachment:read")
+    await task_access.access(session, actor, task_id, scope="attachment:read")
     stmt = sql_select(TaskAttachment).where(TaskAttachment.task_id == task_id)
     if not query.history:
         stmt = stmt.where(TaskAttachment.active.is_(True))
@@ -1112,7 +965,6 @@ async def read_original(session, actor, revision_id, storage, *, part_ordinal=No
         fail("attachment_upload_mode_not_enabled", "Part uploads and downloads are not enabled")
     descriptor = CertificateScanFile.model_validate(file.file)
     content = await storage.read_bounded(
-        actor.org_id,
         file.storage_key,
         min(descriptor.size_bytes, c.FILE_BYTE_LIMIT, settings_for(session).max_upload_bytes),
     )
@@ -1188,7 +1040,7 @@ async def resolve_annotation(*args, **kwargs):
 async def profile_candidates(session, actor, task_id, *, history=False, cursor=None, limit=50):
     from app.services.profiles import snapshot_data
 
-    await task_workflow.access(session, actor, task_id, scope="profile:read")
+    await task_access.access(session, actor, task_id, scope="profile:read")
     query = sql_select(TaskOrgProfile).where(TaskOrgProfile.task_id == task_id)
     if not history:
         query = query.where(TaskOrgProfile.active.is_(True))

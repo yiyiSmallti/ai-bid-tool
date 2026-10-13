@@ -1,9 +1,8 @@
 """DB-free safe projections and wire-shape contracts.
 
-Failure inventory: raw persisted data is spread into a response; secret fields
-or platform request overrides are serialized; disabled catalog identity changes;
-legacy provider identities are silently substituted; cursor is reused across actors/filters;
-oversize metadata is accepted; read preconditions become write preconditions.
+Failure inventory: persisted secrets or request overrides enter responses; model
+identity is substituted; cursors cross actors/filters; metadata exceeds bounds;
+read inputs accidentally require write preconditions.
 """
 
 import json
@@ -19,8 +18,6 @@ from app.core.errors import ServiceError
 from app.core.security import TokenSigner
 from app.schemas.management_pages import PageQuery
 from app.schemas.management_providers import (
-    PlatformModelChoice,
-    ProviderCatalogQuery,
     ProviderRevisionMetadata,
 )
 from app.schemas.provider_contracts import ProviderConfigInput, ProviderConfigSet
@@ -44,30 +41,24 @@ FORBIDDEN = {
 
 
 def actor():
-    return Identity(uuid4(), uuid4(), {"provider:read", "provider:write"}, "admin")
+    return Identity(scopes={"provider:read", "provider:write"})
 
 
-def row(owner, source="platform", **changes):
+def row(owner, **changes):
     return {
         "id": uuid4(),
-        "org_id": owner.org_id,
         "revision": 1,
         "capability": "llm_extract",
-        "source": source,
-        "platform_model_id": "saved-model" if source == "platform" else None,
-        "updated_by": owner.user_id,
         "created_at": datetime.now(UTC),
-        "catalog_enabled": False,
         "data": {
             "provider": "openai",
             "model": "Saved model",
-            "base_url": None if source == "platform" else "https://api.example.test/v1",
+            "base_url": "https://api.example.test/v1",
             "json_mode": "json_schema",
             "reasoning": [
                 {"name": "low", "label": "Low", "request_options": {"reasoning_effort": "low"}}
             ],
             "default_reasoning": "low",
-            "catalog_revision": 3,
             **{key: CANARY for key in FORBIDDEN},
         },
         **{key: CANARY for key in FORBIDDEN},
@@ -89,72 +80,33 @@ def assert_safe(value):
 def test_projection_allowlist_disabled_identity_and_saved_terms():
     owner = actor()
     saved = row(owner)
-    value = service.metadata(owner, saved, owner.user_id).model_dump(mode="json")
+    value = service.metadata(owner, saved).model_dump(mode="json")
     assert_safe(value)
-    assert value["catalog_state"] == "unavailable"
     assert value["model"] == "Saved model"
-    assert value["configuration"]["platform_model_id"] == "saved-model"
-    assert value["configuration"]["base_url"] is None
+    assert value["configuration"]["base_url"] == "https://api.example.test/v1"
     assert value["configuration"]["expected_revision"] is None
     assert value["reasoning"] == [{"name": "low", "label": "Low"}]
-    assert value["catalog_revision"] == 3
-    assert value["revised_by"] == str(owner.user_id)
-    saved["data"].pop("catalog_revision")
-    legacy = service.metadata(owner, saved, None)
-    assert legacy.catalog_revision is None
-    assert legacy.revised_by is None
 
 
 def test_byok_exposes_only_nonsecret_saved_input_and_official_choices():
     owner = actor()
-    value = service.metadata(owner, row(owner, "org"), None).model_dump(mode="json")
+    value = service.metadata(owner, row(owner)).model_dump(mode="json")
     assert_safe(value)
     assert value["credential_state"] == "configured"
-    assert value["catalog_state"] == "not_applicable"
     assert value["configuration"]["base_url"] == "https://api.example.test/v1"
     assert value["configuration"]["reasoning"][0]["request_options"] == {"reasoning_effort": "low"}
-    assert value["catalog_revision"] is None
-
-
-def test_catalog_allowlist_drops_wholesale_endpoint_credentials_and_overrides():
-    data = {
-        "id": "catalog-a",
-        "revision": 2,
-        "model": "Official",
-        "provider": "openai",
-        "is_default": True,
-        "reasoning": [{"name": "low", "label": "Low", "request_options": {"secret": CANARY}}],
-        "default_reasoning": "low",
-        "base_url": CANARY,
-        **{key: CANARY for key in FORBIDDEN},
-    }
-    value = service.catalog_view(data).model_dump(mode="json")
-    assert_safe(value)
-    assert "base_url" not in value
-    assert value["reasoning"] == [{"name": "low", "label": "Low"}]
 
 
 @pytest.mark.parametrize("field", sorted(FORBIDDEN))
 def test_projection_types_reject_new_secret_fields(field):
     owner = actor()
-    value = service.metadata(owner, row(owner), None).model_dump(mode="json")
+    value = service.metadata(owner, row(owner)).model_dump(mode="json")
     with pytest.raises(ValidationError):
         ProviderRevisionMetadata.model_validate({**value, field: CANARY})
-    catalog = {
-        "id": "a",
-        "revision": 1,
-        "model": "Official",
-        "provider": "openai",
-        "default": False,
-        "reasoning": [],
-        "default_reasoning": None,
-    }
-    with pytest.raises(ValidationError):
-        PlatformModelChoice.model_validate({**catalog, field: CANARY})
 
 
 def test_secret_set_is_excluded_from_generic_serialization():
-    body = ProviderConfigSet(source="org", provider="openai", model="Official", api_key=CANARY)
+    body = ProviderConfigSet(provider="openai", model="Official", api_key=CANARY)
     assert CANARY not in body.model_dump_json()
     assert "api_key" not in body.model_dump()
 
@@ -177,7 +129,6 @@ def test_secret_set_is_excluded_from_generic_serialization():
 )
 def test_reasoning_rejects_nested_credential_transport_slots(name):
     body = {
-        "source": "org",
         "provider": "openai",
         "model": "Official",
         "reasoning": [{"name": "low", "request_options": {"nested": [{name: CANARY}]}}],
@@ -186,16 +137,16 @@ def test_reasoning_rejects_nested_credential_transport_slots(name):
     with pytest.raises(ValidationError):
         ProviderConfigInput.model_validate(body)
     owner = actor()
-    saved = row(owner, "org")
+    saved = row(owner)
     saved["data"]["reasoning"] = body["reasoning"]
     with pytest.raises(ServiceError) as error:
-        service.metadata(owner, saved, None)
+        service.metadata(owner, saved)
     assert error.value.code == "management_integrity_error"
     assert CANARY not in str(error.value)
 
 
 def test_reasoning_option_tree_bounds_and_official_options():
-    base = {"source": "org", "provider": "openai", "model": "Official", "default_reasoning": "low"}
+    base = {"provider": "openai", "model": "Official", "default_reasoning": "low"}
     options = {
         "reasoning_effort": "low",
         "thinking": {"type": "enabled", "budget_tokens": 4096},
@@ -220,24 +171,16 @@ def test_metadata_sql_excludes_credential_columns():
     compiled = str(service.config_statement(owner).compile(dialect=postgresql.dialect()))
     for field in FORBIDDEN:
         assert field not in compiled
-    assert "platform_models.base_url" not in compiled
-    for column in service.CATALOG_COLUMNS:
-        assert column.key not in FORBIDDEN
-        assert column.key != "base_url"
 
 
 def test_bad_stored_metadata_has_fixed_error_without_validation_input():
     owner = actor()
-    saved = row(owner, "org")
+    saved = row(owner)
     saved["data"]["base_url"] = "https://example.test/?secret=" + CANARY
     with pytest.raises(ServiceError) as error:
-        service.metadata(owner, saved, None)
+        service.metadata(owner, saved)
     assert error.value.code == "management_integrity_error"
     assert CANARY not in str(error.value)
-    foreign = row(owner, org_id=uuid4())
-    with pytest.raises(ServiceError) as error:
-        service.metadata(owner, foreign, None)
-    assert error.value.code == "management_integrity_error"
 
 
 def test_cursor_is_authority_purpose_prefix_bound_and_expires():
@@ -253,14 +196,14 @@ def test_cursor_is_authority_purpose_prefix_bound_and_expires():
     )
     signer = TokenSigner.for_tokens(service.settings_for(session))
     cursor = signer.issue(
-        {**service.binding(owner, "catalog", {"id_prefix": "abc"}), "anchor": "abc-one"}, 900
+        {**service.binding(owner, "history", {}), "anchor": [1, str(uuid4())]}, 900
     )
-    query = ProviderCatalogQuery(cursor=cursor, q="abc")
-    assert service.open_cursor(session, owner, query, "catalog", {"id_prefix": "abc"}) == "abc-one"
+    query = PageQuery(cursor=cursor)
+    assert service.open_cursor(session, owner, query, "history", {})[0] == 1
     for other, purpose, filters in [
-        (actor(), "catalog", {"id_prefix": "abc"}),
-        (owner, "history", {}),
-        (owner, "catalog", {"id_prefix": "other"}),
+        (Identity(scopes={"provider:read"}), "history", {}),
+        (owner, "wrong-purpose", {}),
+        (owner, "history", {"unexpected": True}),
     ]:
         with pytest.raises(ServiceError) as error:
             service.open_cursor(session, other, query, purpose, filters)
@@ -274,28 +217,11 @@ def test_cursor_is_authority_purpose_prefix_bound_and_expires():
 
 
 @pytest.mark.parametrize(
-    "body",
-    [
-        {"q": " "},
-        {"q": "a" * 201},
-        {"limit": 101},
-        {"limit": True},
-        {"cursor": "a" * 2049},
-        {"capability": "ocr"},
-    ],
-)
-def test_catalog_query_bounds(body):
-    with pytest.raises(ValidationError):
-        ProviderCatalogQuery.model_validate(body)
-
-
-@pytest.mark.parametrize(
     "path,body",
     [
         (
             "/providers",
             {
-                "source": "org",
                 "provider": "openai",
                 "model": "Official",
                 "api_key": CANARY,
@@ -303,9 +229,8 @@ def test_catalog_query_bounds(body):
             },
         ),
         (
-            "/v4/providers",
+            "/v5/providers",
             {
-                "source": "org",
                 "provider": "openai",
                 "model": "Official",
                 "api_key": CANARY,
@@ -313,9 +238,9 @@ def test_catalog_query_bounds(body):
             },
         ),
         ("/providers/test", {CANARY: "extra"}),
-        ("/v4/providers/test", {CANARY: "extra"}),
+        ("/v5/providers/test", {CANARY: "extra"}),
         ("/management/providers/history/query", {CANARY: "extra"}),
-        ("/v4/management/providers/catalog/query", {CANARY: "extra"}),
+        ("/v5/management/providers/history/query", {CANARY: "extra"}),
     ],
 )
 async def test_provider_validation_never_reflects_dynamic_field_names(path, body, caplog):
@@ -325,9 +250,17 @@ async def test_provider_validation_never_reflects_dynamic_field_names(path, body
         token_key=Fernet.generate_key().decode(),
     )
     application = create_app(settings=settings)
+    from app.api.management_providers import create_router as metadata_router
+    from app.api.providers import create_router as provider_router
+
+    async def offline_context():
+        return SimpleNamespace(info={}), actor()
+
+    # Exercise real request schemas and shared error handlers without opening a database.
+    application.router.routes.clear()
+    application.include_router(metadata_router(offline_context, settings))
+    application.include_router(provider_router(offline_context, None, settings, None, None, None))
     try:
-        # No org/auth header means dependency validation completes before any
-        # transaction or vendor resolution; this is deliberately DB-free.
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=application), base_url="http://fixture.test"
         ) as client:
@@ -338,4 +271,3 @@ async def test_provider_validation_never_reflects_dynamic_field_names(path, body
         assert response.headers["Cache-Control"] == "no-store"
     finally:
         await application.state.db.engine.dispose()
-        await application.state.password_attempts.close()

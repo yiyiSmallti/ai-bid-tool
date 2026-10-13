@@ -1,154 +1,264 @@
-"""Independent requirement review state and append-only decisions and receipts."""
-
 from datetime import datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKeyConstraint, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    PrimaryKeyConstraint,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy import (
+    text as sql_text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.entities import Base, Tenant
+from app.models.entities import Base
 
 
-def task_fk():
-    return ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"])
-
-
-def member_fk(column):
-    return ForeignKeyConstraint(["org_id", column], ["memberships.org_id", "memberships.user_id"])
-
-
-class RequirementReviewSet(Tenant, Base):
-    __tablename__ = "requirement_review_sets"
-    task_id: Mapped[UUID] = mapped_column()
-    extraction_job_id: Mapped[UUID] = mapped_column()
-    document_id: Mapped[UUID] = mapped_column()
-    origin: Mapped[str] = mapped_column(String(20))
-    revision: Mapped[int] = mapped_column(Integer, default=1)
-    membership_sha256: Mapped[str] = mapped_column(String(64))
-    confirmation_sha256: Mapped[str] = mapped_column(String(64))
-    __table_args__ = (
-        UniqueConstraint("org_id", "id"),
-        UniqueConstraint("org_id", "extraction_job_id"),
-        UniqueConstraint("org_id", "id", "task_id", "extraction_job_id"),
-        UniqueConstraint("org_id", "task_id", "extraction_job_id"),
-        task_fk(),
-        ForeignKeyConstraint(
-            ["org_id", "task_id", "document_id", "extraction_job_id"],
-            ["jobs.org_id", "jobs.task_id", "jobs.document_id", "jobs.id"],
-        ),
-    )
-
-
-class RequirementReview(Tenant, Base):
-    __tablename__ = "requirement_reviews"
-    task_id: Mapped[UUID] = mapped_column()
-    extraction_job_id: Mapped[UUID] = mapped_column()
-    requirement_id: Mapped[UUID] = mapped_column()
-    origin: Mapped[str] = mapped_column(String(30))
-    revision: Mapped[int] = mapped_column(Integer, default=1)
-    current_event_id: Mapped[UUID] = mapped_column()
-    state: Mapped[str] = mapped_column(String(30))
-    review_hash: Mapped[str] = mapped_column(String(64))
-    source_pin: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
-    snapshot_ciphertext: Mapped[str] = mapped_column(Text)
-    confirmed_by_user_id: Mapped[UUID | None] = mapped_column()
-    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    rejected_job_id: Mapped[UUID | None] = mapped_column()
-    rejected_index: Mapped[int | None] = mapped_column(Integer)
-    rejected_summary_sha256: Mapped[str | None] = mapped_column(String(64))
-    __table_args__ = (
-        UniqueConstraint("org_id", "id"),
-        UniqueConstraint("org_id", "requirement_id"),
-        UniqueConstraint("org_id", "id", "task_id", "extraction_job_id", "requirement_id"),
-        task_fk(),
-        member_fk("confirmed_by_user_id"),
-        ForeignKeyConstraint(
-            ["org_id", "requirement_id", "task_id", "extraction_job_id"],
-            [
-                "requirements.org_id",
-                "requirements.id",
-                "requirements.task_id",
-                "requirements.job_id",
-            ],
-        ),
-        ForeignKeyConstraint(
-            ["org_id", "task_id", "extraction_job_id"],
-            [
-                "requirement_review_sets.org_id",
-                "requirement_review_sets.task_id",
-                "requirement_review_sets.extraction_job_id",
-            ],
-        ),
-        ForeignKeyConstraint(["org_id", "rejected_job_id"], ["jobs.org_id", "jobs.id"]),
-        ForeignKeyConstraint(
-            ["org_id", "id", "current_event_id", "revision"],
-            [
-                "requirement_review_events.org_id",
-                "requirement_review_events.review_id",
-                "requirement_review_events.id",
-                "requirement_review_events.revision",
-            ],
-            deferrable=True,
-            initially="DEFERRED",
-            use_alter=True,
-            name="requirement_current_event",
-        ),
-    )
-
-
-class RequirementReviewEvent(Tenant, Base):
+class RequirementReviewEvent(Base):
     __tablename__ = "requirement_review_events"
-    task_id: Mapped[UUID] = mapped_column()
-    extraction_job_id: Mapped[UUID] = mapped_column()
-    requirement_id: Mapped[UUID] = mapped_column()
-    review_id: Mapped[UUID] = mapped_column()
-    revision: Mapped[int] = mapped_column(Integer)
-    action: Mapped[str] = mapped_column(String(30))
-    state_after: Mapped[str] = mapped_column(String(30))
-    review_hash: Mapped[str] = mapped_column(String(64))
-    snapshot_sha256: Mapped[str] = mapped_column(String(64))
-    snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
-    reason_ciphertext: Mapped[str | None] = mapped_column(Text)
-    reason_sha256: Mapped[str | None] = mapped_column(String(64))
-    source_pin: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
-    actor_kind: Mapped[str] = mapped_column(String(20))
-    actor_user_id: Mapped[UUID | None] = mapped_column()
-    request_id: Mapped[UUID | None] = mapped_column()
-    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    id: Mapped[UUID] = mapped_column(
+        nullable=False,
+        primary_key=True,
+        default=uuid4,
+        server_default=sql_text("gen_random_uuid()"),
+    )
+    task_id: Mapped[UUID] = mapped_column(nullable=False)
+    extraction_job_id: Mapped[UUID] = mapped_column(nullable=False)
+    requirement_id: Mapped[UUID] = mapped_column(nullable=False)
+    review_id: Mapped[UUID] = mapped_column(nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    action: Mapped[str] = mapped_column(String(30), nullable=False)
+    state_after: Mapped[str] = mapped_column(String(30), nullable=False)
+    review_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    reason_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reason_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_pin: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
+    actor_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    request_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("clock_timestamp()")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("clock_timestamp()")
+    )
     __table_args__ = (
-        UniqueConstraint("org_id", "id"),
-        UniqueConstraint("org_id", "review_id", "revision"),
-        UniqueConstraint("org_id", "review_id", "id", "revision"),
-        task_fk(),
-        member_fk("actor_user_id"),
+        CheckConstraint(
+            "(((action)::text = ANY ((ARRAY['seed'::character varying, 'manual_add'::character varying, 'confirm'::character varying, 'reopen'::character varying, 'invalidate'::character varying, 'source_repair'::character varying])::text[])))",
+            name="requirement_review_events_action_check",
+        ),
+        CheckConstraint(
+            "(((actor_kind)::text = ANY ((ARRAY['session'::character varying, 'worker'::character varying, 'migration'::character varying])::text[])))",
+            name="requirement_review_events_actor_kind_check",
+        ),
+        CheckConstraint("((revision >= 1))", name="requirement_review_events_revision_check"),
+        CheckConstraint(
+            "(((length(snapshot_ciphertext) >= 80) AND (snapshot_ciphertext ~ '^gAAAA'::text)))",
+            name="requirement_review_events_snapshot_ciphertext_check",
+        ),
+        CheckConstraint(
+            "(((state_after)::text = ANY ((ARRAY['unconfirmed'::character varying, 'legacy_unconfirmed'::character varying, 'confirmed'::character varying, 'invalidated'::character varying])::text[])))",
+            name="requirement_review_events_state_after_check",
+        ),
+        UniqueConstraint(
+            "review_id",
+            "id",
+            "revision",
+            name="requirement_review_events_review_id_id_revision_key",
+        ),
+        UniqueConstraint(
+            "review_id", "revision", name="requirement_review_events_review_id_revision_key"
+        ),
+        PrimaryKeyConstraint("id", name="requirement_review_events_pkey"),
         ForeignKeyConstraint(
-            ["org_id", "review_id", "task_id", "extraction_job_id", "requirement_id"],
+            ["review_id", "task_id", "extraction_job_id", "requirement_id"],
             [
-                "requirement_reviews.org_id",
                 "requirement_reviews.id",
                 "requirement_reviews.task_id",
                 "requirement_reviews.extraction_job_id",
                 "requirement_reviews.requirement_id",
             ],
+            name="requirement_review_events_review_id_task_id_extract_fkey",
             deferrable=True,
             initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["task_id"], ["tasks.id"], name="requirement_review_events_task_id_fkey"
+        ),
+        Index("requirement_review_events_scope", "requirement_id", "revision"),
+    )
+
+
+class RequirementReviewRequest(Base):
+    __tablename__ = "requirement_review_requests"
+    id: Mapped[UUID] = mapped_column(
+        nullable=False,
+        primary_key=True,
+        default=uuid4,
+        server_default=sql_text("gen_random_uuid()"),
+    )
+    task_id: Mapped[UUID] = mapped_column(nullable=False)
+    request_id: Mapped[UUID] = mapped_column(nullable=False)
+    action: Mapped[str] = mapped_column(String(30), nullable=False)
+    request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    receipt_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("clock_timestamp()")
+    )
+    __table_args__ = (
+        UniqueConstraint("request_id"),
+        PrimaryKeyConstraint("id", name="requirement_review_requests_pkey"),
+        ForeignKeyConstraint(
+            ["task_id"], ["tasks.id"], name="requirement_review_requests_task_id_fkey"
         ),
     )
 
 
-class RequirementReviewRequest(Tenant, Base):
-    __tablename__ = "requirement_review_requests"
-    task_id: Mapped[UUID] = mapped_column()
-    actor_user_id: Mapped[UUID] = mapped_column()
-    request_id: Mapped[UUID] = mapped_column()
-    action: Mapped[str] = mapped_column(String(30))
-    request_sha256: Mapped[str] = mapped_column(String(64))
-    receipt_ciphertext: Mapped[str] = mapped_column(Text)
+class RequirementReviewSet(Base):
+    __tablename__ = "requirement_review_sets"
+    id: Mapped[UUID] = mapped_column(
+        nullable=False,
+        primary_key=True,
+        default=uuid4,
+        server_default=sql_text("gen_random_uuid()"),
+    )
+    task_id: Mapped[UUID] = mapped_column(nullable=False)
+    extraction_job_id: Mapped[UUID] = mapped_column(nullable=False)
+    document_id: Mapped[UUID] = mapped_column(nullable=False)
+    origin: Mapped[str] = mapped_column(String(20), nullable=False)
+    revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default=sql_text("1")
+    )
+    membership_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    confirmation_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("clock_timestamp()")
+    )
     __table_args__ = (
-        UniqueConstraint("org_id", "id"),
-        UniqueConstraint("org_id", "actor_user_id", "request_id"),
-        task_fk(),
-        member_fk("actor_user_id"),
+        CheckConstraint(
+            "(((origin)::text = ANY ((ARRAY['model'::character varying, 'manual'::character varying])::text[])))",
+            name="requirement_review_sets_origin_check",
+        ),
+        CheckConstraint("((revision >= 1))", name="requirement_review_sets_revision_check"),
+        UniqueConstraint("extraction_job_id", name="requirement_review_sets_extraction_job_id_key"),
+        UniqueConstraint(
+            "id",
+            "task_id",
+            "extraction_job_id",
+            name="requirement_review_sets_id_task_id_extraction_job_id_key",
+        ),
+        UniqueConstraint(
+            "task_id",
+            "extraction_job_id",
+            name="requirement_review_sets_task_id_extraction_job_id_key",
+        ),
+        PrimaryKeyConstraint("id", name="requirement_review_sets_pkey"),
+        ForeignKeyConstraint(
+            ["task_id", "document_id", "extraction_job_id"],
+            ["jobs.task_id", "jobs.document_id", "jobs.id"],
+            name="requirement_review_sets_task_id_document_id_extract_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["task_id"], ["tasks.id"], name="requirement_review_sets_task_id_fkey"
+        ),
+    )
+
+
+class RequirementReview(Base):
+    __tablename__ = "requirement_reviews"
+    id: Mapped[UUID] = mapped_column(
+        nullable=False,
+        primary_key=True,
+        default=uuid4,
+        server_default=sql_text("gen_random_uuid()"),
+    )
+    task_id: Mapped[UUID] = mapped_column(nullable=False)
+    extraction_job_id: Mapped[UUID] = mapped_column(nullable=False)
+    requirement_id: Mapped[UUID] = mapped_column(nullable=False)
+    origin: Mapped[str] = mapped_column(String(30), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    current_event_id: Mapped[UUID] = mapped_column(nullable=False)
+    state: Mapped[str] = mapped_column(String(30), nullable=False)
+    review_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_pin: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
+    snapshot_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_job_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    rejected_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rejected_summary_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("clock_timestamp()")
+    )
+    __table_args__ = (
+        CheckConstraint(
+            "(((((state)::text = 'confirmed'::text) AND (confirmed_at IS NOT NULL) AND (source_pin IS NOT NULL)) OR (((state)::text <> 'confirmed'::text) AND (confirmed_at IS NULL))))",
+            name="requirement_reviews_check",
+        ),
+        CheckConstraint(
+            "((((rejected_job_id IS NULL) AND (rejected_index IS NULL) AND (rejected_summary_sha256 IS NULL)) OR ((rejected_job_id IS NOT NULL) AND (rejected_index IS NOT NULL) AND (rejected_summary_sha256 IS NOT NULL))))",
+            name="requirement_reviews_check1",
+        ),
+        CheckConstraint(
+            "(((origin)::text = ANY ((ARRAY['extracted'::character varying, 'legacy'::character varying, 'manual_missing'::character varying, 'manual_rejected'::character varying])::text[])))",
+            name="requirement_reviews_origin_check",
+        ),
+        CheckConstraint("((rejected_index >= 0))", name="requirement_reviews_rejected_index_check"),
+        CheckConstraint("((revision >= 1))", name="requirement_reviews_revision_check"),
+        CheckConstraint(
+            "(((length(snapshot_ciphertext) >= 80) AND (snapshot_ciphertext ~ '^gAAAA'::text)))",
+            name="requirement_reviews_snapshot_ciphertext_check",
+        ),
+        CheckConstraint(
+            "(((state)::text = ANY ((ARRAY['unconfirmed'::character varying, 'legacy_unconfirmed'::character varying, 'confirmed'::character varying, 'invalidated'::character varying])::text[])))",
+            name="requirement_reviews_state_check",
+        ),
+        UniqueConstraint(
+            "id",
+            "task_id",
+            "extraction_job_id",
+            "requirement_id",
+            name="requirement_reviews_id_task_id_extraction_job_id_req_key",
+        ),
+        UniqueConstraint("requirement_id", name="requirement_reviews_requirement_id_key"),
+        PrimaryKeyConstraint("id", name="requirement_reviews_pkey"),
+        ForeignKeyConstraint(
+            ["id", "current_event_id", "revision"],
+            [
+                "requirement_review_events.review_id",
+                "requirement_review_events.id",
+                "requirement_review_events.revision",
+            ],
+            name="requirement_current_event",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["rejected_job_id"], ["jobs.id"], name="requirement_reviews_rejected_job_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["requirement_id", "task_id", "extraction_job_id"],
+            ["requirements.id", "requirements.task_id", "requirements.job_id"],
+            name="requirement_reviews_requirement_id_task_id_extracti_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["task_id", "extraction_job_id"],
+            ["requirement_review_sets.task_id", "requirement_review_sets.extraction_job_id"],
+            name="requirement_reviews_task_id_extraction_job_id_fkey",
+        ),
+        ForeignKeyConstraint(["task_id"], ["tasks.id"], name="requirement_reviews_task_id_fkey"),
+        Index("requirement_reviews_rejected", "rejected_job_id", "rejected_index"),
+        Index("requirement_reviews_scope", "task_id", "extraction_job_id", "state"),
     )

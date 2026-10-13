@@ -19,7 +19,6 @@ from app.models.bid_review_run import (
     BidReviewRun,
     BidReviewSigningRequirement,
 )
-from app.models.team_workflow import TaskMember
 from app.schemas import bid_review_presence as c
 from app.services import bid_review as bids
 from app.services import bid_review_privacy as privacy
@@ -131,22 +130,20 @@ async def prepare(session, actor, submission_id, body, settings, provider_bindin
     if existing is None:
         prepared = BidPresencePreparation(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=root.task_id,
             submission_id=root.id,
             preparation_id=fixed.publication.preparation_id,
             source_review_id=body.review_id,
-            created_by=actor.user_id,
             manifest_sha256=manifest_hash,
             expected_page_ids=sorted(str(page["page_id"]) for page in pages),
         )
-        prepared.details_encrypted = bids.seal(settings, actor.org_id, prepared.id, binding)
+        prepared.details_encrypted = bids.seal(settings, prepared.id, binding)
         session.add(prepared)
         await session.flush()
         for page in sorted(pages, key=lambda p: str(p["page_id"])):
             source = page["row"]
             content = await storage.read_bounded(
-                actor.org_id, source.storage_key, min(source.image["size_bytes"], 32 * 1024 * 1024)
+                source.storage_key, min(source.image["size_bytes"], 32 * 1024 * 1024)
             )
             if (
                 len(content) != source.image["size_bytes"]
@@ -157,12 +154,11 @@ async def prepare(session, actor, submission_id, body, settings, provider_bindin
             receipt = bids.digest(
                 {**meta, "page_id": str(source.id), "manifest_sha256": manifest_hash}
             )
-            key = f"org/{actor.org_id}/bid-review/{root.id}/presence/{prepared.id}/{meta['sha256']}.jpg"
-            await storage.put(actor.org_id, key, jpeg)
+            key = f"bid-review/{root.id}/presence/{prepared.id}/{meta['sha256']}.jpg"
+            await storage.put(key, jpeg)
             session.add(
                 BidPresenceImage(
                     id=uuid4(),
-                    org_id=actor.org_id,
                     task_id=root.task_id,
                     submission_id=root.id,
                     presence_preparation_id=prepared.id,
@@ -307,7 +303,6 @@ async def authorize(session, actor, submission_id, body, settings, provider_bind
     payload_hash = bids.digest(body.model_dump(mode="json"))
     replay = await session.scalar(
         select(BidPresenceAuthorization).where(
-            BidPresenceAuthorization.authorized_by == actor.user_id,
             BidPresenceAuthorization.request_id == body.request_id,
         )
     )
@@ -338,27 +333,24 @@ async def authorize(session, actor, submission_id, body, settings, provider_bind
         raise not_found()
     grant = BidPresenceAuthorization(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=root.task_id,
         submission_id=root.id,
         presence_preparation_id=prepared.id,
         revision=body.expected_revision,
         prior_authorization_id=body.expected_authorization_id,
         request_id=body.request_id,
-        authorized_by=actor.user_id,
         payload_hash=payload_hash,
         manifest_sha256=prepared.manifest_sha256,
         image_ids=sorted(str(value) for value in body.image_ids),
         allow_external=body.allow_external,
     )
-    grant.reason_encrypted = bids.seal(settings, actor.org_id, grant.id, body.reason)
+    grant.reason_encrypted = bids.seal(settings, grant.id, body.reason)
     session.add(grant)
     await session.flush()
     for identifier in body.image_ids:
         session.add(
             BidPresenceAuthorizedImage(
                 id=uuid4(),
-                org_id=actor.org_id,
                 task_id=root.task_id,
                 submission_id=root.id,
                 presence_preparation_id=prepared.id,
@@ -403,18 +395,8 @@ async def planned(session, submission_id, settings, provider_binding, authorizat
         if prepared is None:
             raise not_found()
         await live_preparation(session, prepared, settings, provider_binding)
-        live = await session.scalar(
-            select(func.bid_review_actor_live(grant.org_id, grant.task_id, grant.authorized_by))
-        )
-        owner = await session.scalar(
-            select(TaskMember.id).where(
-                TaskMember.task_id == grant.task_id,
-                TaskMember.user_id == grant.authorized_by,
-                TaskMember.active.is_(True),
-                TaskMember.role == "owner",
-            )
-        )
-        if not live or owner is None:
+        live = await session.scalar(select(func.bid_review_actor_live(grant.task_id)))
+        if not live:
             bids.fail(
                 "presence_authority_expired", "Presence grant human authority expired", 409, 4
             )
@@ -439,7 +421,7 @@ async def planned(session, submission_id, settings, provider_binding, authorizat
 
 
 async def read_image(session, image, storage):
-    content = await storage.read_bounded(image.org_id, image.storage_key, image.size_bytes)
+    content = await storage.read_bounded(image.storage_key, image.size_bytes)
     if len(content) != image.size_bytes or hashlib.sha256(content).hexdigest() != image.sha256:
         bids.fail("presence_image_integrity", "Presence image failed integrity", 409, 4)
     return content

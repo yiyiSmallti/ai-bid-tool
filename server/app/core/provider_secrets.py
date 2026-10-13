@@ -1,4 +1,4 @@
-"""Authenticated, independently rotated encryption for org and platform credentials."""
+"""Authenticated, independently rotated encryption for local provider and service credentials."""
 
 import json
 from uuid import UUID
@@ -49,17 +49,16 @@ class ProviderSecrets:
         self.cipher = ciphers[0]
         self.keyring = MultiFernet(ciphers)
 
-    def encrypt(self, key: str, org_id: UUID, config_id: UUID) -> str:
-        payload = json.dumps({"org": str(org_id), "config": str(config_id), "key": key})
+    def encrypt(self, key: str, config_id: UUID) -> str:
+        payload = json.dumps({"config": str(config_id), "key": key})
         return self.cipher.encrypt(payload.encode()).decode()
 
-    def decrypt(self, encrypted: str, org_id: UUID, config_id: UUID) -> SecretStr:
+    def decrypt(self, encrypted: str, config_id: UUID) -> SecretStr:
         try:
             payload = json.loads(self.keyring.decrypt(encrypted.encode()))
             if (
                 not isinstance(payload, dict)
-                or set(payload) != {"org", "config", "key"}
-                or payload.get("org") != str(org_id)
+                or set(payload) != {"config", "key"}
                 or payload.get("config") != str(config_id)
                 or not isinstance(payload.get("key"), str)
             ):
@@ -119,6 +118,6 @@ class ProviderSecrets:
         )
         return self._rewrap(ciphertext)
 
-    def rewrap_org(self, ciphertext: str, *, org_id: UUID, config_id: UUID) -> str | None:
-        self.decrypt(ciphertext, org_id, config_id)
+    def rewrap(self, ciphertext: str, *, config_id: UUID) -> str | None:
+        self.decrypt(ciphertext, config_id)
         return self._rewrap(ciphertext)

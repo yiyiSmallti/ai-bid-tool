@@ -36,11 +36,13 @@ provider outcome requires verification; it has no automatic replay path.
 
 ## How it works
 
-A persistent principal binds the initiating human, Membership, org, original
-permissions, reduced scopes and authority expiry. Each admission intersects those
-grants with current role and task access. Only the owner reads or controls the
-session; other members receive 404. Renewal may reduce authority or extend it
-within a fresh human session, and never resets cumulative resource limits.
+A persistent principal binds original human grants, reduced agent scopes and
+an authority expiry. Admission intersects those fixed grants with live principal
+permissions and task access. The installation human can read and control every
+session. Renewal may reduce authority or extend it from a fresh human session;
+it never resets cumulative resource limits. Sessions have no user owner or
+organization identifier. [ADR 0012](../adr/0012-single-user-installation.md)
+defines this installation boundary.
 
 The broker exposes req list, card list, card show, card generate, draft, draft show
 and job status. It has no shell, arbitrary HTTP or model-selected file access.
@@ -78,7 +80,7 @@ token identity and the token-automation marker. Dry-run creates no writes or cal
   confidential-value access available to an agent.
 - Context overflow, changed fixed inputs or disabled redaction pause explicitly.
   Do not shrink requirements, switch models or truncate citations silently.
-- Database-free tests cannot prove FORCE RLS, queue transaction atomicity, lease
+- Database-free tests cannot prove database triggers, queue transaction atomicity, lease
   takeover or concurrent call admission. The contract owns those acceptance gates.
 
 ## Code
@@ -92,10 +94,10 @@ acceptance remains defined by the
   discriminated decisions, pauses and limits. Readonly business origin uses
   [AgentProvenance](../../server/app/schemas/agent_provenance.py).
 - [Agent models](../../server/app/models/agent.py) and
-  [migration](../../server/migrations/versions/0042_builtin_agent.py): persistent
-  tenant state, composite relationships, immutable history and database gates.
-- [Session services](../../server/app/services/agents.py) `human_access/owned/start/resume/cancel`:
-  owner authorization, revisions, human review/limit rechecks and saved receipts.
+  [baseline](../../server/migrations/baseline/10_tables.sql): persistent
+  installation state, composite relationships, immutable history and database gates.
+- [Session services](../../server/app/services/agents.py) `human_access/session_record/start/resume/cancel`:
+  human authorization, revisions, human review/limit rechecks and saved receipts.
 - [Agent routes](../../server/app/api/agent.py) `create_router`: authenticated
   HTTP management and history endpoints.
 - [Tool broker](../../server/app/services/agent_tools.py) and

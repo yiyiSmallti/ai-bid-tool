@@ -18,8 +18,8 @@ COMMAND_INPUTS = {
 COMMAND_DATA = {command: ClefSettingsData for command in COMMAND_INPUTS}
 ERRORS = {
     "invalid_input": ("Invalid Clef configuration input", 2),
-    "invalid_session": ("Platform login required", 4),
-    "forbidden": ("Platform operator authorization required", 4),
+    "invalid_session": ("Installation access key required", 4),
+    "forbidden": ("A human session is required", 4),
     "revision_conflict": ("Clef settings changed; refresh before retrying", 2),
     "credential_reference_mismatch": ("Clef credentials do not match their purposes", 2),
     "clef_configuration_unavailable": ("Clef configuration is unavailable", 3),
@@ -56,7 +56,7 @@ def perform(action: str, method: str, path: str, json_output: bool, **kwargs):
     from bid_cli.main import call, emit
 
     command = "platform clef " + action
-    body = safe_result(call(method, "/platform/clef" + path, platform=True, **kwargs), command)
+    body = safe_result(call(method, "/platform/clef" + path, **kwargs), command)
     emit(body, command, json_output, 0 if body["ok"] else body["data"]["error"]["exit_code"])
 
 

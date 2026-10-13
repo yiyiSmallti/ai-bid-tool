@@ -42,8 +42,9 @@ from app.services import response_cards as cards
 from app.services.versioned import audit
 
 
-async def memory_upload(request: Request, max_bytes: int = screenshots.MAX_BYTES):
+async def memory_upload(request: Request, max_bytes: int | None = None):
     """Avoid UploadFile/SpooledTemporaryFile: no pre-release image may touch disk."""
+    max_bytes = screenshots.MAX_BYTES if max_bytes is None else max_bytes
     media, options = parse_options_header(request.headers.get("content-type", ""))
     boundary = options.get(b"boundary")
     if media != b"multipart/form-data" or not boundary or len(boundary) > 200:
@@ -156,27 +157,27 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         if job is not None and job.status == "queued" and job.queue_id is None:
             await session.commit()
             try:
-                queue_id = await queue.enqueue(str(actor.org_id), str(job.id))
+                queue_id = await queue.enqueue(str(job.id))
             except (OSError, ConnectorException, OperationalError) as exc:
                 raise ServiceError(
                     "queue_unavailable", "Job saved; repeat request to schedule it", 503, 3
                 ) from exc
-            async with db.transaction(actor.org_id) as update:
+            async with db.transaction() as update:
                 saved = await update.get(Job, job.id)
                 if saved is not None:
                     saved.queue_id = queue_id
 
-    async def discard_staged(keys, org_id):
+    async def discard_staged(keys):
         from app.providers.screenshot_objects import discard
 
         for key in keys:
             # Resolve even an ambiguous commit before deleting an attempt-owned object.
-            async with db.transaction(org_id) as check:
+            async with db.transaction() as check:
                 referenced = await check.scalar(
                     select(ScreenshotRendition.id).where(ScreenshotRendition.storage_key == key)
                 )
             if referenced is None:
-                await discard(storage, org_id, key)
+                await discard(storage, key)
 
     @router.post("/tasks/{task_id}/screenshots", name="screenshot_add", response_model=Result)
     async def ingest(task_id: UUID, request: Request, ctx=Depends(context, scope="function")):
@@ -199,9 +200,9 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
             await ctx[0].commit()
         except (ServiceError, ProviderFailure, SQLAlchemyError, OSError):
             await ctx[0].rollback()
-            await discard_staged(staged, actor.org_id)
+            await discard_staged(staged)
             raise
-        await discard_staged(staged, actor.org_id)
+        await discard_staged(staged)
         return result("screenshot add", data)
 
     @router.get("/tasks/{task_id}/screenshots", name="screenshot_list", response_model=Result)
@@ -213,7 +214,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         ctx=Depends(context, scope="function"),
     ):
         session, actor = ctx
-        from app.services.task_workflow import access as task_access
+        from app.services.task_access import access as task_access
 
         await task_access(session, actor, task_id, scope="screenshot:read")
         actor = await cards.access(session, actor, "screenshot:read")
@@ -278,7 +279,6 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         token = tokens.issue(
             {
                 "purpose": "screenshot-preview",
-                "org_id": str(actor.org_id),
                 "rendition_id": str(row.id),
                 "sha256": row.image_sha256,
             },
@@ -319,7 +319,6 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
             signed.get(k) != v
             for k, v in {
                 "purpose": "screenshot-preview",
-                "org_id": str(actor.org_id),
                 "rendition_id": str(row.id),
                 "sha256": row.image_sha256,
             }.items()
@@ -391,9 +390,12 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
 
     async def search_provider():
         from app.providers.search import create_search_provider
+        from app.services.platform_credentials import PlatformCredentialResolver
 
         return await create_search_provider(
-            settings, getattr(processor, "search_transport", None) if processor else None
+            settings,
+            getattr(processor, "search_transport", None) if processor else None,
+            credential_resolver=PlatformCredentialResolver(settings, db),
         )
 
     @router.post(
@@ -519,7 +521,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     )
     async def decision_list(task_id: UUID, job: UUID, ctx=Depends(context, scope="function")):
         session, actor = ctx
-        from app.services.task_workflow import access as task_access
+        from app.services.task_access import access as task_access
 
         await task_access(session, actor, task_id, scope="card:read")
         actor = await cards.access(session, actor, "card:read")

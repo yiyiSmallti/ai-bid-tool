@@ -17,13 +17,21 @@ def build(tmp_path):
     return root
 
 
-async def test_console_routes_assets_and_traversal(tenants, tmp_path, build):
+async def test_console_routes_assets_and_traversal(database, tmp_path, build):
     app = create_app(Settings(data_dir=tmp_path, web_dir=build), queue=FakeQueue())
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        for path in ("/app", "/app/", "/app/platform/orgs", "/app/setup-password"):
+        for path in (
+            "/app",
+            "/app/",
+            "/app/platform/credentials",
+            "/app/platform/clef",
+            "/app/platform/trust-anchors",
+            "/app/login",
+            "/app/org/tasks",
+        ):
             response = await api.get(path)
             assert response.status_code == 200 and "<title>console</title>" in response.text
             assert "default-src 'self'" in response.headers["content-security-policy"]
@@ -39,6 +47,6 @@ async def test_console_routes_assets_and_traversal(tenants, tmp_path, build):
         assert (await api.get("/health")).json()["ok"] is True
 
 
-def test_console_requires_a_build(tenants, tmp_path):
+def test_console_requires_a_build(database, tmp_path):
     with pytest.raises(RuntimeError):
         create_app(Settings(data_dir=tmp_path, web_dir=tmp_path / "missing"), queue=FakeQueue())

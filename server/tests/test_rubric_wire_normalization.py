@@ -300,8 +300,6 @@ def test_candidate_rule_text_is_preserved_without_inferred_corrections():
     wire.update(overall_aggregation="formula", overall_rule_text="  Synthetic overall wording.\n")
     accepted = accept_wire(wire)
     assert "unexpected_cap" in accepted["normalization_errors"]
-
-    # Fix the cap explicitly while leaving all original rule wording untouched.
     section = {
         key: value
         for key, value in accepted["sections"][0].items()
@@ -342,7 +340,6 @@ def test_candidate_rule_text_is_preserved_without_inferred_corrections():
 
 def public_views(accepted):
     common = {
-        "org_id": UUID(int=401),
         "task_id": UUID(int=402),
         "rubric_id": UUID(int=403),
         "state": "candidate",
@@ -402,7 +399,6 @@ def test_invalid_candidates_are_readable_but_cannot_become_confirmed():
             **payload,
             "state": "confirmed",
             "review_domain": "technical",
-            "confirmed_by": UUID(int=407),
             "confirmed_at": "2026-10-05T00:00:00Z",
         }
         if model is RubricSetView:

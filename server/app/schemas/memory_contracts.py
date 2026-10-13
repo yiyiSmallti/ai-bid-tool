@@ -13,29 +13,24 @@ from app.schemas.response_card_contracts import ReviewDomain
 
 if TYPE_CHECKING:
     from app.providers.drafting import DraftingOutput
-
-type MemoryScope = Literal["global", "org", "user", "project"]
-type TenantMemoryScope = Literal["org", "user", "project"]
+type MemoryScope = Literal["global", "library", "project"]
 type MemoryKind = Literal["rule", "preference"]
 type MemoryStatus = Literal["candidate", "active", "disabled"]
-type MemoryOrigin = Literal["human", "system", "platform_release"]
+type MemoryOrigin = Literal["human", "system"]
 type RetrievalMode = Literal["keyword", "vector", "hybrid"]
 type FeedbackKind = Literal["card_rejected", "card_edited", "card_confirmed"]
-type Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+type Digest = Annotated[str, Field(pattern="^[0-9a-f]{64}$")]
 type ShortText = Annotated[str, Field(min_length=1, max_length=200)]
-type Tag = Annotated[str, Field(min_length=1, max_length=40)]
+type Tag = Annotated[str, Field(min_length=1, max_length=30)]
 type Revision = Annotated[int, Field(strict=True, ge=1)]
 
 
 class MemoryTarget(Contract):
     scope: MemoryScope
-    user_id: UUID | None = None
     task_id: UUID | None = None
 
     @model_validator(mode="after")
     def scope_owner(self):
-        if (self.scope == "user") != (self.user_id is not None):
-            raise ValueError("user scope requires exactly one user owner")
         if (self.scope == "project") != (self.task_id is not None):
             raise ValueError("project scope requires exactly one task owner")
         return self
@@ -43,7 +38,7 @@ class MemoryTarget(Contract):
 
 class MemoryContent(Contract):
     kind: MemoryKind
-    conflict_key: str = Field(min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9_.-]*$")
+    conflict_key: str = Field(min_length=1, max_length=100, pattern="^[a-z0-9][a-z0-9_.-]*$")
     text: str = Field(min_length=1, max_length=2000)
     tags: list[Tag] = Field(default_factory=list, max_length=20)
 
@@ -83,8 +78,6 @@ class MemoryCreate(Contract):
 
     @model_validator(mode="after")
     def kind_and_scope(self):
-        if self.target.scope == "user" and self.content.kind != "preference":
-            raise ValueError("user memory contains preferences only")
         if self.target.scope == "project" and self.content.kind != "rule":
             raise ValueError("project memory contains facts and rules only")
         if self.target.scope == "project" and self.source is not None:
@@ -130,7 +123,6 @@ class MemoryDelete(MemoryDisable):
 
 class MemorySourceView(Contract):
     origin: MemoryOrigin
-    # Read projection only: the immutable stored source retains the full chain.
     provenance_redacted: bool = Field(default=False, exclude_if=lambda value: not value)
     task_id: UUID | None = None
     card_id: UUID | None = None
@@ -138,7 +130,6 @@ class MemorySourceView(Contract):
     feedback_event_id: UUID | None = None
     proposal_job_id: UUID | None = None
     proposal_run_id: UUID | None = None
-    platform_release_id: UUID | None = None
 
     @model_validator(mode="after")
     def provenance(self):
@@ -152,7 +143,6 @@ class MemorySourceView(Contract):
                     self.feedback_event_id,
                     self.proposal_job_id,
                     self.proposal_run_id,
-                    self.platform_release_id,
                 )
             ):
                 raise ValueError("redacted provenance cannot expose source identifiers")
@@ -163,19 +153,6 @@ class MemorySourceView(Contract):
             raise ValueError("card provenance requires a task")
         if (self.proposal_job_id is None) != (self.proposal_run_id is None):
             raise ValueError("proposal job and run must be bound together")
-        if self.origin == "platform_release":
-            if self.platform_release_id is None or any(
-                value is not None
-                for value in (
-                    self.task_id,
-                    self.card_id,
-                    self.feedback_event_id,
-                    self.proposal_job_id,
-                )
-            ):
-                raise ValueError("global provenance cannot originate from tenant data")
-        elif self.platform_release_id is not None:
-            raise ValueError("tenant provenance cannot reference a platform release")
         if self.origin == "system" and (
             self.feedback_event_id is None or self.proposal_job_id is None or self.card_id is None
         ):
@@ -185,7 +162,6 @@ class MemorySourceView(Contract):
 
 class MemoryRevisionView(Contract):
     id: UUID
-    org_id: UUID
     memory_id: UUID
     revision: Revision
     target: MemoryTarget
@@ -194,9 +170,7 @@ class MemoryRevisionView(Contract):
     source: MemorySourceView
     content_sha256: Digest
     created_at: AwareDatetime
-    created_by: UUID
     actor_kind: Literal["session", "token", "agent", "worker"]
-    confirmed_by: UUID | None = None
     confirmed_at: AwareDatetime | None = None
     decision: Literal["approve", "reject", "disable", "delete"] | None = None
     decision_reason_sha256: Digest | None = None
@@ -204,18 +178,12 @@ class MemoryRevisionView(Contract):
 
     @model_validator(mode="after")
     def confirmation_gate(self):
-        if (self.confirmed_by is None) != (self.confirmed_at is None):
-            raise ValueError("confirmation identity and time must be paired")
         if self.status == "active" and (
-            self.confirmed_by is None or self.actor_kind != "session" or self.decision != "approve"
+            self.confirmed_at is None or self.actor_kind != "session" or self.decision != "approve"
         ):
             raise ValueError("active memory requires a human approval revision")
-        if self.status == "candidate" and self.confirmed_by is not None:
-            raise ValueError("candidate memory cannot carry confirmation")
-        if self.source.origin == "platform_release":
-            raise ValueError("global storage requires a separately approved contract")
-        if self.target.scope == "user" and self.content.kind != "preference":
-            raise ValueError("user memory contains preferences only")
+        if self.status != "active" and self.confirmed_at is not None:
+            raise ValueError("only active memory can carry confirmation")
         if self.target.scope == "project" and self.content.kind != "rule":
             raise ValueError("project memory contains facts and rules only")
         return self
@@ -223,15 +191,14 @@ class MemoryRevisionView(Contract):
 
 class MemoryView(Contract):
     id: UUID
-    org_id: UUID
     current: MemoryRevisionView
     effective_status: Literal["candidate", "active", "disabled", "expired", "deleted"]
     deleted_at: AwareDatetime | None = None
 
     @model_validator(mode="after")
     def current_binding(self):
-        if self.id != self.current.memory_id or self.org_id != self.current.org_id:
-            raise ValueError("current revision must belong to this memory and org")
+        if self.id != self.current.memory_id:
+            raise ValueError("current revision must belong to this memory")
         if self.effective_status == "active" and self.current.status != "active":
             raise ValueError("only approved memory can be effective")
         if (self.effective_status == "deleted") != (self.deleted_at is not None):
@@ -264,9 +231,7 @@ class MemoryPageData(Contract):
 
 
 class MemoryRetrievalRequest(Contract):
-    org_id: UUID
-    scopes: list[MemoryScope] = Field(min_length=1, max_length=4)
-    user_id: UUID | None = None
+    scopes: list[MemoryScope] = Field(min_length=1, max_length=3)
     task_id: UUID | None = None
     query: str = Field(min_length=1, max_length=2000)
     keywords: list[Tag] = Field(default_factory=list, max_length=20)
@@ -279,8 +244,6 @@ class MemoryRetrievalRequest(Contract):
     def explicit_boundaries(self):
         if len(self.scopes) != len(set(self.scopes)):
             raise ValueError("scopes cannot contain duplicates")
-        if "user" in self.scopes and self.user_id is None:
-            raise ValueError("user retrieval requires its authenticated owner")
         if "project" in self.scopes and self.task_id is None:
             raise ValueError("project retrieval requires an authorized task")
         if not self.query.strip():
@@ -291,9 +254,7 @@ class MemoryRetrievalRequest(Contract):
 
 
 class MemoryEpochView(Contract):
-    org_id: UUID
     scope: MemoryScope
-    owner_id: UUID
     epoch: int = Field(strict=True, ge=0)
 
 
@@ -326,13 +287,12 @@ class MemoryOmission(Contract):
 
 class MemoryRetrievalData(Contract):
     retrieval_id: UUID | None
-    org_id: UUID
     mode: RetrievalMode
     retrieval_version: str
     priority_version: str
     query_sha256: Digest
     manifest_sha256: Digest
-    scopes: list[MemoryScope] = Field(min_length=1, max_length=4)
+    scopes: list[MemoryScope] = Field(min_length=1, max_length=3)
     epochs: list[MemoryEpochView]
     valid_until: AwareDatetime | None
     omitted: list[MemoryOmission] = Field(default_factory=list)
@@ -347,8 +307,10 @@ class MemoryRetrievalData(Contract):
     def preview_has_no_row(self):
         if self.preview != (self.retrieval_id is None):
             raise ValueError("only previews omit the persisted retrieval ID")
-        if any(epoch.org_id != self.org_id for epoch in self.epochs):
-            raise ValueError("retrieval epochs cannot cross orgs")
+        if len({epoch.scope for epoch in self.epochs}) != len(self.epochs):
+            raise ValueError("retrieval epochs must be unique per scope")
+        if {epoch.scope for epoch in self.epochs} != set(self.scopes):
+            raise ValueError("retrieval epochs must match the selected scopes")
         if self.currently_valid == bool(self.stale_reasons):
             raise ValueError("stale retrievals require explicit reasons")
         return self
@@ -362,8 +324,6 @@ class MemoryRetrievalOutput(Contract):
 
 class MemoryRetrievalView(Contract):
     id: UUID
-    org_id: UUID
-    user_id: UUID
     task_id: UUID | None
     actor_token_id: UUID | None
     created_at: AwareDatetime
@@ -372,7 +332,6 @@ class MemoryRetrievalView(Contract):
 
 class MemoryRetrievalItemView(Contract):
     id: UUID
-    org_id: UUID
     retrieval_id: UUID
     memory: MemoryRef
     rank: int = Field(ge=1)
@@ -390,7 +349,6 @@ class MemoryRetrievalItemView(Contract):
 
 class MemoryCallInputView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     job_id: UUID
     run_id: UUID
@@ -411,7 +369,6 @@ class MemoryCallData(Contract):
 
 
 class MemoryPromptContext(Contract):
-    org_id: UUID
     retrieval_id: UUID
     manifest_sha256: Digest
     rules: list[MemoryHit] = Field(default_factory=list, max_length=50)
@@ -431,12 +388,10 @@ class MemoryPromptContext(Contract):
 
 class MemoryFeedbackView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     card_id: UUID
     before_revision_id: UUID
     after_revision_id: UUID
-    actor_user_id: UUID
     actor_kind: Literal["session"] = "session"
     kind: FeedbackKind
     review_domain: ReviewDomain | None
@@ -446,7 +401,6 @@ class MemoryFeedbackView(Contract):
 
 
 class MemoryCandidateInput(Contract):
-    org_id: UUID
     event: MemoryFeedbackView
     target: MemoryTarget
     sanitized_summary: str = Field(min_length=1, max_length=2000)
@@ -454,21 +408,16 @@ class MemoryCandidateInput(Contract):
 
     @model_validator(mode="after")
     def event_boundary(self):
-        if self.event.org_id != self.org_id:
-            raise ValueError("feedback cannot cross orgs")
         if self.event.kind == "card_confirmed":
             raise ValueError("confirmation creates an evaluation sample, not a candidate")
         if self.target.scope == "project" and self.target.task_id != self.event.task_id:
             raise ValueError("project candidates stay in the source task")
-        if self.target.scope == "user" and self.target.user_id != self.event.actor_user_id:
-            raise ValueError("personal candidates belong to the editing human")
         return self
 
 
 class MemoryCandidateProposal(Contract):
     content: MemoryContent
     status: Literal["candidate"] = "candidate"
-    confirmed_by: Literal[None] = None
     origin: Literal["system"] = "system"
 
 
@@ -532,20 +481,17 @@ class MemoryCandidateJobResult(Contract):
 
 class MemoryEvalSampleView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     feedback_event_id: UUID
     card_id: UUID
     before_revision_id: UUID
     after_revision_id: UUID
     label: FeedbackKind
-    actor_user_id: UUID
     generator_version: str
     sanitized_sha256: Digest
     created_at: AwareDatetime
     review_state: Literal["unreviewed", "accepted", "excluded"]
     review_revision: Revision
-    reviewed_by: UUID | None = None
     reviewed_at: AwareDatetime | None = None
 
 
@@ -587,13 +533,10 @@ class EmbeddingIdentity(Contract):
     dimensions: int = Field(strict=True, ge=1, le=16000)
     metric: Literal["cosine"] = "cosine"
     provider_config_id: UUID
-    platform_model_id: str | None = None
 
 
 class EmbeddingRequest(Contract):
-    org_id: UUID
     scope: MemoryScope
-    user_id: UUID | None = None
     task_id: UUID | None = None
     job_id: UUID
     run_id: UUID
@@ -605,8 +548,6 @@ class EmbeddingRequest(Contract):
 
     @model_validator(mode="after")
     def owner_boundaries(self):
-        if self.scope == "user" and self.user_id is None:
-            raise ValueError("user embedding requires its owner")
         if self.scope == "project" and self.task_id is None:
             raise ValueError("project embedding requires its task")
         return self
@@ -629,8 +570,7 @@ class EmbeddingOutput(Contract):
             self.usage.provider != self.identity.provider
             or self.usage.model != self.identity.model
             or self.usage.version != self.identity.version
-            or self.usage.provider_config_id != self.identity.provider_config_id
-            or self.usage.platform_model_id != self.identity.platform_model_id
+            or (self.usage.provider_config_id != self.identity.provider_config_id)
         ):
             raise ValueError("usage must describe the invoked embedding model")
         return self
@@ -638,10 +578,8 @@ class EmbeddingOutput(Contract):
 
 class MemoryEmbeddingView(Contract):
     id: UUID
-    org_id: UUID
     memory_revision_id: UUID
     scope: MemoryScope
-    user_id: UUID | None = None
     task_id: UUID | None = None
     identity: EmbeddingIdentity
     text_sha256: Digest
@@ -652,7 +590,6 @@ class MemoryEmbeddingView(Contract):
 
 
 class MemoryIndexRequest(Contract):
-    org_id: UUID
     target: MemoryTarget
     revision_ids: list[UUID] = Field(min_length=1, max_length=100)
     action: JobAction = Field(default_factory=JobAction)
@@ -696,8 +633,6 @@ type MemoryDataPayload = (
     | MemoryIndexJobResult
     | MemoryErrorData
 )
-
-# The envelope is the existing seven-key contract; payloads above go into data/items.
 MemoryResult = Result
 
 

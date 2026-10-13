@@ -4,7 +4,8 @@ import { useRoute } from "vue-router";
 import AssessmentCitation from "../components/AssessmentCitation.vue";
 import JobPanel from "../components/JobPanel.vue";
 import { assessmentError, domainLabels, enc, queryPath, severityLabels, stateLabels, useAssessmentPage, useUnsaved } from "../assessments.js";
-import { formatTime, orgRequest } from "../org.js";
+import { request } from "../api.js";
+import { formatTime } from "../org.js";
 const route = useRoute(), summary = ref(null), taskName = ref(""), error = ref(""), loading = ref(false);
 const taskId = computed(() => String(route.params.taskId)), reportId = computed(() => String(route.params.reportId));
 const path = computed(() => `/checks/${enc(reportId.value)}`);
@@ -32,14 +33,14 @@ const allowed = (row, action) => !stale.value && meta.value?.subject_actions?.fi
 const reviewHref = (requirementId) => `/org/tasks/${enc(taskId.value)}/review?job=${enc(summary.value.report.extraction_job_id)}&requirement=${enc(requirementId)}`;
 async function refreshSummary() {
   const current = sequence, id = reportId.value;
-  const result = await orgRequest("GET", queryPath(path.value, { view: "console", part: "summary" }));
+  const result = await request("GET", queryPath(path.value, { view: "console", part: "summary" }));
   if (current !== sequence) return;
   if (result.data.report.id !== id || result.data.report.task_id !== taskId.value) throw { status: 404 };
   summary.value = result.data;
 }
 async function load() {
   const current = ++sequence; loading.value = true; error.value = ""; summary.value = null; dialog.value = false; reason.value = ""; historyRow.value = null;
-  try { await refreshSummary(); if (current !== sequence) return; taskName.value = (await orgRequest("GET", `/tasks/${enc(taskId.value)}`)).data.name; await listing.load(); }
+  try { await refreshSummary(); if (current !== sequence) return; taskName.value = (await request("GET", `/tasks/${enc(taskId.value)}`)).data.name; await listing.load(); }
   catch (exc) { if (exc.name !== "AbortError" && current === sequence) error.value = assessmentError(exc); }
   finally { if (current === sequence) loading.value = false; }
 }
@@ -50,19 +51,19 @@ async function saveDecision() {
   busy.value = true; decisionError.value = "";
   try {
     const row = decision.value.row;
-    await orgRequest("POST", `${path.value}/findings/${enc(row.id)}/decisions`, { action: decision.value.action, reason: reason.value.trim(), expected_revision: row.revision, expected_input_hash: summary.value.report.input_hash });
+    await request("POST", `${path.value}/findings/${enc(row.id)}/decisions`, { action: decision.value.action, reason: reason.value.trim(), expected_revision: row.revision, expected_input_hash: summary.value.report.input_hash });
     dialog.value = false; reason.value = ""; await refreshSummary(); await listing.load(); await loadHistory(row);
   } catch (exc) {
     if (exc.name === "AbortError") return;
     decisionError.value = assessmentError(exc);
     if (["revision_conflict", "assessment_view_changed", "check_input_changed"].includes(exc.code)) {
-      try { await refreshSummary(); await listing.load(); const result = await orgRequest("GET", queryPath(path.value, { view: "console", part: "findings", entry_id: decision.value.row.id })); if (result.items[0]) decision.value = { ...decision.value, row: result.items[0] }; } catch (reload) { decisionError.value += `；${assessmentError(reload)}`; }
+      try { await refreshSummary(); await listing.load(); const result = await request("GET", queryPath(path.value, { view: "console", part: "findings", entry_id: decision.value.row.id })); if (result.items[0]) decision.value = { ...decision.value, row: result.items[0] }; } catch (reload) { decisionError.value += `；${assessmentError(reload)}`; }
     }
   } finally { busy.value = false; }
 }
 async function loadHistory(row, cursor = null) {
   historyRow.value = row; error.value = "";
-  try { await refreshSummary(); const result = await orgRequest("GET", queryPath(`${path.value}/findings/${enc(row.id)}/decisions`, { limit: 50, cursor })); historyItems.value = result.items; historyCursor.value = result.data.next_cursor; }
+  try { await refreshSummary(); const result = await request("GET", queryPath(`${path.value}/findings/${enc(row.id)}/decisions`, { limit: 50, cursor })); historyItems.value = result.items; historyCursor.value = result.data.next_cursor; }
   catch (exc) { if (exc.name !== "AbortError") error.value = assessmentError(exc); }
 }
 watch(filters, () => { historyRow.value = null; listing.load(); });
@@ -81,7 +82,7 @@ watch(() => [taskId.value, reportId.value], load, { immediate: true });
     <div class="stat-grid" aria-live="polite"><div class="stat"><span class="label">全部要求</span><strong>{{ summary.item_count }}</strong></div><div class="stat"><span class="label">机器发现风险（含已忽略）</span><strong>{{ summary.finding_count }}</strong></div><div class="stat"><span class="label">未评估</span><strong>{{ summary.unassessed_count }}</strong></div><div class="stat"><span class="label">证照日期</span><strong>{{ summary.certificate_count }}</strong></div></div>
     <p v-if="summary.unassessed_count > 0">部分内容未完成检查</p><p v-else-if="summary.finding_count === 0">在本次{{ summary.mode === 'rules' ? '规则' : '规则与语义' }}检查的已评估范围内未发现风险</p>
     <p v-for="group in summary.groups" :key="`${group.severity}-${group.review_domain}-${group.status}`">{{ severityLabels[group.severity] }} · {{ domainLabels[group.review_domain ?? 'unclassified'] }} · {{ stateLabels[group.status] }}：{{ group.count }}</p>
-    <el-button @click="showJob = !showJob">查看报告作业与实际用量</el-button><JobPanel assessment-mode v-if="showJob" :job-id="summary.report.job_id" :writable="false" />
+    <el-button @click="showJob = !showJob">查看报告作业与实际用量</el-button><JobPanel assessment-mode v-if="showJob" :job-id="summary.report.job_id" />
     <el-tabs v-model="part" aria-label="检查报告分区"><el-tab-pane label="风险条目" name="findings" /><el-tab-pane label="覆盖情况" name="coverage" /><el-tab-pane label="证照日期" name="certificates" /><el-tab-pane label="提示" name="notices" /></el-tabs>
     <div v-if="part === 'findings'" class="actions">
       <el-select v-model="severity" aria-label="风险级别" placeholder="全部级别" clearable><el-option v-for="(label, value) in severityLabels" :key="value" :value="value" :label="label" /></el-select>
@@ -101,7 +102,7 @@ watch(() => [taskId.value, reportId.value], load, { immediate: true });
           <p>{{ row.method === 'deterministic' ? '确定性规则' : '语义检查' }} · {{ row.code }}</p><blockquote class="quote">{{ row.source.quote }}</blockquote>
           <AssessmentCitation :task-id="taskId" parent-kind="check" :parent-id="reportId" part="finding" :entry-id="row.id" />
           <details v-if="row.citations.length"><summary>查看保存的响应与证据引用</summary><div v-for="(entry, index) in row.citations" :key="entry.id"><p>{{ entry.citation.kind === 'draft' ? '固定初稿响应' : entry.citation.kind === 'evidence' ? '证据' : '招标原文' }}：{{ entry.citation.quote ?? entry.citation.source?.quote }}</p><AssessmentCitation :task-id="taskId" parent-kind="check" :parent-id="reportId" part="finding" :entry-id="row.id" origin="citations" :citation-index="index" /></div></details>
-          <p v-if="!row.review_domain">请管理员到响应卡分配职责，再重新组表检查</p>
+          <p v-if="!row.review_domain">尚未标注审阅职责，无法按职责分类</p>
           <div class="actions"><el-button v-if="allowed(row, 'dismiss')" @click="openDecision(row, 'dismiss')">忽略此风险</el-button><el-button v-if="allowed(row, 'reopen')" @click="openDecision(row, 'reopen')">重新打开</el-button><el-button @click="loadHistory(row)">查看处理记录</el-button><RouterLink :to="reviewHref(row.requirement_id)">前往响应卡修改</RouterLink></div>
         </el-card>
       </section>

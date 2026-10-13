@@ -218,7 +218,6 @@ class PrototypeGenerateInput(Contract):
 
 class PrototypeGenerationView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     generation_job_id: UUID
     requirement_id: UUID
@@ -319,7 +318,6 @@ class VendorArchiveView(Contract):
 
 class ScreenshotView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     extraction_job_id: UUID
     source: ScreenshotSource
@@ -337,7 +335,6 @@ class ScreenshotView(Contract):
     active_selection: bool
     withdrawn: bool
     status: Literal["unconfirmed_material"] = "unconfirmed_material"
-    confirmed_by: Literal[None] = None
     eligible_for_draft_export: Literal[False] = False
     warning_codes: list[str]
 
@@ -433,7 +430,6 @@ class ScreenshotSuggestionView(Contract):
     requirement_id: UUID | None
     proposal: VisionProposal
     status: Literal["unreviewed"] = "unreviewed"
-    confirmed_by: Literal[None] = None
 
 
 class VendorJobPreview(Contract):
@@ -519,7 +515,6 @@ class PrototypeDecisionView(Contract):
     target: PrototypeDecisionTarget
     decision: Literal["keep", "replace"]
     keep_basis: Literal["already_delivered", "will_deliver"] | None
-    decided_by: UUID
     decided_at: datetime
     validity: Literal["current", "stale", "superseded"]
 

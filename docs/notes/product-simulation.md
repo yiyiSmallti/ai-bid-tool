@@ -2,7 +2,7 @@
 
 ## Problem
 
-Drafting can only cite materials an organization has recorded and selected on the
+Drafting can only cite materials the installation has recorded and selected on the
 task. When nobody has chosen products yet, every hardware requirement drafts as
 "material missing", which shows nothing about the drafting and export path. A
 demonstration needs plausible products with real, sourced parameters, and those
@@ -10,7 +10,7 @@ materials must never pass for a bid decision or reach a deliverable.
 
 ## Usage
 
-A human admin or technical reviewer opens 模拟拟投（演示） on the task page, picks a
+The authenticated installation owner opens 模拟拟投（演示） on the task page, picks a
 succeeded extraction, previews, and starts the run. The CLI-equivalent API is
 `POST /tasks/{task_id}/product-simulations` with `extraction_job_id` and
 `dry_run: true`, then the returned `expected_input_hash`; `retry: true` requeues a
@@ -20,7 +20,7 @@ source URL and kept parameter quotes. `GET /tasks/{task_id}/simulated-resources`
 returns the task's selection IDs that came from a simulation; the console marks
 them 模拟 in the material panel and on card evidence.
 
-A run needs `BID_PERPLEXITY_API_KEY` or `BID_SEARCH_URL`, `BID_SANDBOX_POLICY_FILE` and
+A run needs a configured Perplexity credential or `BID_SEARCH_URL`, `BID_SANDBOX_POLICY_FILE` and
 `BID_SANDBOX_FETCH_QUOTA`; the preview reports `search_unavailable` or
 `fetch_unavailable` otherwise.
 

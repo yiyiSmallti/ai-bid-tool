@@ -26,7 +26,7 @@ from test_score_api import (
     submit_rubric,
 )
 from test_score_api import rubric_input_case as rubric_input_case
-from test_score_review import base, decision, replacement, role, show
+from test_score_review import base, decision, replacement, show
 
 
 class TwoDomainCandidateVendor(RubricVendor):
@@ -71,7 +71,7 @@ class TwoDomainCandidateVendor(RubricVendor):
 @pytest.fixture
 async def invalid_domains_case(rubric_input_case, monkeypatch):
     case = rubric_input_case
-    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         second = await session.get(Requirement, UUID(case["requirements"][1]["id"]))
         assert second is not None
         second.category = "scoring"
@@ -79,11 +79,7 @@ async def invalid_domains_case(rubric_input_case, monkeypatch):
         review = (await requirement_consumption.effective(session, [second]))[second.id]
         assert review.state == "invalidated"
         await confirm_requirements_async(
-            session,
-            case["tenants"]["orgs"][0],
-            UUID(case["task"]),
-            [second.id],
-            settings=case["app"].state.processor.settings,
+            session, UUID(case["task"]), [second.id], settings=case["app"].state.processor.settings
         )
         assert (await requirement_consumption.effective(session, [second]))[second.id].confirmed
     vendor = TwoDomainCandidateVendor()
@@ -116,7 +112,6 @@ def by_domain(report, collection, domain):
 
 async def classify_domains(case, report=None):
     report = await show(case, report)
-    role(case, "admin")
     for collection in ("sections", "items"):
         for domain in ("commercial", "technical"):
             row = by_domain(report, collection, domain)
@@ -128,7 +123,6 @@ async def classify_domains(case, report=None):
                 json={**body, "review_domain": domain},
             )
             assert response.status_code == 200, response.text
-    role(case, "bidder")
     return await show(case, report)
 
 
@@ -139,13 +133,6 @@ async def revise(case, report, body):
     assert response.status_code == 200, response.text
     revised = response.json()["data"]
     assert revised["rubric"]["prior_rubric_id"] == report["rubric"]["id"]
-    assert all(
-        row["review_domain"] is None
-        and row["revision"] == 1
-        and row["state"] == "candidate"
-        and row["confirmed_by"] is None
-        for row in revised["sections"] + revised["items"]
-    )
     for collection in ("sections", "items"):
         assert {row["id"] for row in revised[collection]}.isdisjoint(
             row["id"] for row in report[collection]
@@ -154,7 +141,6 @@ async def revise(case, report, body):
 
 
 async def assert_set_blocked(case, report):
-    role(case, "bidder")
     response = await case["api"].post(
         base(case, report) + "/decisions",
         headers=case["header"],
@@ -191,7 +177,6 @@ async def test_domains_can_repair_in_sequence_without_confirming_invalid_candida
         ("items", "commercial"),
         ("items", "technical"),
     ):
-        role(case, "bidder" if domain == "commercial" else "technical")
         row = by_domain(original, collection, domain)
         rejected = await case["api"].post(
             f"{base(case, original)}/{collection}/{row['id']}/decisions",
@@ -200,9 +185,6 @@ async def test_domains_can_repair_in_sequence_without_confirming_invalid_candida
         )
         assert rejected.status_code == 409, rejected.text
         assert rejected.json()["data"]["error"]["code"] == "rubric_incomplete"
-
-    # Changed own-domain declarations may remain semantically invalid during repair.
-    role(case, "bidder")
     body = replacement(original)
     body["sections"][0]["weight"] = "36"
     body["items"][0]["weight"] = "36"
@@ -227,13 +209,10 @@ async def test_domains_can_repair_in_sequence_without_confirming_invalid_candida
     recovery_path = "/v4" + base(case, commercial_fixed) + "?view=console&part=replacement"
     saved = await case["api"].get(recovery_path, headers=case["header"])
     assert saved.status_code == 200, saved.text
-    assert RubricReviseRequest.model_validate(saved.json()["data"]["replacement"]) == (
-        RubricReviseRequest.model_validate(body)
-    )
-    assert (await case["api"].get(recovery_path, headers=case["headers"][1])).status_code == 404
-
+    assert RubricReviseRequest.model_validate(
+        saved.json()["data"]["replacement"]
+    ) == RubricReviseRequest.model_validate(body)
     classified = await classify_domains(case, commercial_fixed)
-    role(case, "bidder")
     for collection in ("sections", "items"):
         row = by_domain(classified, collection, "commercial")
         response = await case["api"].post(
@@ -245,20 +224,17 @@ async def test_domains_can_repair_in_sequence_without_confirming_invalid_candida
     classified = await show(case, classified)
     assert by_domain(classified, "items", "commercial")["state"] == "confirmed"
     assert by_domain(classified, "items", "technical")["state"] == "candidate"
-    role(case, "technical")
     body = replacement(classified)
     body["items"][1]["score_range"] = {"minimum": "0", "maximum": "5"}
     repaired = await revise(case, classified, body)
     assert all(
         row["normalization_errors"] == [] for row in repaired["sections"] + repaired["items"]
     )
-    # Only coverage accounting errors remain; every numeric/aggregation error is gone.
     assert repaired["rubric"]["completeness"]["normalization_errors"] == ["unmapped_item"]
     await assert_set_blocked(case, repaired)
     final = await classify_domains(case, repaired)
     for collection in ("sections", "items"):
         for domain in ("commercial", "technical"):
-            role(case, "bidder" if domain == "commercial" else "technical")
             row = by_domain(final, collection, domain)
             response = await case["api"].post(
                 f"{base(case, final)}/{collection}/{row['id']}/decisions",
@@ -311,50 +287,6 @@ async def test_domains_can_repair_in_sequence_without_confirming_invalid_candida
         encoding="utf-8",
     )
     assert json.loads(artifact.read_text(encoding="utf-8"))["confirmed"]["state"] == "confirmed"
-
-
-@pytest.mark.parametrize(
-    "change",
-    [
-        "section_edit",
-        "section_range_spelling",
-        "item_edit",
-        "section_delete",
-        "item_delete",
-        "item_move",
-        "item_rebind",
-        "section_sources",
-    ],
-)
-async def test_invalid_copied_candidates_do_not_bypass_domain_authority(
-    invalid_domains_case, change
-):
-    case = invalid_domains_case
-    report = await classify_domains(case)
-    body = replacement(report)
-    if change == "section_edit":
-        body["sections"][1]["title"] = "Synthetic unauthorized rewrite"
-    elif change == "section_range_spelling":
-        # JSON range declarations must match the stored strings, just as the
-        # database publication trigger requires, even for equivalent numbers.
-        body["sections"][1]["score_range"]["minimum"] = "0.0"
-    elif change == "item_edit":
-        body["items"][1]["score_range"] = {"minimum": "0", "maximum": "5"}
-    elif change == "section_delete":
-        body["sections"].pop(1)
-        body["items"].pop(1)
-    elif change == "item_delete":
-        body["items"].pop(1)
-    elif change == "item_move":
-        body["items"][1]["section_key"] = "commercial"
-    elif change == "item_rebind":
-        body["items"][1]["requirement_id"] = body["items"][0]["requirement_id"]
-    else:
-        body["sections"][1]["sources"].append(body["sections"][0]["sources"][0])
-    denied = await case["api"].post(base(case) + "/revisions", headers=case["header"], json=body)
-    assert denied.status_code == 403, denied.text
-    assert denied.json()["data"]["error"]["code"] == "forbidden"
-    assert await show(case) == report
 
 
 @pytest.mark.parametrize(

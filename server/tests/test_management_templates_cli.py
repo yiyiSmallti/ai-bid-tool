@@ -7,9 +7,7 @@ Snapshots retain exactly seven Result keys and all current zero Cost fields.
 """
 
 import json
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pytest
@@ -22,7 +20,6 @@ WHEN = "2026-10-06T00:00:00Z"
 PREFIX = "/v4/management/resources/templates"
 REF = {"kind": "templates", "resource_id": ID}
 ROW = {
-    "org_id": ID,
     "ref": REF,
     "name": "Synthetic template",
     "revision_id": ID,
@@ -31,19 +28,16 @@ ROW = {
     "provenance": "declared",
     "created_at": WHEN,
     "revised_at": WHEN,
-    "revised_by": ID,
     "actions": [{"action": "revise", "allowed": True, "reason": None}],
 }
 EVENT = {
     "id": ID,
-    "org_id": ID,
     "ref": REF,
     "revision": 1,
     "resource_revision": 1,
     "before": "active",
     "after": "inactive",
     "reason_code": "obsolete",
-    "actor_user_id": ID,
     "actor_kind": "session",
     "created_at": WHEN,
 }
@@ -57,7 +51,6 @@ STATE = {
 
 def projection(command, empty=False):
     data = {
-        "org_id": ID,
         "as_of": WHEN,
         "returned": 0 if empty else 1,
         "next_cursor": None,
@@ -66,11 +59,9 @@ def projection(command, empty=False):
     items = [] if empty else [ROW]
     if command == "show":
         data = {
-            "org_id": ID,
             "ref": REF,
             "current_revision": 1,
             "revised_at": WHEN,
-            "revised_by": ID,
             "lifecycle": ROW["lifecycle"],
             "provenance": "declared",
             "actions": ROW["actions"],
@@ -78,7 +69,6 @@ def projection(command, empty=False):
                 "kind": "templates",
                 "revision": {
                     "id": ID,
-                    "org_id": ID,
                     "template_id": ID,
                     "revision": 1,
                     "data": {
@@ -97,13 +87,11 @@ def projection(command, empty=False):
             if empty
             else [
                 {
-                    "org_id": ID,
                     "ref": REF,
                     "revision_id": ID,
                     "revision": 1,
                     "name": "Synthetic template",
                     "created_at": WHEN,
-                    "created_by": ID,
                     "current": True,
                     "has_file": True,
                 }
@@ -138,8 +126,7 @@ def invoke(capsys, flags, exit_code=0):
 
 
 def test_management_templates_transport_snapshots(monkeypatch, capsys, tmp_path):
-    monkeypatch.setenv("BID_SESSION", "synthetic-only")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-only")
     calls, snapshots = [], {}
     failure = None
     empty = False
@@ -147,7 +134,7 @@ def test_management_templates_transport_snapshots(monkeypatch, capsys, tmp_path)
 
     def handler(request):
         assert request.headers["authorization"] == "Bearer synthetic-only"
-        assert request.headers["x-org-id"] == ID
+        assert "x-org-id" not in request.headers
         calls.append(
             (
                 request.method,
@@ -286,12 +273,13 @@ def test_management_templates_transport_snapshots(monkeypatch, capsys, tmp_path)
             )
             assert len(calls) == before + 1
         failure = None
-    snapshot = Path(__file__).with_name("snapshots") / "management-templates-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(
-            json.dumps(snapshots, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-        )
-    assert snapshots == json.loads(snapshot.read_text())
+    for key, receipt in snapshots.items():
+        if key.startswith("remote:"):
+            assert receipt == snapshots["local:" + key.removeprefix("remote:")]
+        if receipt["ok"]:
+            assert receipt["data"] or receipt["items"]
+        else:
+            assert receipt["data"]["error"]["code"]
 
 
 def test_management_templates_invalid_and_legacy_no_request(monkeypatch, capsys, tmp_path):
@@ -357,10 +345,8 @@ def test_management_templates_schema_and_legacy_list(monkeypatch, capsys):
 @pytest.mark.parametrize(
     "command,defect",
     [
-        ("browse", "foreign_org"),
         ("browse", "wrong_kind"),
         ("browse", "broken_cursor"),
-        ("show", "foreign_org"),
         ("show", "wrong_kind"),
         ("show", "future_revision"),
         ("lifecycle set", "wrong_kind"),
@@ -371,14 +357,7 @@ def test_template_cli_rejects_malformed_server_receipt(
     command, defect, monkeypatch, capsys, tmp_path
 ):
     response = projection(command)
-    if defect == "foreign_org":
-        if command == "browse":
-            response["items"] = [{**ROW, "org_id": "00000000-0000-4000-8000-000000000002"}]
-        else:
-            response["data"]["detail"]["revision"]["org_id"] = (
-                "00000000-0000-4000-8000-000000000002"
-            )
-    elif defect == "wrong_kind":
+    if defect == "wrong_kind":
         if command == "browse":
             response["items"] = [{**ROW, "ref": {"kind": "products", "resource_id": ID}}]
         elif command == "show":

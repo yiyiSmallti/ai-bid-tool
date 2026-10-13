@@ -16,7 +16,7 @@ from app.models.entities import Chunk
 from app.providers.storage import Storage
 from app.schemas.citation_repair_contracts import CitationRepairRequest
 from app.schemas.contracts import JobAction, Result, TaskCreate
-from app.services import citation_repair, documents, page_previews, requirements, tender_jobs
+from app.services import citation_repair, documents, requirements, tender_jobs
 
 CHUNK_FIELDS = ("id", "document_id", "seq", "page", "text", "ocr", "citation_verified", "blocks")
 
@@ -92,7 +92,6 @@ def create_router(
                 crypto,
                 f"/documents/{document_id}/download",
                 "download",
-                identity.org_id,
                 document_id=document_id,
             ),
         )
@@ -101,9 +100,9 @@ def create_router(
     async def download(document_id: UUID, signature: str, ctx=Depends(context, scope="function")):
         session, identity = ctx
         document = await documents.require_document(session, document_id)
-        check_signature(crypto, signature, "download", identity.org_id, document_id=document_id)
+        check_signature(crypto, signature, "download", document_id=document_id)
         return Response(
-            await storage.read(identity.org_id, document.storage_key),
+            await storage.read(document.storage_key),
             media_type=document.media_type,
         )
 
@@ -115,6 +114,8 @@ def create_router(
         ctx=Depends(context, scope="function"),
     ):
         session, identity = ctx
+        from app.services import page_previews
+
         png = await page_previews.document_page(
             session, identity, document_id, page, zoom, storage, settings
         )

@@ -37,11 +37,11 @@ parsed; the warnings list what was skipped. Footnote separators are recognised
 by `w:type` rather than ID, because Word and WPS number them differently.
 
 Blocks are grouped into chunks at level 1 and 2 headings, and a longer section
-is split at block boundaries once it passes 8,000 characters. Migration `0013`
-stores Word chunks with `page` null, a `seq`, and the `blocks` array; a CHECK
+is split at block boundaries once it passes 8,000 characters. The
+[`chunks` and `requirements` baseline definitions](../../server/migrations/baseline/10_tables.sql)
+store Word chunks with `page` null, a `seq`, and the `blocks` array; a CHECK
 requires exactly one of page or blocks. Requirements store `location` the same
-way. Re-parsing a document that the old parser stored as flat unverified text
-replaces those chunks.
+way. Re-parsing a document stored as flat unverified text replaces those chunks.
 
 The adapters render a Word chunk as `<section path="...">` with one
 `<block id="p37">` per block, and the model returns that ID as `ref`. The
@@ -61,7 +61,7 @@ such occurrences produce `ambiguous_quote`, even when one occurrence happens to
 use the model's exact typography.
 
 Database confirmation and draft checks call `response_locate_quote` from
-[0019_citation_boundaries.py](../../server/migrations/versions/0019_citation_boundaries.py).
+[the response baseline functions](../../server/migrations/baseline/00_functions_response.sql).
 It maps NFKC-normalized characters back to whole original normalization units,
 checks the same original-character boundaries, and rejects partial compatibility
 expansions and unresolved ambiguity. The combining-character set is frozen from
@@ -92,11 +92,11 @@ a missing marked segment directly from the source. Heading-only segments ending
 in a colon are skipped. Requirements are listed in reading order: document,
 chunk `seq`, then block position.
 
-Migration `0017` adds nullable `requirements.model_quote` without rewriting
-historical requirements. A human administrator can preview and repair older
-normalization-only citations with the explicit task and extraction job flow in
-[the CLI guide](../guides/cli.md#repair-legacy-requirement-citations). Rows that
-cannot be located uniquely remain unchanged.
+The [baseline `requirements` definition](../../server/migrations/baseline/10_tables.sql)
+keeps nullable `model_quote` for the original provider text. A human can preview
+and repair normalization-only citations with the explicit task and extraction job
+flow in [the CLI guide](../guides/cli.md#repair-legacy-requirement-citations).
+Rows that cannot be located uniquely remain unchanged.
 
 ## Pitfalls
 
@@ -120,7 +120,7 @@ cannot be located uniquely remain unchanged.
 - [server/app/services/extraction.py](../../server/app/services/extraction.py): `normalize`, `locate_quote`, `location_of`, `split_cited`, `merge_starred`.
 - [server/app/services/response_cards.py](../../server/app/services/response_cards.py): `citation_validity_batch` and the scalar citation predicate.
 - [server/app/providers/llm.py](../../server/app/providers/llm.py): block rendering and `ref` mapping.
-- [server/migrations/versions/0013_docx_locations.py](../../server/migrations/versions/0013_docx_locations.py): schema.
-- [server/migrations/versions/0017_exact_citations.py](../../server/migrations/versions/0017_exact_citations.py): exact-source quote provenance for new and legacy requirements.
+- [server/migrations/baseline/10_tables.sql](../../server/migrations/baseline/10_tables.sql): `chunks.blocks`, `requirements.location` and `requirements.model_quote` schema.
+- [server/migrations/baseline/00_functions_response.sql](../../server/migrations/baseline/00_functions_response.sql): `response_locate_quote`, `response_citation_valid` and revision quote gates for exact-source provenance.
 - [server/tests/test_docx_blocks.py](../../server/tests/test_docx_blocks.py), [server/tests/test_docx_extraction.py](../../server/tests/test_docx_extraction.py): parser and end-to-end cases.
 - [test_adversarial_citations.py](../../server/tests/test_adversarial_citations.py): extraction, repair, human confirmation (人工确认), draft assembly and SQL/Python locator parity.

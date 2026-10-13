@@ -49,7 +49,6 @@ def test_draft_response_row_preserves_category_and_serializes_without_warnings(
     assert json.loads(row.model_dump_json()) == payload
     draft = DraftView(
         id=uuid4(),
-        org_id=uuid4(),
         task_id=uuid4(),
         extraction_job_id=uuid4(),
         generation_job_id=uuid4(),

@@ -3,11 +3,10 @@ from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from app.models.entities import AuditLog, CertificateRevision, Membership, TaskCertificate
+from app.models.entities import AuditLog, CertificateRevision, TaskCertificate
 from app.schemas.certificate_contracts import CertificateData
 from app.services.certificates import inspect_dates
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 
 
 def metadata(**patch):
@@ -34,29 +33,29 @@ async def task(api, header):
 
 
 async def test_certificate_versions_fixed_snapshots_inspection_and_audit(api, headers, application):
-    row = await certificate(api, headers[0])
-    task_id = await task(api, headers[0])
+    row = await certificate(api, headers)
+    task_id = await task(api, headers)
     path = f"/tasks/{task_id}/certificates"
     body = {"certificate_id": row["certificate_id"], "lot": "synthetic"}
-    first = (await api.post(path, headers=headers[0], json=body)).json()["data"]
+    first = (await api.post(path, headers=headers, json=body)).json()["data"]
     revised = await api.post(
         f"/resources/certificates/{row['certificate_id']}/revisions",
-        headers=headers[0],
+        headers=headers,
         json={"expected_revision": 1, "data": metadata(valid_until="2027-12-31")},
     )
     assert revised.status_code == 200 and revised.json()["data"]["revision"] == 2
-    fixed = (await api.get(path, headers=headers[0], params={"as_of": "2027-01-01"})).json()
+    fixed = (await api.get(path, headers=headers, params={"as_of": "2027-01-01"})).json()
     assert fixed["items"][0]["data"] == row["data"] and fixed["items"][0]["revision"] == 1
     assert fixed["data"]["validity_by_revision"][row["id"]] == {
         "as_of": "2027-01-01",
         "state": "expired",
     }
-    replacement = (await api.post(path, headers=headers[0], json=body)).json()["data"]
+    replacement = (await api.post(path, headers=headers, json=body)).json()["data"]
     assert replacement["revision"] == 2 and replacement["replaced_snapshot_id"] == first["id"]
-    repeated = (await api.post(path, headers=headers[0], json=body)).json()["data"]
+    repeated = (await api.post(path, headers=headers, json=body)).json()["data"]
     assert repeated["duplicate"] and repeated["id"] == replacement["id"]
     history = (
-        await api.get(path, headers=headers[0], params={"history": "true", "as_of": "2027-01-01"})
+        await api.get(path, headers=headers, params={"history": "true", "as_of": "2027-01-01"})
     ).json()
     assert [item["revision"] for item in history["items"]] == [1, 2]
     assert history["data"]["active_snapshot_ids"] == [replacement["id"]]
@@ -65,19 +64,16 @@ async def test_certificate_versions_fixed_snapshots_inspection_and_audit(api, he
         "valid",
     ]
     versions = (
-        await api.get("/resources/certificates", headers=headers[0], params={"history": "true"})
+        await api.get("/resources/certificates", headers=headers, params={"history": "true"})
     ).json()
     assert [item["revision"] for item in versions["items"]] == [1, 2]
     assert all(
         v == {"as_of": None, "state": "unknown"}
         for v in versions["data"]["validity_by_revision"].values()
     )
-    # Fixed revision and distinct lots remain independently selectable.
-    explicit = await api.post(
-        path, headers=headers[0], json={**body, "revision": 1, "lot": "second"}
-    )
+    explicit = await api.post(path, headers=headers, json={**body, "revision": 1, "lot": "second"})
     assert explicit.status_code == 200 and explicit.json()["data"]["revision"] == 1
-    async with application.state.db.transaction(UUID(headers[0]["X-Org-Id"])) as session:
+    async with application.state.db.transaction() as session:
         events = (
             await session.scalars(
                 select(AuditLog)
@@ -90,78 +86,25 @@ async def test_certificate_versions_fixed_snapshots_inspection_and_audit(api, he
     assert application.state.queue.calls == []
 
 
-async def test_certificate_endpoints_hide_foreign_data_and_reject_context_forgery(api, headers):
-    own, foreign = await certificate(api, headers[0]), await certificate(api, headers[1])
-    own_task, foreign_task = await task(api, headers[0]), await task(api, headers[1])
-    routes = [
-        ("POST", "/resources/certificates", {"data": metadata()}),
-        (
-            "POST",
-            f"/resources/certificates/{own['certificate_id']}/revisions",
-            {"expected_revision": 1, "data": metadata()},
-        ),
-        ("GET", "/resources/certificates", None),
-        ("POST", f"/tasks/{own_task}/certificates", {"certificate_id": own["certificate_id"]}),
-        ("GET", f"/tasks/{own_task}/certificates", None),
-    ]
-    forged = {**headers[0], "X-Org-Id": headers[1]["X-Org-Id"]}
-    for method, path, body in routes:
-        assert (await api.request(method, path, headers=forged, json=body)).status_code == 404
-        assert (
-            await api.request(method, path, headers={"X-Org-Id": headers[0]["X-Org-Id"]}, json=body)
-        ).status_code == 401
-    for method, path, body in [
-        (
-            "POST",
-            f"/resources/certificates/{foreign['certificate_id']}/revisions",
-            {"expected_revision": 1, "data": metadata()},
-        ),
-        ("GET", f"/resources/certificates?certificate_id={foreign['certificate_id']}", None),
-        ("POST", f"/tasks/{own_task}/certificates", {"certificate_id": foreign["certificate_id"]}),
-        ("POST", f"/tasks/{foreign_task}/certificates", {"certificate_id": own["certificate_id"]}),
-        ("GET", f"/tasks/{foreign_task}/certificates", None),
-        (
-            "POST",
-            f"/tasks/{own_task}/certificates",
-            {"certificate_id": own["certificate_id"], "revision": 999},
-        ),
-    ]:
-        response = await api.request(method, path, headers=headers[0], json=body)
-        assert (
-            response.status_code == 404 and response.json()["data"]["error"]["code"] == "not_found"
-        )
-    assert [
-        item["certificate_id"]
-        for item in (await api.get("/resources/certificates", headers=headers[0])).json()["items"]
-    ] == [own["certificate_id"]]
-    assert (
-        await api.post(
-            "/resources/certificates",
-            headers=headers[0],
-            json={"org_id": foreign["org_id"], "data": metadata()},
-        )
-    ).status_code == 422
-
-
 async def test_certificate_concurrent_updates_and_duplicate_selection(api, headers, application):
-    row = await certificate(api, headers[0])
+    row = await certificate(api, headers)
     updates = await asyncio.gather(
         *(
             api.post(
                 f"/resources/certificates/{row['certificate_id']}/revisions",
-                headers=headers[0],
+                headers=headers,
                 json={"expected_revision": 1, "data": metadata(number=number)},
             )
             for number in ("SYNTHETIC-A", "SYNTHETIC-B")
         )
     )
     assert sorted(response.status_code for response in updates) == [200, 409]
-    task_id = await task(api, headers[0])
+    task_id = await task(api, headers)
     responses = await asyncio.gather(
         *(
             api.post(
                 f"/tasks/{task_id}/certificates",
-                headers=headers[0],
+                headers=headers,
                 json={"certificate_id": row["certificate_id"]},
             )
             for _ in range(4)
@@ -170,220 +113,9 @@ async def test_certificate_concurrent_updates_and_duplicate_selection(api, heade
     assert all(response.status_code == 200 for response in responses)
     assert len({response.json()["data"]["id"] for response in responses}) == 1
     assert sum(not response.json()["data"]["duplicate"] for response in responses) == 1
-    async with application.state.db.transaction(UUID(headers[0]["X-Org-Id"])) as session:
+    async with application.state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(CertificateRevision)) == 2
         assert await session.scalar(select(func.count()).select_from(TaskCertificate)) == 1
-
-
-@pytest.mark.parametrize(
-    "role,write,select_allowed",
-    [
-        ("admin", True, True),
-        ("bidder", True, True),
-        ("technical", False, True),
-        ("viewer", False, False),
-    ],
-)
-async def test_certificate_roles_preserve_old_grants(
-    role, write, select_allowed, api, headers, tenants, admin_engine
-):
-    from app.services.auth import HUMAN_ONLY_SCOPES, ROLE_SCOPES, SCOPES
-
-    attachment_human = {
-        "attachment:write",
-        "attachment:review",
-        "attachment:manage",
-        "attachment:original:read",
-        "attachment:privacy",
-        "task:attachment",
-    }
-    assert ROLE_SCOPES[role] & attachment_human == (
-        attachment_human if role in {"admin", "bidder"} else set()
-    )
-    assert {"attachment:read", "attachment:page:read"} <= ROLE_SCOPES[role]
-    assert attachment_human | {"attachment:page:read"} <= HUMAN_ONLY_SCOPES
-    assert (attachment_human | {"attachment:page:read"}).isdisjoint(SCOPES)
-    assert "attachment:read" in SCOPES
-
-    # U01 permits every human org role to open originals, never API tokens.
-    assert "template:file:read" in ROLE_SCOPES[role]
-    assert "template:file:read" in HUMAN_ONLY_SCOPES
-    assert "template:file:read" not in SCOPES
-
-    # Model metadata is readable by every role and scoped tokens; writes/tests are human-admin.
-    assert "provider:read" in ROLE_SCOPES[role]
-    assert "provider:read" in SCOPES
-    assert "provider:read" not in HUMAN_ONLY_SCOPES
-    assert ("provider:write" in ROLE_SCOPES[role]) == (role == "admin")
-    assert "provider:write" in HUMAN_ONLY_SCOPES
-    assert "provider:write" not in SCOPES
-
-    human_workflow_scopes = {"req:confirm", "req:manual", "evidence:annotate"}
-    assert ROLE_SCOPES[role] & human_workflow_scopes == (
-        human_workflow_scopes if role in {"admin", "bidder", "technical"} else set()
-    )
-    assert human_workflow_scopes <= HUMAN_ONLY_SCOPES
-    assert human_workflow_scopes.isdisjoint(SCOPES)
-
-    lifecycle_scopes = {"certificate:lifecycle", "profile:lifecycle"}
-    assert ROLE_SCOPES[role] & lifecycle_scopes == (
-        lifecycle_scopes if role in {"admin", "bidder"} else set()
-    )
-    assert lifecycle_scopes <= HUMAN_ONLY_SCOPES
-    assert lifecycle_scopes.isdisjoint(SCOPES)
-
-    old_expected = {
-        "admin": {
-            "task:read",
-            "task:create",
-            "tender:upload",
-            "tender:parse",
-            "req:extract",
-            "job:read",
-            "job:cancel",
-            "resource:read",
-            "resource:write",
-            "task:resource",
-            "token:create",
-        },
-        "bidder": {
-            "task:read",
-            "task:create",
-            "tender:upload",
-            "tender:parse",
-            "req:extract",
-            "job:read",
-            "job:cancel",
-            "resource:read",
-            "task:resource",
-        },
-        "technical": {
-            "task:read",
-            "tender:upload",
-            "tender:parse",
-            "req:extract",
-            "job:read",
-            "job:cancel",
-            "resource:read",
-            "resource:write",
-            "task:resource",
-        },
-        "viewer": {"task:read", "job:read", "resource:read"},
-    }
-    assert {
-        scope
-        for scope in ROLE_SCOPES[role]
-        if scope
-        not in {
-            "member:manage",
-            "attachment:read",
-            "attachment:write",
-            "attachment:review",
-            "attachment:manage",
-            "attachment:original:read",
-            "attachment:page:read",
-            "attachment:privacy",
-            "task:attachment",
-            "certificate:lifecycle",
-            "profile:lifecycle",
-            "certificate:read",
-            "certificate:write",
-            "task:certificate",
-            "profile:read",
-            "profile:write",
-            "task:profile",
-            "certificate:file:read",
-            "certificate:file:write",
-            "evidence:source:read",
-            "evidence:source:write",
-            "evidence:annotate",
-            "template:read",
-            "template:file:read",
-            "template:write",
-            "task:template",
-            "provider:read",
-            "provider:write",
-            "screenshot:read",
-            "screenshot:write",
-            "screenshot:ingest",
-            "confidential:read",
-            "confidential:write",
-            "confidential:reveal",
-            "check:read",
-            "check:run",
-            "check:decide",
-            "score:read",
-            "score:run",
-            "score:rubric:generate",
-            "score:rubric:review",
-            "agent:read",
-            "agent:run",
-            "agent:cancel",
-            "task:members:write",
-            "task:archive",
-            "card:assign",
-            "card:comment",
-            "task:review-policy",
-            "card:cosign",
-            "memory:read",
-            "memory:write",
-            "memory:retrieve",
-            "memory:candidate:run",
-            "memory:approve",
-            "memory:manage",
-            "memory:eval:read",
-            "memory:eval:review",
-            "card:read",
-            "card:write",
-            "card:generate",
-            "draft:run",
-            "draft:read",
-            "evidence:confirm",
-            "export",
-            "sandbox:read",
-            "sandbox:render",
-            "sandbox:capture",
-            "req:confirm",
-            "req:manual",
-            "bid-review:classify",
-            "bid-review:decide",
-            "bid-review:evidence:review",
-            "bid-review:original:read",
-            "bid-review:outbound:authorize",
-            "bid-review:prepare",
-            "bid-review:price:release",
-            "bid-review:read",
-            "bid-review:report:download",
-            "bid-review:report:read",
-            "bid-review:report:render",
-            "bid-review:run",
-            "bid-review:source:read",
-            "bid-review:upload",
-        }
-    } == old_expected[role]
-    row, task_id = await certificate(api, headers[0]), await task(api, headers[0])
-    with Session(admin_engine) as session, session.begin():
-        member = session.scalar(select(Membership).where(Membership.org_id == tenants["orgs"][0]))
-        member.role = role
-    assert (await api.get("/resources/certificates", headers=headers[0])).status_code == 200
-    assert (await api.get(f"/tasks/{task_id}/certificates", headers=headers[0])).status_code == 200
-    for path, body in [
-        ("/resources/certificates", {"data": metadata()}),
-        (
-            f"/resources/certificates/{row['certificate_id']}/revisions",
-            {"expected_revision": 1, "data": metadata()},
-        ),
-    ]:
-        assert (await api.post(path, headers=headers[0], json=body)).status_code == (
-            200 if write else 403
-        )
-    assert (
-        await api.post(
-            f"/tasks/{task_id}/certificates",
-            headers=headers[0],
-            json={"certificate_id": row["certificate_id"]},
-        )
-    ).status_code == (200 if select_allowed else 403)
 
 
 @pytest.mark.parametrize(
@@ -400,11 +132,9 @@ async def test_certificate_roles_preserve_old_grants(
 )
 async def test_certificate_invalid_inputs_never_write(patch, api, headers):
     assert (
-        await api.post(
-            "/resources/certificates", headers=headers[0], json={"data": metadata(**patch)}
-        )
+        await api.post("/resources/certificates", headers=headers, json={"data": metadata(**patch)})
     ).status_code == 422
-    assert (await api.get("/resources/certificates", headers=headers[0])).json()["items"] == []
+    assert (await api.get("/resources/certificates", headers=headers)).json()["items"] == []
 
 
 @pytest.mark.parametrize(
@@ -430,22 +160,22 @@ def test_declared_date_boundaries(start, end, as_of, state):
     assert result == {"as_of": as_of, "state": state}
 
 
-async def test_old_tokens_denied_new_scopes_and_membership_intersection(
-    api, headers, application, tenants, admin_engine
+async def test_old_tokens_denied_new_scopes_and_scope_limits(
+    api, headers, application, database, admin_engine
 ):
     expiry = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
 
     async def token(scopes):
         response = await api.post(
             "/tokens",
-            headers=headers[0],
+            headers=headers,
             json={"name": "Synthetic only", "scopes": scopes, "expires_at": expiry},
         )
         assert response.status_code == 200
         row = response.json()["data"]
-        return {**headers[0], "Authorization": "Bearer " + row["token"]}, row["id"]
+        return ({**headers, "Authorization": "Bearer " + row["token"]}, row["id"])
 
-    row, task_id = await certificate(api, headers[0]), await task(api, headers[0])
+    row, task_id = (await certificate(api, headers), await task(api, headers))
     old, _ = await token(["task:read", "resource:read", "resource:write", "task:resource"])
     for method, path, body in [
         ("GET", "/resources/certificates", None),
@@ -478,17 +208,11 @@ async def test_old_tokens_denied_new_scopes_and_membership_intersection(
         )
     ).status_code == 200
     assert (await api.get(f"/tasks/{task_id}/certificates", headers=selector)).status_code == 200
-    async with application.state.db.transaction(UUID(headers[0]["X-Org-Id"])) as session:
+    async with application.state.db.transaction() as session:
         event = await session.scalar(
             select(AuditLog).where(AuditLog.object_id == UUID(created["certificate_id"]))
         )
         assert str(event.actor_token_id) == token_id
-    with Session(admin_engine) as session, session.begin():
-        member = session.scalar(select(Membership).where(Membership.org_id == tenants["orgs"][0]))
-        member.role = "technical"
-    assert (
-        await api.post("/resources/certificates", headers=writer, json={"data": metadata()})
-    ).status_code == 403
 
 
 async def test_certificate_commit_failure_has_no_partial_success(api, headers, monkeypatch):
@@ -497,8 +221,7 @@ async def test_certificate_commit_failure_has_no_partial_success(api, headers, m
     def invalid_event(session, actor, action, object_id, details):
         session.add(
             AuditLog(
-                org_id=actor.org_id,
-                actor_user_id=uuid4(),
+                actor_token_id=uuid4(),
                 action="synthetic-invalid-actor",
                 object_id=object_id,
                 details={},
@@ -506,8 +229,6 @@ async def test_certificate_commit_failure_has_no_partial_success(api, headers, m
         )
 
     monkeypatch.setattr(versioned, "audit", invalid_event)
-    response = await api.post(
-        "/resources/certificates", headers=headers[0], json={"data": metadata()}
-    )
-    assert response.status_code == 409 and not response.json()["ok"]
-    assert (await api.get("/resources/certificates", headers=headers[0])).json()["items"] == []
+    response = await api.post("/resources/certificates", headers=headers, json={"data": metadata()})
+    assert response.status_code == 409 and (not response.json()["ok"])
+    assert (await api.get("/resources/certificates", headers=headers)).json()["items"] == []

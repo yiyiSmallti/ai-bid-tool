@@ -2,8 +2,8 @@
 
 Interrupted sandbox deliveries can outlive terminal or missing application jobs.
 Recovery must retain healthy workers, queued/running jobs (including expired leases),
-other task kinds and queues, and malformed identities. Tenant RLS must distinguish
-each org's live jobs from missing rows. Repeated/concurrent recovery must not repeat
+other task kinds and queues, and malformed identities. Recovery distinguishes
+existing installation jobs from missing rows. Repeated/concurrent recovery must not repeat
 terminal events or change application data; a renewed heartbeat must fence recovery.
 """
 
@@ -61,20 +61,19 @@ async def sandbox_queue(application, admin_engine):
         await application.state.db.engine.dispose()
 
 
-def seed_application_jobs(admin_engine, tenants):
+def seed_application_jobs(admin_engine, database):
     output = []
     with Session(admin_engine) as session, session.begin():
-        for org_id, user_id in zip(tenants["orgs"], tenants["users"], strict=True):
-            task = Task(id=uuid4(), org_id=org_id, name="Queue recovery", created_by=user_id)
+        for _ in range(1):
+            task = Task(id=uuid4(), name="Queue recovery")
             session.add(task)
             session.flush()
             document = Document(
                 id=uuid4(),
-                org_id=org_id,
                 task_id=task.id,
                 name="Synthetic tender.pdf",
                 sha256="a" * 64,
-                storage_key=f"org/{org_id}/synthetic.pdf",
+                storage_key="synthetic.pdf",
                 media_type="application/pdf",
             )
             session.add(document)
@@ -91,7 +90,6 @@ def seed_application_jobs(admin_engine, tenants):
             ):
                 job = Job(
                     id=uuid4(),
-                    org_id=org_id,
                     task_id=task.id,
                     document_id=document.id,
                     kind=kind,
@@ -101,12 +99,12 @@ def seed_application_jobs(admin_engine, tenants):
                 )
                 session.add(job)
                 jobs[label] = str(job.id)
-            output.append((str(org_id), jobs))
+            output.append(jobs)
     return output
 
 
-async def seed_delivery(queue, admin_engine, org_id, job_id, **overrides):
-    delivery = await queue.sandbox_task.defer_async(org_id=org_id, job_id=job_id)
+async def seed_delivery(queue, admin_engine, job_id, **overrides):
+    delivery = await queue.sandbox_task.defer_async(job_id=job_id)
     values = {
         "id": delivery,
         "status": "doing",
@@ -127,10 +125,10 @@ async def seed_delivery(queue, admin_engine, org_id, job_id, **overrides):
 
 
 async def test_reconcile_stale_sandbox_deliveries(
-    sandbox_queue, admin_engine, tenants, caplog, tmp_path
+    sandbox_queue, admin_engine, database, caplog, tmp_path
 ):
     queue = sandbox_queue
-    jobs = seed_application_jobs(admin_engine, tenants)
+    jobs = seed_application_jobs(admin_engine, database)
     old_worker = await queue.app.job_manager.register_worker()
     live_worker = await queue.app.job_manager.register_worker()
     with admin_engine.begin() as connection:
@@ -144,36 +142,32 @@ async def test_reconcile_stale_sandbox_deliveries(
         before = connection.execute(text("SELECT * FROM jobs ORDER BY id")).mappings().all()
     expected = {}
     recovered = {}
-    for org_id, by_status in jobs:
+    for by_status in jobs:
         for status in ("succeeded", "failed", "cancelled"):
             delivery = await seed_delivery(
-                queue, admin_engine, org_id, by_status[status], worker_id=old_worker
+                queue, admin_engine, by_status[status], worker_id=old_worker
             )
             expected[delivery] = recovered[delivery] = (
                 "aborted" if status == "cancelled" else status
             )
-        missing = await seed_delivery(queue, admin_engine, org_id, str(uuid4()))
+        missing = await seed_delivery(queue, admin_engine, str(uuid4()))
         expected[missing] = recovered[missing] = "aborted"
         for label in ("queued", "running", "expired", "other_kind"):
-            delivery = await seed_delivery(queue, admin_engine, org_id, by_status[label])
+            delivery = await seed_delivery(queue, admin_engine, by_status[label])
             expected[delivery] = "doing"
         for job_id in (by_status["succeeded"], str(uuid4())):
-            delivery = await seed_delivery(
-                queue, admin_engine, org_id, job_id, worker_id=live_worker
-            )
+            delivery = await seed_delivery(queue, admin_engine, job_id, worker_id=live_worker)
             expected[delivery] = "doing"
-    org_id, by_status = jobs[0]
+    by_status = jobs[0]
     for overrides in (
         {"task_name": "bid.process"},
         {"queue_name": "unrelated"},
         {"status": "todo"},
         {"status": "failed"},
     ):
-        delivery = await seed_delivery(
-            queue, admin_engine, org_id, by_status["succeeded"], **overrides
-        )
+        delivery = await seed_delivery(queue, admin_engine, by_status["succeeded"], **overrides)
         expected[delivery] = overrides.get("status", "doing")
-    malformed = await seed_delivery(queue, admin_engine, "invalid-org", "invalid-job")
+    malformed = await seed_delivery(queue, admin_engine, "invalid-job")
     expected[malformed] = "doing"
     caplog.set_level(logging.INFO, logger="app.jobs.queue")
     await asyncio.gather(queue.recover_sandbox_jobs(), queue.recover_sandbox_jobs())
@@ -205,7 +199,7 @@ async def test_reconcile_stale_sandbox_deliveries(
 
 
 async def test_recovery_rechecks_renewed_worker_heartbeat(
-    sandbox_queue, admin_engine, tenants, monkeypatch
+    sandbox_queue, admin_engine, database, monkeypatch
 ):
     queue = sandbox_queue
     worker = await queue.app.job_manager.register_worker()
@@ -213,9 +207,7 @@ async def test_recovery_rechecks_renewed_worker_heartbeat(
         connection.execute(
             text("UPDATE procrastinate_workers SET last_heartbeat=now()-interval '1 hour'")
         )
-    delivery = await seed_delivery(
-        queue, admin_engine, str(tenants["orgs"][0]), str(uuid4()), worker_id=worker
-    )
+    delivery = await seed_delivery(queue, admin_engine, str(uuid4()), worker_id=worker)
     original = queue.app.job_manager.get_stalled_jobs
 
     async def renew_after_scan(**kwargs):

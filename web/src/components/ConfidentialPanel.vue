@@ -1,16 +1,15 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
-import { useProvidedTaskAuthority, canEditTask } from "../task-authority.js";
-import { confirmAction, errorText, formatTime, label, orgAccess, orgRequest } from "../org.js";
-// Without a task this manages the org's fields and org-wide values; with one it fills the
+import { request } from "../api.js";
+import { confirmAction, errorText, formatTime, label } from "../org.js";
+// Without a task this manages shared fields and values; with one it fills the
 // task's own values. Values are only ever typed in or revealed on request, never listed.
 const props = defineProps({ taskId: { type: String, default: null } });
 const kinds = { amount: "金额", contact: "联系人 / 电话", identity: "证件号", bank_account: "银行账号", other: "其他" };
-const scopes = { org: "全单位共用", task: "每个任务单独填写" };
+const scopes = { library: "所有任务共用", task: "每个任务单独填写" };
 const fields = ref([]), values = ref([]), error = ref(""), busy = ref(false);
 const editing = ref(null), draft = ref(""), shown = ref(null), past = ref(null);
 const creating = ref({ key: "", label: "", kind: "amount", scope: "task" });
-const writable = computed(() => ["admin", "bidder"].includes(orgAccess.role));
 const rows = computed(() => {
   const byField = new Map(values.value.map((item) => [item.field_id, item]));
   return fields.value.map((field) => ({ field, value: byField.get(field.id) ?? null }));
@@ -20,26 +19,25 @@ async function load() {
   error.value = "";
   try {
     const query = props.taskId ? `?task_id=${props.taskId}` : "";
-    const [listed, state] = await Promise.all([orgRequest("GET", "/confidential-fields"), orgRequest("GET", `/confidential-values${query}`)]);
+    const [listed, state] = await Promise.all([request("GET", "/confidential-fields"), request("GET", `/confidential-values${query}`)]);
     fields.value = listed.items; values.value = state.items;
   } catch (exc) { error.value = errorText(exc); }
 }
-const authority = useProvidedTaskAuthority();
-function canSet(field) { return (!props.taskId || canEditTask(authority.value)) && writable.value && (props.taskId ? true : field.scope === "org"); }
+function canSet(field) { return !field.archived && (!!props.taskId || field.scope === "library"); }
 function openSet(field) { editing.value = field; draft.value = ""; }
 async function save() {
   if (!editing.value || !canSet(editing.value)) return;
   busy.value = true; error.value = "";
   try {
     const body = { value: draft.value, ...(editing.value.scope === "task" ? { task_id: props.taskId } : {}) };
-    await orgRequest("POST", `/confidential-fields/${editing.value.id}/values`, body);
+    await request("POST", `/confidential-fields/${editing.value.id}/values`, body);
     editing.value = null; draft.value = ""; await load();
   } catch (exc) { error.value = errorText(exc); } finally { busy.value = false; }
 }
 async function reveal(value) {
   error.value = "";
   try {
-    shown.value = (await orgRequest("POST", `/confidential-values/${value.value_id}/reveal`)).data;
+    shown.value = (await request("POST", `/confidential-values/${value.value_id}/reveal`)).data;
     // The plain value is kept only briefly in memory.
     setTimeout(() => { if (shown.value?.value_id === value.value_id) shown.value = null; }, 30000);
   } catch (exc) { error.value = errorText(exc); }
@@ -48,20 +46,20 @@ async function history(field) {
   error.value = "";
   try {
     const query = field.scope === "task" && props.taskId ? `?task_id=${props.taskId}` : "";
-    past.value = { field, items: (await orgRequest("GET", `/confidential-fields/${field.id}/values${query}`)).items };
+    past.value = { field, items: (await request("GET", `/confidential-fields/${field.id}/values${query}`)).items };
   } catch (exc) { error.value = errorText(exc); }
 }
 async function create() {
   busy.value = true; error.value = "";
   try {
-    await orgRequest("POST", "/confidential-fields", creating.value);
+    await request("POST", "/confidential-fields", creating.value);
     creating.value = { key: "", label: "", kind: "amount", scope: "task" }; await load();
   } catch (exc) { error.value = errorText(exc); } finally { busy.value = false; }
 }
 async function archive(field) {
   if (!(await confirmAction(`归档后，引用 {{secret.${field.key}}} 的卡片无法确认，导出也会被阻止。确定归档“${field.label}”？`))) return;
   try {
-    await orgRequest("POST", `/confidential-fields/${field.id}/revisions`, { expected_revision: field.revision, archived: true });
+    await request("POST", `/confidential-fields/${field.id}/revisions`, { expected_revision: field.revision, archived: true });
     await load();
   } catch (exc) { error.value = errorText(exc); }
 }
@@ -98,9 +96,9 @@ onMounted(load);
             <td>
               <div class="row-actions">
                 <el-button v-if="canSet(field)" link type="primary" @click="openSet(field)">{{ value?.status === "filled" ? "更新" : "填写" }}</el-button>
-                <el-button v-if="writable && value?.status === 'filled'" link @click="reveal(value)">查看</el-button>
+                <el-button v-if="value?.status === 'filled'" link @click="reveal(value)">查看</el-button>
                 <el-button v-if="value" link @click="history(field)">历史</el-button>
-                <el-button v-if="writable && !taskId" link type="danger" @click="archive(field)">归档</el-button>
+                <el-button v-if="!taskId" link type="danger" @click="archive(field)">归档</el-button>
               </div>
             </td>
           </tr>
@@ -108,7 +106,7 @@ onMounted(load);
         </tbody>
       </table>
     </div>
-    <el-form v-if="writable && !taskId" class="create inset" inline @submit.prevent="create">
+    <el-form v-if="!taskId" class="create inset" inline @submit.prevent="create">
       <el-form-item label="名称"><el-input v-model="creating.label" placeholder="投标总价" /></el-form-item>
       <el-form-item label="键名"><el-input v-model="creating.key" placeholder="bid_total" /></el-form-item>
       <el-form-item label="类别"><el-select v-model="creating.kind" style="width: 140px"><el-option v-for="(text, key) in kinds" :key="key" :label="text" :value="key" /></el-select></el-form-item>

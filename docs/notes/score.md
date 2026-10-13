@@ -4,7 +4,7 @@
 
 Scoring requirements are cited tender text, but their free-form condition payload is not a safe
 executable rubric. A model may miss a scoring requirement, merge two rules, invent a bound, or
-choose the wrong commercial or technical reviewer. Scoring a draft before people resolve those
+misclassify a commercial or technical rule. Scoring a draft before the human resolves those
 errors would create a precise-looking result from an unconfirmed interpretation.
 
 ## Usage
@@ -13,22 +13,13 @@ Run `bid score rubric generate --dry-run` for a successful extraction job, inspe
 hash and nonmonetary call limits, and submit the same input hash to create a candidate rubric. Use the list and
 show commands to inspect sections, items, requirement coverage, source citations, and completeness.
 
-An admin classifies each section and item as commercial or technical. The responsible bidder or
-technical reviewer then confirms or rejects sections and items. Coverage decisions must map every
-scoring requirement, name a canonical requirement for a duplicate, or explain an exclusion. A
-revision is a complete JSON replacement snapshot and resets classifications and confirmations. The
-bidder confirms the set only after all deterministic completeness checks pass. History retains every
-classification, decision, and replacement event.
+The installation human classifies commercial or technical sections/items, confirms or rejects them, resolves coverage and confirms the set after deterministic completeness checks. A complete replacement resets classifications and confirmations; history retains every review and replacement event. Domains classify content rather than granting a user's permissions.
 
 Replacement events retain the validated complete request, including proposed coverage, with a
 database-verified snapshot hash. Effective coverage in the new version starts pending and requires
 new coverage decisions; a proposal in a replacement request is not an inherited confirmation.
 
-For incremental domain repair, copy the complete candidate and edit only the responsible domain.
-Section/item `normalization_errors` locate local problems; completeness and console blockers retain
-aggregate problems. Other-domain errors may remain in the saved version. The next reviewer acts
-after the admin classifies the new IDs again; every required decision must still precede set
-confirmation. See the [replacement contract](../plan/score.md#rubric-versions-coverage-and-human-confirmation-人工确认).
+For incremental repair, copy the complete candidate and correct its declarations. Section/item `normalization_errors` locate local problems; completeness and console blockers retain aggregate problems. A replacement needs new classifications and all required decisions before set confirmation. See the [replacement contract](../plan/score.md#rubric-versions-coverage-and-human-confirmation-人工确认).
 
 Complex inputs are UTF-8 JSON files. All commands return the seven-key `Result` envelope and never
 prompt. Generate submission can return immediately or wait for the rubric job; a retained partial
@@ -41,15 +32,15 @@ item is unassessable, a provider batch is incomplete, or a complete total cannot
 
 ## How it works
 
-The rubric input fixes one organization, task, successful extraction job, document, and the complete
+The rubric input fixes one task, successful extraction job, document, and the complete
 set of scoring requirements from that extraction. The generation provider receives the verified
 source text with requirement summaries and position metadata after configured redaction. It creates candidates and cannot
 confirm, classify, revise, or exclude anything.
 
 Rubric sets, sections, items, requirement coverage, normalized coverage links, and append-only review
-events use tenant-bound composite keys and forced row-level security. Revisions create a new candidate
+events use task-bound composite keys and immutable publication gates. Revisions create a new candidate
 set with new child IDs; they never rewrite an earlier set. Expected revision and input hash checks stop
-stale decisions. Session-only review scopes and stored review domains (职责) enforce the human role boundary;
+stale decisions. Session-only review scopes enforce the human decision boundary;
 tokens, agents, and workers cannot perform review actions.
 
 Completeness is deterministic. Every extracted scoring requirement needs an explicit coverage result;
@@ -125,7 +116,7 @@ or admission failure can retain earlier valid stage-2 batches or score batches i
 Cancellation, lease loss, input changes or accounting failure prevent publication without erasing occurred usage. Publication
 rechecks rubric confirmation and draft currency under locks and database triggers. Report reads
 reauthorize fixed parents and recompute staleness without rewriting history. Section and overall
-aggregates are stored on the immutable report; item support and citations use separate RLS tables.
+aggregates are stored on the immutable report; item support and citations use separate task-bound tables.
 
 ## Pitfalls
 
@@ -152,8 +143,8 @@ Every citation is checked against the sent source segment, original text and pin
 stage 2. A bad citation fails the whole structure; a single quotation joining two Requirements is
 still invalid. Item citations must all bind the same single Requirement.
 
-Migration [`0046_score_section_sources.py`](../../server/migrations/versions/0046_score_section_sources.py)
-adds the list to the existing immutable, FORCE-RLS section table. Old NULL lists read as one legacy
+Migration [baseline rubric functions](../../server/migrations/baseline/00_functions_rubric.sql)
+adds the list to the existing immutable section table. Old NULL lists read as one legacy
 source without rewriting history. Confirmation and report reads resolve every source again. Human
 replacement selects verified `{requirement_id, quote}` pairs, keeps at least one, and never supplies
 Source JSON. The console displays all entries and opens each saved citation by index. The wire and
@@ -202,16 +193,14 @@ define the codes. Candidate storage and console reads preserve the declared valu
 rule text. Do not move cap into score bounds, relabel an aggregation, or fill missing weights.
 
 Replacement validation has the same candidate semantics, including partially repaired entries.
-Requiring all entries to satisfy confirmed-rule invariants before domain authorization can deadlock
-every reviewer when the untouched domain also has errors, as in the
-[dev revision incident](../changelog.md#2026-10-06-rubric-revision-across-domains-with-normalization-errors).
-`score.revise_rubric` compares other-domain fields against immutable stored declarations and
-preserves citation selectors and section membership. It recomputes completeness for the new version;
-the unchanged application and database confirmation gates reject remaining errors.
+The installation human may replace the complete candidate across commercial and technical domains.
+`score.revise_rubric` preserves verified citation selectors and pinned Requirement identities,
+then recomputes completeness for the new version. Application and database confirmation gates
+reject remaining errors.
 Malformed types/keys/enums and invalid citations still fail their existing checks.
 
-Candidate numeric storage checks differ from confirmation checks. Migration
-[`0044_score_rubric_candidates.py`](../../server/migrations/versions/0044_score_rubric_candidates.py)
+Candidate numeric storage checks differ from confirmation checks. The immutable
+[single-user baseline](../../server/migrations/versions/0001_single_user_baseline.py)
 permits invalid numeric declarations only as unconfirmed history; the subject and set gates still
 check their strict invariants independently of the stored error list. A human fixes them through
 the existing complete replacement flow and repeats classification, coverage and confirmation.
@@ -250,9 +239,9 @@ report contract; this narrow representation limit preserves both the fixed key a
   human review, and deterministic completeness.
 - `server/app/services/score_generation.py`, `server/app/providers/rubric.py`, and
   `server/app/jobs/score_rubric.py` enforce provider acceptance and guarded publication.
-- `server/app/api/score.py` exposes tenant-scoped rubric and score routes.
+- `server/app/api/score.py` exposes task-bound rubric and score routes.
 - `cli/bid_cli/score.py` implements noninteractive rubric/score commands and exit semantics.
-- `server/migrations/versions/0034_score_rubric.py` defines forced RLS, tenant-bound relationships,
+- `server/migrations/versions/0001_single_user_baseline.py` defines task relationships,
   immutable review history, and runtime grants.
 - `server/tests/test_score_cli.py` covers both CLI transports without a database; score service,
   migration, API, and worker tests cover the persistent boundary.
@@ -261,7 +250,7 @@ report contract; this narrow representation limit preserves both the fixed key a
 - `server/app/services/score_execution.py` handles scoring previews, submissions and report reads.
 - `server/app/services/score_semantic.py`, `server/app/providers/scoring.py` and
   `server/app/jobs/score.py` implement local acceptance, aggregation and accounted model execution.
-- `server/migrations/versions/0035_score.py` defines score report RLS, immutable children and
+- `server/migrations/versions/0001_single_user_baseline.py` defines score report task references, immutable children and
   worker-attempt publication gates.
 - `server/tests/test_score_run.py`, `test_score_execution_provider.py`, `test_score_report_storage.py`
   and `test_score_run_cli.py` exercise scoring input, calls, reports, isolation and CLI boundaries.

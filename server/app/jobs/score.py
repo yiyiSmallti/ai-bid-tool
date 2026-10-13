@@ -40,7 +40,7 @@ async def current_snapshot(
 
 
 async def process(execution: JobExecution, storage) -> None:
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         actor = await score_run_inputs.access(session, score_execution.worker(job), "score:run")
         submitted = job.result["submission"]
@@ -91,7 +91,7 @@ async def process(execution: JobExecution, storage) -> None:
         and execution.stopped.code not in score_execution.PARTIAL_STOPS
     ):
         raise execution.stopped
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         await score_run_inputs.lock_inputs(session, actor, task_id, fixed.extraction.id)
         job = await execution.owned_job(session)
         actor = await score_run_inputs.access(session, score_execution.worker(job), "score:run")

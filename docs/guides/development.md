@@ -36,7 +36,7 @@ uv run python scripts/test_runtime.py stop --root /tmp/ai-bid-test
 
 `environment.sh` holds generated test secrets with mode 0600. Source it only in
 a local shell without tracing. Tests refuse any database whose name lacks the
-`bid_test` prefix, and seed only synthetic users and documents.
+`bid_test` prefix, and seed only synthetic tasks and documents.
 
 Without `BID_TEST_ADMIN_URL`, every database-backed test fails; tests that
 need no database still run.
@@ -58,10 +58,8 @@ runner's cores.
 
 ## Provision a development database
 
-The provisioning owner runs migrations and never serves requests. Runtime receives
-`bid_app` for tenant work, `bid_platform_app` for credential management, and
-`bid_credential_reader` for per-call resolution. The dedicated roles have no table or
-tenant access; see [Platform credential authority](../notes/platform-credentials.md).
+The provisioning owner runs migrations and never serves requests. The API and worker
+use `bid_app`, which cannot own application tables or bypass their triggers.
 
 1. Set `BID_MIGRATION_DATABASE_URL` for the owner and `BID_DATABASE_PASSWORD`
    for the new `bid_app` role.
@@ -71,21 +69,20 @@ tenant access; see [Platform credential authority](../notes/platform-credentials
    uv run python -m app.admin init-db
    ```
 
-3. Create the first organization and admin. The password comes from
-   `BID_BOOTSTRAP_PASSWORD` (at least 12 characters); existing identities are
-   refused rather than changed.
+3. Set `BID_ACCESS_KEY` to a random secret of at least 32 characters in the local
+   environment. Supply it as a bearer credential or exchange it through
+   `POST /auth/session` with `{"access_key": "..."}`. `GET /auth/session` describes
+   the current actor and scopes.
+4. For CLI authentication, set `BID_ACCESS_KEY`, or set `BID_ACCESS_KEY_FILE` to an
+   owner-only regular file containing the key. `BID_TOKEN` accepts a scoped `bid_`
+   token when neither key source is set. No login command or session file is needed.
 
-   ```sh
-   uv run python -m app.admin bootstrap --org-name ORG_NAME --email ADMIN_EMAIL
-   ```
-
-The command prints the new organization ID. Variable names and their meaning
-are listed in [deploy/.env.example](../../deploy/.env.example) and
+Variable definitions are in [deploy/.env.example](../../deploy/.env.example) and
 `Settings` in [server/app/core/config.py](../../server/app/core/config.py).
 
 ## Start the API and worker
 
-Both processes need `BID_DATABASE_URL` for `bid_app`, `BID_ENCRYPTION_KEY` for
+Both processes need `BID_ACCESS_KEY`, `BID_DATABASE_URL` for `bid_app`, `BID_ENCRYPTION_KEY` for
 stored data, and a different Fernet key in `BID_TOKEN_KEY` for sessions and
 signed links; [Keys and storage](#keys-and-storage) describes both.
 Startup fails if the runtime role is a superuser, can bypass RLS, or owns
@@ -97,123 +94,43 @@ uv run python -m app.jobs.worker
 ```
 
 The API documentation at `http://127.0.0.1:8000/docs` uses the HTTP Bearer
-scheme: choose **Authorize**, paste the session or token value without the
-`Bearer` prefix, and supply `X-Org-Id` on each operation.
-
-## Enable organization applications
-
-1. Apply migrations using the provisioning owner before running the API or worker.
-2. Set `BID_ORG_SIGNUP_ENABLED=true` in the runtime environment (Compose passes it
-   through). The default is `false`; operator reviews remain available when disabled.
-3. Trust only the deployment's own reverse proxy for forwarded client addresses.
-   Application source limits use the effective request peer, never a header read by
-   the signup handler.
-4. Open `/app/apply` to submit a synthetic application, then approve it in the 申请
-   tab on `/app/platform/orgs` using a platform operator session. Sign in with the
-   applicant email and password to verify the new organization admin membership.
-5. Run the worker for daily expiry. The signup protocol and CLI commands are in
-   [Organization self-service application](../notes/org-signup.md).
+scheme: choose **Authorize**, paste the access key, session or API token value without the
+`Bearer` prefix.
 
 ## Configure the extraction model
 
-1. Configure a platform operator and the dedicated credential connections using
-   [Manage platform credentials](#manage-platform-credentials).
-2. Create an active `catalog_llm` credential, then select it in the platform Models
-   page. The provider and canonical endpoint must match. Set model name, reasoning
-   options and the default model in that catalog entry.
-3. Tenant jobs use their pinned BYOK revision or the platform catalog. They do not
-   use standalone deployment settings as a fallback. A missing or disabled credential
-   prevents the next request; replacing its key does not change model/cache identity.
-4. For standalone evaluation, create a separate active `standalone_llm` credential.
-   Set nonsecret provider/model/endpoint options to match. The evaluator requires
-   the reader database URL and secrets root. No anonymous or env-key mode is supported.
-5. Run an explicit public-tender evaluation:
+Use encrypted local provider revisions for extraction jobs. The resolver in
+[configured.py](../../server/app/providers/configured.py) pins the selected
+revision to each job. Follow the provider-management work in
+[the single-user plan](../plan/single-user.md) when adapting configuration entrypoints.
 
-   ```sh
-   uv run python evals/extract_tender.py --file PUBLIC_TENDER.docx --output data/work/extract-result.json
-   ```
+Standalone evaluation uses a `standalone_llm` service credential, the runtime
+database URL and provider-secret root. Its entrypoint adaptation is tracked in
+[the single-user plan](../plan/single-user.md); the caller is
+[evals/extract_tender.py](../../evals/extract_tender.py).
 
 Batching and model options are defined by
 [llm-providers.md](../notes/llm-providers.md); variable names are in
 [deploy/.env.example](../../deploy/.env.example).
 
-## Manage platform credentials
+## Manage service credential roots
 
-1. Apply migrations with the migration owner. Provision authentication for
-   `bid_platform_app` and `bid_credential_reader` through the deployment secret
-   manager/database administration channel; the migration creates the restricted
-   LOGIN roles without passwords. For password-authenticated development, supply
-   `BID_PLATFORM_DATABASE_PASSWORD` and `BID_CREDENTIAL_DATABASE_PASSWORD` only to
-   `app.admin init-db` (the Compose migrate service); it assigns those explicit bootstrap
-   passwords after migration. Use matching URL-encoded values in the dedicated runtime
-   URLs. Peer/certificate deployments may omit these password variables. Do not grant
-   either role membership in another role.
-2. Inject `BID_PLATFORM_DATABASE_URL` for management, `BID_CREDENTIAL_DATABASE_URL`
-   for resolution, and a distinct `BID_SECRETS_KEY` into the appropriate API/worker
-   processes. The standalone evaluator requires only the reader URL. Keep root keys,
-   database credentials and platform authentication factors outside the service
-   credential table. Operator enrollment uses its own
-   [authentication-factor authority](../notes/operator-enrollment.md).
-3. Sign in through the existing platform password-and-TOTP flow. In `/app/platform/credentials`,
-   create the credential, inspect consumers, replace, enable, disable, remove or test it.
-   CLI automation uses `bid platform login` followed by these commands:
+Use the runtime `BID_DATABASE_URL` for local service credentials and a distinct
+`BID_SECRETS_KEY` for provider secrets. Credential settings HTTP and CLI changes
+are tracked in [the single-user plan](../plan/single-user.md).
 
-   ```sh
-   bid platform credential list --json
-   bid platform credential create --input data/work/credential-metadata.json --key-file data/work/vendor-key --json
-   bid platform credential show --id CREDENTIAL_UUID --json
-   bid platform credential replace --id CREDENTIAL_UUID --expected-revision REVISION --reason scheduled_rotation --key-file data/work/vendor-key --json
-   bid platform credential set-active --id CREDENTIAL_UUID --expected-revision REVISION --inactive --reason incident --json
-   bid platform credential test --id CREDENTIAL_UUID --expected-revision REVISION --json
-   bid platform credential remove --id CREDENTIAL_UUID --expected-revision REVISION --reason retired --json
-   ```
-
-   Metadata JSON contains `name`, `purpose`, `provider`, `endpoint`, optional `active`
-   (default false) and `reason`; it never contains `api_key`. Key files must be owned by
-   the caller, mode 0600, and have no symbolic-link path components. Use `--active` to
-   enable. Conflicts require refreshing the revision, not blindly retrying.
-4. For a legacy deployment, stop admissions and drain old workers before cutover.
-   Export only the intended legacy vendor assignments to an owner-only env file; do
-   not source it into the new API, worker or evaluator. Prepare a manifest containing
-   `entries`, each with `name/purpose/provider/endpoint/active/source_env`.
-
-   ```sh
-   bid platform credential import-env --manifest data/work/credential-import.json --env-file data/work/legacy-vendor.env --dry-run --json
-   bid platform credential import-env --manifest data/work/credential-import.json --env-file data/work/legacy-vendor.env --json
-   ```
-
-   The parser does not execute shell expressions. Dry-run makes no writes; same-value
-   replays skip existing rows; any mismatch rejects the batch. Import all catalog
-   references, then have the migration owner validate
-   `platform_model_credential_fk` using `ALTER TABLE public.platform_models VALIDATE
-   CONSTRAINT platform_model_credential_fk`. Resolve any mismatch explicitly.
-5. Remove `BID_PLATFORM_CREDENTIAL_*`, `BID_PERPLEXITY_API_KEY` and `BID_LLM_API_KEY`
-   from every runtime environment/config, including empty legacy assignments and old
-   mounts. Startup refuses them by variable name without echoing values. Remove the
-   temporary import/key files after the deployment secret source is cleared.
-6. Set `BID_SEARCH_PROVIDER` explicitly: `disabled`, `searxng` or `perplexity`.
-   Perplexity requires the active `vendor_search` credential. It never falls back to
-   SearXNG. Re-submit old search jobs that lack the pinned service credential identity.
-
-Metadata tests do not prove model authorization. Official
-OpenAI/Anthropic model-list probes are bounded; Perplexity and custom endpoints return
-`unsupported`.
-
-To rotate the encryption root, first distribute the new key as a readable previous key
-on all replicas, then switch it to current while retaining the old key in
-`BID_SECRETS_KEY_PREVIOUS`. Run with the migration owner and the same root keyring:
+To rotate the provider-secret encryption root, retain the old root in
+`BID_SECRETS_KEY_PREVIOUS` and set the new root in `BID_SECRETS_KEY`. Run with the
+migration owner and the same keyring:
 
 ```sh
-uv run python -m app.admin rotate-encryption --scope provider-secrets
-uv run python -m app.admin rotate-encryption --scope provider-secrets
+uv run python -m app.admin rotate-provider-secrets
+uv run python -m app.admin rotate-provider-secrets
 ```
 
-The report separates checked/rewritten platform, BYOK-history and operator-factor
-counts; `app.admin rotate-provider-secrets` invokes the same scope. Require zero
-failures and zero rewrites on the second run before removing retired keys from the online
-keyring. Preserve retired keys for the backup retention period. Default `--scope data`
-keeps the existing data rotation behavior. Never downgrade to an env-reading release
-while serving requests; retain the table/audits and repair forward.
+Require zero failures and zero rewrites on the second run before removing the
+retired root from the runtime keyring. Retain roots needed to decrypt backups.
+Use `rotate-encryption` for stored files and encrypted application fields.
 
 ## Configure score requests
 
@@ -234,14 +151,14 @@ Inspect the fixed input
 
 ## Configure job guards
 
-1. Set these values consistently on the API and all workers before starting
-   model jobs:
-
-2. Apply [0016_vendor_call_guards.py](../../server/migrations/versions/0016_vendor_call_guards.py)
-   with the migration owner before running the new workers.
+1. Set `BID_JOB_MAX_VENDOR_CALLS`, `BID_JOB_VENDOR_CALLS_PER_BATCH`,
+   `BID_JOB_LEASE_SECONDS` and `BID_JOB_HEARTBEAT_SECONDS` consistently on the API
+   and all workers.
+2. Run `uv run python -m app.admin init-db` with the migration owner before running
+   the workers.
 Quiesce old
    workers during rollout: an older binary does not participate in admission.
-4. Run the API/processor guard scenarios against the disposable PostgreSQL
+3. Run the API/processor guard scenarios against the disposable PostgreSQL
    runtime from [Run the checks](#run-the-checks):
 
    ```sh
@@ -255,70 +172,15 @@ The guard scenarios write synthetic
 Keep
    evidence outside `docs/`.
 
-## Run the platform console
-
-The console at `/app` is for platform operators; it shows org accounts and
-usage totals, never org business data.
-
-1. Apply migrations with the provisioning owner. Set `BID_PLATFORM_ADMIN_EMAILS`
-   to the operator emails and inject the independent `BID_SECRETS_KEY` on the API.
-   Leave `BID_PLATFORM_TOTP_SECRETS` empty for browser-managed factors.
-2. Build the console and point the API at it:
-
-   ```sh
-   cd web && npm ci && npm run build
-   ```
-
-   Set `BID_WEB_DIR` to the absolute path of `web/dist`, restart the API, and
-   open `http://127.0.0.1:8000/app/`. For live editing, run `npm run dev` in
-   `web/` with `BID_API_URL` pointing at the API.
-3. Issue the first operator's enrollment link on the trusted host:
-
-   ```sh
-   uv run python -m app.admin platform-enroll OPERATOR_EMAIL
-   ```
-
-   Deliver the printed relative link privately and open it on the console origin.
-   Links expire after 30 minutes. Set a password for a new/setup-only account or
-   confirm its existing password, scan the QR code or enter the shown secret, and
-   submit a current authenticator code. Enrollment creates no org membership.
-4. Wait for the next authenticator code and sign in at `/app/platform/login`.
-   Signed-in operators can issue another allowlisted email's link from 平台管理员;
-   the host command also supports device recovery. Create any required org
-   separately in the console and attach the operator's existing email. Manage
-   catalog keys through [Manage platform credentials](#manage-platform-credentials).
-
-For the deployment-managed break-glass alternative, use an account with a usable
-password, generate a factor privately, and set its printed `email:SECRET` pair in
-`BID_PLATFORM_TOTP_SECRETS` before restarting:
+## Build the console
 
 ```sh
-uv run python -m app.admin platform-totp --email OPERATOR_EMAIL
+cd web && npm ci && npm run build
 ```
 
-An environment factor always wins over the stored factor and blocks browser
-enrollment for that email. Remove the override and restart before returning to
-browser enrollment. Enrollment-token binding, key rotation and failure semantics
-are defined by [Operator enrollment](../notes/operator-enrollment.md).
-
-If sign-in or org lookup returns `too_many_attempts` (HTTP 429), stop retrying
-and wait for `Retry-After` before retrying; switching pages or orgs does not
-reset the account's limit. For `auth_busy` (HTTP 503), wait for `Retry-After`
-and retry with the current authenticator code. Both errors use CLI exit code 3.
-After a successful platform sign-in, wait for a new authenticator code before
-signing in again. The shared account/source limits, proxy requirements and
-concurrency bounds are defined in
-[Password admission and TOTP consumption](../notes/platform-console.md#password-admission-and-totp-consumption).
-
-The end-to-end check drives a real browser through sign-in, provisioning,
-models, usage, CSV export, disabling and password setup against a running API
-that serves the build. It needs an operator account with a known password and
-TOTP secret, and writes screenshots, the CSV and `result.json` to a new
-directory:
-
-```sh
-cd web && E2E_BASE_URL=http://127.0.0.1:8000 E2E_EMAIL=OPERATOR_EMAIL E2E_PASSWORD=OPERATOR_PASSWORD E2E_TOTP_SECRET=SECRET E2E_OUTPUT=/tmp/console-e2e npx playwright test
-```
+Set `BID_WEB_DIR` to the absolute path of `web/dist` and restart the API. For live
+editing, run `npm run dev` in `web/` with `BID_API_URL` pointing at the API. Console
+access-key integration is tracked in [the single-user plan](../plan/single-user.md).
 
 ## Check an export in Word
 
@@ -439,7 +301,7 @@ citation.
 
 Stored files and encrypted database fields use `BID_ENCRYPTION_KEY`; file
 ciphertext is bound to its object key. Sessions and signed download links use
-`BID_TOKEN_KEY`, which must differ from every other key. Org provider
+`BID_TOKEN_KEY`, which must differ from every other key. Provider
 credentials use `BID_SECRETS_KEY` ([provider-config.md](../notes/provider-config.md)).
 Startup fails when a key is missing, malformed or reused. Keep all of them in
 your secret and backup workflow. Plaintext conversion is not automated; a file
@@ -447,7 +309,7 @@ encrypted with an unknown key fails with `unreadable_file`.
 
 To replace the token key, set a new `BID_TOKEN_KEY` on the API and workers and
 restart them. Every outstanding session and link stops working at once, so
-users sign in again.
+mint a new session using the installation access key.
 
 To replace the data key:
 
@@ -462,19 +324,16 @@ To replace the data key:
    uv run python -m app.admin rotate-encryption
    ```
 
-   It goes through every org's encrypted fields and stored objects and prints
+   It goes through all encrypted fields and stored objects and prints
    the checked and rewritten counts as JSON. Values already under the new key
    are skipped, so an interrupted run can be repeated; a second run reports zero
    rewrites.
 3. Remove `BID_ENCRYPTION_KEY_PREVIOUS` and restart. Keep the old key as long as
    backups taken before the rotation are retained, because they still need it.
 
-Downgrades from `0003` onward raise an error instead of dropping history
-tables; the `0001` and `0002` downgrades do drop their tables and columns. To
-recover credential cutover failures, retain the table and audit history and repair forward;
-an env-reading application version cannot safely serve after revocation. Each migration's tables
-and constraints are described in the matching note listed in the
-[documentation index](../README.md#mechanism-notes).
+Use the upgrade path in
+[0001_single_user_baseline.py](../../server/migrations/versions/0001_single_user_baseline.py).
+Keep database and encrypted-file backups together with the keys needed to read them.
 
 ## Troubleshooting
 

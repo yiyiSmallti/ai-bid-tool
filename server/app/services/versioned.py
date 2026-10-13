@@ -1,4 +1,4 @@
-"""Shared lifecycle of versioned org resources and their immutable task selections.
+"""Shared lifecycle of versioned library resources and their immutable task selections.
 
 Products, features, certificates, organization profiles and templates each keep a
 root row with a current revision pointer, append-only revisions, and per-task
@@ -54,8 +54,6 @@ class VersionedKind:
 def audit(session: AsyncSession, actor: Identity, action: str, object_id: UUID, details: dict):
     session.add(
         AuditLog(
-            org_id=actor.org_id,
-            actor_user_id=actor.user_id,
             actor_token_id=actor.token_id,
             action=action,
             object_id=object_id,
@@ -66,7 +64,6 @@ def audit(session: AsyncSession, actor: Identity, action: str, object_id: UUID, 
             else "external_agent"
             if actor.token_id
             else None,
-            on_behalf_of_user_id=actor.user_id if actor.principal_id or actor.token_id else None,
             agent_principal_id=actor.principal_id,
             agent_session_id=actor.session_id,
             agent_step_id=actor.step_id,
@@ -115,12 +112,10 @@ async def create(
     await check_placeholders(session, data)
     if check is not None:
         await check()
-    root = kind.root(org_id=actor.org_id, created_by=actor.user_id, current_revision=1)
+    root = kind.root(current_revision=1)
     session.add(root)
     await session.flush()
-    revision = kind.revision(
-        org_id=actor.org_id, **{kind.key: root.id}, revision=1, data=data, **(columns or {})
-    )
+    revision = kind.revision(**{kind.key: root.id}, revision=1, data=data, **(columns or {}))
     if attach is not None:
         await attach(revision, root)
     session.add(revision)
@@ -152,9 +147,7 @@ async def list_revisions(
         raise not_found()
     current = {str(row.id): row.current_revision for row in records}
     key = getattr(kind.revision, kind.key)
-    query = select(kind.revision).join(
-        kind.root, and_(kind.root.org_id == kind.revision.org_id, kind.root.id == key)
-    )
+    query = select(kind.revision).join(kind.root, kind.root.id == key)
     if not history:
         query = query.where(kind.revision.revision == kind.root.current_revision)
     if root_id is not None:
@@ -167,7 +160,6 @@ async def list_revisions(
 
 async def lock_feature_roots(
     session: AsyncSession,
-    org_id: UUID,
     feature_id: UUID,
     *,
     product_ids: Sequence[UUID] = (),
@@ -185,11 +177,10 @@ async def lock_feature_roots(
             select(Feature.current_revision, FeatureRevision.product_id)
             .join(
                 FeatureRevision,
-                (FeatureRevision.org_id == Feature.org_id)
-                & (FeatureRevision.feature_id == Feature.id)
+                (FeatureRevision.feature_id == Feature.id)
                 & (FeatureRevision.revision == Feature.current_revision),
             )
-            .where(Feature.org_id == org_id, Feature.id == feature_id)
+            .where(Feature.id == feature_id)
         )
     ).one_or_none()
     if observed is None:
@@ -199,7 +190,7 @@ async def lock_feature_roots(
     feature = None
     for identifier, root_kind in sorted(roots):
         model = Feature if root_kind == "feature" else Product
-        query = select(model).where(model.org_id == org_id, model.id == identifier)
+        query = select(model).where(model.id == identifier)
         query = (
             query.with_for_update(key_share=True)
             if write and model is Feature
@@ -239,12 +230,11 @@ async def update(
     """Append the next revision when the caller saw the current one."""
     actor.require(kind.write_scope)
     # Shared library validity changes lock the affected tasks before library rows.
-    # These IDs remain internal: org library authority grants no task visibility.
+    # These IDs remain internal: library authority grants no task visibility.
     affected = list(
         await session.scalars(
             select(kind.selection.task_id)
             .where(
-                kind.selection.org_id == actor.org_id,
                 getattr(kind.selection, kind.key) == root_id,
             )
             .distinct()
@@ -256,15 +246,11 @@ async def update(
         raise ServiceError("affected_task_limit", "Shared update affects too many tasks", 409, 2)
     if affected:
         await session.execute(
-            select(Task.id)
-            .where(Task.org_id == actor.org_id, Task.id.in_(affected))
-            .order_by(Task.id)
-            .with_for_update()
+            select(Task.id).where(Task.id.in_(affected)).order_by(Task.id).with_for_update()
         )
     if kind.root is Feature:
         root = await lock_feature_roots(
             session,
-            actor.org_id,
             root_id,
             product_ids=[columns["product_id"]] if columns else [],
             write=True,
@@ -293,7 +279,6 @@ async def update(
     if old is None:
         raise not_found()
     revision = kind.revision(
-        org_id=actor.org_id,
         **{kind.key: root.id},
         revision=root.current_revision + 1,
         data=data,
@@ -339,7 +324,6 @@ async def select_revision(
         if revision_number is not None:
             selected_parent = await session.scalar(
                 select(FeatureRevision.product_id).where(
-                    FeatureRevision.org_id == actor.org_id,
                     FeatureRevision.feature_id == root_id,
                     FeatureRevision.revision == revision_number,
                 )
@@ -348,7 +332,6 @@ async def select_revision(
                 raise not_found()
         root = await lock_feature_roots(
             session,
-            actor.org_id,
             root_id,
             product_ids=[selected_parent] if selected_parent is not None else [],
         )
@@ -403,7 +386,6 @@ async def select_revision(
         current_parent = (
             select(FeatureRevision.product_id)
             .where(
-                FeatureRevision.org_id == actor.org_id,
                 FeatureRevision.feature_id == root.id,
                 FeatureRevision.revision == root.current_revision,
             )
@@ -412,7 +394,6 @@ async def select_revision(
         inactive_parent = await session.scalar(
             select(Product.id)
             .where(
-                Product.org_id == actor.org_id,
                 (Product.id == revision.product_id) | (Product.id == current_parent),
                 Product.lifecycle_state != "active",
             )
@@ -429,7 +410,6 @@ async def select_revision(
         previous.active = False
         await session.flush()
     snapshot = selection(
-        org_id=actor.org_id,
         task_id=task_id,
         **{kind.key: root.id, kind.revision_key: revision.id},
         lot=lot,
@@ -473,7 +453,6 @@ async def list_selections(
             .join(
                 kind.revision,
                 and_(
-                    selection.org_id == kind.revision.org_id,
                     getattr(selection, kind.revision_key) == kind.revision.id,
                 ),
             )

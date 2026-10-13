@@ -45,17 +45,24 @@ class Processor:
         self.converter_transport = None
         self.queue: Any = None
 
-    async def __call__(self, org: str, job: str):
-        org_id, job_id = UUID(org), UUID(job)
-        from app.jobs.agent import process_if_agent
+    async def __call__(self, job: str):
+        job_id = UUID(job)
+        async with self.db.transaction() as session:
+            current = await locked_job(session, job_id)
+            if current is None or current.status in {"cancelled", "succeeded", "failed"}:
+                return
+            special_kind = current.kind
+        if special_kind == "agent":
+            from app.jobs.agent import process_if_agent
 
-        if await process_if_agent(self, org_id, job_id):
+            await process_if_agent(self, job_id)
             return
-        from app.jobs.sandbox import process_if_sandbox
+        if special_kind == "sandbox":
+            from app.jobs.sandbox import process_if_sandbox
 
-        if await process_if_sandbox(self, org_id, job_id):
+            await process_if_sandbox(self, job_id)
             return
-        async with self.db.transaction(org_id) as session:
+        async with self.db.transaction() as session:
             current = await locked_job(session, job_id)
             if current is None or current.status in {"cancelled", "succeeded", "failed"}:
                 return
@@ -184,7 +191,7 @@ class Processor:
                 ]
             )
 
-        execution = JobExecution(self.settings, self.db, org_id, job_id, run_id)
+        execution = JobExecution(self.settings, self.db, job_id, run_id)
         async with execution.activate():
             rejected: list[dict[str, str]] = []
 
@@ -210,7 +217,7 @@ class Processor:
                     )
                     return
                 if kind in {"parse", "extract"}:
-                    async with self.db.transaction(org_id) as session:
+                    async with self.db.transaction() as session:
                         authorized = await execution.owned_job(session)
                         await authorized_job(session, authorized)
                 llm = self.llm
@@ -222,7 +229,7 @@ class Processor:
                     "prototype_generate",
                     "product_simulation",
                 }:
-                    async with self.db.transaction(org_id) as session:
+                    async with self.db.transaction() as session:
                         llm = await self.resolve(session, current)
                 if kind == "memory_candidate":
                     from app.jobs.memory_candidate import process as propose_memories
@@ -275,11 +282,16 @@ class Processor:
                     return
                 if kind == "screenshot_search":
                     from app.providers.search import create_search_provider
+                    from app.services.platform_credentials import PlatformCredentialResolver
                     from app.services.vendor_search import process as search_vendor
 
                     await search_vendor(
                         execution,
-                        await create_search_provider(self.settings, self.search_transport),
+                        await create_search_provider(
+                            self.settings,
+                            self.search_transport,
+                            credential_resolver=PlatformCredentialResolver(self.settings, self.db),
+                        ),
                     )
                     return
                 if kind == "prototype_generate":
@@ -315,7 +327,7 @@ class Processor:
                     from app.services.drafts import complete_draft
                     from app.services.response_cards import task_lock
 
-                    async with self.db.transaction(org_id) as session:
+                    async with self.db.transaction() as session:
                         # Submission and selection changes use this same lock order.
                         await task_lock(session, task_id)
                         current = await execution.owned_job(session)
@@ -325,7 +337,7 @@ class Processor:
                         current.finished_at = datetime.now(UTC)
                     return
                 if kind == "parse":
-                    content = await self.storage.read(org_id, key)
+                    content = await self.storage.read(key)
                     if hashlib.sha256(content).hexdigest() != expected_hash:
                         raise ServiceError(
                             "content_mismatch", "Stored document hash does not match", 409, 4
@@ -381,7 +393,7 @@ class Processor:
                 else:
                     raise ServiceError("invalid_job", "Unsupported job kind", 400, 2)
 
-                async with self.db.transaction(org_id) as session:
+                async with self.db.transaction() as session:
                     current = await execution.owned_job(session)
                     await authorized_job(session, current)
                     if (
@@ -423,14 +435,11 @@ class Processor:
                             inserted = await session.scalar(
                                 insert(Chunk)
                                 .values(
-                                    org_id=org_id,
                                     task_id=task_id,
                                     document_id=document_id,
                                     **values,
                                 )
-                                .on_conflict_do_nothing(
-                                    index_elements=["org_id", "document_id", "seq"]
-                                )
+                                .on_conflict_do_nothing(index_elements=["document_id", "seq"])
                                 .returning(Chunk.id)
                             )
                             if inserted is None:
@@ -464,7 +473,6 @@ class Processor:
                         for item in requirements.items:
                             item_fingerprint = fingerprint(item)
                             row = dict(
-                                org_id=org_id,
                                 task_id=task_id,
                                 document_id=document_id,
                                 chunk_id=item.source.chunk_id,
@@ -484,9 +492,7 @@ class Processor:
                             created = await session.scalar(
                                 insert(Requirement)
                                 .values(**row)
-                                .on_conflict_do_nothing(
-                                    index_elements=["org_id", "job_id", "fingerprint"]
-                                )
+                                .on_conflict_do_nothing(index_elements=["job_id", "fingerprint"])
                                 .returning(Requirement.id)
                             )
                             saved += created is not None
@@ -513,7 +519,7 @@ class Processor:
                     current.status, current.result, current.error = "succeeded", result, None
                     current.finished_at = datetime.now(UTC)
                     if kind == "extract":
-                        from app.services.requirement_confirmation import seed_reviews
+                        from app.services.requirement_seeds import seed_reviews
 
                         actor = await authorized_job(session, current)
                         await session.flush()
@@ -556,7 +562,7 @@ class Processor:
                         "exit_code": 4,
                     }
                     retryable = False
-                async with self.db.transaction(org_id) as session:
+                async with self.db.transaction() as session:
                     current = await locked_job(session, job_id)
                     if current is None or current.status == "cancelled" or current.run_id != run_id:
                         return

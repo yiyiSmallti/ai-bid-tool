@@ -1,4 +1,4 @@
-"""Bounded org-memory reads; mutations remain in the original memory services."""
+"""Bounded library memory reads; mutations remain in the original memory services."""
 
 from datetime import UTC, datetime
 from typing import cast as typed_cast
@@ -9,10 +9,9 @@ from sqlalchemy.orm import aliased
 
 from app.core.errors import not_found
 from app.memory import crud
-from app.memory.access import human_admin, normalize
-from app.models.entities import AuditLog, Job
+from app.memory.access import human, normalize
+from app.models.entities import Job
 from app.models.memory import Memory, MemoryFeedbackEvent, MemoryRevision
-from app.models.team_workflow import TaskMember, TaskWorkflow
 from app.schemas.contracts import Cost, Result
 from app.schemas.management_pages import (
     DETAIL_BYTE_LIMIT,
@@ -29,7 +28,7 @@ from app.schemas.management_pages import (
     ResourceDetailQuery,
 )
 from app.services import management_products as bounded
-from app.services.task_workflow import live_actor
+from app.services.task_access import live_actor
 
 WARNINGS = ["Memory is guidance, never evidence or human confirmation"]
 
@@ -71,8 +70,6 @@ def detail_result(command, value, duration_ms=0):
 
 
 def binding(collection, filters=None):
-    # The shared encrypted cursor codec binds this namespace as well as authority,
-    # parent and filters; resource-library cursors cannot be reused here.
     return {"collection": collection, **(filters or {})}
 
 
@@ -84,29 +81,16 @@ def build_page(session, actor, command, purpose, parent, filters, items, anchors
             else None
         )
         data = PageData(
-            org_id=actor.org_id,
-            as_of=as_of,
-            returned=count,
-            next_cursor=continuation,
-            has_more=continuation is not None,
+            as_of=as_of, returned=count, next_cursor=continuation, has_more=continuation is not None
         )
         if (
-            bounded.result_bytes(
-                encoded(
-                    command,
-                    data,
-                    items[:count],
-                    9223372036854775807,
-                )
-            )
+            bounded.result_bytes(encoded(command, data, items[:count], 9223372036854775807))
             <= PAGE_BYTE_LIMIT
         ):
             return Page(data=data, items=items[:count])
     if items:
         bounded.too_large()
-    return Page(
-        data=PageData(org_id=actor.org_id, as_of=as_of, returned=0, has_more=False), items=[]
-    )
+    return Page(data=PageData(as_of=as_of, returned=0, has_more=False), items=[])
 
 
 def filters(body):
@@ -129,12 +113,11 @@ def browse_statement(actor, body, anchor=None, as_of=None):
         select(Memory, MemoryRevision)
         .join(
             MemoryRevision,
-            (MemoryRevision.org_id == Memory.org_id)
-            & (MemoryRevision.memory_id == Memory.id)
+            (MemoryRevision.memory_id == Memory.id)
             & (MemoryRevision.id == Memory.current_revision_id)
             & (MemoryRevision.revision == Memory.revision),
         )
-        .where(Memory.org_id == actor.org_id, Memory.scope == "org")
+        .where(Memory.scope == "library")
     )
     if not body.include_deleted:
         statement = statement.where(Memory.deleted_at.is_(None))
@@ -168,11 +151,9 @@ def browse_statement(actor, body, anchor=None, as_of=None):
 
 def check_revision(actor, root, revision):
     if (
-        root.org_id != actor.org_id
-        or revision.org_id != actor.org_id
-        or revision.memory_id != root.id
+        revision.memory_id != root.id
         or revision.revision > root.revision
-        or root.scope != "org"
+        or root.scope != "library"
     ):
         bounded.fail("management_integrity_error", "Memory revision identity is invalid", 409, 4)
 
@@ -186,13 +167,13 @@ async def query(session, actor, body: MemoryQuery, settings):
     async with bounded.read_budget(session, body):
         actor = await reader(session, actor)
         if body.include_deleted:
-            human_admin(actor, "memory:manage")
+            human(actor, "memory:manage")
         normalized = filters(body)
         anchor = bounded.open_cursor(session, actor, body, "browse", None, normalized)
         as_of = datetime.now(UTC)
         rows = (await session.execute(browse_statement(actor, body, anchor, as_of))).all()
         sources = await crud.visible_sources(session, actor, [r for _, r in rows[: body.limit]])
-        items, anchors = [], []
+        items, anchors = ([], [])
         for root, revision in rows[: body.limit]:
             check_revision(actor, root, revision)
             items.append(memory_view(root, revision, sources[revision.id], as_of))
@@ -211,43 +192,6 @@ async def query(session, actor, body: MemoryQuery, settings):
         )
 
 
-async def authors(session, actor, revisions):
-    ids = [row.id for row in revisions]
-    if not ids:
-        return {}
-    rows = (
-        await session.execute(
-            select(
-                MemoryRevision.id,
-                func.count(AuditLog.id),
-                func.min(cast(AuditLog.actor_user_id, String)),
-            )
-            .join(
-                AuditLog,
-                (AuditLog.org_id == MemoryRevision.org_id)
-                & (AuditLog.object_id == MemoryRevision.memory_id)
-                & (AuditLog.memory_revision_id_text == cast(MemoryRevision.id, String))
-                & (AuditLog.details["revision"] == func.to_jsonb(MemoryRevision.revision)),
-            )
-            .where(
-                MemoryRevision.org_id == actor.org_id,
-                MemoryRevision.id.in_(ids),
-                AuditLog.org_id == actor.org_id,
-                AuditLog.memory_revision_id_text.in_([str(value) for value in ids]),
-                text(
-                    "audit_logs.action IN ('memory.create','memory.update','memory.approve','memory.reject','memory.disable','memory.delete','memory.candidate.publish')"
-                ),
-            )
-            .group_by(MemoryRevision.id)
-        )
-    ).all()
-    result: dict[UUID, UUID | None] = {value: None for value in ids}
-    for revision_id, count, user_id in rows:
-        if count == 1 and user_id:
-            result[revision_id] = UUID(user_id)
-    return result
-
-
 async def detail(session, actor, identifier, body: ResourceDetailQuery, settings):
     session.info["management_settings"] = settings
     async with bounded.read_budget(session, body):
@@ -258,15 +202,10 @@ async def detail(session, actor, identifier, body: ResourceDetailQuery, settings
                 select(Memory, MemoryRevision)
                 .join(
                     MemoryRevision,
-                    (MemoryRevision.org_id == Memory.org_id)
-                    & (MemoryRevision.memory_id == Memory.id)
-                    & (MemoryRevision.revision == selected),
+                    (MemoryRevision.memory_id == Memory.id) & (MemoryRevision.revision == selected),
                 )
                 .where(
-                    Memory.org_id == actor.org_id,
-                    Memory.id == identifier,
-                    Memory.deleted_at.is_(None),
-                    Memory.scope == "org",
+                    Memory.id == identifier, Memory.deleted_at.is_(None), Memory.scope == "library"
                 )
             )
         ).first()
@@ -275,14 +214,13 @@ async def detail(session, actor, identifier, body: ResourceDetailQuery, settings
         root, revision = row
         check_revision(actor, root, revision)
         sources = await crud.visible_sources(session, actor, [revision])
-        by = await authors(session, actor, [revision])
-        human = actor.actor_kind == "session" and actor.token_id is None and actor.role == "admin"
+        human = actor.actor_kind == "session" and actor.token_id is None
         current = revision.revision == root.revision
         editable = current and "memory:write" in actor.scopes
-        if editable and not human:
+        if editable and (not human):
             editable = (
                 revision.status == "candidate"
-                and revision.created_by == actor.user_id
+                and actor.token_id is not None
                 and revision.actor_token_id == actor.token_id
             )
             if editable:
@@ -290,9 +228,7 @@ async def detail(session, actor, identifier, body: ResourceDetailQuery, settings
                     await session.scalar(
                         select(MemoryRevision.id)
                         .where(
-                            MemoryRevision.org_id == actor.org_id,
-                            MemoryRevision.memory_id == root.id,
-                            MemoryRevision.status == "active",
+                            MemoryRevision.memory_id == root.id, MemoryRevision.status == "active"
                         )
                         .limit(1)
                     )
@@ -305,28 +241,36 @@ async def detail(session, actor, identifier, body: ResourceDetailQuery, settings
                 "approve",
                 current
                 and human
-                and "memory:approve" in actor.scopes
-                and revision.status == "candidate",
+                and ("memory:approve" in actor.scopes)
+                and (revision.status == "candidate"),
             ),
             (
                 "reject",
                 current
                 and human
-                and "memory:approve" in actor.scopes
-                and revision.status == "candidate",
+                and ("memory:approve" in actor.scopes)
+                and (revision.status == "candidate"),
             ),
             (
                 "disable",
                 current
                 and human
-                and "memory:manage" in actor.scopes
-                and revision.status != "disabled",
+                and ("memory:manage" in actor.scopes)
+                and (revision.status != "disabled"),
             ),
         ]
         for action, allowed in decisions:
             actions.append(
                 ActionHint(
-                    action=action, allowed=allowed, reason=None if allowed else "role_required"
+                    action=action,
+                    allowed=allowed,
+                    reason=None
+                    if allowed
+                    else "human_required"
+                    if not human
+                    else "not_candidate"
+                    if action in {"approve", "reject"} and revision.status != "candidate"
+                    else "scope_required",
                 )
             )
         as_of = datetime.now(UTC)
@@ -334,7 +278,7 @@ async def detail(session, actor, identifier, body: ResourceDetailQuery, settings
         if (
             current_status == "active"
             and root.search_expires_at
-            and root.search_expires_at <= as_of
+            and (root.search_expires_at <= as_of)
         ):
             current_status = "expired"
         value = MemoryDetailData(
@@ -343,7 +287,6 @@ async def detail(session, actor, identifier, body: ResourceDetailQuery, settings
             current_effective_status=typed_cast(MemoryEffectiveStatus, current_status),
             as_of=as_of,
             revised_at=revision.created_at,
-            revised_by=by[revision.id],
             actions=actions,
         )
         detail_result("memory show", value, 9223372036854775807)
@@ -356,18 +299,14 @@ async def history(session, actor, identifier, body: PageQuery, settings):
         actor = await reader(session, actor)
         normalized = binding("memory_history")
         anchor = bounded.open_cursor(session, actor, body, "history", identifier, normalized)
-        relation = (MemoryRevision.org_id == Memory.org_id) & (
-            MemoryRevision.memory_id == Memory.id
-        )
+        relation = MemoryRevision.memory_id == Memory.id
         if anchor:
             relation &= tuple_(MemoryRevision.revision, MemoryRevision.id) < tuple_(*anchor)
         rows = (
             await session.execute(
                 select(Memory, MemoryRevision)
                 .outerjoin(MemoryRevision, relation)
-                .where(
-                    Memory.org_id == actor.org_id, Memory.id == identifier, Memory.scope == "org"
-                )
+                .where(Memory.id == identifier, Memory.scope == "library")
                 .order_by(MemoryRevision.revision.desc(), MemoryRevision.id.desc())
                 .limit(body.limit + 1)
             )
@@ -376,10 +315,10 @@ async def history(session, actor, identifier, body: PageQuery, settings):
             raise not_found()
         root = rows[0][0]
         if root.deleted_at:
-            human_admin(actor, "memory:manage")
+            human(actor, "memory:manage")
         revisions = [r for _, r in rows if r is not None]
         sources = await crud.visible_sources(session, actor, revisions[: body.limit])
-        items, anchors = [], []
+        items, anchors = ([], [])
         for revision in revisions[: body.limit]:
             check_revision(actor, root, revision)
             items.append(crud.revision_view(root, revision, sources[revision.id]))
@@ -399,16 +338,11 @@ async def history(session, actor, identifier, body: PageQuery, settings):
 
 
 def feedback_statement(actor, task_id, body, anchor=None):
-    event_query = select(MemoryFeedbackEvent).where(
-        MemoryFeedbackEvent.org_id == actor.org_id, MemoryFeedbackEvent.task_id == task_id
-    )
+    event_query = select(MemoryFeedbackEvent).where(MemoryFeedbackEvent.task_id == task_id)
     if anchor:
         event_query = event_query.where(
             tuple_(MemoryFeedbackEvent.created_at, MemoryFeedbackEvent.id) < tuple_(*anchor)
         )
-
-    # Limit the event relation before looking up receipts. Root/job joins never
-    # expand the retained page or materialize the task's complete event history.
     events = (
         event_query.order_by(MemoryFeedbackEvent.created_at.desc(), MemoryFeedbackEvent.id.desc())
         .limit(body.limit + 1)
@@ -423,7 +357,6 @@ def feedback_statement(actor, task_id, body, anchor=None):
             Job.id.label("job_id"), Job.status.label("job_status"), recorded_ids.label("event_ids")
         )
         .where(
-            Job.org_id == actor.org_id,
             Job.task_id == task_id,
             text("jobs.kind = 'memory_candidate'"),
             recorded_ids.op("?")(cast(event.id, String)),
@@ -438,8 +371,7 @@ def feedback_statement(actor, task_id, body, anchor=None):
         .outerjoin(job, true())
         .outerjoin(
             Memory,
-            (Memory.org_id == actor.org_id)
-            & (Memory.source_feedback_event_id == event.id)
+            (Memory.source_feedback_event_id == event.id)
             & (Memory.generator_version == "feedback-copy-v1")
             & Memory.deleted_at.is_(None),
         )
@@ -448,40 +380,24 @@ def feedback_statement(actor, task_id, body, anchor=None):
 
 
 async def feedback_page(session, actor, task_id, body: PageQuery, settings):
-    from app.services.task_workflow import require_read_authority
+    from app.services.task_access import access as task_access
 
     session.info["management_settings"] = settings
     async with bounded.read_budget(session, body):
         actor = await reader(session, actor, scope=None)
-        authority_row = (
-            await session.execute(
-                select(TaskWorkflow, TaskMember)
-                .outerjoin(
-                    TaskMember,
-                    (TaskMember.org_id == TaskWorkflow.org_id)
-                    & (TaskMember.task_id == TaskWorkflow.task_id)
-                    & (TaskMember.user_id == actor.user_id)
-                    & TaskMember.active.is_(True),
-                )
-                .where(TaskWorkflow.org_id == actor.org_id, TaskWorkflow.task_id == task_id)
-                .execution_options(populate_existing=True)
-            )
-        ).first()
-        workflow, member = authority_row if authority_row else (None, None)
-        require_read_authority(actor, workflow, member, "memory:read")
-        assert workflow is not None
+        await task_access(session, actor, task_id, scope="memory:read")
         actor.require("card:read")
-        normalized = binding("memory_feedback", {"access_epoch": workflow.access_epoch})
+        normalized = binding("memory_feedback")
         anchor = bounded.open_cursor(session, actor, body, "browse", task_id, normalized)
         rows = (await session.execute(feedback_statement(actor, task_id, body, anchor))).all()
         retained = rows[: body.limit]
         items = []
         for event, job_id, job_status, event_ids, memory_id in retained:
-            if event.org_id != actor.org_id or event.task_id != task_id:
+            if event.task_id != task_id:
                 raise not_found()
             item = MemoryFeedbackRow.model_validate(event, from_attributes=True)
-            item.candidate_job_id, item.candidate_job_status = job_id, job_status
-            item.candidate_event_ids = [UUID(value) for value in (event_ids or [])]
+            item.candidate_job_id, item.candidate_job_status = (job_id, job_status)
+            item.candidate_event_ids = [UUID(value) for value in event_ids or []]
             if len(item.candidate_event_ids) > 100 or (
                 job_id and event.id not in item.candidate_event_ids
             ):

@@ -166,7 +166,7 @@ ClefAnswer = Annotated[
 
 
 class ClefCallPlan(Contract):
-    """Fixed catalog identity and bounded input for each admitted call."""
+    """Fixed provider identity and bounded input for each admitted call."""
 
     quote: CallPlan
     platform_config_revision: Revision
@@ -176,10 +176,10 @@ class ClefCallPlan(Contract):
         if (
             self.quote.capability != "vision"
             or self.quote.model != "@cf/cloudflare/clef"
-            or self.quote.platform_model_id is None
+            or self.quote.provider != "cloudflare"
             or self.quote.image_count > CLEF_IMAGE_LIMIT
         ):
-            raise ValueError("Clef requires a known explicit platform vision call quote")
+            raise ValueError("Clef requires a fixed Cloudflare vision call quote")
         return self
 
 
@@ -233,7 +233,6 @@ class ClefSettingsSet(Contract):
 
 
 class ClefPlatformConfig(ClefSettingsSet):
-    platform_model_id: Literal["bid-review-clef"] = "bid-review-clef"
     revision: Revision
     workers_credential_revision: Revision
     gateway_credential_revision: Revision

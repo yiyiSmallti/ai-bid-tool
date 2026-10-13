@@ -2,8 +2,8 @@
 
 Failure modes enumerated before implementation:
 - a manifest-only web capture retains no page bytes and must not become an archive;
-- a client could name a rendered DOM, the wrong capture kind, another task's run or
-  another organization's artifact as its source image;
+- a client could name a rendered DOM, the wrong capture kind or another task's run
+  as its source image;
 - the uploaded PNG could differ from the server's replay of the captured page and plan;
 - the human review could name a different archive than the one retained;
 - URLs, titles and capture time must come from the proxy receipts, not the client, and
@@ -43,14 +43,13 @@ from app.services import screenshots
 from sandbox_fakes import synthetic_png
 from sqlalchemy import select, update
 from test_prototype_decisions import renderer_required  # pyright: ignore[reportMissingImports]
-from test_response_cards import (  # pyright: ignore[reportMissingImports]
+from test_response_cards import (
     PhaseOneExtraction,
     create_card,
     create_tender,
     labelled_pdf,
     login,
     require_action,
-    set_role,
 )
 from test_sandbox import FakeBrowser, SandboxQueue  # pyright: ignore[reportMissingImports]
 from test_screenshot_cards import run_draft  # pyright: ignore[reportMissingImports]
@@ -122,7 +121,7 @@ class VendorBrowser(FakeBrowser):
 
 
 @asynccontextmanager
-async def vendor_client(tenants, tmp_path: Path, monkeypatch, *, live=False):
+async def vendor_client(database, tmp_path: Path, monkeypatch, *, live=False):
     policy = tmp_path / "policy.json"
     urls = (WEB_URL, FINAL_URL, PDF_URL, MISSING_URL)
     rules = [{"url": url, "methods": ["GET", "HEAD"]} for url in urls]
@@ -153,11 +152,8 @@ async def vendor_client(tenants, tmp_path: Path, monkeypatch, *, live=False):
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        headers = [
-            await login(api, org, label)
-            for org, label in zip(tenants["orgs"], ("a", "b"), strict=True)
-        ]
-        yield api, app, headers
+        headers = await login(api)
+        yield (api, app, headers)
 
 
 async def select_product(api, header, task, web_url=WEB_URL, pdf_url=PDF_URL):
@@ -208,11 +204,11 @@ async def capture(api, app, header, task, extraction, product, selection, **spec
     )
     assert submitted.status_code == 200, submitted.text
     run = submitted.json()["data"]
-    await app.state.processor(header["X-Org-Id"], run["job_id"])
+    await app.state.processor(run["job_id"])
     shown = (await api.get(f"/sandbox-runs/{run['id']}", headers=header)).json()["data"]
     job = (await api.get(f"/jobs/{run['job_id']}", headers=header)).json()["data"]
     assert shown["state"] == "succeeded", (shown["issues"], shown["cleanup_state"], job)
-    return {artifact["kind"]: artifact for artifact in shown["artifacts"]}, shown
+    return ({artifact["kind"]: artifact for artifact in shown["artifacts"]}, shown)
 
 
 async def download(api, header, artifact):
@@ -248,18 +244,15 @@ def code(response):
 
 
 async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
-    tenants, tmp_path, admin_engine, monkeypatch
+    database, tmp_path, admin_engine, monkeypatch
 ):
     renderer_required()
-    org = tenants["orgs"][0]
-    async with vendor_client(tenants, tmp_path, monkeypatch) as (api, app, headers):
-        header = headers[0]
+    async with vendor_client(database, tmp_path, monkeypatch) as (api, app, headers):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, confirmed=True
         )
         product, selection = await select_product(api, header, task)
-
-        # Manifest-only captures keep receipts but not page bytes; they cannot be archived.
         manifest_only, _ = await capture(api, app, header, task, extraction, product, selection)
         thin = VendorSource(
             kind="vendor_web", sandbox_artifact_id=manifest_only["capture_png"]["id"]
@@ -269,7 +262,6 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
             api, header, task, UUID(extraction), thin, thin_png, ImagePlan(), "0" * 64
         )
         assert refused.status_code == 409 and code(refused) == "vendor_archive_required"
-
         web, web_run = await capture(
             api, app, header, task, extraction, product, selection, archive="bundle"
         )
@@ -277,7 +269,6 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
         source = VendorSource(kind="vendor_web", sandbox_artifact_id=web["capture_png"]["id"])
         plan = ImagePlan(redact=[PixelRect(x=0, y=0, width=40, height=20)])
         archive_sha = web["capture_archive"]["sha256"]
-
         wrong_kind = VendorSource(kind="vendor_pdf", sandbox_artifact_id=source.sandbox_artifact_id)
         response = await ingest(
             api, header, task, UUID(extraction), wrong_kind, page_png, plan, archive_sha
@@ -292,7 +283,6 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
             api, header, task, UUID(extraction), source, synthetic_png(1440, 899), plan, archive_sha
         )
         assert response.status_code == 409 and code(response) == "source_image_mismatch"
-        # A receipt that names the real source hash but carries other pixels fails the replay.
         other = _rgb_png(1440, 900, [(200, 30, 30)] * (1440 * 900))
         forged_png, forged = await screenshots.prepare(other, source, plan)
         forged_body = ScreenshotIngest(
@@ -315,11 +305,6 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
             api, header, task, UUID(extraction), source, page_png, plan, "0" * 64
         )
         assert response.status_code == 409 and code(response) == "archive_hash_mismatch"
-        foreign = await ingest(
-            api, headers[1], task, UUID(extraction), source, page_png, plan, archive_sha
-        )
-        assert foreign.status_code == 404, foreign.text
-
         accepted = await ingest(
             api, header, task, UUID(extraction), source, page_png, plan, archive_sha
         )
@@ -343,7 +328,6 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
         assert "vendor.example/m1" not in json.dumps(asset)
         rendition = accepted.json()["data"]["rendition"]
         assert rendition["profile"] == "screenshot-markup-v1"
-
         pdf, pdf_run = await capture(
             api, app, header, task, extraction, product, selection, format="pdf", pdf_pages=[1, 2]
         )
@@ -369,10 +353,9 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
         assert whitepaper["incomplete"] is False and whitepaper["failed_request_count"] == 0
         assert whitepaper["archive"]["media_type"] == "application/pdf"
         assert whitepaper["content_sha256"] == hashlib.sha256(WHITEPAPER).hexdigest()
-        async with app.state.db.transaction(org) as session:
+        async with app.state.db.transaction() as session:
             archives = (await session.scalars(select(ScreenshotVendorArchive))).all()
             assert len(archives) == 2
-
         evidence = {
             "kind": "image_region",
             "asset_id": asset["id"],
@@ -401,7 +384,6 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
         )
         assert misuse.status_code == 400 and code(misuse) == "invalid_image_claim"
         card = await create_card(api, header, task, extraction, requirements[2], content)
-        set_role(admin_engine, org, tenants["users"][0], "technical")
         pending = await require_action(api, header, card, "submit")
         assert {"vendor_model_scope", "vendor_capture_incomplete"} <= set(pending["warning_codes"])
         confirmed = await require_action(
@@ -422,13 +404,11 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
             if row["requirement_id"] == requirements[2]["id"]
         )
         assert row["evidence"][0]["image_sha256"] == rendition["image"]["sha256"]
-
-        # Altered retained bytes stop any further use of the image.
-        async with app.state.db.transaction(org) as session:
+        async with app.state.db.transaction() as session:
             stored = await session.get(ScreenshotVendorArchive, UUID(archive["id"]))
             assert stored is not None
             key = stored.storage_key
-        path = app.state.storage.path(org, key)
+        path = app.state.storage.path(key)
         await asyncio.to_thread(path.write_bytes, path.read_bytes()[:-8] + b"tampered")
         broken = await api.post(
             f"/tasks/{task}/cards",
@@ -440,11 +420,9 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
             },
         )
         assert broken.status_code == 409 and code(broken) == "vendor_provenance_integrity"
-
-        # Replacing the product selection stops new ingests of its captures.
         from app.models.entities import TaskResource
 
-        async with app.state.db.transaction(org) as session:
+        async with app.state.db.transaction() as session:
             await session.execute(
                 update(TaskResource)
                 .where(TaskResource.id == UUID(selection["id"]))
@@ -454,7 +432,6 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
             api, header, task, UUID(extraction), source, page_png, ImagePlan(), archive_sha
         )
         assert stale.status_code == 409, stale.text
-
         artifact_dir = Path("data/work/vendor-screenshots")
         await asyncio.to_thread(artifact_dir.mkdir, parents=True, exist_ok=True)
         (artifact_dir / "vendor-chain.json").write_text(
@@ -478,14 +455,14 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
     reason="requires the sandbox supervisor and an explicit public vendor URL",
 )
 async def test_real_sandbox_captures_a_public_vendor_page_and_pdf(
-    tenants, tmp_path, admin_engine, monkeypatch
+    database, tmp_path, admin_engine, monkeypatch
 ):
     """Development acceptance over the open egress policy; never runs in CI."""
     renderer_required()
     web_url = os.environ.get("BID_VENDOR_LIVE_WEB_URL") or WEB_URL
     pdf_url = os.environ.get("BID_VENDOR_LIVE_PDF_URL") or PDF_URL
-    async with vendor_client(tenants, tmp_path, monkeypatch, live=True) as (api, app, headers):
-        header = headers[0]
+    async with vendor_client(database, tmp_path, monkeypatch, live=True) as (api, app, headers):
+        header = headers
         task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
         product, selection = await select_product(api, header, task, web_url, pdf_url)
         target = Path(os.environ.get("BID_VENDOR_LIVE_DIR", "data/work/vendor-live"))

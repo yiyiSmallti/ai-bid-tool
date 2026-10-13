@@ -43,7 +43,6 @@ def request(content="Prepare response proposals for human review."):
         messages=[
             AgentMessageView(
                 id=uuid4(),
-                org_id=uuid4(),
                 session_id=session_id,
                 ordinal=1,
                 role="human",

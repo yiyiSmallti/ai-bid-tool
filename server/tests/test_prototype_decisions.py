@@ -5,16 +5,15 @@ Failure modes fixed before the scenarios:
   requirement, stored HTML hash, stored source PNG hash and sandbox receipt are fixed together;
 - preparation and ingest must reproduce that exact stored PNG before a prototype asset exists;
 - preview contains only live, confirmed prototype image evidence owned by the requested module,
-  and explicit evidence ids cannot omit, add or cross an org/task boundary;
+  and explicit evidence ids cannot omit, add or cross an task boundary;
 - duplicate module selections, omitted decision items, duplicate evidence items, stale preflight
   hashes and mismatched previous-decision ids fail atomically;
 - keep requires an explicit keep basis, replace forbids it, and changing an existing decision
   requires both the exact previous id and a non-empty reason;
-- bidder/admin responsibility mismatches and API tokens cannot preview or apply a human
-  prototype decision even if they can read screenshots and cards;
+- API tokens cannot preview or apply a human prototype decision even if they can read
+  screenshots and cards;
 - idempotent replay creates no second batch, replacement supersedes keep, and reopening the
   confirmed card makes the latest decision stale;
-- preview, apply and list all hide the other organization's task and evidence as 404.
 
 The test uses synthetic HTML/PNG stored through the real local storage provider and seeds only
 the otherwise-unimplemented ``ScreenshotPrototypeRun`` plus its running generation job. It does
@@ -36,13 +35,7 @@ from app.schemas.screenshot_contracts import ImagePlan, PrototypeSource, Screens
 from app.services import screenshots
 from sqlalchemy import func, select
 from test_card_generation import token_header  # pyright: ignore[reportMissingImports]
-from test_response_cards import (  # pyright: ignore[reportMissingImports]
-    create_card,
-    create_tender,
-    phase_one_client,
-    require_action,
-    set_role,
-)
+from test_response_cards import create_card, create_tender, phase_one_client, require_action
 from test_screenshot_cards import selected_feature  # pyright: ignore[reportMissingImports]
 from test_screenshot_renderer import _rgb_png  # pyright: ignore[reportMissingImports]
 
@@ -54,29 +47,25 @@ def renderer_required():
 
 
 async def seed_prototype(
-    app,
-    org_id: UUID,
-    user_id: UUID,
-    task_id: UUID,
-    extraction_id: UUID,
-    requirement_id: UUID,
-    task_feature_id: UUID,
+    app, task_id: UUID, extraction_id: UUID, requirement_id: UUID, task_feature_id: UUID
 ):
     source_png = _rgb_png(32, 20, [(220, 235, 250)] * (32 * 20))
     html = b"<!doctype html><title>Synthetic prototype fixture</title><main>Workflow</main>"
-    prototype_id, generation_id = uuid4(), uuid4()
-    html_hash, image_hash = hashlib.sha256(html).hexdigest(), hashlib.sha256(source_png).hexdigest()
-    html_key = f"org/{org_id}/synthetic-prototype/{prototype_id}/prototype.html"
-    image_key = f"org/{org_id}/synthetic-prototype/{prototype_id}/source.png"
-    await app.state.storage.put(org_id, html_key, html)
-    await app.state.storage.put(org_id, image_key, source_png)
-    async with app.state.db.transaction(org_id) as session:
+    prototype_id, generation_id = (uuid4(), uuid4())
+    html_hash, image_hash = (
+        hashlib.sha256(html).hexdigest(),
+        hashlib.sha256(source_png).hexdigest(),
+    )
+    html_key = f"synthetic-prototype/{prototype_id}/prototype.html"
+    image_key = f"synthetic-prototype/{prototype_id}/source.png"
+    await app.state.storage.put(html_key, html)
+    await app.state.storage.put(image_key, source_png)
+    async with app.state.db.transaction() as session:
         extraction = await session.get(Job, extraction_id)
         feature = await session.get(TaskFeature, task_feature_id)
         assert extraction is not None and feature is not None
         job = Job(
             id=generation_id,
-            org_id=org_id,
             task_id=task_id,
             document_id=extraction.document_id,
             kind="prototype_generate",
@@ -85,15 +74,9 @@ async def seed_prototype(
             run_id=uuid4(),
             result={
                 "submission": {
-                    "actor_user_id": str(user_id),
                     "actor_token_id": None,
                     "actor_kind": "session",
-                    "scopes": [
-                        "task:read",
-                        "resource:read",
-                        "screenshot:read",
-                        "screenshot:write",
-                    ],
+                    "scopes": ["task:read", "resource:read", "screenshot:read", "screenshot:write"],
                 }
             },
         )
@@ -101,7 +84,6 @@ async def seed_prototype(
         session.add(
             ScreenshotPrototypeRun(
                 id=prototype_id,
-                org_id=org_id,
                 task_id=task_id,
                 extraction_job_id=extraction_id,
                 requirement_id=requirement_id,
@@ -233,39 +215,26 @@ def artifact(value):
     )
 
 
-async def test_prototype_keep_replace_permissions_and_card_reopen(tenants, tmp_path, admin_engine):
+async def test_prototype_keep_replace_permissions_and_card_reopen(database, tmp_path, admin_engine):
     renderer_required()
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, suffix="prototype-decisions", confirmed=True
         )
         feature = await selected_feature(api, header, task)
         prototype = await seed_prototype(
-            app,
-            tenants["orgs"][0],
-            tenants["users"][0],
-            UUID(task),
-            UUID(extraction),
-            UUID(requirements[2]["id"]),
-            UUID(feature["id"]),
+            app, UUID(task), UUID(extraction), UUID(requirements[2]["id"]), UUID(feature["id"])
         )
         uploaded = await prepare_ingest_prototype(
             api, app, header, task, UUID(extraction), prototype
         )
         second_prototype = await seed_prototype(
-            app,
-            tenants["orgs"][0],
-            tenants["users"][0],
-            UUID(task),
-            UUID(extraction),
-            UUID(requirements[3]["id"]),
-            UUID(feature["id"]),
+            app, UUID(task), UUID(extraction), UUID(requirements[3]["id"]), UUID(feature["id"])
         )
         second_uploaded = await prepare_ingest_prototype(
             api, app, header, task, UUID(extraction), second_prototype
         )
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
         card = await confirmed_prototype_card(
             api, header, task, extraction, requirements[2], uploaded
         )
@@ -275,13 +244,6 @@ async def test_prototype_keep_replace_permissions_and_card_reopen(tenants, tmp_p
         evidence = card["evidence"][0]
         second_evidence = second_card["evidence"][0]
         preview_body = preview_input(extraction, feature["id"])
-
-        foreign_preview = await api.post(
-            f"/tasks/{task}/prototype-decisions/preview",
-            headers=headers[1],
-            json=preview_body,
-        )
-        assert foreign_preview.status_code == 404
         duplicated_module = await api.post(
             f"/tasks/{task}/prototype-decisions/preview",
             headers=header,
@@ -289,30 +251,15 @@ async def test_prototype_keep_replace_permissions_and_card_reopen(tenants, tmp_p
         )
         assert duplicated_module.status_code == 422
         assert duplicated_module.json()["data"]["error"]["code"] == "invalid_input"
-
-        for role in ("admin", "bidder"):
-            set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], role)
-            wrong_role = await api.post(
-                f"/tasks/{task}/prototype-decisions/preview", headers=header, json=preview_body
-            )
-            assert wrong_role.status_code == 403
-        # Only an admin can issue tokens; the token is then used while the member is technical.
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
         token = await token_header(
-            api,
-            header,
-            scopes=["task:read", "card:read", "resource:read", "screenshot:read"],
+            api, header, scopes=["task:read", "card:read", "resource:read", "screenshot:read"]
         )
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
         token_denied = await api.post(
             f"/tasks/{task}/prototype-decisions/preview", headers=token, json=preview_body
         )
         assert token_denied.status_code == 403
-
         preview_response = await api.post(
-            f"/tasks/{task}/prototype-decisions/preview",
-            headers=header,
-            json=preview_body,
+            f"/tasks/{task}/prototype-decisions/preview", headers=header, json=preview_body
         )
         assert preview_response.status_code == 200, preview_response.text
         preview = preview_response.json()["data"]
@@ -324,13 +271,10 @@ async def test_prototype_keep_replace_permissions_and_card_reopen(tenants, tmp_p
             evidence["id"],
             second_evidence["id"],
         }
-
         omitted_body = decision_input(preview, extraction, feature["id"], decision="keep")
         omitted_body["items"] = omitted_body["items"][:1]
         omitted = await api.post(
-            f"/tasks/{task}/prototype-decisions",
-            headers=header,
-            json=omitted_body,
+            f"/tasks/{task}/prototype-decisions", headers=header, json=omitted_body
         )
         assert omitted.status_code == 409
         assert omitted.json()["data"]["error"]["code"] == "decision_set_mismatch"
@@ -340,7 +284,6 @@ async def test_prototype_keep_replace_permissions_and_card_reopen(tenants, tmp_p
             f"/tasks/{task}/prototype-decisions", headers=header, json=duplicate_item
         )
         assert duplicated.status_code == 422
-
         keep_body = decision_input(preview, extraction, feature["id"], decision="keep", key=uuid4())
         kept_response = await api.post(
             f"/tasks/{task}/prototype-decisions", headers=header, json=keep_body
@@ -355,11 +298,10 @@ async def test_prototype_keep_replace_permissions_and_card_reopen(tenants, tmp_p
             f"/tasks/{task}/prototype-decisions", headers=header, json=keep_body
         )
         assert replay.status_code == 200 and replay.json()["data"]["duplicate"] is True
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             assert (
                 await session.scalar(select(func.count()).select_from(PrototypeDecisionBatch)) == 1
             )
-
         stale_body = decision_input(
             preview, extraction, feature["id"], decision="replace", reason="Synthetic change"
         )
@@ -368,12 +310,9 @@ async def test_prototype_keep_replace_permissions_and_card_reopen(tenants, tmp_p
         )
         assert stale.status_code == 409
         assert stale.json()["data"]["error"]["code"] == "prototype_decision_stale"
-
         second_preview = (
             await api.post(
-                f"/tasks/{task}/prototype-decisions/preview",
-                headers=header,
-                json=preview_body,
+                f"/tasks/{task}/prototype-decisions/preview", headers=header, json=preview_body
             )
         ).json()["data"]
         assert {row["expected_previous_decision_id"] for row in second_preview["targets"]} == {
@@ -402,7 +341,6 @@ async def test_prototype_keep_replace_permissions_and_card_reopen(tenants, tmp_p
         assert len(replaced["decisions"]) == 2
         assert all(row["decision"] == "replace" for row in replaced["decisions"])
         assert all(row["keep_basis"] is None for row in replaced["decisions"])
-
         listed = await api.get(
             f"/tasks/{task}/prototype-decisions", headers=header, params={"job": extraction}
         )
@@ -410,27 +348,6 @@ async def test_prototype_keep_replace_permissions_and_card_reopen(tenants, tmp_p
         views = listed.json()["items"]
         assert [row["validity"] for row in views].count("superseded") == 2
         assert [row["validity"] for row in views].count("current") == 2
-        assert (
-            await api.get(
-                f"/tasks/{task}/prototype-decisions",
-                headers=headers[1],
-                params={"job": extraction},
-            )
-        ).status_code == 404
-        assert (
-            await api.post(
-                f"/tasks/{task}/prototype-decisions",
-                headers=headers[1],
-                json=decision_input(
-                    second_preview,
-                    extraction,
-                    feature["id"],
-                    decision="replace",
-                    reason="Foreign decision must be hidden",
-                ),
-            )
-        ).status_code == 404
-
         reopened = await require_action(
             api,
             header,

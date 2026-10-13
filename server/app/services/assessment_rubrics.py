@@ -118,7 +118,6 @@ async def completeness(session: AsyncSession, row: ScoreRubricSet) -> RubricComp
                     ScoreRubricDecision.item_id,
                     ScoreRubricDecision.revision,
                     ScoreRubricDecision.action,
-                    ScoreRubricDecision.decided_by,
                     ScoreRubricDecision.decided_at,
                 )
                 .where(ScoreRubricDecision.rubric_id == row.id)
@@ -175,7 +174,6 @@ async def completeness(session: AsyncSession, row: ScoreRubricSet) -> RubricComp
             if current
             else "candidate",
             "review_domain": classification["review_domain"] if classification else None,
-            "confirmed_by": current["decided_by"] if confirmed and current else None,
             "confirmed_at": current["decided_at"] if confirmed and current else None,
         }
 
@@ -245,7 +243,6 @@ async def completeness(session: AsyncSession, row: ScoreRubricSet) -> RubricComp
                     ScoreRubricCoverageDecision.coverage_id,
                     ScoreRubricCoverageDecision.action,
                     ScoreRubricCoverageDecision.canonical_requirement_id,
-                    ScoreRubricCoverageDecision.decided_by,
                     ScoreRubricCoverageDecision.decided_at,
                     (func.length(func.trim(ScoreRubricCoverageDecision.reason)) > 0).label(
                         "has_reason"
@@ -286,7 +283,6 @@ async def completeness(session: AsyncSession, row: ScoreRubricSet) -> RubricComp
             value.update(
                 disposition=saved["action"],
                 canonical_requirement_id=saved["canonical_requirement_id"],
-                decided_by=saved["decided_by"],
                 decided_at=saved["decided_at"],
                 reason="recorded" if saved["has_reason"] else None,
                 rubric_item_ids=mappings.get(saved["id"], []),
@@ -354,7 +350,6 @@ async def summary(
         task_id,
         "rubric_confirm",
         "score:rubric:review",
-        role="bidder",
         domain="commercial",
         human=True,
         checks=checks,
@@ -369,7 +364,6 @@ async def summary(
         task_id,
         "rubric_reopen",
         "score:rubric:review",
-        role="bidder",
         domain="commercial",
         human=True,
         checks=checks,
@@ -381,19 +375,15 @@ async def summary(
         task_id,
         "rubric_revise",
         "score:rubric:review",
-        domain={"bidder": "commercial", "technical": "technical"}.get(actor.role),
         human=True,
         checks=checks,
         valid=active,
     )
-    if actor.role not in {"bidder", "technical"}:
-        revise = revise.model_copy(update={"allowed": False, "blocker_codes": ["wrong_role"]})
     return RubricSummaryData(
         **score.fields(
             row,
             (
                 "id",
-                "org_id",
                 "task_id",
                 "extraction_job_id",
                 "document_id",
@@ -428,7 +418,6 @@ async def subject_view(session: AsyncSession, row: ScoreRubricSet, child: Any, p
     if part == "sections":
         fields = (
             "id",
-            "org_id",
             "task_id",
             "rubric_id",
             "key",
@@ -456,7 +445,6 @@ async def subject_view(session: AsyncSession, row: ScoreRubricSet, child: Any, p
         )
     fields = (
         "id",
-        "org_id",
         "task_id",
         "rubric_id",
         "section_id",
@@ -591,7 +579,6 @@ async def page(
             "coverage": ScoreRubricCoverage,
         }[query.part]
         conditions: list[Any] = [
-            model.org_id == actor.org_id,
             model.rubric_id == rubric_id,
             model.task_id == task_id,
         ]
@@ -678,7 +665,6 @@ async def page(
                         task_id,
                         "rubric_coverage_decide",
                         "score:rubric:review",
-                        role="bidder",
                         domain="commercial",
                         human=True,
                         checks=checks,
@@ -687,20 +673,18 @@ async def page(
                 ]
             else:
                 domain = value.review_domain
-                role = {"commercial": "bidder", "technical": "technical"}.get(domain)
                 decision = await action(
                     session,
                     actor,
                     task_id,
                     "rubric_section_decide" if query.part == "sections" else "rubric_item_decide",
                     "score:rubric:review",
-                    role=role,
                     domain=domain,
                     human=True,
                     checks=checks,
                     valid=state["state"] == "candidate",
                 )
-                if role is None:
+                if domain is None:
                     decision = decision.model_copy(
                         update={"allowed": False, "blocker_codes": ["unclassified"]}
                     )
@@ -711,7 +695,6 @@ async def page(
                         task_id,
                         "rubric_classify",
                         "score:rubric:review",
-                        role="admin",
                         human=True,
                         checks=checks,
                         valid=state["state"] == "candidate",
@@ -764,9 +747,9 @@ async def replacement(
         raise not_found()
     actual = await session.scalar(
         text(
-            "SELECT encode(sha256(convert_to(replacement_snapshot::text, 'UTF8')), 'hex') FROM score_rubric_revision_events WHERE org_id=:org AND task_id=:task AND rubric_id=:rubric"
+            "SELECT encode(sha256(convert_to(replacement_snapshot::text, 'UTF8')), 'hex') FROM score_rubric_revision_events WHERE task_id=:task AND rubric_id=:rubric"
         ),
-        {"org": actor.org_id, "task": task_id, "rubric": rubric_id},
+        {"task": task_id, "rubric": rubric_id},
     )
     if actual != event.snapshot_sha256:
         raise ServiceError(
@@ -793,7 +776,6 @@ async def history(
         raise not_found()
     conditions: list[Any] = [
         ScoreRubricSet.task_id == task_id,
-        ScoreRubricSet.org_id == actor.org_id,
     ]
     if query.extraction_job_id:
         extraction = await session.get(Job, query.extraction_job_id)

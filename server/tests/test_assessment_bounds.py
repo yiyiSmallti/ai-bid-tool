@@ -18,8 +18,9 @@ from cryptography.fernet import Fernet
 
 
 def test_cursor_principal_filters_and_snapshot():
-    actor = Identity(uuid4(), uuid4(), {"check:read"}, "viewer")
+    actor = Identity({"check:read"})
     settings = Settings(
+        access_key="synthetic-check-access-key-with-32-characters",
         database_url="postgresql+psycopg://synthetic@localhost/bid_test_unused",
         encryption_key=Fernet.generate_key().decode(),
         token_key=Fernet.generate_key().decode(),
@@ -34,7 +35,7 @@ def test_cursor_principal_filters_and_snapshot():
         read_cursor(settings, actor, {**binding, "snapshot": "b" * 64}, value)
     assert changed_snapshot.value.code == "assessment_view_changed"
     assert changed_snapshot.value.status == 409
-    other = Identity(uuid4(), actor.org_id, actor.scopes, actor.role)
+    other = Identity(actor.scopes, token_id=uuid4(), actor_kind="token")
     with pytest.raises(ServiceError, match="Cursor"):
         read_cursor(settings, other, binding, value)
 
@@ -78,8 +79,6 @@ def test_page_caps_whole_rows_and_rebuilds_continuation():
         validity="current",
     )
     items = [Notice(code="notice", message="原" * 500) for _ in range(3)]
-    # Use a small injected cap so this exercises actual envelope encoding,
-    # metadata, whole rows, and the exact continuation without huge fixtures.
     shaped, selected = fit_items(
         "check show", data, items, lambda index: f"after-{index}", byte_limit=2400
     )
@@ -127,7 +126,6 @@ def test_projection_accounts_for_real_http_spaces_unicode_and_duration():
         items=[item.model_dump(mode="json") for item in selected],
         duration_ms=2**63 - 1,
     )
-    # This is the exact middleware JSON encoder, not Pydantic's compact JSON.
     encoded = json.dumps(result.model_dump(mode="json"), ensure_ascii=False).encode()
     assert len(encoded) <= 1800
     assert len(selected) < len(items)

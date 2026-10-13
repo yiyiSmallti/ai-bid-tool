@@ -178,7 +178,6 @@ async def check_job_access(session, actor, job):
 def view(row: ScreenshotPrototypeRun) -> dict:
     return {
         "id": str(row.id),
-        "org_id": str(row.org_id),
         "task_id": str(row.task_id),
         "generation_job_id": str(row.generation_job_id),
         "requirement_id": str(row.requirement_id),
@@ -202,7 +201,7 @@ def view(row: ScreenshotPrototypeRun) -> dict:
 
 async def process(execution, storage, llm, browser):
     llm = http_model(llm)
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         llm, _, _ = with_reasoning(llm, job.reasoning)
         actor = await cards.access(session, worker(job), "screenshot:write")
@@ -228,11 +227,9 @@ async def process(execution, storage, llm, browser):
     html, usage = await prototyping.generate(llm, spec)
 
     prototype_id = uuid4()
-    prefix = f"org/{execution.org_id}/prototypes/{prototype_id}"
+    prefix = f"prototypes/{prototype_id}"
     html_key, png_key = f"{prefix}/prototype.html", f"{prefix}/source.png"
-    descriptor = RunDescriptor(
-        execution.org_id, job_id, execution.run_id, sha(html), "prototype_offline"
-    )
+    descriptor = RunDescriptor(job_id, execution.run_id, sha(html), "prototype_offline")
     try:
         rendered = await browser.render_prototype(descriptor, html)
     except SandboxFailure as exc:
@@ -257,17 +254,16 @@ async def process(execution, storage, llm, browser):
         "issues": list(rendered.issues),
         "metrics": rendered.metrics,
     }
-    await storage.put(execution.org_id, html_key, html)
-    await storage.put(execution.org_id, png_key, png.data)
+    await storage.put(html_key, html)
+    await storage.put(png_key, png.data)
 
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         await cards.task_lock(session, task_id)
         job = await execution.owned_job(session)
         actor = await cards.access(session, worker(job), "screenshot:write")
         await rebuild(session, actor, job, llm)
         row = ScreenshotPrototypeRun(
             id=prototype_id,
-            org_id=execution.org_id,
             task_id=task_id,
             extraction_job_id=UUID(manifest["extraction_job_id"]),
             requirement_id=UUID(manifest["requirement_id"]),
@@ -331,7 +327,7 @@ async def show(session, actor, prototype_id):
 
 async def source(session, actor, prototype_id, storage) -> tuple[ScreenshotPrototypeRun, bytes]:
     row = await show(session, actor, prototype_id)
-    content = await storage.read(actor.org_id, row.source_image_key)
+    content = await storage.read(row.source_image_key)
     if sha(content) != row.source_image_sha256 or len(content) > MAX_SOURCE_BYTES:
         images.fail("image_integrity", "Stored prototype image failed integrity checks", 409, 4)
     return row, content

@@ -1,10 +1,13 @@
 """Attempt-scoped export rendering in a terminable private child process."""
 
 import asyncio
+import ctypes
+import errno
 import hashlib
 import json
 import os
 import signal
+import struct
 import sys
 import tempfile
 import time
@@ -34,7 +37,38 @@ def private_write(path: Path, content: bytes) -> None:
         output.write(content)
 
 
+def darwin_resident_bytes(pid: int) -> int:
+    try:
+        library = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+        query = library.proc_pidinfo
+        query.argtypes = [
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint64,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        ]
+        query.restype = ctypes.c_int
+        # Darwin's proc_taskinfo ABI is six uint64_t values followed by twelve
+        # int32_t values; its second field is resident bytes. Querying the child
+        # directly avoids ps's broader process-list permission requirement.
+        layout = struct.Struct("=6Q12i")
+        buffer = ctypes.create_string_buffer(layout.size)
+        received = query(pid, 4, 0, buffer, layout.size)  # PROC_PIDTASKINFO
+        if received == 0 and ctypes.get_errno() == errno.ESRCH:
+            return 0
+        if received != layout.size:
+            raise OSError(ctypes.get_errno(), "Invalid process memory response")
+        return layout.unpack(buffer.raw)[1]
+    except OSError as exc:
+        raise ServiceError(
+            "export_memory_monitor_failed", "Could not enforce render memory limit", 503, 4
+        ) from exc
+
+
 async def resident_bytes(pid: int) -> int:
+    if sys.platform == "darwin":
+        return await asyncio.to_thread(darwin_resident_bytes, pid)
     if sys.platform == "linux":
         try:
             values = (await asyncio.to_thread(Path(f"/proc/{pid}/statm").read_text)).split()
@@ -43,15 +77,20 @@ async def resident_bytes(pid: int) -> int:
             # open and read makes the read fail with ESRCH instead of ENOENT.
             return 0
         return int(values[1]) * os.sysconf("SC_PAGE_SIZE")
-    process = await asyncio.create_subprocess_exec(
-        "/bin/ps",
-        "-o",
-        "rss=",
-        "-p",
-        str(pid),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
-    )
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "/bin/ps",
+            "-o",
+            "rss=",
+            "-p",
+            str(pid),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except OSError as exc:
+        raise ServiceError(
+            "export_memory_monitor_failed", "Could not enforce render memory limit", 503, 4
+        ) from exc
     output, _ = await process.communicate()
     if process.returncode == 1 and not output.strip():
         return 0  # ps reports no matching process after a normal exit.
@@ -96,7 +135,7 @@ async def render_process(root: Path, request: dict, execution: JobExecution) -> 
                 )
             if execution.stopped is not None:
                 raise execution.stopped
-            async with execution.db.transaction(execution.org_id) as session:
+            async with execution.db.transaction() as session:
                 await execution.owned_job(session)
             if await resident_bytes(child.pid) > execution.settings.export_memory_bytes:
                 raise ServiceError(
@@ -141,7 +180,7 @@ async def render(execution: JobExecution, storage: Storage) -> None:
     # timeout or cancellation. Only this attempt can write its encrypted key.
     with tempfile.TemporaryDirectory(prefix="bid-export-") as directory:
         root = Path(directory)
-        async with execution.db.transaction(execution.org_id) as session:
+        async with execution.db.transaction() as session:
             job = await session.get(Job, execution.job_id)
             if job is None:
                 raise not_found()
@@ -222,7 +261,7 @@ async def render(execution: JobExecution, storage: Storage) -> None:
         # Recheck before writing and again under publication locks. A cancellation
         # during object I/O may leave an encrypted unreferenced object, never a
         # candidate row or a downloadable publication.
-        async with execution.db.transaction(execution.org_id) as session:
+        async with execution.db.transaction() as session:
             job = await execution.owned_job(session)
             actor = await exports.worker_access(session, job, execution.run_id)
             run = await session.get(ExportRun, run_id)
@@ -239,10 +278,10 @@ async def render(execution: JobExecution, storage: Storage) -> None:
                 raise ServiceError(
                     "export_nondeterministic", "Repeated render produced different bytes", 500, 4
                 )
-        key = f"org/{execution.org_id}/export-candidates/{run_id}/{execution.run_id}/{result['sha256']}.docx"
-        await storage.put(execution.org_id, key, content)
+        key = f"export-candidates/{run_id}/{execution.run_id}/{result['sha256']}.docx"
+        await storage.put(key, content)
         del content
-        async with execution.db.transaction(execution.org_id) as session:
+        async with execution.db.transaction() as session:
             # Lock order is task/cards/dependencies then run/job, matching release.
             job = await session.get(Job, execution.job_id)
             if job is None:
@@ -258,7 +297,6 @@ async def render(execution: JobExecution, storage: Storage) -> None:
             await exports.fresh_manifest(session, actor, run, storage, verify_files=False)
             candidate = ExportRenderCandidate(
                 id=uuid4(),
-                org_id=execution.org_id,
                 run_id=run_id,
                 render_job_id=job.id,
                 attempt_id=execution.run_id,
@@ -300,9 +338,7 @@ async def render(execution: JobExecution, storage: Storage) -> None:
 
 async def failure_audit(session, job: Job, code: str) -> None:
     submission = job.result["submission"]
-    actor = exports.Identity(
-        UUID(submission["actor_user_id"]), job.org_id, set(), "bidder", actor_kind="worker"
-    )
+    actor = exports.Identity(scopes=set(), actor_kind="worker", job_id=job.id, run_id=job.run_id)
     await set_actor_context(session, actor)
     await session.execute(
         text(

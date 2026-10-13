@@ -4,7 +4,7 @@
 
 A later original or declaration must not rewrite an earlier task's selected
 certificate. An old revision without a file must stay explicitly empty. Reading an
-original requires independent file permission, tenant isolation and byte integrity;
+original requires independent file permission and byte integrity;
 retaining a PDF does not authenticate the certificate or establish eligibility.
 
 ## Usage
@@ -21,14 +21,13 @@ revision UUID to a new path using the commands in [cli.md](../guides/cli.md#atta
 
 ## How it works
 
-Migration 0008 adds certificate_files with NOT NULL org_id, FORCE RLS, tenant-bound
-revision/creator foreign keys, one original per revision, descriptor constraints,
-and an object key bound to org/certificate/revision/SHA. The restricted runtime can
+`certificate_files` has a revision foreign key, one original per revision,
+descriptor constraints and an object key bound to certificate/revision/SHA. The restricted runtime can
 only SELECT/INSERT files and cannot rewrite existing revisions or audit records.
 An invoker-security trigger requires a visible parent's xmin to equal
 pg_current_xact_id()::xid. Thus the current service creates the revision and file
 in the same top-level transaction; a committed metadata-only revision cannot be
-backfilled. The trigger respects caller RLS and leaves missing/mismatched parents
+backfilled. The trigger leaves missing/mismatched parents
 to the composite foreign key. [PostgreSQL system columns](https://www.postgresql.org/docs/16/ddl-system-columns.html)
 identify xmin as the inserting transaction; [transaction functions](https://www.postgresql.org/docs/16/functions-info.html#FUNCTIONS-PG-SNAPSHOT)
 document the current transaction and xid8-to-xid cast. This comparison is a
@@ -43,10 +42,10 @@ unreferenced object. No automatic object or history deletion is performed.
 Task file queries join the task's fixed revision, never the resource's current
 pointer. Missing file and file ID are both null with an explicit warning. Current
 file lists do not fall back to old originals. Separate file read/write scopes must
-intersect current human-role grants and the existing certificate read/write scope.
+accompany the existing certificate read/write scope.
 Old tokens gain no file scopes, and a selection scope does not grant file content.
-Download links are signed for org/revision/kind for 300 seconds and still require
-identity, membership and file-read permission. Server and CLI verify length/SHA;
+Download links are signed for revision/kind for 300 seconds and still require
+identity and file-read permission. Server and CLI verify length/SHA;
 CLI permits only the matching own-service route, no redirects, and atomically
 creates a 0600 nonsymlink output without overwriting any existing file.
 
@@ -63,7 +62,7 @@ previews render photos and scans alike. A requested rotation turns the file's
 pages clockwise. Every page, evidence source, preview and export attachment then
 works on the composed PDF exactly as on an uploaded one.
 
-Migration 0031 keeps each uploaded file unchanged and encrypted in
+`certificate_file_parts` keeps each uploaded file unchanged and encrypted in
 `certificate_file_parts`, with its ordinal, type, hash, size, page range and
 rotation. A trigger like the file's own allows parts only in the transaction that
 created the original, so a committed original never gains, loses or swaps a
@@ -96,7 +95,7 @@ is refused. Do not treat raw-original download as bid export or evidence approva
 - Schemas: server/app/schemas/certificate_file_contracts.py
 - Service: server/app/services/certificate_files.py
 - API/CLI: server/app/api/resources.py; cli/bid_cli/main.py; cli/bid_cli/client.py
-- Migration: server/migrations/versions/0008_certificate_files.py; 0031_certificate_file_parts.py
+- Schema and guards: server/migrations/baseline/
 - Console: web/src/components/CertificateSection.vue
 - Tests: server/tests/test_certificate_files.py; test_certificate_images.py; test_certificate_file_client.py;
   test_resource_rls.py; test_cli_snapshots.py; test_runtime_integration.py

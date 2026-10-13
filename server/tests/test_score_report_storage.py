@@ -1,7 +1,6 @@
 """Real PostgreSQL report boundaries, exercised with API-approved rubric and draft.
 
-Failure inventory recorded before implementation: missing/no tenant context,
-foreign tenant/task/draft/rubric parents, stale/expired/cancelled attempts, unconfirmed
+Failure inventory recorded before implementation: foreign task/draft/rubric parents, stale/expired/cancelled attempts, unconfirmed
 or reopened rubric, changed draft, mutable history, late children, forged supporting
 rows/quotes, incomplete coverage, and a total hiding unassessable items.
 """
@@ -19,14 +18,14 @@ from app.models.score import (
     ScoreReportItem,
     ScoreReportItemResponse,
 )
-from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
+from app.services.auth import HUMAN_SCOPES, Identity, set_actor_context
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from test_check import publish_draft
 from test_response_cards import create_card, require_action
 from test_score_api import rubric_case as rubric_case
 from test_score_api import rubric_input_case as rubric_input_case
-from test_score_review import base, confirm_contents, decision, role, show
+from test_score_review import base, confirm_contents, decision, show
 
 TABLES = (
     "score_reports",
@@ -41,12 +40,9 @@ async def score_storage_case(rubric_case):
     case = rubric_case
     report = await confirm_contents(case)
     confirmed = await case["api"].post(
-        base(case) + "/decisions",
-        headers=case["header"],
-        json=decision(report, report["rubric"]),
+        base(case) + "/decisions", headers=case["header"], json=decision(report, report["rubric"])
     )
     assert confirmed.status_code == 200, confirmed.text
-    role(case, "technical")
     card = await create_card(
         case["api"],
         case["header"],
@@ -77,14 +73,10 @@ async def score_storage_case(rubric_case):
 
 
 async def pending_score(session, case, *, change=None, score_value=5, deduction_reasons=None):
-    org, user = case["tenants"]["orgs"][0], case["tenants"]["users"][0]
-    await set_actor_context(
-        session, Identity(user, org, ROLE_SCOPES["technical"], "technical", actor_kind="worker")
-    )
+    await set_actor_context(session, Identity(HUMAN_SCOPES, actor_kind="worker"))
     rubric = case["confirmed"]["rubric"]
     draft = await session.get(DraftRun, case["draft_id"])
     manifest = dict(
-        org_id=str(org),
         task_id=case["task"],
         draft_id=str(draft.id),
         extraction_job_id=case["extraction"],
@@ -102,7 +94,6 @@ async def pending_score(session, case, *, change=None, score_value=5, deduction_
     )
     report = ScoreReport(
         id=uuid4(),
-        org_id=org,
         task_id=UUID(case["task"]),
         job_id=uuid4(),
         run_id=uuid4(),
@@ -139,13 +130,11 @@ async def pending_score(session, case, *, change=None, score_value=5, deduction_
                 "estimated_score": "5",
             }
         ],
-        actor_user_id=user,
         actor_token_id=None,
         actor_kind="worker",
     )
     job = Job(
         id=report.job_id,
-        org_id=org,
         task_id=report.task_id,
         document_id=report.document_id,
         kind="score",
@@ -179,7 +168,6 @@ async def pending_score(session, case, *, change=None, score_value=5, deduction_
     )
     item = ScoreReportItem(
         id=uuid4(),
-        org_id=org,
         task_id=report.task_id,
         report_id=report.id,
         draft_id=draft.id,
@@ -202,7 +190,6 @@ async def pending_score(session, case, *, change=None, score_value=5, deduction_
     await session.flush()
     session.add(
         ScoreReportItemResponse(
-            org_id=org,
             task_id=report.task_id,
             report_id=report.id,
             score_item_id=item.id,
@@ -217,7 +204,6 @@ async def pending_score(session, case, *, change=None, score_value=5, deduction_
     session.add_all(
         [
             ScoreItemCitation(
-                org_id=org,
                 task_id=report.task_id,
                 report_id=report.id,
                 score_item_id=item.id,
@@ -228,7 +214,6 @@ async def pending_score(session, case, *, change=None, score_value=5, deduction_
                 source=source,
             ),
             ScoreItemCitation(
-                org_id=org,
                 task_id=report.task_id,
                 report_id=report.id,
                 score_item_id=item.id,
@@ -245,30 +230,9 @@ async def pending_score(session, case, *, change=None, score_value=5, deduction_
     return report
 
 
-@pytest.mark.parametrize("table", TABLES)
-def test_score_tables_force_rls_and_required_context(tenants, admin_engine, table):
-    with admin_engine.connect() as connection:
-        assert connection.execute(
-            text("SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname=:table"),
-            {"table": table},
-        ).one() == (True, True)
-        assert set(
-            connection.execute(
-                text(
-                    "SELECT column_name,is_nullable FROM information_schema.columns WHERE table_name=:table AND column_name IN ('org_id','task_id')"
-                ),
-                {"table": table},
-            ).all()
-        ) == {("org_id", "NO"), ("task_id", "NO")}
-        connection.execute(text("SET LOCAL ROLE bid_app"))
-        connection.execute(text("SELECT set_config('app.current_org','',true)"))
-        assert connection.execute(text(f'SELECT count(*) FROM "{table}"')).scalar_one() == 0
-
-
-async def test_score_report_rows_isolated_immutable_and_closed(score_storage_case):
+async def test_score_report_rows_immutable_and_closed(score_storage_case):
     case = score_storage_case
-    org = case["tenants"]["orgs"][0]
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         report = await pending_score(session, case)
         report_id = report.id
     for table in TABLES:
@@ -287,17 +251,9 @@ async def test_score_report_rows_isolated_immutable_and_closed(score_storage_cas
             )
             assert rows, table
             connection.execute(text("SET LOCAL ROLE bid_app"))
-            for tenant in ("", str(case["tenants"]["orgs"][1])):
-                connection.execute(
-                    text("SELECT set_config('app.current_org',:org,true)"), {"org": tenant}
-                )
-                assert connection.execute(text(f'SELECT count(*) FROM "{table}"')).scalar_one() == 0
         for operation in ("UPDATE", "DELETE", "INSERT"):
             with pytest.raises(DBAPIError), case["admin_engine"].begin() as connection:
                 connection.execute(text("SET LOCAL ROLE bid_app"))
-                connection.execute(
-                    text("SELECT set_config('app.current_org',:org,true)"), {"org": str(org)}
-                )
                 if operation == "UPDATE":
                     connection.execute(text(f'UPDATE "{table}" SET id=id'))
                 elif operation == "DELETE":
@@ -312,10 +268,7 @@ async def test_score_report_rows_isolated_immutable_and_closed(score_storage_cas
                     )
         with pytest.raises(DBAPIError), case["admin_engine"].begin() as connection:
             connection.execute(text("SET LOCAL ROLE bid_app"))
-            connection.execute(
-                text("SELECT set_config('app.current_org',:org,true)"), {"org": str(org)}
-            )
-            payload = {**rows[0], "id": str(uuid4()), "org_id": str(case["tenants"]["orgs"][1])}
+            payload = {**rows[0], "id": str(uuid4())}
             connection.execute(
                 text(
                     f'INSERT INTO "{table}" SELECT (jsonb_populate_record(NULL::"{table}",CAST(:payload AS jsonb))).*'
@@ -329,6 +282,7 @@ async def test_score_report_rows_isolated_immutable_and_closed(score_storage_cas
     ["expired", "run_id", "cancelled", "rubric_revision", "draft_hash", "hidden_partial"],
 )
 async def test_score_publication_attempt_and_snapshot_fences(score_storage_case, mutation):
+
     def change(report, job):
         if mutation == "expired":
             job.lease_until = datetime.now(UTC) - timedelta(seconds=1)
@@ -345,7 +299,7 @@ async def test_score_publication_attempt_and_snapshot_fences(score_storage_case,
 
     case = score_storage_case
     with pytest.raises(DBAPIError):
-        async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        async with case["app"].state.db.transaction() as session:
             await pending_score(session, case, change=change)
 
 
@@ -354,25 +308,17 @@ async def test_score_composite_fk_rejects_cross_task(score_storage_case, table):
     from task_fixtures import related_task
 
     case = score_storage_case
-    org = case["tenants"]["orgs"][0]
     other_task = uuid4()
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         await related_task(
-            session,
-            org,
-            case["tenants"]["users"][0],
-            case["task"],
-            name="Other synthetic scoring task",
-            task_id=other_task,
+            session, case["task"], name="Other synthetic scoring task", task_id=other_task
         )
         await pending_score(session, case)
-    # Both tasks exist in the same tenant. Disable only the append-only user trigger
-    # for this rolled-back transaction so the composite parent FK itself is tested.
     with pytest.raises(IntegrityError) as error, case["admin_engine"].begin() as connection:
         connection.execute(text(f'ALTER TABLE "{table}" DISABLE TRIGGER USER'))
         connection.execute(
-            text(f'UPDATE "{table}" SET task_id=:task WHERE org_id=:org'),
-            {"task": other_task, "org": org},
+            text(f'UPDATE "{table}" SET task_id=:task WHERE task_id=:original'),
+            {"task": other_task, "original": UUID(case["task"])},
         )
     assert error.value.orig.sqlstate == "23503"
 
@@ -381,14 +327,12 @@ async def test_score_composite_fk_rejects_cross_task(score_storage_case, table):
 async def test_score_rejects_changed_confirmations(score_storage_case, changed_input):
     case = score_storage_case
     if changed_input == "rubric_reopened":
-        role(case, "bidder")
         response = await case["api"].post(
             base(case) + "/decisions",
             headers=case["header"],
             json=decision(case["confirmed"], case["confirmed"]["rubric"], "reopen"),
         )
         assert response.status_code == 200, response.text
-        role(case, "technical")
     else:
         await require_action(
             case["api"],
@@ -398,7 +342,7 @@ async def test_score_rejects_changed_confirmations(score_storage_case, changed_i
             reason="Synthetic current-draft invalidation.",
         )
     with pytest.raises(DBAPIError):
-        async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        async with case["app"].state.db.transaction() as session:
             await pending_score(session, case)
 
 
@@ -408,7 +352,7 @@ async def test_score_rejects_changed_confirmations(score_storage_case, changed_i
 async def test_score_rejects_forged_draft_citation(score_storage_case, mutation):
     case = score_storage_case
     with pytest.raises(DBAPIError):
-        async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        async with case["app"].state.db.transaction() as session:
             report = await pending_score(session, case)
             original = await session.scalar(
                 select(ScoreItemCitation).where(
@@ -435,7 +379,7 @@ async def test_score_rejects_forged_draft_citation(score_storage_case, mutation)
 async def test_score_deferred_publish_rechecks_worker_attempt(score_storage_case):
     case = score_storage_case
     with pytest.raises(DBAPIError):
-        async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        async with case["app"].state.db.transaction() as session:
             report = await pending_score(session, case)
             job = await session.get(Job, report.job_id)
             job.lease_until = datetime.now(UTC) - timedelta(seconds=1)
@@ -450,7 +394,7 @@ async def test_score_database_rejects_invalid_numeric_score(
 ):
     case = score_storage_case
     with pytest.raises(IntegrityError) as error:
-        async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        async with case["app"].state.db.transaction() as session:
             await pending_score(
                 session, case, score_value=score_value, deduction_reasons=deductions
             )
@@ -469,7 +413,7 @@ async def test_score_database_accepts_inclusive_bounds(score_storage_case, score
         }
         report.sections = [{**row, "estimated_score": str(score_value)} for row in report.sections]
 
-    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         await pending_score(
             session,
             case,
@@ -495,7 +439,7 @@ async def test_score_no_total_requires_partial_even_when_items_assessed(
         ]
 
     async def publish():
-        async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        async with case["app"].state.db.transaction() as session:
             await pending_score(session, case, change=incomplete_provider)
 
     if completion == "partial":

@@ -2,7 +2,7 @@
 
 Failure cases: a repeated short quote elsewhere in the page rejects a valid
 semantic answer; page context leaks into the request; the full Requirement Source
-changes; report/citation rows lose their original source binding; or another tenant
+changes; report/citation rows lose their original source binding; or an unrelated task
 can read the report. Providers use MockTransport and all material is synthetic.
 """
 
@@ -26,7 +26,7 @@ from test_check_combined import (
     semantic_llm,
     submit_combined,
 )
-from test_check_combined import combined_scope_case as combined_scope_case  # noqa: F401
+from test_check_combined import combined_scope_case as combined_scope_case
 
 
 class ShortTenderCitationVendor(SemanticVendor):
@@ -61,8 +61,7 @@ async def test_combined_check_short_citation_repeated_outside_pinned_source(
     quote = "within thirty calendar days"
     assert source["quote"].count(quote) == 1
     repeated = f"Synthetic unrelated paragraph: {quote}. Outside the pinned delivery rule."
-    org = UUID(case["header"]["X-Org-Id"])
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         chunk = await session.get(Chunk, UUID(source["chunk_id"]))
         original = "\n".join(
             (repeated, chunk.text) if repeat_position == "before" else (chunk.text, repeated)
@@ -75,17 +74,12 @@ async def test_combined_check_short_citation_repeated_outside_pinned_source(
         review = (await requirement_consumption.effective(session, [target]))[target.id]
         assert review.state == "invalidated"
         await confirm_requirements_async(
-            session,
-            org,
-            UUID(case["task"]),
-            [target.id],
-            settings=case["app"].state.processor.settings,
+            session, UUID(case["task"]), [target.id], settings=case["app"].state.processor.settings
         )
         assert (await requirement_consumption.effective(session, [target]))[target.id].confirmed
     await scope_draft(case, response=True)
     vendor = ShortTenderCitationVendor(quote)
     install_resolver(monkeypatch, semantic_llm(tmp_path, vendor))
-
     preview_response, preview = await combined_preview(case)
     assert preview_response.status_code == 200, preview_response.text
     assert preview["semantic_items"] == 1
@@ -102,11 +96,7 @@ async def test_combined_check_short_citation_repeated_outside_pinned_source(
     texts = {row["ref"]: row["text"] for row in vendor.requests[0]["context"]["texts"]}
     assert texts["r3.tender"] == source["quote"]
     assert repeated not in json.dumps(vendor.requests)
-    assert vendor.answers[0]["items"][0]["citations"][0] == {
-        "ref": "r3.tender",
-        "quote": quote,
-    }
-
+    assert vendor.answers[0]["items"][0]["citations"][0] == {"ref": "r3.tender", "quote": quote}
     path = f"/checks/{result['report_id']}"
     shown = await case["api"].get(path, headers=case["header"])
     assert shown.status_code == 200, shown.text
@@ -121,9 +111,7 @@ async def test_combined_check_short_citation_repeated_outside_pinned_source(
     tender_citation = {"kind": "tender", "source": {**source, "quote": quote}}
     assert tender_citation in target["semantic_citations"]
     assert {row["kind"] for row in target["semantic_citations"]} == {"tender", "draft"}
-    assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
-
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         stored = await session.get(CheckRun, UUID(result["report_id"]))
         assert stored.completion == "complete"
         assert stored.input_hash == drafts.digest(stored.input_manifest)
@@ -132,8 +120,7 @@ async def test_combined_check_short_citation_repeated_outside_pinned_source(
         assert item.source == source
         citation = await session.scalar(
             select(CheckFindingCitation).where(
-                CheckFindingCitation.check_item_id == item.id,
-                CheckFindingCitation.kind == "tender",
+                CheckFindingCitation.check_item_id == item.id, CheckFindingCitation.kind == "tender"
             )
         )
         assert citation.quote == quote

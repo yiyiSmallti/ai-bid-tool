@@ -1,69 +1,125 @@
-"""Encrypted immutable report snapshots and atomically published artifact pairs."""
+from datetime import datetime
+from uuid import UUID, uuid4
 
-from uuid import UUID
-
-from sqlalchemy import CheckConstraint, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Integer,
+    PrimaryKeyConstraint,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy import (
+    text as sql_text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.bid_review import common, fk
-from app.models.bid_review_run import run_fk
-from app.models.entities import Base, Tenant
+from app.models.entities import Base
 
 
-class BidReviewReportSnapshot(Tenant, Base):
-    __tablename__ = "bid_review_report_snapshots"
-    task_id: Mapped[UUID] = mapped_column()
-    submission_id: Mapped[UUID] = mapped_column()
-    review_id: Mapped[UUID] = mapped_column()
-    publication_id: Mapped[UUID] = mapped_column()
-    job_id: Mapped[UUID] = mapped_column()
-    created_by: Mapped[UUID] = mapped_column()
-    request_id: Mapped[UUID] = mapped_column()
-    input_hash: Mapped[str] = mapped_column(String(64))
-    report_input_hash: Mapped[str] = mapped_column(String(64))
-    decisions_snapshot_sha256: Mapped[str] = mapped_column(String(64))
-    renderer_identity: Mapped[str] = mapped_column(Text)
-    details_sha256: Mapped[str] = mapped_column(String(64))
-    details_encrypted: Mapped[str] = mapped_column(Text)
+class BidReviewReportArtifact(Base):
+    __tablename__ = "bid_review_report_artifacts"
+    task_id: Mapped[UUID] = mapped_column(nullable=False)
+    submission_id: Mapped[UUID] = mapped_column(nullable=False)
+    review_id: Mapped[UUID] = mapped_column(nullable=False)
+    snapshot_id: Mapped[UUID] = mapped_column(nullable=False)
+    run_id: Mapped[UUID] = mapped_column(nullable=False)
+    format: Mapped[str] = mapped_column(String(10), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False)
+    id: Mapped[UUID] = mapped_column(nullable=False, primary_key=True, default=uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
     __table_args__ = (
-        *common(),
-        run_fk(),
-        fk(["task_id", "job_id"], "jobs", ["task_id", "id"]),
-        fk(["task_id", "publication_id"], "bid_review_publications", ["task_id", "id"]),
-        fk(["created_by"], "memberships", ["user_id"]),
-        UniqueConstraint("org_id", "job_id"),
-        UniqueConstraint("org_id", "created_by", "request_id"),
-        UniqueConstraint("org_id", "task_id", "submission_id", "review_id", "id"),
         CheckConstraint(
-            "input_hash ~ '^[0-9a-f]{64}$' AND report_input_hash ~ '^[0-9a-f]{64}$' AND decisions_snapshot_sha256 ~ '^[0-9a-f]{64}$' AND details_sha256 ~ '^[0-9a-f]{64}$'"
+            "((((format)::text = ANY ((ARRAY['docx'::character varying, 'console'::character varying])::text[])) AND ((sha256)::text ~ '^[0-9a-f]{64}$'::text) AND ((size_bytes >= 1) AND (size_bytes <= 104857600))))",
+            name="bid_review_report_artifacts_check",
         ),
-        CheckConstraint("length(details_encrypted)>0 AND length(renderer_identity)>0"),
+        CheckConstraint(
+            "((storage_key ~~ ((((('bid-review/'::text) || (submission_id)::text) || '/reports/'::text) || (snapshot_id)::text) || '/%'::text)))",
+            name="bid_review_report_artifacts_check1",
+        ),
+        UniqueConstraint(
+            "snapshot_id", "format", name="bid_review_report_artifacts_snapshot_id_format_key"
+        ),
+        UniqueConstraint("task_id", "id", name="bid_review_report_artifacts_task_id_id_key"),
+        PrimaryKeyConstraint("id", name="bid_review_report_artifacts_pkey"),
+        ForeignKeyConstraint(
+            ["task_id"], ["tasks.id"], name="bid_review_report_artifacts_task_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["task_id", "submission_id", "review_id", "snapshot_id"],
+            [
+                "bid_review_report_snapshots.task_id",
+                "bid_review_report_snapshots.submission_id",
+                "bid_review_report_snapshots.review_id",
+                "bid_review_report_snapshots.id",
+            ],
+            name="bid_review_report_artifacts_task_id_submission_id_r_fkey",
+        ),
     )
 
 
-class BidReviewReportArtifact(Tenant, Base):
-    __tablename__ = "bid_review_report_artifacts"
-    task_id: Mapped[UUID] = mapped_column()
-    submission_id: Mapped[UUID] = mapped_column()
-    review_id: Mapped[UUID] = mapped_column()
-    snapshot_id: Mapped[UUID] = mapped_column()
-    run_id: Mapped[UUID] = mapped_column()
-    format: Mapped[str] = mapped_column(String(10))
-    sha256: Mapped[str] = mapped_column(String(64))
-    size_bytes: Mapped[int] = mapped_column(Integer)
-    storage_key: Mapped[str] = mapped_column(Text)
+class BidReviewReportSnapshot(Base):
+    __tablename__ = "bid_review_report_snapshots"
+    task_id: Mapped[UUID] = mapped_column(nullable=False)
+    submission_id: Mapped[UUID] = mapped_column(nullable=False)
+    review_id: Mapped[UUID] = mapped_column(nullable=False)
+    publication_id: Mapped[UUID] = mapped_column(nullable=False)
+    job_id: Mapped[UUID] = mapped_column(nullable=False)
+    request_id: Mapped[UUID] = mapped_column(nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    decisions_snapshot_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    renderer_identity: Mapped[str] = mapped_column(Text, nullable=False)
+    details_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    details_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    id: Mapped[UUID] = mapped_column(nullable=False, primary_key=True, default=uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
     __table_args__ = (
-        *common(),
-        fk(
-            ["task_id", "submission_id", "review_id", "snapshot_id"],
-            "bid_review_report_snapshots",
-            ["task_id", "submission_id", "review_id", "id"],
-        ),
-        UniqueConstraint("org_id", "snapshot_id", "format"),
         CheckConstraint(
-            "format IN ('docx','console') AND sha256 ~ '^[0-9a-f]{64}$' AND size_bytes BETWEEN 1 AND 104857600"
+            "((((input_hash)::text ~ '^[0-9a-f]{64}$'::text) AND ((report_input_hash)::text ~ '^[0-9a-f]{64}$'::text) AND ((decisions_snapshot_sha256)::text ~ '^[0-9a-f]{64}$'::text) AND ((details_sha256)::text ~ '^[0-9a-f]{64}$'::text)))",
+            name="bid_review_report_snapshots_check",
         ),
         CheckConstraint(
-            "storage_key LIKE 'org/' || org_id::text || '/bid-review/' || submission_id::text || '/reports/' || snapshot_id::text || '/%'"
+            "(((length(details_encrypted) > 0) AND (length(renderer_identity) > 0)))",
+            name="bid_review_report_snapshots_check1",
+        ),
+        UniqueConstraint(
+            "request_id", name="bid_review_report_snapshots_created_by_request_id_key"
+        ),
+        UniqueConstraint("job_id", name="bid_review_report_snapshots_job_id_key"),
+        UniqueConstraint("task_id", "id", name="bid_review_report_snapshots_task_id_id_key"),
+        UniqueConstraint(
+            "task_id",
+            "submission_id",
+            "review_id",
+            "id",
+            name="bid_review_report_snapshots_task_id_submission_id_re_key",
+        ),
+        PrimaryKeyConstraint("id", name="bid_review_report_snapshots_pkey"),
+        ForeignKeyConstraint(
+            ["task_id"], ["tasks.id"], name="bid_review_report_snapshots_task_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["task_id", "job_id"],
+            ["jobs.task_id", "jobs.id"],
+            name="bid_review_report_snapshots_task_id_job_id_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["task_id", "publication_id"],
+            ["bid_review_publications.task_id", "bid_review_publications.id"],
+            name="bid_review_report_snapshots_task_id_publication_id_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["task_id", "submission_id", "review_id"],
+            ["bid_review_runs.task_id", "bid_review_runs.submission_id", "bid_review_runs.id"],
+            name="bid_review_report_snapshots_task_id_submission_id_r_fkey",
         ),
     )

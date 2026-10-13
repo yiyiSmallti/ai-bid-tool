@@ -53,7 +53,6 @@ def _fixed_usage(quote: CallPlan, usage: ProviderUsage) -> ProviderUsage:
             "capability": quote.capability,
             "provider": quote.provider,
             "version": quote.version,
-            "platform_model_id": quote.platform_model_id,
             "provider_config_id": quote.provider_config_id,
         }
     )

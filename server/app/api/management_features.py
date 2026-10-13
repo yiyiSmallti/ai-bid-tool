@@ -13,7 +13,6 @@ from app.schemas.management_pages import (
     ResourceLifecycleSet,
     ResourceQuery,
 )
-from app.services import management_features as features
 
 
 def create_router(context, settings):
@@ -27,13 +26,19 @@ def create_router(context, settings):
         return session, actor
 
     def page(command, value, started):
+        from app.services import management_features as features
+
         return features.page_result(command, value, round((time.monotonic() - started) * 1000))
 
     def detail(command, value, started):
+        from app.services import management_features as features
+
         return features.detail_result(command, value, round((time.monotonic() - started) * 1000))
 
     @router.post("/query", name="resource_feature_browse", response_model=Result)
     async def query(body: ResourceQuery, ctx=Depends(management_context, scope="function")):
+        from app.services import management_features as features
+
         started = time.monotonic()
         session, actor = ctx
         return page(
@@ -46,6 +51,8 @@ def create_router(context, settings):
         revision: int | None = Query(None, ge=1),
         ctx=Depends(management_context, scope="function"),
     ):
+        from app.services import management_features as features
+
         started = time.monotonic()
         session, actor = ctx
         return detail(
@@ -62,6 +69,8 @@ def create_router(context, settings):
     async def history(
         feature_id: UUID, body: PageQuery, ctx=Depends(management_context, scope="function")
     ):
+        from app.services import management_features as features
+
         started = time.monotonic()
         session, actor = ctx
         return page(
@@ -78,6 +87,8 @@ def create_router(context, settings):
         body: ResourceLifecycleSet,
         ctx=Depends(management_context, scope="function"),
     ):
+        from app.services import management_features as features
+
         started = time.monotonic()
         session, actor = ctx
         return detail(
@@ -94,6 +105,8 @@ def create_router(context, settings):
     async def lifecycle_history(
         feature_id: UUID, body: PageQuery, ctx=Depends(management_context, scope="function")
     ):
+        from app.services import management_features as features
+
         started = time.monotonic()
         session, actor = ctx
         return page(

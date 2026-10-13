@@ -11,7 +11,6 @@ Failure modes fixed before the scenarios:
   fail the job, and publish no analysis run or suggestion;
 - withdrawal after submission but before worker admission stops the attempt without a vendor
   call, usage row, analysis row, or suggestion;
-- analysis submission, job status and suggestion listing are hidden from the other org as 404;
 - actual token usage, vendor call state and job usage remain consistent.
 
 The renderer and PostgreSQL are genuine integration dependencies. The existing helpers skip
@@ -25,7 +24,6 @@ import re
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from uuid import UUID
 
 import httpx
 import pytest
@@ -151,7 +149,7 @@ def successful_vision(body):
 
 
 @asynccontextmanager
-async def analysis_client(tenants, tmp_path, vendor):
+async def analysis_client(database, tmp_path, vendor):
     settings = settings_for(
         tmp_path,
         "openai",
@@ -160,13 +158,12 @@ async def analysis_client(tenants, tmp_path, vendor):
         llm_max_output_tokens=2048,
         llm_concurrency=1,
     )
-    provider = OpenAICompatibleExtractor(
-        settings, httpx.MockTransport(vendor), platform_model_id="synthetic-vision-catalog"
-    )
+    provider = OpenAICompatibleExtractor(settings, httpx.MockTransport(vendor))
     provider.version = "http-extract-v5:synthetic-vision-catalog:1"
     provider.model_revision = 1
     provider.reasoning_levels = {
         "high": {
+            "name": "high",
             "label": "Synthetic official high",
             "request_options": {"reasoning_effort": "high", "screenshot_vision": CAPABILITY},
             "batch_chars": 8000,
@@ -178,10 +175,7 @@ async def analysis_client(tenants, tmp_path, vendor):
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        headers = [
-            await login(api, org, label)
-            for org, label in zip(tenants["orgs"], ("a", "b"), strict=True)
-        ]
+        headers = await login(api)
         yield (api, app, headers, provider)
 
 
@@ -212,8 +206,8 @@ def request_body(extraction, requirement, rendition, **changes):
     return value
 
 
-async def counts(app, org):
-    async with app.state.db.transaction(UUID(str(org))) as session:
+async def counts(app):
+    async with app.state.db.transaction() as session:
         return {
             "jobs": await session.scalar(
                 select(func.count()).select_from(Job).where(Job.kind == "screenshot_analyze")
@@ -238,15 +232,15 @@ def artifact(name: str, value: dict):
     (path / name).write_text(json.dumps(safe, indent=2, sort_keys=True) + "\n")
 
 
-async def test_three_purpose_analysis_preflight_accounting_and_org_isolation(tenants, tmp_path):
+async def test_three_purpose_analysis_preflight_accounting_and_job_inputs(database, tmp_path):
     vendor = VisionVendor(successful_vision)
-    async with analysis_client(tenants, tmp_path, vendor) as (api, app, headers, _):
-        header = headers[0]
+    async with analysis_client(database, tmp_path, vendor) as (api, app, headers, _):
+        header = headers
         task, extraction, requirements, uploaded = await fixture_chain(
             api, app, header, tmp_path, "vision-success"
         )
         rendition = uploaded["rendition"]
-        before = await counts(app, tenants["orgs"][0])
+        before = await counts(app)
         queued_before = list(app.state.queue.calls)
         preview = await api.post(
             f"/tasks/{task}/screenshot-analyses",
@@ -259,7 +253,7 @@ async def test_three_purpose_analysis_preflight_accounting_and_org_isolation(ten
         assert preflight["planned_calls"] == preflight["input_image_count"] == 1
         assert preflight["estimated_cost"]["ocr_pages"] == 0
         assert vendor.vision_requests == []
-        assert await counts(app, tenants["orgs"][0]) == before
+        assert await counts(app) == before
         assert app.state.queue.calls == queued_before
         stale = await api.post(
             f"/tasks/{task}/screenshot-analyses",
@@ -271,14 +265,8 @@ async def test_three_purpose_analysis_preflight_accounting_and_org_isolation(ten
         assert stale.status_code == 409
         assert stale.json()["data"]["error"]["code"] == "screenshot_input_changed"
         assert vendor.vision_requests == []
-        assert await counts(app, tenants["orgs"][0]) == before
+        assert await counts(app) == before
         assert app.state.queue.calls == queued_before
-        foreign = await api.post(
-            f"/tasks/{task}/screenshot-analyses",
-            headers=headers[1],
-            json=request_body(extraction, requirements[2], rendition),
-        )
-        assert foreign.status_code == 404
         submitted = await api.post(
             f"/tasks/{task}/screenshot-analyses",
             headers=header,
@@ -292,7 +280,7 @@ async def test_three_purpose_analysis_preflight_accounting_and_org_isolation(ten
         )
         assert submitted.status_code == 200, submitted.text
         job_id = submitted.json()["data"]["job_id"]
-        await app.state.processor(header["X-Org-Id"], job_id)
+        await app.state.processor(job_id)
         status = await api.get(f"/jobs/{job_id}", headers=header)
         assert status.status_code == 200, status.text
         terminal = status.json()["data"]
@@ -308,9 +296,6 @@ async def test_three_purpose_analysis_preflight_accounting_and_org_isolation(ten
             "propose_regions",
             "read_text",
         }
-        assert all(
-            row["status"] == "unreviewed" and row["confirmed_by"] is None for row in suggestions
-        )
         assert all(row["requirement_id"] == requirements[2]["id"] for row in suggestions)
         assert (
             await api.post(
@@ -318,11 +303,7 @@ async def test_three_purpose_analysis_preflight_accounting_and_org_isolation(ten
                 headers=header,
             )
         ).status_code == 404
-        assert (
-            await api.get(f"/screenshot-analyses/{analysis_id}/suggestions", headers=headers[1])
-        ).status_code == 404
-        assert (await api.get(f"/jobs/{job_id}", headers=headers[1])).status_code == 404
-        after = await counts(app, tenants["orgs"][0])
+        after = await counts(app)
         assert after["runs"] == before["runs"] + 1
         assert after["suggestions"] == before["suggestions"] + 3
         assert after["calls"] == before["calls"] + 1
@@ -337,14 +318,14 @@ async def test_three_purpose_analysis_preflight_accounting_and_org_isolation(ten
         )
 
 
-async def test_withdrawal_after_submission_stops_before_vendor_call(tenants, tmp_path):
+async def test_withdrawal_after_submission_stops_before_vendor_call(database, tmp_path):
     vendor = VisionVendor(successful_vision)
-    async with analysis_client(tenants, tmp_path, vendor) as (api, app, headers, _):
-        header = headers[0]
+    async with analysis_client(database, tmp_path, vendor) as (api, app, headers, _):
+        header = headers
         task, extraction, requirements, uploaded = await fixture_chain(
             api, app, header, tmp_path, "vision-withdraw"
         )
-        rendition, asset = uploaded["rendition"], uploaded["asset"]
+        rendition, asset = (uploaded["rendition"], uploaded["asset"])
         preview = (
             await api.post(
                 f"/tasks/{task}/screenshot-analyses",
@@ -365,18 +346,18 @@ async def test_withdrawal_after_submission_stops_before_vendor_call(tenants, tmp
         )
         assert submitted.status_code == 200
         job_id = submitted.json()["data"]["job_id"]
-        before = await counts(app, tenants["orgs"][0])
+        before = await counts(app)
         withdrawn = await api.post(
             f"/screenshots/{asset['id']}/withdrawals",
             headers=header,
             json={"reason": "Synthetic withdrawal before worker admission"},
         )
         assert withdrawn.status_code == 200
-        await app.state.processor(header["X-Org-Id"], job_id)
+        await app.state.processor(job_id)
         status = (await api.get(f"/jobs/{job_id}", headers=header)).json()["data"]
         assert status["status"] == "failed"
         assert status["error"]["code"] == "withdrawn_image"
-        after = await counts(app, tenants["orgs"][0])
+        after = await counts(app)
         assert vendor.vision_requests == []
         assert after["usage"] == before["usage"] and after["calls"] == before["calls"]
         assert after["runs"] == before["runs"] and after["suggestions"] == before["suggestions"]
@@ -384,7 +365,7 @@ async def test_withdrawal_after_submission_stops_before_vendor_call(tenants, tmp
 
 @pytest.mark.parametrize("case", ["invalid_json", "unknown_ref"])
 async def test_invalid_or_unknown_only_output_records_usage_without_publication(
-    tenants, tmp_path, case
+    database, tmp_path, case
 ):
     if case == "invalid_json":
         reply = openai_reply("not-json")
@@ -408,8 +389,8 @@ async def test_invalid_or_unknown_only_output_records_usage_without_publication(
         )
         expected = "invalid_vision_suggestions"
     vendor = VisionVendor(reply)
-    async with analysis_client(tenants, tmp_path, vendor) as (api, app, headers, _):
-        header = headers[0]
+    async with analysis_client(database, tmp_path, vendor) as (api, app, headers, _):
+        header = headers
         task, extraction, requirements, uploaded = await fixture_chain(
             api, app, header, tmp_path, f"vision-{case}"
         )
@@ -433,13 +414,13 @@ async def test_invalid_or_unknown_only_output_records_usage_without_publication(
             ),
         )
         job_id = submitted.json()["data"]["job_id"]
-        before = await counts(app, tenants["orgs"][0])
-        await app.state.processor(header["X-Org-Id"], job_id)
+        before = await counts(app)
+        await app.state.processor(job_id)
         terminal = (await api.get(f"/jobs/{job_id}", headers=header)).json()["data"]
         assert terminal["status"] == "failed" and terminal["error"]["code"] == expected
         assert "private-unknown-image-ref" not in json.dumps(terminal)
         assert "private-invalid-output" not in json.dumps(terminal)
-        after = await counts(app, tenants["orgs"][0])
+        after = await counts(app)
         assert after["usage"] == before["usage"] + 1
         assert after["calls"] == before["calls"] + 1
         assert after["runs"] == before["runs"] and after["suggestions"] == before["suggestions"]

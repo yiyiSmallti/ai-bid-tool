@@ -1,7 +1,7 @@
 """Score acceptance through API, worker, stored report and CLI.
 
 Failure inventory: dry-run writes/calls, unconfirmed/superseded rubric, stale
-DraftRun, cross-org routes, redaction disabled/changed, malformed citations,
+DraftRun, cross-task routes, redaction disabled/changed, malformed citations,
 bounds, refusal/truncation, cancelled/expired/taken-over attempts and usage
 failure must not bypass confirmation, publication or accounting fences.
 """
@@ -20,14 +20,13 @@ from app.models.entities import AuditLog, Job, UsageRecord, VendorCall
 from app.models.score import ScoreReport
 from app.schemas.score_contracts import ScorePreview, ScoreReportData
 from sqlalchemy import func, select
-from task_fixtures import reviewer_header
 from test_check import LiveCheckClient, invoke_live_cli, publish_draft
-from test_check_combined import platform_llm, seed_platform, semantic_llm
-from test_response_cards import create_card, require_action, set_role
+from test_check_combined import semantic_llm
+from test_response_cards import create_card, require_action
 from test_score_api import rubric_case as rubric_case
 from test_score_api import rubric_input_case as rubric_input_case
 from test_score_api import set_redaction
-from test_score_review import base, confirm_contents, decision, replacement, role, show
+from test_score_review import base, confirm_contents, decision, replacement, show
 
 
 class ScoreVendor:
@@ -87,6 +86,7 @@ class ScoreVendor:
 
 
 def install_score_resolver(monkeypatch, llm):
+
     async def resolve(session, settings, job=None):
         return llm
 
@@ -104,15 +104,7 @@ async def score_case(rubric_case, monkeypatch):
     )
     assert confirmed.status_code == 200, confirmed.text
     case["rubric"] = await show(case)
-    # A different confirmed requirement supplies the actual bid-side support;
-    # the scoring requirement's own anchor remains a gap.
-    _, technical_header = await reviewer_header(
-        case["api"],
-        case["admin_engine"],
-        case["tenants"]["orgs"][0],
-        UUID(case["task"]),
-        "technical",
-    )
+    technical_header = case["header"]
     card = await create_card(
         case["api"],
         case["header"],
@@ -148,7 +140,6 @@ async def score_case(rubric_case, monkeypatch):
     draft = await publish_draft(
         case["api"], case["app"], case["header"], case["task"], case["extraction"]
     )
-    role(case, "bidder")
     vendor = ScoreVendor()
     llm = semantic_llm(case["tmp_path"], vendor)
     install_score_resolver(monkeypatch, llm)
@@ -192,14 +183,14 @@ async def submit_score(case, preview, **overrides):
 
 
 async def finish_score(case, accepted):
-    await case["app"].state.processor(case["header"]["X-Org-Id"], accepted["job_id"])
+    await case["app"].state.processor(accepted["job_id"])
     response = await case["api"].get(f"/jobs/{accepted['job_id']}", headers=case["header"])
     assert response.status_code == 200, response.text
     return response.json()["data"]
 
 
 async def counts(case):
-    async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
+    async with case["app"].state.db.transaction() as session:
         return {
             model.__tablename__: await session.scalar(select(func.count()).select_from(model))
             for model in (Job, AuditLog, UsageRecord, VendorCall, ScoreReport)
@@ -213,7 +204,7 @@ async def test_score_preview_worker_cross_response_total_cache_and_cli(score_cas
     before = await counts(case)
     preview = await preview_score(case)
     ScorePreview.model_validate(preview)
-    assert await counts(case) == before and not case["score_vendor"].requests
+    assert await counts(case) == before and (not case["score_vendor"].requests)
     refused = await submit_score(case, preview, expected_input_hash="0" * 64)
     assert refused.status_code == 409
     accepted = await submit_score(case, preview)
@@ -236,14 +227,11 @@ async def test_score_preview_worker_cross_response_total_cache_and_cli(score_cas
     after = await counts(case)
     cached = await submit_score(case, preview)
     assert cached.json()["data"]["cached"] and await counts(case) == after
-    monkeypatch.setenv("BID_SESSION", case["header"]["Authorization"].removeprefix("Bearer "))
-    monkeypatch.setenv("BID_ORG", case["header"]["X-Org-Id"])
+    monkeypatch.setenv("BID_ACCESS_KEY", case["header"]["Authorization"].removeprefix("Bearer "))
     monkeypatch.setattr(
         cli,
         "Client",
-        lambda mode, server, state: LiveCheckClient(
-            mode, server, state, case["app"].state.processor.settings
-        ),
+        lambda mode, server: LiveCheckClient(mode, server, case["app"].state.processor.settings),
     )
     exit_code, cli_result = await asyncio.to_thread(
         invoke_live_cli, ["score", "show", "--task", case["task"], "--report", result["report_id"]]
@@ -261,18 +249,15 @@ async def test_score_preview_worker_cross_response_total_cache_and_cli(score_cas
 @pytest.mark.parametrize("mode", ["bounds", "unknown_ref", "deduction", "refused", "truncated"])
 async def test_score_invalid_outputs_bill_once(score_case, monkeypatch, mode):
     case = score_case
-    await seed_platform(
-        case["admin_engine"], case["app"].state.processor.settings, case["tenants"]["orgs"][0]
-    )
     install_score_resolver(
-        monkeypatch, platform_llm(case["app"].state.processor.settings, case["score_vendor"])
+        monkeypatch, semantic_llm(case["app"].state.processor.settings, case["score_vendor"])
     )
     case["score_vendor"].mode = mode
     preview = await preview_score(case)
     accepted = await submit_score(case, preview)
     assert accepted.status_code == 200, accepted.text
     terminal = await finish_score(case, accepted.json()["data"])
-    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         usages = list(
             (
                 await session.scalars(
@@ -285,7 +270,7 @@ async def test_score_invalid_outputs_bill_once(score_case, monkeypatch, mode):
         assert terminal["result"]["completion"] == "partial"
         assert terminal["result"]["estimated_total"] is None
     before = await counts(case)
-    await case["app"].state.processor(case["header"]["X-Org-Id"], terminal["id"])
+    await case["app"].state.processor(terminal["id"])
     assert await counts(case) == before
     assert "private-untrusted-ref" not in json.dumps(terminal)
 
@@ -294,11 +279,11 @@ async def test_score_invalid_outputs_bill_once(score_case, monkeypatch, mode):
 async def test_score_late_usage_never_publishes_after_fence(score_case, change):
     case = score_case
     vendor = case["score_vendor"]
-    vendor.entered, vendor.release = asyncio.Event(), asyncio.Event()
+    vendor.entered, vendor.release = (asyncio.Event(), asyncio.Event())
     accepted = await submit_score(case, await preview_score(case))
     assert accepted.status_code == 200, accepted.text
     job_id = accepted.json()["data"]["job_id"]
-    worker = asyncio.create_task(case["app"].state.processor(case["header"]["X-Org-Id"], job_id))
+    worker = asyncio.create_task(case["app"].state.processor(job_id))
     try:
         await asyncio.wait_for(vendor.entered.wait(), 10)
         if change == "cancel":
@@ -307,7 +292,7 @@ async def test_score_late_usage_never_publishes_after_fence(score_case, change):
         elif change == "redaction":
             await set_redaction(case, False, True)
         else:
-            async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+            async with case["app"].state.db.transaction() as session:
                 job = await session.get(Job, UUID(job_id))
                 if change == "lease":
                     job.lease_until = datetime.now(UTC) - timedelta(seconds=1)
@@ -316,7 +301,7 @@ async def test_score_late_usage_never_publishes_after_fence(score_case, change):
     finally:
         vendor.release.set()
         await asyncio.wait_for(worker, 10)
-    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(ScoreReport)) == 0
         assert (
             await session.scalar(
@@ -330,32 +315,6 @@ async def test_score_late_usage_never_publishes_after_fence(score_case, change):
 
 async def test_score_redaction_off_and_foreign_routes(score_case):
     case = score_case
-    foreign = case["headers"][1]
-    set_role(
-        case["admin_engine"], case["tenants"]["orgs"][1], case["tenants"]["users"][1], "bidder"
-    )
-    preview = await preview_score(case)
-    accepted = await submit_score(case, preview)
-    terminal = await finish_score(case, accepted.json()["data"])
-    report_id = terminal["result"]["report_id"]
-    prefix = f"/tasks/{case['task']}/scores"
-    for path in (prefix, prefix + f"/{report_id}"):
-        assert (await case["api"].get(path, headers=foreign)).status_code == 404
-    for path, extra in (
-        (prefix + "/preview", {"dry_run": True}),
-        (prefix, {"expected_input_hash": preview["input"]["input_hash"]}),
-    ):
-        response = await case["api"].post(
-            path,
-            headers=foreign,
-            json={
-                "draft_id": case["draft_id"],
-                "rubric_id": case["rubric"]["rubric"]["id"],
-                "assessment_date": "2026-10-05",
-                **extra,
-            },
-        )
-        assert response.status_code == 404, response.text
     await set_redaction(case, False)
     before = await counts(case)
     blocked = await preview_score(case)
@@ -376,7 +335,7 @@ async def test_score_stale_draft_and_revised_rubric_refuse(score_case):
     )
     assert revised.status_code == 200, revised.text
     refused = await submit_score(case, preview)
-    assert refused.status_code == 409 and not case["score_vendor"].requests
+    assert refused.status_code == 409 and (not case["score_vendor"].requests)
     new_rubric = revised.json()["data"]["rubric"]["id"]
     response = await case["api"].post(
         f"/tasks/{case['task']}/scores/preview",

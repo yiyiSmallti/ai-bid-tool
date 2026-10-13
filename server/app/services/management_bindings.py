@@ -21,7 +21,7 @@ detail_result = management.detail_result
 
 
 def view(row: ExportTemplateBinding, actor: Identity, revision_id: UUID) -> ExportBindingView:
-    if row.org_id != actor.org_id or row.template_revision_id != revision_id:
+    if row.template_revision_id != revision_id:
         management.fail("management_integrity_error", "Binding identity is invalid", 409, 4)
     return ExportBindingView.model_validate(exports.binding_view(row))
 
@@ -37,9 +37,7 @@ async def query(
         )
         # The authorized revision remains visible as an empty sentinel after the
         # last binding. A foreign/nonexistent parent instead has no result at all.
-        relation = (ExportTemplateBinding.org_id == TemplateRevision.org_id) & (
-            ExportTemplateBinding.template_revision_id == TemplateRevision.id
-        )
+        relation = ExportTemplateBinding.template_revision_id == TemplateRevision.id
         if anchor:
             relation &= tuple_(
                 ExportTemplateBinding.reviewed_at, ExportTemplateBinding.id
@@ -49,7 +47,6 @@ async def query(
                 select(TemplateRevision.id, ExportTemplateBinding)
                 .outerjoin(ExportTemplateBinding, relation)
                 .where(
-                    TemplateRevision.org_id == actor.org_id,
                     TemplateRevision.id == body.template_revision_id,
                 )
                 .order_by(ExportTemplateBinding.reviewed_at.desc(), ExportTemplateBinding.id.desc())
@@ -81,7 +78,6 @@ async def detail(
         actor = await exports.human_access(session, actor, binding="read")
         row = await session.scalar(
             select(ExportTemplateBinding).where(
-                ExportTemplateBinding.org_id == actor.org_id,
                 ExportTemplateBinding.id == binding_id,
                 ExportTemplateBinding.template_revision_id == body.template_revision_id,
             )

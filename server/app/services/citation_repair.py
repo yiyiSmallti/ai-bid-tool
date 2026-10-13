@@ -1,4 +1,4 @@
-"""Tenant-admin citation repair through the authenticated API transaction."""
+"""Installation-human citation repair through the authenticated API transaction."""
 
 from uuid import UUID, uuid4
 
@@ -26,7 +26,7 @@ async def repair_citations(
     request: CitationRepairRequest | None = None,
 ) -> tuple[dict, list[dict]]:
     actor = await cards.access(session, actor, "req:extract")
-    cards.human(actor, admin=True)
+    cards.human(actor)
     if request is not None:
         if request.extraction_job_id != job_id:
             cards.fail("invalid_repair_scope", "The extraction job must match the repair scope")
@@ -36,7 +36,7 @@ async def repair_citations(
     await cards.extraction_scope(session, task_id, job_id)
     query = (
         select(Requirement, Chunk)
-        .join(Chunk, (Chunk.org_id == Requirement.org_id) & (Chunk.id == Requirement.chunk_id))
+        .join(Chunk, Chunk.id == Requirement.chunk_id)
         .where(Requirement.task_id == task_id, Requirement.job_id == job_id)
         .order_by(Requirement.id)
         .execution_options(populate_existing=True)
@@ -105,7 +105,6 @@ async def repair_citations(
     preview_hash = digest(
         {
             "version": "citation-repair-v1",
-            "org_id": str(actor.org_id),
             "task_id": str(task_id),
             "extraction_job_id": str(job_id),
             "requirements": manifest,
@@ -130,10 +129,12 @@ async def repair_citations(
             requirement.quote = item["proposed_quote"]
             if requirement.model_quote is None:
                 requirement.model_quote = old_quote
+            # The source trigger owns requirement.repair_citation and binds it
+            # to its immutable system event; this records the human operation.
             audit(
                 session,
                 actor,
-                "requirement.repair_citation",
+                "requirement.citation_repair.executed",
                 requirement.id,
                 {
                     "task_id": str(task_id),

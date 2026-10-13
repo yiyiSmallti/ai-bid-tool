@@ -20,10 +20,9 @@ from app.models.bid_review_privacy import (
 )
 from app.models.bid_signature import BidPDFValidation
 from app.models.entities import Task
-from app.models.team_workflow import TaskMember
 from app.schemas import bid_review_privacy as c
 from app.services import bid_review as bids
-from app.services import confidential, redaction, task_workflow
+from app.services import confidential, redaction, task_access
 from app.services.versioned import audit
 
 POLICY_VERSION = redaction.RULE_VERSION + ":uploaded-text-v1"
@@ -44,7 +43,7 @@ def open_value(settings, row, column):
     if ciphertext is None or len(ciphertext) > 32 * 1024 * 1024:
         bids.fail("bid_redaction_integrity", "Encrypted privacy input exceeds bounds", 409, 4)
     value = json.loads(Secrets.for_data(settings).decrypt(ciphertext))
-    if value.get("org_id") != str(row.org_id) or value.get("id") != str(row.id):
+    if value.get("id") != str(row.id):
         bids.fail("bid_redaction_integrity", "Encrypted privacy data binding mismatch", 409, 4)
     return value["value"]
 
@@ -314,16 +313,20 @@ async def current_snapshot(session, submission_id, settings, provider_binding):
 
 async def human_access(session, actor, submission_id, *, write=False):
     root = await bids.required(session, submission_id)
-    _, _, member = await task_workflow.access(
+    await task_access.access(
         session,
         actor,
         root.task_id,
         scope="bid-review:outbound:authorize",
         write=write,
-        require_member=True,
     )
-    if actor.role not in {"admin", "bidder"} or member is None or member.role != "owner":
-        bids.fail("forbidden", "Human admin/bidder task owner is required", 403, 4)
+    if (
+        actor.actor_kind != "session"
+        or actor.token_id is not None
+        or actor.principal_id is not None
+        or actor.session_id is not None
+    ):
+        bids.fail("human_session_required", "Human authorization is required", 403, 4)
     return root
 
 
@@ -410,7 +413,6 @@ async def authorize(session, actor, submission_id, body, settings, provider_bind
     payload_hash = bids.digest(body.model_dump(mode="json"))
     replay = await session.scalar(
         select(BidOutboundAuthorization).where(
-            BidOutboundAuthorization.authorized_by == actor.user_id,
             BidOutboundAuthorization.request_id == body.request_id,
         )
     )
@@ -462,7 +464,6 @@ async def authorize(session, actor, submission_id, body, settings, provider_bind
     if snapshot is None:
         snapshot = BidRedactionSnapshot(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=root.task_id,
             submission_id=root.id,
             preparation_id=fixed.publication.preparation_id,
@@ -472,10 +473,9 @@ async def authorize(session, actor, submission_id, body, settings, provider_bind
             confidential_binding_sha256=fixed.confidential_binding_sha256,
             derived_name_lists_sha256=fixed.derived_name_lists_sha256,
             provider_bindings_sha256=fixed.provider_bindings_sha256,
-            created_by=actor.user_id,
         )
         snapshot.details_encrypted = bids.seal(
-            settings, actor.org_id, snapshot.id, {"manifest": fixed.manifest, "names": fixed.names}
+            settings, snapshot.id, {"manifest": fixed.manifest, "names": fixed.names}
         )
         session.add(snapshot)
         await session.flush()
@@ -484,7 +484,6 @@ async def authorize(session, actor, submission_id, body, settings, provider_bind
             session.add(
                 BidRedactedPage(
                     id=identifier,
-                    org_id=actor.org_id,
                     task_id=root.task_id,
                     submission_id=root.id,
                     preparation_id=fixed.publication.preparation_id,
@@ -492,13 +491,12 @@ async def authorize(session, actor, submission_id, body, settings, provider_bind
                     page_id=page["page_id"],
                     sanitized_text_sha256=page["sanitized_text_sha256"],
                     sanitized_text_encrypted=bids.seal(
-                        settings, actor.org_id, identifier, page["sanitized_text"]
+                        settings, identifier, page["sanitized_text"]
                     ),
                     price_page=page["price_page"],
                     classification=page["price_classification"],
                     notes_encrypted=bids.seal(
                         settings,
-                        actor.org_id,
                         identifier,
                         {"notes": page["notes"], "counts": page["redaction_counts"]},
                     ),
@@ -507,7 +505,6 @@ async def authorize(session, actor, submission_id, body, settings, provider_bind
         await session.flush()
     grant = BidOutboundAuthorization(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=root.task_id,
         submission_id=root.id,
         preparation_id=fixed.publication.preparation_id,
@@ -522,17 +519,15 @@ async def authorize(session, actor, submission_id, body, settings, provider_bind
         authorized_sanitized_context_sha256=body.authorized_sanitized_context_sha256,
         provider_bindings_sha256=fixed.provider_bindings_sha256,
         allow_external=True,
-        authorized_by=actor.user_id,
         reason_sha256=text_hash(body.reason),
     )
-    grant.reason_encrypted = bids.seal(settings, actor.org_id, grant.id, body.reason)
+    grant.reason_encrypted = bids.seal(settings, grant.id, body.reason)
     session.add(grant)
     await session.flush()
     for item in body.pages:
         session.add(
             BidOutboundAuthorizedPage(
                 id=uuid4(),
-                org_id=actor.org_id,
                 task_id=root.task_id,
                 submission_id=root.id,
                 snapshot_id=snapshot.id,
@@ -562,7 +557,6 @@ async def revoke(session, actor, submission_id, body, settings, provider_binding
     payload_hash = bids.digest({"revoke": body.model_dump(mode="json")})
     replay = await session.scalar(
         select(BidOutboundAuthorization).where(
-            BidOutboundAuthorization.authorized_by == actor.user_id,
             BidOutboundAuthorization.request_id == body.request_id,
         )
     )
@@ -578,7 +572,6 @@ async def revoke(session, actor, submission_id, body, settings, provider_binding
         bids.fail("bid_outbound_revision_conflict", "Outbound authorization changed; read it again")
     grant = BidOutboundAuthorization(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=root.task_id,
         submission_id=root.id,
         preparation_id=previous.preparation_id,
@@ -588,7 +581,6 @@ async def revoke(session, actor, submission_id, body, settings, provider_binding
         request_id=body.request_id,
         payload_hash=payload_hash,
         allow_external=False,
-        authorized_by=actor.user_id,
         reason_sha256=text_hash(body.reason),
         **{
             key: getattr(previous, key)
@@ -601,14 +593,13 @@ async def revoke(session, actor, submission_id, body, settings, provider_binding
             )
         },
     )
-    grant.reason_encrypted = bids.seal(settings, actor.org_id, grant.id, body.reason)
+    grant.reason_encrypted = bids.seal(settings, grant.id, body.reason)
     session.add(grant)
     await session.flush()
     for item in await grant_refs(session, previous):
         session.add(
             BidOutboundAuthorizedPage(
                 id=uuid4(),
-                org_id=actor.org_id,
                 task_id=root.task_id,
                 submission_id=root.id,
                 snapshot_id=grant.snapshot_id,
@@ -672,19 +663,8 @@ async def authorized_snapshot(
             409,
             4,
         )
-    live = await session.scalar(
-        select(func.bid_review_actor_live(grant.org_id, grant.task_id, grant.authorized_by))
-    )
-    owner = await session.scalar(
-        select(TaskMember.id).where(
-            TaskMember.org_id == grant.org_id,
-            TaskMember.task_id == grant.task_id,
-            TaskMember.user_id == grant.authorized_by,
-            TaskMember.active.is_(True),
-            TaskMember.role == "owner",
-        )
-    )
-    if not live or owner is None:
+    live = await session.scalar(select(func.bid_review_actor_live(grant.task_id)))
+    if not live:
         bids.fail(
             "bid_outbound_authority_expired",
             "Human outbound grant origin no longer has task authority",
@@ -739,7 +719,6 @@ async def add_names(session, actor, submission_id, body, settings):
     hashed = bids.digest(names)
     replay = await session.scalar(
         select(BidReviewNameList).where(
-            BidReviewNameList.created_by == actor.user_id,
             BidReviewNameList.request_id == body.request_id,
         )
     )
@@ -767,15 +746,13 @@ async def add_names(session, actor, submission_id, body, settings):
             )
         row = BidReviewNameList(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=root.task_id,
             submission_id=root.id,
             revision=current + 1,
             request_id=body.request_id,
-            created_by=actor.user_id,
             names_sha256=hashed,
         )
-        row.names_encrypted = bids.seal(settings, actor.org_id, row.id, names)
+        row.names_encrypted = bids.seal(settings, row.id, names)
         session.add(row)
         await session.flush()
         audit(

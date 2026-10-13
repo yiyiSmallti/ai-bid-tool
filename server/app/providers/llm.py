@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.errors import ServiceError, log_unexpected
 from app.core.llm_options import output_limits, validate_request_options
-from app.models.entities import Job, PlatformModel
+from app.models.entities import Job
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.calls import accounted_call, plan_calls
 from app.providers.disabled import DisabledLLM
@@ -32,7 +32,6 @@ from app.schemas.contracts import (
     ProviderUsage,
     Source,
 )
-from app.schemas.platform_credentials import CatalogResolveTarget
 from app.schemas.preflight_contracts import CallPlan, Capability
 from app.services.extraction import cited, fingerprint, locate_span, location_of, normalize
 
@@ -318,7 +317,7 @@ class HTTPExtractor:
     version = ADAPTER_VERSION
     test_only = False
     records_calls = True
-    # Official reasoning levels of a catalog model, by name, and the level this copy runs at.
+    # Configured reasoning levels of a model, by name, and the level this copy runs at.
     reasoning_levels: dict[str, dict] = {}
     default_reasoning: str | None = None
     reasoning: str | None = None
@@ -332,9 +331,7 @@ class HTTPExtractor:
         settings: Settings,
         transport: httpx.AsyncBaseTransport | None = None,
         *,
-        platform_model_id: str | None = None,
         provider_config_id: UUID | None = None,
-        org_owned: bool = False,
         credential_resolver=None,
         credential_target=None,
     ):
@@ -343,8 +340,7 @@ class HTTPExtractor:
         self.settings = settings
         self.model = settings.llm_model
         self.transport = transport
-        self.platform_model_id = platform_model_id
-        self.provider_config_id, self.org_owned = provider_config_id, org_owned
+        self.provider_config_id = provider_config_id
         self.credential_resolver, self.credential_target = credential_resolver, credential_target
 
     def at_reasoning(self, name: str) -> "HTTPExtractor":
@@ -360,9 +356,7 @@ class HTTPExtractor:
         copy = type(self)(
             settings,
             self.transport,
-            platform_model_id=self.platform_model_id,
             provider_config_id=self.provider_config_id,
-            org_owned=self.org_owned,
             credential_resolver=self.credential_resolver,
             credential_target=self.credential_target,
         )
@@ -562,7 +556,6 @@ class HTTPExtractor:
             tokens=sum(u.tokens for u in usages),
             input_tokens=sum(u.input_tokens for u in usages),
             output_tokens=sum(u.output_tokens for u in usages),
-            platform_model_id=self.platform_model_id,
             provider_config_id=self.provider_config_id,
             capability=usages[0].capability if usages else "llm",
         )
@@ -576,13 +569,11 @@ class HTTPExtractor:
             tokens=input_tokens + output_tokens,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            platform_model_id=self.platform_model_id,
             provider_config_id=self.provider_config_id,
         )
 
     def build_request(self, body: dict) -> dict:
-        # Validate here as well as in the catalog: environment settings and old
-        # catalog levels can still reach both extraction and drafting workers.
+        # Validate again before extraction and drafting serialize their vendor request.
         try:
             options = validate_request_options(self.settings.request_options())
         except ValueError:
@@ -628,7 +619,6 @@ class HTTPExtractor:
             model=self.model,
             version=self.version,
             provider_config_id=self.provider_config_id,
-            platform_model_id=self.platform_model_id,
             request_sha256=hashlib.sha256(wire).hexdigest(),
             input_tokens_upper_bound=inputs,
             output_tokens_upper_bound=outputs,
@@ -687,19 +677,7 @@ class HTTPExtractor:
                 )
             if self.credential_target is not None:
                 assert self.credential_resolver is not None
-                try:
-                    credential = await self.credential_resolver.resolve_for_call(
-                        self.credential_target
-                    )
-                except ServiceError as exc:
-                    if self.platform_model_id is None:
-                        raise
-                    raise ServiceError(
-                        "provider_unavailable",
-                        "Selected provider is unavailable",
-                        503,
-                        exc.exit_code,
-                    ) from None
+                credential = await self.credential_resolver.resolve_for_call(self.credential_target)
                 expected_provider = "anthropic" if self.name == "anthropic" else "openai"
                 expected_endpoint = (
                     self.settings.llm_base_url
@@ -859,11 +837,7 @@ class HTTPExtractor:
                 raise ProviderFailure(
                     f"Model quota is used up or the plan is unavailable ({kind})"
                     + (f"; it resets at {reset.group()}" if reset else "")
-                    + (
-                        ". Ask your organization administrator to review the vendor account quota."
-                        if self.org_owned
-                        else ". Contact your system administrator."
-                    ),
+                    + ". Review the vendor account quota.",
                     code="provider_quota_exhausted",
                     usage=usages,
                 )
@@ -988,66 +962,18 @@ class OpenAICompatibleExtractor(HTTPExtractor):
 def create_llm(settings: Settings, *, credential_resolver=None, credential_target=None):
     settings.assert_vendor_credentials_absent()
     if settings.llm_provider != "disabled" and credential_resolver is None:
-        from app.services.platform_credentials import PlatformCredentialResolver
-
-        credential_resolver = PlatformCredentialResolver(settings)
+        raise ServiceError(
+            "provider_unavailable",
+            "An enabled provider requires the runtime credential resolver",
+            503,
+            4,
+        )
     kwargs = {"credential_resolver": credential_resolver, "credential_target": credential_target}
     if settings.llm_provider == "anthropic":
         return AnthropicExtractor(settings, **kwargs)
     if settings.llm_provider == "openai":
         return OpenAICompatibleExtractor(settings, **kwargs)
     return DisabledLLM()
-
-
-class UnavailablePlatformModel(DisabledLLM):
-    """The catalog default exists but its credential is missing from the deployment."""
-
-    def __init__(self, entry: PlatformModel):
-        self.name, self.model = entry.provider, entry.model
-        self.version = f"{ADAPTER_VERSION}:{entry.id}:{entry.revision}"
-        self.platform_model_id, self.model_revision = entry.id, entry.revision
-        self.reasoning_levels = {level["name"]: level for level in entry.reasoning or []}
-        self.default_reasoning = entry.default_reasoning
-
-    def at_reasoning(self, name: str):
-        # Preserve catalog identity for previews; this adapter still cannot issue a call.
-        return self
-
-    async def extract(self, chunks: list[dict], schema: dict) -> LLMResult:
-        raise ProviderFailure("Selected provider is unavailable", code="provider_unavailable")
-
-
-def platform_llm(
-    settings: Settings, entry: PlatformModel, transport=None, *, credential_resolver=None
-):
-    if credential_resolver is None:
-        from app.services.platform_credentials import PlatformCredentialResolver
-
-        credential_resolver = PlatformCredentialResolver(settings)
-    configured = settings.model_copy(
-        update={
-            "llm_provider": entry.provider,
-            "llm_model": entry.model,
-            "llm_api_key": None,
-            "llm_base_url": entry.base_url,
-        }
-    )
-    extractor = AnthropicExtractor if entry.provider == "anthropic" else OpenAICompatibleExtractor
-    llm = extractor(
-        configured,
-        transport,
-        platform_model_id=entry.id,
-        credential_resolver=credential_resolver,
-        credential_target=CatalogResolveTarget(
-            model_id=entry.id, expected_model_revision=entry.revision
-        ),
-    )
-    # Editing the catalog entry changes the job cache key.
-    llm.version = f"{ADAPTER_VERSION}:{entry.id}:{entry.revision}"
-    llm.model_revision = entry.revision
-    llm.reasoning_levels = {level["name"]: level for level in entry.reasoning or []}
-    llm.default_reasoning = entry.default_reasoning
-    return llm
 
 
 def with_reasoning(llm, requested: str | None):

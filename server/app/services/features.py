@@ -29,7 +29,6 @@ def revision_data(row: FeatureRevision) -> dict:
 def snapshot_data(row: TaskFeature, revision: FeatureRevision) -> dict:
     return TaskFeatureSnapshot(
         id=row.id,
-        org_id=row.org_id,
         task_id=row.task_id,
         feature_revision_id=revision.id,
         revision=revision.revision,

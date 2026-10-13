@@ -11,9 +11,7 @@ integration boundary are in [the export contract](../plan/export.md).
 ## Usage
 
 The API and CLI share the models in
-[export_contracts.py](../../server/app/schemas/export_contracts.py). An active human
-admin previews and creates an immutable template binding. An active human bidder
-previews a particular draft and task-template selection, then submits its exact
+[export_contracts.py](../../server/app/schemas/export_contracts.py). The authenticated installation owner previews and creates an immutable template binding. The same human session previews a particular draft and task-template selection, then submits its exact
 input hash and warning IDs with `bid export prepare`. `--wait` ends when a private
 candidate awaits release; it never releases a file. `bid export release` separately
 requires the input hash and candidate hash. List and show return history without
@@ -34,24 +32,23 @@ once as a response, a comply-only (须遵守) decision or a gap. Gap entries car
 reason metadata, never unconfirmed proposed responses or candidate material.
 Canonical UTF-8 JSON uses sorted keys, compact separators and ASCII escaping.
 The input hash excludes acknowledgments; the manifest hash also binds the exact
-acknowledgment set. Cache identity adds the initiator to the input hash.
+acknowledgment set. Cache identity fixes the input hash and renderer dependencies.
 
-Human authorization intersects current membership and role with all source-read
-permissions. The token scope allowlist excludes export. The worker retains its
-worker identity and must own the exact job attempt and lease. Normalized run items
-and evidence links supply composite foreign keys; the manifest does not substitute
-for those relations. [0021_exports.py](../../server/migrations/versions/0021_exports.py)
-adds FORCE RLS, append-only grants, immediate actor gates, deferred coverage and
-confirmation checks, and export-specific audit identity checks. The worker policy
-for a succeeded job lasts only through its completion transaction. Older material
-tables retain their tenant RLS; the trusted worker loader restricts actual reads to
-the fixed run's authorized inputs.
+Human authorization requires an authenticated installation session and all
+source-read permissions. Tokens and agents cannot prepare, release or download
+exports. The worker retains its worker identity and must own the exact job attempt
+and lease. Normalized run items and evidence links constrain the task, extraction,
+card and material relationships; the manifest does not substitute for those
+relations. The [single-user baseline](../adr/0012-single-user-installation.md)
+retains append-only grants, immediate human and worker gates, deferred coverage
+and confirmation checks, and export-specific audit checks. The trusted worker
+loader restricts actual reads to the fixed run's authorized inputs.
 
 The template adapter accepts the ordered body anchors and style/column bindings
 specified by the contract. Response tables have the four columns of a winning bid:
 number within the table, the verbatim tender requirement, the confirmed response with
 links to its attachments and declarations, and the compliance state with any
-deviation. Identifiers, confirmers, timestamps and hashes are not printed; the
+deviation. Identifiers, confirmation timestamps and hashes are not printed; the
 provenance route rebuilds them from the fixed manifest with the same numbering. Static headings must match the selected template
 revision's declared chapter titles. Missing metadata is refused when its marker is
 present. Unsupported fields, hidden content, revisions, media and external
@@ -92,20 +89,20 @@ A final section also runs `prototype_gate`: each prototype image needs a current
 `prototype_decision_stale` blocks it. The current decisions and their set hash are
 part of the input manifest, so a later decision makes the run and its export stale.
 `export_run_evidence.prototype_decision_id` stores the kept decision, and
-[0024_export_images.py](../../server/migrations/versions/0024_export_images.py)
-adds `export_prototype_kept` to the completion gate, which requires that decision
+[`export_prototype_kept` in `00_functions_bid.sql`](../../server/migrations/baseline/00_functions_bid.sql)
+requires that decision during the completion gate
 to be the latest `keep` for the same card revision, rendition and feature revision.
 Review copies never depend on decisions.
 
 Preparation, candidate publication and human release use the task, sorted cards,
-member/dependency and run/job lock order. File I/O occurs outside the short final
+dependency and run/job lock order. File I/O occurs outside the short final
 mutation checks. The service re-reads fixed inputs under locks before committing
 business rows and identifier-only audits. Object storage and SQL are not one
 transaction; an unsuccessful commit can retain an encrypted unreferenced object,
 but cannot expose a half-published file.
 
-Candidates and released files use different org-prefixed immutable keys in the
-existing encrypted Storage. Download signatures bind org, export ID, file hash and
+Candidates and released files use different installation-local immutable keys in the
+existing encrypted Storage. Download signatures bind export ID, file hash and
 a dedicated kind. Issuing a link and delivering bytes both recheck current human
 permission and all relevant input gates. Decrypted length and SHA-256 must match
 before a response body is sent. A served audit records a delivery attempt, not proof
@@ -134,7 +131,7 @@ replacement. Only the verified local receipt reports a completed download.
 - Byte reproducibility is scoped to the recorded profile. Word/WPS re-saving or
   editing changes file bytes, and different font environments can change pagination.
   Reopening with python-docx verifies package structure, not visual Word pagination.
-- PostgreSQL tests are required to validate RLS, triggers and concurrency. A passing
+- PostgreSQL tests are required to validate actor gates, triggers and concurrency. A passing
   renderer, CLI transport test or offline migration generation cannot establish that
   those database gates work. Tests and repeatable synthetic artifacts belong under
   `data/work/`, not documentation.
@@ -142,10 +139,10 @@ replacement. Only the verified local receipt reports a completed download.
 ## Code
 
 - [api/exports.py](../../server/app/api/exports.py): binding, prepare, release, history and signed downloads.
-- [models/exports.py](../../server/app/models/exports.py): immutable export entities and tenant references.
+- [models/exports.py](../../server/app/models/exports.py): immutable export entities and task relationships.
 - [cli/bid_cli/export.py](../../cli/bid_cli/export.py): non-interactive commands and candidate-only waiting.
-- [test_exports.py](../../server/tests/test_exports.py): real API/processor release, isolation and invalidation scenarios.
-- [test_export_db.py](../../server/tests/test_export_db.py): runtime-role SQL gates and two-organization table isolation.
+- [test_exports.py](../../server/tests/test_exports.py): real API/processor release, human boundaries and invalidation scenarios.
+- [test_export_db.py](../../server/tests/test_export_db.py): runtime-role SQL gates and append-only history.
 - [test_export_renderer.py](../../server/tests/test_export_renderer.py): strict templates, preserved media and cross-process synthetic page artifacts.
 - [test_export_client.py](../../server/tests/test_export_client.py): CLI schema, partial completion and hostile download transports.
 - [test_export_images.py](../../server/tests/test_export_images.py): prototype gate, keep link, embedded rendition bytes and staleness after replace.

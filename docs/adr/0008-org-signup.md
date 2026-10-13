@@ -4,7 +4,7 @@ kind: adr
 
 # 0008 Global organization applications and manual provisioning
 
-Date: 2026-10-07. Status: **accepted.**
+Date: 2026-10-07. Status: superseded by 0012.
 
 ## Context
 
@@ -18,8 +18,8 @@ already provides password-and-TOTP sessions and a restricted function owner.
 
 ## Decision
 
-The [organization application contract](../plan/org-signup.md) defines submitted
-fields, decision states, abuse bounds, entry points and acceptance.
+The organization application contract is retained in version-control history.
+[ADR 0012](0012-single-user-installation.md) removes its public and operator entry points.
 
 - Approve the third global-table exception, `org_applications`, without tenant
   `org_id` or RLS. It stores only prospective org onboarding fields, a keyed source

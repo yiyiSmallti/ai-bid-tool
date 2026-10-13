@@ -5,7 +5,7 @@ Failure modes enumerated before implementation:
 - a paid run whose fixed inputs changed since the preview must be refused before any job;
 - the vendor must receive only the redacted requirement text and the feature declaration;
 - the generated HTML and PNG must be stored encrypted, bound to the sandbox receipt, and
-  readable only by the same organization;
+  bound to the requested task;
 - a feature selection replaced after submission must stop the job before the vendor call;
 - an unavailable sandbox must block admission instead of paying for an unrenderable page;
 - the run must enter the existing prepare/ingest chain as an origin=prototype asset.
@@ -61,18 +61,17 @@ async def post(api, header, task, body):
     return await api.post(f"/tasks/{task}/prototype-generations", headers=header, json=body)
 
 
-async def jobs(app, org):
-    async with app.state.db.transaction(org) as session:
+async def jobs(app):
+    async with app.state.db.transaction() as session:
         return await session.scalar(
             select(func.count()).select_from(Job).where(Job.kind == "prototype_generate")
         )
 
 
-async def test_generate_render_store_ingest_and_fences(tenants, tmp_path, admin_engine):
+async def test_generate_render_store_ingest_and_fences(database, tmp_path, admin_engine):
     renderer_required()
-    org = tenants["orgs"][0]
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        header = headers[0]
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        header = headers
         browser = FakeBrowser()
         app.state.processor.sandbox_browser = browser
 
@@ -91,17 +90,17 @@ async def test_generate_render_store_ingest_and_fences(tenants, tmp_path, admin_
         assert preview.status_code == 200, preview.text
         estimate = preview.json()["data"]
         assert estimate["planned_calls"] == 1 and estimate["admission_blocker"] is None
-        assert not vendor.drafts and await jobs(app, org) == 0
+        assert not vendor.drafts and await jobs(app) == 0
         stale = await post(api, header, task, {**body, "expected_input_hash": "0" * 64})
         assert stale.status_code == 409, stale.text
         assert stale.json()["data"]["error"]["code"] == "prototype_input_changed"
-        assert await jobs(app, org) == 0
+        assert await jobs(app) == 0
         submitted = await post(
             api, header, task, {**body, "expected_input_hash": estimate["input_hash"]}
         )
         assert submitted.status_code == 200, submitted.text
         job_id = submitted.json()["data"]["job_id"]
-        await app.state.processor(header["X-Org-Id"], job_id)
+        await app.state.processor(job_id)
         status = (await api.get(f"/jobs/{job_id}", headers=header)).json()["data"]
         assert status["status"] == "succeeded", status
         generation = status["result"]["prototype_generation"]
@@ -121,15 +120,12 @@ async def test_generate_render_store_ingest_and_fences(tenants, tmp_path, admin_
         import hashlib
 
         assert hashlib.sha256(source.content).hexdigest() == generation["source_image_sha256"]
-        async with app.state.db.transaction(org) as session:
+        async with app.state.db.transaction() as session:
             row = await session.get(ScreenshotPrototypeRun, UUID(prototype_id))
             assert row is not None
-            stored = app.state.storage.path(org, row.html_storage_key).read_bytes()
+            stored = app.state.storage.path(row.html_storage_key).read_bytes()
             assert stored.startswith(b"BIDFILE1\n") and HTML.encode() not in stored
             assert row.sandbox_receipt_id and row.provenance["model"] == "synthetic-model"
-        for path in (f"/prototype-runs/{prototype_id}", f"/prototype-runs/{prototype_id}/source"):
-            assert (await api.get(path, headers=headers[1])).status_code == 404
-        assert (await post(api, headers[1], task, {**body, "dry_run": True})).status_code == 404
         uploaded = await prepare_ingest_prototype(
             api,
             app,
@@ -153,13 +149,13 @@ async def test_generate_render_store_ingest_and_fences(tenants, tmp_path, admin_
             api, header, task, {**other, "expected_input_hash": fresh["input_hash"]}
         )
         fenced_job = queued.json()["data"]["job_id"]
-        async with app.state.db.transaction(org) as session:
+        async with app.state.db.transaction() as session:
             await session.execute(
                 update(TaskFeature)
                 .where(TaskFeature.id == UUID(feature["id"]))
                 .values(active=False)
             )
-        await app.state.processor(header["X-Org-Id"], fenced_job)
+        await app.state.processor(fenced_job)
         fenced = (await api.get(f"/jobs/{fenced_job}", headers=header)).json()["data"]
         assert fenced["status"] == "failed", fenced
         assert fenced["error"]["code"] in {"inactive_selection", "prototype_input_changed"}
@@ -170,12 +166,11 @@ async def test_generate_render_store_ingest_and_fences(tenants, tmp_path, admin_
     os.environ.get("BID_SANDBOX_RUNTIME_TEST") != "1",
     reason="requires the independently provisioned sandbox supervisor",
 )
-async def test_real_sandbox_renders_generated_prototype(tenants, tmp_path):
+async def test_real_sandbox_renders_generated_prototype(database, tmp_path):
     from app.providers.browser import create_browser_provider
 
-    org = tenants["orgs"][0]
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        header = headers[0]
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        header = headers
         app.state.processor.sandbox_browser = create_browser_provider()
 
         async def respond(sent):
@@ -195,13 +190,13 @@ async def test_real_sandbox_renders_generated_prototype(tenants, tmp_path):
             api, header, task, {**body, "expected_input_hash": estimate["input_hash"]}
         )
         job_id = submitted.json()["data"]["job_id"]
-        await app.state.processor(header["X-Org-Id"], job_id)
+        await app.state.processor(job_id)
         status = (await api.get(f"/jobs/{job_id}", headers=header)).json()["data"]
         assert status["status"] == "succeeded", status
         generation = status["result"]["prototype_generation"]
         source = await api.get(f"/prototype-runs/{generation['id']}/source", headers=header)
         assert source.status_code == 200
-        async with app.state.db.transaction(org) as session:
+        async with app.state.db.transaction() as session:
             row = await session.get(ScreenshotPrototypeRun, UUID(generation["id"]))
             assert row is not None and row.provenance["runtime_versions"]
         target = Path(os.environ.get("BID_SANDBOX_ARTIFACT_DIR", "data/work/sandbox-verification"))

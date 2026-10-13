@@ -13,8 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
 from app.core.security import TokenSigner
-from app.models.team_workflow import TaskEvent, TaskEventHead
-from app.schemas.team_workflow import (
+from app.models.task_events import TaskEvent, TaskEventHead
+from app.schemas.task_board import (
     EventReplayView,
     StreamResetRequired,
     TaskEventPayload,
@@ -27,25 +27,23 @@ RETENTION_SECONDS = 7 * 86400
 MAX_EVENTS = 50000
 
 
-def fingerprint(actor, workflow) -> str:
+def fingerprint(actor) -> str:
     value = [
-        str(actor.user_id),
         str(actor.token_id or ""),
         actor.actor_kind,
-        actor.role,
         sorted(actor.scopes),
-        workflow.access_epoch,
+        str(actor.principal_id or ""),
+        str(actor.session_id or ""),
     ]
     return hashlib.sha256(json.dumps(value, separators=(",", ":")).encode()).hexdigest()
 
 
-def issue_cursor(actor, task_id, workflow, settings, *, purpose="events", seq=0, **fields):
+def issue_cursor(actor, task_id, settings, *, purpose="events", seq=0, **fields):
     value = TokenSigner.for_tokens(settings).issue(
         {
             "kind": "task_cursor",
-            "o": str(actor.org_id),
             "t": str(task_id),
-            "v": fingerprint(actor, workflow),
+            "v": fingerprint(actor),
             "p": purpose,
             "s": seq,
             **fields,
@@ -57,14 +55,14 @@ def issue_cursor(actor, task_id, workflow, settings, *, purpose="events", seq=0,
     return value
 
 
-def open_cursor(value, actor, task_id, workflow, settings, *, purpose="events"):
+def open_cursor(value, actor, task_id, settings, *, purpose="events"):
     if len(value) > 1024:
         raise ServiceError("invalid_event_cursor", "Invalid cursor", 422, 2)
     try:
         data = json.loads(TokenSigner.for_tokens(settings).cipher.decrypt(value.encode()))
     except (InvalidToken, ValueError, KeyError, TypeError):
         raise ServiceError("invalid_event_cursor", "Invalid or expired cursor", 422, 2) from None
-    if (data.get("o"), data.get("t")) != (str(actor.org_id), str(task_id)):
+    if data.get("t") != str(task_id):
         raise not_found()
     if data.get("kind") != "task_cursor" or data.get("p") != purpose:
         raise ServiceError("invalid_event_cursor", "Invalid cursor", 422, 2)
@@ -75,41 +73,34 @@ def open_cursor(value, actor, task_id, workflow, settings, *, purpose="events"):
             409,
             2,
         )
-    if data.get("v") != fingerprint(actor, workflow):
+    if data.get("v") != fingerprint(actor):
         raise ServiceError("board_changed", "Task visibility changed; reload snapshot", 409, 2)
     if type(data.get("s")) is not int or data["s"] < 0:
         raise ServiceError("invalid_event_cursor", "Invalid cursor", 422, 2)
     return data
 
 
-async def head(session, org_id, task_id):
-    row = await session.scalar(
-        select(TaskEventHead).where(
-            TaskEventHead.org_id == org_id, TaskEventHead.task_id == task_id
-        )
-    )
+async def head(session, task_id):
+    row = await session.scalar(select(TaskEventHead).where(TaskEventHead.task_id == task_id))
     if row is None:
         raise not_found()
     return row
 
 
-async def current_cursor(session, actor, task_id, settings, workflow=None):
-    if workflow is None:
-        from app.services.task_workflow import access
+async def current_cursor(session, actor, task_id, settings):
+    from app.services.task_access import access
 
-        _, workflow, _ = await access(session, actor, task_id)
-    row = await head(session, actor.org_id, task_id)
-    return issue_cursor(actor, task_id, workflow, settings, seq=row.last_seq)
+    await access(session, actor, task_id)
+    row = await head(session, task_id)
+    return issue_cursor(actor, task_id, settings, seq=row.last_seq)
 
 
-async def append(
-    session: AsyncSession, org_id: UUID, task_id: UUID, payload, source_id: UUID | None = None
-):
+async def append(session: AsyncSession, task_id: UUID, payload, source_id: UUID | None = None):
     """Head row lock lasts until caller commit; state and event roll back together."""
     value = PAYLOAD.validate_python(payload).model_dump(mode="json")
     if len(json.dumps(value, separators=(",", ":")).encode()) > 1800:
         if value["type"] == "board_changed":
-            from app.schemas.team_workflow import BoardChanged
+            from app.schemas.task_board import BoardChanged
 
             value = BoardChanged(
                 invalidate_all=True, extraction_job_id=value.get("extraction_job_id")
@@ -118,11 +109,8 @@ async def append(
             raise ServiceError("board_limit_exceeded", "Event metadata exceeds bound", 422, 2)
     # Use the same function as trigger producers, including bounded prefix retention.
     await session.execute(
-        text(
-            "SELECT public.append_task_event(:org, :task, :kind, CAST(:payload AS jsonb), :source)"
-        ),
+        text("SELECT public.append_task_event(:task, :kind, CAST(:payload AS jsonb), :source)"),
         {
-            "org": org_id,
             "task": task_id,
             "kind": value["type"],
             "payload": json.dumps(value),
@@ -151,12 +139,7 @@ def hidden_job_kinds(actor):
         "memory_candidate": "memory:read",
     }
     denied = {kind for kind, scope in scopes.items() if scope not in actor.scopes}
-    if (
-        actor.actor_kind != "session"
-        or actor.token_id is not None
-        or actor.role != "bidder"
-        or "export" not in actor.scopes
-    ):
+    if actor.actor_kind != "session" or actor.token_id is not None or "export" not in actor.scopes:
         denied |= {"export_render", "export_preview"}
     return denied
 
@@ -164,7 +147,14 @@ def hidden_job_kinds(actor):
 async def visible_job(session, actor, job, storage):
     from app.services.jobs import read_access
 
-    key = (job.id, actor.user_id, actor.token_id, actor.role, tuple(sorted(actor.scopes)))
+    key = (
+        job.id,
+        actor.token_id,
+        actor.principal_id,
+        actor.session_id,
+        actor.actor_kind,
+        tuple(sorted(actor.scopes)),
+    )
     cache = session.info.setdefault("task_visible_jobs", {})
     if key in cache:
         return cache[key]
@@ -184,15 +174,14 @@ async def visible_job(session, actor, job, storage):
 
 async def replay(session, actor, task_id, settings, storage, *, cursor=None, limit=100):
     from app.models.entities import Job
-    from app.services.task_workflow import access
+    from app.services.task_access import access
 
-    _, workflow, _ = await access(session, actor, task_id)
+    await access(session, actor, task_id)
     actor.require("card:read")
     actor.require("job:read")
-    row = await head(session, actor.org_id, task_id)
-    checkpoint = issue_cursor(actor, task_id, workflow, settings, seq=row.last_seq)
+    row = await head(session, task_id)
+    checkpoint = issue_cursor(actor, task_id, settings, seq=row.last_seq)
     base = dict(
-        org_id=actor.org_id,
         task_id=task_id,
         head_cursor=checkpoint,
         next_cursor=None,
@@ -209,7 +198,7 @@ async def replay(session, actor, task_id, settings, storage, *, cursor=None, lim
             }
         )
 
-    data = open_cursor(cursor, actor, task_id, workflow, settings)
+    data = open_cursor(cursor, actor, task_id, settings)
     seq = data["s"]
     if seq > row.last_seq:
         raise ServiceError("invalid_event_cursor", "Future cursor", 422, 2)
@@ -218,9 +207,7 @@ async def replay(session, actor, task_id, settings, storage, *, cursor=None, lim
     events = list(
         await session.scalars(
             select(TaskEvent)
-            .where(
-                TaskEvent.org_id == actor.org_id, TaskEvent.task_id == task_id, TaskEvent.seq > seq
-            )
+            .where(TaskEvent.task_id == task_id, TaskEvent.seq > seq)
             .order_by(TaskEvent.seq)
             .limit(100)
         )
@@ -231,9 +218,7 @@ async def replay(session, actor, task_id, settings, storage, *, cursor=None, lim
     jobs = {
         job.id: job
         for job in await session.scalars(
-            select(Job).where(
-                Job.org_id == actor.org_id, Job.task_id == task_id, Job.id.in_(job_ids)
-            )
+            select(Job).where(Job.task_id == task_id, Job.id.in_(job_ids))
         )
     }
     visible = set()
@@ -258,19 +243,19 @@ async def replay(session, actor, task_id, settings, storage, *, cursor=None, lim
             more = True
             break
         scanned = event.seq
+        payload = dict(event.payload)
         output.append(
             TaskEventView(
                 event_id=event.id,
-                org_id=actor.org_id,
                 task_id=task_id,
-                cursor=issue_cursor(actor, task_id, workflow, settings, seq=event.seq),
-                payload=event.payload,
+                cursor=issue_cursor(actor, task_id, settings, seq=event.seq),
+                payload=PAYLOAD.validate_python(payload),
                 created_at=event.created_at,
             )
         )
     base.update(
         events=output,
-        next_cursor=issue_cursor(actor, task_id, workflow, settings, seq=scanned),
+        next_cursor=issue_cursor(actor, task_id, settings, seq=scanned),
         has_more=more,
     )
     return EventReplayView.model_validate(base)

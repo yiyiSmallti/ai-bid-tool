@@ -7,7 +7,7 @@ const form = reactive({ account_id: "", gateway_id: "", enabled: true, workers_c
 const workers = computed(() => credentials.value.filter(row => row.purpose === "clef_workers_ai" && row.state === "active"));
 const gateways = computed(() => credentials.value.filter(row => row.purpose === "clef_gateway" && row.state === "active"));
 const ready = computed(() => /^[a-f0-9]{32}$/.test(form.account_id) && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(form.gateway_id) && workers.value.some(row => row.id === form.workers_credential_id) && gateways.value.some(row => row.id === form.gateway_credential_id));
-const labels = { clef_gateway_unchecked: "尚未完成网关安全检查", clef_credential_unavailable: "平台 Clef 凭据不可用", clef_credential_changed: "平台 Clef 凭据已变化，请保存配置并重新检查", clef_configuration_unavailable: "Clef 配置暂不可用", clef_unconfigured: "尚未配置 Clef", clef_disabled: "平台已停用 Clef", clef_gateway_not_checked: "尚未完成网关安全检查", clef_gateway_check_failed: "网关安全检查未通过", clef_gateway_unsafe: "网关未满足安全设置", clef_credentials_missing: "缺少有效的模型令牌或网关令牌", clef_revision_conflict: "配置修订已变化，请刷新后重试", revision_conflict: "配置修订已变化，请刷新后重试", invalid_input: "配置参数无效，请核对填写内容", forbidden: "需要平台管理员本人登录", invalid_session: "平台登录已失效，请重新登录" };
+const labels = { clef_gateway_unchecked: "尚未完成网关安全检查", clef_credential_unavailable: "Clef 凭据不可用", clef_credential_changed: "Clef 凭据已变化，请保存配置并重新检查", clef_configuration_unavailable: "Clef 配置暂不可用", clef_unconfigured: "尚未配置 Clef", clef_disabled: "已停用 Clef", clef_gateway_not_checked: "尚未完成网关安全检查", clef_gateway_check_failed: "网关安全检查未通过", clef_gateway_unsafe: "网关未满足安全设置", clef_credentials_missing: "缺少有效的模型令牌或网关令牌", clef_revision_conflict: "配置修订已变化，请刷新后重试", revision_conflict: "配置修订已变化，请刷新后重试", invalid_input: "配置参数无效，请核对填写内容", forbidden: "需要本人登录", invalid_session: "登录已失效，请重新登录" };
 const message = code => labels[code] ?? `配置未就绪（${code}）`;
 let mounted = true;
 const controller = new AbortController();
@@ -55,17 +55,17 @@ onMounted(load);
 onBeforeUnmount(() => { mounted = false; controller.abort(); });
 </script>
 <template>
-  <div class="page-header"><div><h2>Clef 初筛配置</h2><p class="subtitle">平台统一配置签章存在性初筛；记录调用次数和返回的 token 用量。</p></div><el-button :loading="busy" @click="load">刷新 Clef 配置</el-button></div>
+  <div class="page-header"><div><h2>Clef 初筛配置</h2><p class="subtitle">配置签章存在性初筛；记录调用次数和返回的 token 用量。</p></div><el-button :loading="busy" @click="load">刷新 Clef 配置</el-button></div>
   <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" class="section" />
   <el-alert v-if="notice" :title="notice" :type="blockers.length ? 'warning' : 'success'" :closable="false" role="status" class="section" />
-  <p>需要独立的 Workers AI 模型令牌与网关令牌；请在 <RouterLink to="/platform/credentials">服务凭据</RouterLink> 中创建并启用。单位成员无法读取平台凭据。</p>
+  <p>需要独立的 Workers AI 模型令牌与网关令牌；请在 <RouterLink to="/platform/credentials">服务凭据</RouterLink> 中创建并启用。</p>
   <el-card class="section" shadow="never"><template #header><h3>服务配置</h3></template>
     <el-form label-position="top" @submit.prevent="save">
       <el-form-item label="Cloudflare Account ID"><el-input v-model="form.account_id" aria-label="Cloudflare Account ID" maxlength="32" :disabled="busy" /></el-form-item>
       <el-form-item label="AI Gateway ID"><el-input v-model="form.gateway_id" aria-label="AI Gateway ID" maxlength="64" :disabled="busy" /></el-form-item>
       <el-form-item label="Workers AI 模型凭据"><el-select v-model="form.workers_credential_id" aria-label="Workers AI 模型凭据" :disabled="busy"><el-option v-for="row in workers" :key="row.id" :value="row.id" :label="`${row.name} · 第 ${row.revision} 版`" /></el-select></el-form-item>
       <el-form-item label="网关凭据"><el-select v-model="form.gateway_credential_id" aria-label="网关凭据" :disabled="busy"><el-option v-for="row in gateways" :key="row.id" :value="row.id" :label="`${row.name} · 第 ${row.revision} 版`" /></el-select></el-form-item>
-      <el-checkbox v-model="form.enabled" :disabled="busy">启用平台 Clef 初筛</el-checkbox>
+      <el-checkbox v-model="form.enabled" :disabled="busy">启用 Clef 初筛</el-checkbox>
       <p>每个目标页一次调用，同时询问公章与签字存在性。每次检验默认开启，提交人可在预检中关闭。</p>
       <el-button type="primary" native-type="submit" :loading="busy" :disabled="!ready">保存 Clef 配置</el-button>
     </el-form>

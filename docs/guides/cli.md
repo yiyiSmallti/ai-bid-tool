@@ -164,7 +164,7 @@ audit boundary are described in
    ```
 
 3. Submit a card, read its returned revision and evidence IDs, and have the
-   assigned professional reviewer inspect the actual materials and response.
+   eligible professional reviewer inspect the actual materials and response.
    Use a human login session for all decisions:
 
    ```sh
@@ -550,42 +550,40 @@ service without the user's explicit decision.
 
 ## Operate the platform
 
-Platform commands need an operator account; see
-[development.md](development.md#run-the-platform-console). They use a
-platform session, which org commands do not accept, and the reverse.
+Platform commands require the configured operator account and TOTP factor;
+see [development.md](development.md#run-the-platform-console). Platform and
+organization sessions remain separate.
 
 ```sh
-bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform login --email OPERATOR_EMAIL --totp 123456 --json
-bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform org create --name ORG_NAME --admin-email ADMIN_EMAIL --json
-bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform org set-active --id ORG_ID --inactive --json
-bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform model set --input MODEL.json --json
-bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform usage --from 2026-10 --to 2026-12 --json
+bid --mode remote --server http://127.0.0.1:8000 --state SESSION_FILE platform login --email OPERATOR_EMAIL --totp 123456 --json
+bid --mode remote --server http://127.0.0.1:8000 --state SESSION_FILE platform model list --json
+bid --mode remote --server http://127.0.0.1:8000 --state SESSION_FILE platform model set --input MODEL.json --json
+bid --mode remote --server http://127.0.0.1:8000 --state SESSION_FILE platform model test --id MODEL_ID --json
 ```
 
-1. `platform login` reads the password from `BID_PASSWORD` and takes the
-   current authenticator code. Follow the [sign-in retry instructions](development.md#run-the-platform-console)
-   for `too_many_attempts` or `auth_busy`; org lookup, org login and platform
-   login share the [authentication limits](../notes/platform-console.md#password-admission-and-totp-consumption).
-2. `platform org create` returns `setup_url` when the admin has never set a
-   password. Give the full link to the admin; it works once within 24 hours.
-3. `platform org set-active --inactive` blocks every login, session and token
-   of the org immediately; `--active` restores access. Data is kept.
-4. `platform model set` takes the fields of `PlatformModelSet` in
-   [platform_contracts.py](../../server/app/schemas/platform_contracts.py).
-   Send `expected_revision` when updating. Setting `default: true` makes the
-   model the one used and billed for extraction.
-5. `platform model test --id MODEL_ID` makes one real vendor call per
-   registered reasoning level and reports each under `levels`. Register levels
-   in `reasoning` with the vendor's official names and mark the official
-   default in `default_reasoning`; see
-   [reasoning-levels.md](../notes/reasoning-levels.md).
-6. `platform org list`, `platform model list`, and `platform audit` read the
-   current state.
+`platform login` reads the password from `BID_PASSWORD`. For `too_many_attempts`
+or `auth_busy`, follow the
+[sign-in retry instructions](development.md#run-the-platform-console).
+`platform model set` takes `PlatformModelSet` from
+[platform_contracts.py](../../server/app/schemas/platform_contracts.py); updates
+require `expected_revision`. `default: true` selects the extraction default.
+`platform model test` makes one real vendor call per registered reasoning level
+and reports each under `levels`; use vendor official names and
+`default_reasoning` as described in [reasoning levels](../notes/reasoning-levels.md).
+Credential commands follow
+[Manage platform credentials](development.md#manage-platform-credentials).
 
-A new org admin can set the password from the CLI instead of the browser. Put
-the token part of the link, after `#token=`, in `BID_SETUP_TOKEN` and the new
-password in `BID_PASSWORD`:
+## Inspect task progress
 
 ```sh
-bid --mode remote --server https://YOUR_SERVER auth setup-password --json
+bid task progress --task TASK_ID --json
+bid task board --task TASK_ID --job EXTRACTION_JOB_ID --json
+bid task activity --task TASK_ID --json
+bid task events --task TASK_ID --wait-seconds 0 --json
 ```
+
+Select the extraction explicitly for the board. Progress works before extraction;
+events return one bounded Result suitable for polling. Pass the returned cursor
+to continue a page or replay. A reset or expired cursor requires a fresh snapshot.
+Projection, privacy and reconnect rules are in
+[Task board and durable progress](../notes/task-progress.md).

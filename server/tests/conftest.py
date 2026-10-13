@@ -1,7 +1,5 @@
-import base64
 import hashlib
 import os
-import secrets
 from uuid import uuid4
 
 import httpx
@@ -10,40 +8,17 @@ from alembic import command
 from alembic.config import Config
 from app.api.main import create_app
 from app.core.config import Settings
-from app.core.totp import generate_secret
-from app.models.entities import Membership, Org, User
 from app.providers.llm import HTTPExtractor
-from app.services.platform_credentials import PlatformCredentialResolver as CredentialResolver
 from cryptography.fernet import Fernet
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.orm import Session
-
-PASSWORD = "synthetic-test-password-only"
 
 
-def cheap_password_hash(password: str) -> str:
-    """A hash in the production format with few rounds; verification reads them from it.
-
-    Production's 600,000 PBKDF2 rounds per login dominated the suite on CI's CPUs, and
-    no test depends on the work factor stored for these synthetic users.
-    """
-    salt = secrets.token_bytes(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 1000)
-    return f"pbkdf2$1000${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}"
-
-
-PASSWORD_HASH = cheap_password_hash(PASSWORD)
-OPERATOR = "ops@example.test"
-OPERATOR_PASSWORD = "synthetic-operator-password"
-OPERATOR_SECRET = generate_secret()
-
-
-def prepare_database(url: str, *, configure_logins: bool = True) -> None:
+def prepare_database(url: str) -> None:
     """Create the application role if missing and migrate the database at `url` to head.
 
-    Role passwords are cluster-wide, so concurrent xdist workers must not set them; only the
-    locked `pytest_configure` path and single-process runs configure logins.
+    Roles are cluster-wide; per-worker setup uses the maintenance advisory lock
+    before creating the shared role. Existing role passwords are never changed.
     """
     if not (make_url(url).database or "").startswith("bid_test"):
         raise RuntimeError("Tests refuse to mutate a database without the bid_test prefix")
@@ -63,23 +38,6 @@ def prepare_database(url: str, *, configure_logins: bool = True) -> None:
     engine.dispose()
     os.environ["BID_MIGRATION_DATABASE_URL"] = url
     command.upgrade(Config("alembic.ini"), "head")
-    # CI uses password authentication instead of the local test socket's trust policy.
-    # These roles exist only after migration and use the isolated test runtime password.
-    if configure_logins and os.environ.get("BID_DATABASE_PASSWORD"):
-        from psycopg import sql
-        from sqlalchemy.exc import SQLAlchemyError
-
-        try:
-            with engine.begin() as connection:
-                for role in ("bid_platform_app", "bid_credential_reader"):
-                    statement = sql.SQL("ALTER ROLE {} PASSWORD {}").format(
-                        sql.Identifier(role), sql.Literal(os.environ["BID_DATABASE_PASSWORD"])
-                    )
-                    connection.exec_driver_sql(statement.as_string())
-        except SQLAlchemyError as exc:
-            raise RuntimeError("Could not configure isolated credential test logins") from exc
-        finally:
-            engine.dispose()
 
 
 # Tests that run alone on shard 1 whenever they are selected: the longest scale test,
@@ -170,11 +128,7 @@ def pytest_configure(config):
             connection.execute(text("SELECT pg_advisory_unlock(hashtext('bid_test_workers'))"))
     maintenance.dispose()
     os.environ["BID_TEST_ADMIN_URL"] = base.set(database=name).render_as_string(hide_password=False)
-    for variable in (
-        "BID_DATABASE_URL",
-        "BID_PLATFORM_DATABASE_URL",
-        "BID_CREDENTIAL_DATABASE_URL",
-    ):
+    for variable in ("BID_DATABASE_URL",):
         if os.environ.get(variable):
             app = make_url(os.environ[variable]).set(database=name)
             os.environ[variable] = app.render_as_string(hide_password=False)
@@ -194,46 +148,30 @@ def admin_engine():
         # Failing instead of skipping keeps a run without the database from looking green.
         pytest.fail("BID_TEST_ADMIN_URL must point at an isolated PostgreSQL test runtime")
     # Under xdist, pytest_configure already prepared this worker's copy under a lock.
-    prepare_database(url, configure_logins=not os.environ.get("PYTEST_XDIST_WORKER"))
+    prepare_database(url)
     engine = create_engine(url, hide_parameters=True)
     yield engine
     engine.dispose()
 
 
 @pytest.fixture
-def tenants(admin_engine, monkeypatch):
-    # Dedicated logins use the same isolated test database, never the org connection.
-    runtime_url = make_url(os.environ["BID_DATABASE_URL"])
-    for variable, role in (
-        ("BID_PLATFORM_DATABASE_URL", "bid_platform_app"),
-        ("BID_CREDENTIAL_DATABASE_URL", "bid_credential_reader"),
-    ):
-        if not os.environ.get(variable):
-            monkeypatch.setenv(
-                variable, runtime_url.set(username=role).render_as_string(hide_password=False)
-            )
+def database(admin_engine, monkeypatch):
     if not os.environ.get("BID_SECRETS_KEY"):
         monkeypatch.setenv("BID_SECRETS_KEY", Fernet.generate_key().decode())
+    from psycopg import sql
+
     with admin_engine.begin() as connection:
-        connection.execute(
+        tables = connection.scalars(
             text(
-                "TRUNCATE platform_trust_anchors, platform_operator_factors, platform_credentials, platform_audit_logs, platform_models, evidence_sources, certificate_files, task_templates, template_revisions, templates, task_org_profiles, org_profile_revisions, org_profiles, task_certificates, certificate_revisions, certificates, task_features, feature_revisions, features, audit_logs, task_resources, product_revisions, products, jobs, usage_records, requirements, chunks, documents, tasks, api_tokens, memberships, orgs, users CASCADE"
+                "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> 'alembic_version'"
             )
-        )
-    orgs, users = [], []
-    with Session(admin_engine) as session, session.begin():
-        for label in ("A", "B"):
-            org_id = uuid4()
-            org = Org(id=org_id, org_id=org_id, name=f"Synthetic tenant {label}")
-            user = User(
-                id=uuid4(), email=f"{label.lower()}@example.test", password_hash=PASSWORD_HASH
+        ).all()
+        if tables:
+            statement = sql.SQL("TRUNCATE {} CASCADE").format(
+                sql.SQL(", ").join(sql.Identifier("public", name) for name in tables)
             )
-            session.add_all([org, user])
-            session.flush()
-            session.add(Membership(org_id=org_id, user_id=user.id, role="admin"))
-            orgs.append(org_id)
-            users.append(user.id)
-    return {"orgs": orgs, "users": users}
+            connection.exec_driver_sql(statement.as_string())
+    return admin_engine
 
 
 class FakeQueue:
@@ -244,34 +182,32 @@ class FakeQueue:
         self.annotation_cleanups = []
         self.attachment_invalidations = []
 
-    async def enqueue(self, org_id: str, job_id: str):
-        self.calls.append((org_id, job_id))
+    async def enqueue(self, job_id: str):
+        self.calls.append(job_id)
         return len(self.calls)
 
-    async def enqueue_in_transaction(self, session, org_id: str, job_id: str):
-        return await self.enqueue(org_id, job_id)
+    async def enqueue_in_transaction(self, session, job_id: str):
+        return await self.enqueue(job_id)
 
     async def enqueue_attachment_invalidation_in_transaction(self, session, **arguments):
         self.attachment_invalidations.append(arguments)
         return len(self.attachment_invalidations)
 
-    async def enqueue_agent_wake(self, session, org_id: str, session_id: str, *, delay=30):
-        self.wakes.append((org_id, session_id))
+    async def enqueue_agent_wake(self, session, session_id: str, *, delay=30):
+        self.wakes.append(session_id)
         return len(self.wakes)
 
-    async def enqueue_annotation_cleanup_in_transaction(
-        self, session, org_id: str, job_id: str, *, delay=300
-    ):
-        self.annotation_cleanups.append((org_id, job_id, max(300, delay)))
+    async def enqueue_annotation_cleanup_in_transaction(self, session, job_id: str, *, delay=300):
+        self.annotation_cleanups.append((job_id, max(300, delay)))
         return len(self.annotation_cleanups)
 
     async def ensure_process_delivery(self, session, job):
         if job.queue_id is None:
-            job.queue_id = await self.enqueue(str(job.org_id), str(job.id))
+            job.queue_id = await self.enqueue(str(job.id))
 
 
 @pytest.fixture
-def application(tenants, tmp_path):
+def application(database, tmp_path):
     settings = Settings(data_dir=tmp_path)
     return create_app(settings, queue=FakeQueue())
 
@@ -288,18 +224,30 @@ async def api(application):
 
 
 @pytest.fixture
-async def headers(api, tenants):
-    output = []
-    for label, org in zip(("a", "b"), tenants["orgs"], strict=True):
+async def headers(api):
+    response = await api.post("/auth/session", json={"access_key": os.environ["BID_ACCESS_KEY"]})
+    assert response.status_code == 200
+    return {"Authorization": "Bearer " + response.json()["data"]["session"]}
+
+
+@pytest.fixture
+def token_headers():
+    from datetime import UTC, datetime, timedelta
+
+    async def create(api, scopes):
         response = await api.post(
-            "/auth/login",
-            json={"email": f"{label}@example.test", "password": PASSWORD, "org_id": str(org)},
+            "/tokens",
+            headers={"Authorization": "Bearer " + os.environ["BID_ACCESS_KEY"]},
+            json={
+                "name": "synthetic token",
+                "scopes": sorted(scopes),
+                "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+            },
         )
-        assert response.status_code == 200
-        output.append(
-            {"Authorization": "Bearer " + response.json()["data"]["session"], "X-Org-Id": str(org)}
-        )
-    return output
+        assert response.status_code == 200, response.text
+        return {"Authorization": "Bearer " + response.json()["data"]["token"]}
+
+    return create
 
 
 @pytest.fixture
@@ -331,16 +279,6 @@ def docx_bytes():
     return buffer.getvalue()
 
 
-@pytest.fixture
-def operator(tenants, admin_engine):
-    """A platform operator identity; settings must list OPERATOR with OPERATOR_SECRET."""
-    with Session(admin_engine) as session, session.begin():
-        session.add(
-            User(id=uuid4(), email=OPERATOR, password_hash=cheap_password_hash(OPERATOR_PASSWORD))
-        )
-    return OPERATOR
-
-
 async def seed_platform_credential(
     settings,
     *,
@@ -349,40 +287,42 @@ async def seed_platform_credential(
     endpoint="https://api.anthropic.com",
     key="synthetic-platform-key",
     active=True,
-    purpose="catalog_llm",
+    purpose="standalone_llm",
 ):
-    """Persist a synthetic credential through the restricted management connection."""
-    from datetime import UTC, datetime, timedelta
-
-    from app.schemas.platform_credentials import CredentialCreate, PlatformOperator
+    """Persist a synthetic local credential through the human settings service."""
+    from app.core.db import Database
+    from app.schemas.platform_credentials import CredentialCreate
+    from app.services.auth import HUMAN_SCOPES, Identity
     from app.services.platform_credentials import PlatformCredentialService
     from pydantic import SecretStr
 
-    actor = PlatformOperator("fixture@example.test", datetime.now(UTC) + timedelta(minutes=5))
-    return (
-        await PlatformCredentialService(settings).create(
-            actor,
-            CredentialCreate(
-                name=name,
-                purpose=purpose,
-                provider=provider,
-                endpoint=endpoint,
-                api_key=SecretStr(key),
-                active=active,
-            ),
-        )
-    ).credential
+    db = Database(settings)
+    try:
+        return (
+            await PlatformCredentialService(settings, db).create(
+                Identity(scopes=set(HUMAN_SCOPES)),
+                CredentialCreate(
+                    name=name,
+                    purpose=purpose,
+                    provider=provider,
+                    endpoint=endpoint,
+                    api_key=SecretStr(key),
+                    active=active,
+                ),
+            )
+        ).credential
+    finally:
+        await db.engine.dispose()
 
 
 async def credential_app(settings, *, llm: HTTPExtractor, queue):
-    """Use stored platform credentials with an explicitly injected MockTransport adapter.
-
-    The adapter remains injectable for reasoning and stale-identity cases.
-    Its request settings are untouched; only authentication moves to the
-    same encrypted store and per-call catalog resolver used by production API/worker calls.
-    """
-    from app.models.entities import PlatformModel
-    from app.schemas.platform_credentials import CatalogResolveTarget, CredentialSpec
+    """Bind an injected mock adapter to an encrypted local provider revision."""
+    from app.core.provider_secrets import ProviderSecrets
+    from app.models.provider_configs import ProviderConfig
+    from app.providers.configured import configured_llm
+    from app.schemas.platform_credentials import CredentialSpec
+    from app.services.auth import HUMAN_SCOPES, Identity, set_actor_context
+    from sqlalchemy import func, select
 
     key = llm.settings.llm_api_key
     assert key is not None and isinstance(llm.transport, httpx.MockTransport)
@@ -392,36 +332,40 @@ async def credential_app(settings, *, llm: HTTPExtractor, queue):
         or ("https://api.anthropic.com" if llm.name == "anthropic" else "https://api.openai.com/v1")
     )
     clean_settings = settings.model_copy(update={"llm_api_key": None})
-    llm.settings = llm.settings.model_copy(update={"llm_api_key": None, "llm_base_url": endpoint})
     app = create_app(clean_settings, llm=llm, queue=queue)
-    credential_name = "fixture_" + uuid4().hex
-    await seed_platform_credential(
-        clean_settings,
-        name=credential_name,
-        provider=provider,
-        endpoint=endpoint,
-        key=key.get_secret_value(),
-    )
-    model_id = llm.platform_model_id or "fixture-" + uuid4().hex
-    revision = llm.model_revision or 1
+    config_id = uuid4()
     async with app.state.db.transaction() as session:
-        session.add(
-            PlatformModel(
-                id=model_id,
-                capability="llm_extract",
-                provider=provider,
-                model=llm.model,
-                base_url=endpoint,
-                credential=credential_name,
-                revision=revision,
-                enabled=True,
-                is_default=False,
-                reasoning=[],
-                updated_by="fixture@example.test",
-            )
+        await set_actor_context(session, Identity(scopes=set(HUMAN_SCOPES)))
+        revision = (await session.scalar(select(func.max(ProviderConfig.revision)))) or 0
+        config = ProviderConfig(
+            id=config_id,
+            capability="llm_extract",
+            revision=revision + 1,
+            encrypted_key=ProviderSecrets(clean_settings).encrypt(
+                key.get_secret_value(), config_id
+            ),
+            key_last4=key.get_secret_value()[-4:],
+            data={
+                "provider": provider,
+                "model": llm.model,
+                "base_url": endpoint,
+                "json_mode": llm.settings.llm_json_mode,
+                "reasoning": list(llm.reasoning_levels.values()),
+                "default_reasoning": llm.default_reasoning,
+            },
         )
-    llm.credential_resolver = CredentialResolver(clean_settings)
-    llm.credential_target = CatalogResolveTarget(
-        model_id=model_id, expected_model_revision=revision
+        session.add(config)
+        await session.flush()
+    configured = configured_llm(clean_settings, config, llm.transport)
+    llm.settings = configured.settings.model_copy(
+        update={
+            "llm_effort": llm.settings.llm_effort,
+            "llm_request_options": llm.settings.llm_request_options,
+        }
     )
+    llm.provider_config_id = config.id
+    llm.model_revision = config.revision
+    llm.version = configured.version
+    llm.credential_resolver = None
+    llm.credential_target = None
     return app

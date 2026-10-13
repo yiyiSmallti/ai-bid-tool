@@ -186,9 +186,7 @@ async def resolve(session, actor, task_id, extraction_id, source: VendorSource, 
 
 async def _read(storage: Storage, artifact: SandboxArtifact) -> bytes:
     try:
-        content = await storage.read_bounded(
-            artifact.org_id, artifact.object_key, MAX_ARTIFACT_BYTES[artifact.kind]
-        )
+        content = await storage.read_bounded(artifact.object_key, MAX_ARTIFACT_BYTES[artifact.kind])
     except ServiceError as exc:
         if exc.code in {"missing_file", "unreadable_file", "file_size_limit"}:
             raise integrity() from None
@@ -251,7 +249,6 @@ async def record(
     pdf = capture.archive.kind == "source_pdf"
     row = ScreenshotVendorArchive(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=task_id,
         extraction_job_id=extraction_id,
         task_resource_id=capture.input.task_resource_id,

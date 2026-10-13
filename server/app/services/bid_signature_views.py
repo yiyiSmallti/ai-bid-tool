@@ -14,14 +14,15 @@ def protected(actor) -> bool:
     return (
         actor.actor_kind == "session"
         and actor.token_id is None
-        and actor.role in {"admin", "bidder"}
+        and actor.principal_id is None
+        and actor.session_id is None
         and "bid-review:original:read" in actor.scopes
     )
 
 
 def open_detail(settings, actor, row):
     value = json.loads(Secrets.for_data(settings).decrypt(row.details_encrypted))
-    if value.get("org_id") != str(actor.org_id) or value.get("id") != str(row.id):
+    if value.get("id") != str(row.id):
         raise ServiceError("bid_signature_integrity", "Signature evidence binding mismatch", 409, 4)
     return value["value"]
 
@@ -32,7 +33,6 @@ async def validations(session, actor, submission_id, settings):
             select(BidPDFValidation)
             .where(
                 BidPDFValidation.submission_id == submission_id,
-                BidPDFValidation.org_id == actor.org_id,
             )
             .order_by(BidPDFValidation.document_id)
         )
@@ -81,7 +81,6 @@ async def validations(session, actor, submission_id, settings):
 
 async def candidates(session, actor, submission_id, settings, *, cursor=0, limit=20):
     query = select(BidSigningCandidate).where(
-        BidSigningCandidate.org_id == actor.org_id,
         BidSigningCandidate.submission_id == submission_id,
     )
     total = await session.scalar(select(func.count()).select_from(query.subquery()))

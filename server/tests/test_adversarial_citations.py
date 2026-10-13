@@ -26,7 +26,7 @@ from test_docx_extraction import item
 from test_job_boundaries import session_for
 from test_llm_providers import Vendor, anthropic_reply, settings_for
 from test_parameter_extraction import extract_document, parameter_word
-from test_response_cards import require_action, sanitized_artifact, set_role
+from test_response_cards import require_action, sanitized_artifact
 
 
 @pytest.mark.parametrize(
@@ -38,7 +38,7 @@ from test_response_cards import require_action, sanitized_artifact, set_role
 )
 @pytest.mark.parametrize("repair_legacy", [False, True])
 async def test_boundary_citation_extract_repair_confirm_and_draft(
-    tenants, tmp_path, admin_engine, parts, repair_legacy
+    database, tmp_path, admin_engine, parts, repair_legacy
 ):
     source = "；".join(parts)
     model_quotes = [part.replace("：", ":").replace(" ", "") for part in parts]
@@ -47,7 +47,7 @@ async def test_boundary_citation_extract_repair_confirm_and_draft(
     app = await credential_app(
         settings, llm=AnthropicExtractor(settings, vendor.transport()), queue=FakeQueue()
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         task = (
             await api.post("/tasks", headers=header, json={"name": "Synthetic boundaries"})
         ).json()["data"]["id"]
@@ -92,20 +92,17 @@ async def test_boundary_citation_extract_repair_confirm_and_draft(
             assert repaired.status_code == 200, repaired.text
             assert repaired.json()["data"]["changed"] == 2
 
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
-            await confirm_requirements_async(
-                session, tenants["orgs"][0], UUID(task), settings=settings
-            )
+        async with app.state.db.transaction() as session:
+            await confirm_requirements_async(session, UUID(task), settings=settings)
         confirmations = []
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
         for row in rows:
-            async with app.state.db.transaction(tenants["orgs"][0]) as session:
+            async with app.state.db.transaction() as session:
                 requirement = await session.get(Requirement, UUID(row["id"]))
                 assert await citation_valid(session, requirement)
                 assert (
                     await session.scalar(
-                        text("SELECT response_citation_valid(:org,:requirement)"),
-                        {"org": tenants["orgs"][0], "requirement": UUID(row["id"])},
+                        text("SELECT response_citation_valid(:requirement)"),
+                        {"requirement": UUID(row["id"])},
                     )
                     is True
                 )
@@ -119,7 +116,7 @@ async def test_boundary_citation_extract_repair_confirm_and_draft(
         )
         assert receipt.status_code == 200, receipt.text
         job = receipt.json()["data"]["job_id"]
-        await app.state.processor(header["X-Org-Id"], job)
+        await app.state.processor(job)
         status = (await api.get(f"/jobs/{job}", headers=header)).json()["data"]
         assert status["status"] == "succeeded", status
         draft = (await api.get(f"/drafts/{status['result']['draft_id']}", headers=header)).json()[
@@ -146,7 +143,7 @@ async def test_boundary_citation_extract_repair_confirm_and_draft(
 
 
 @pytest.mark.parametrize("missing_starred", [False, True])
-async def test_starred_membership_uses_the_located_span(tenants, tmp_path, missing_starred):
+async def test_starred_segment_uses_the_located_span(database, tmp_path, missing_starred):
     source = "★扩展内存≥16GB；内存≥16GB"
     quotes = ["内存≥16GB"] if missing_starred else ["扩展内存≥16GB", "内存≥16GB"]
     replies = [anthropic_reply([item("t1r1c1", quote) for quote in quotes])]
@@ -157,7 +154,7 @@ async def test_starred_membership_uses_the_located_span(tenants, tmp_path, missi
     app = await credential_app(
         settings, llm=AnthropicExtractor(settings, vendor.transport()), queue=FakeQueue()
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         status, rows = await extract_document(api, app, header, parameter_word(source))
     assert status["status"] == "succeeded", status
     expected_starred = "★扩展内存≥16GB" if missing_starred else "扩展内存≥16GB"

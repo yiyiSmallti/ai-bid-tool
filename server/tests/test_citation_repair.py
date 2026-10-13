@@ -7,8 +7,8 @@ Failure modes are fixed before the tests, per repository policy:
 * a normalized quote with more than one possible source span must be rejected;
 * preview must be read-only, deterministic, and bind requirements, chunks, and
   response-card revisions so a stale preview cannot execute;
-* only a current human organization administrator may execute repair: API
-  tokens, agents, other roles, and foreign organizations must fail closed;
+* only an installation human may execute repair: API tokens and agents
+  must fail closed;
 * unlocatable and ambiguous legacy rows must remain byte-for-byte unchanged;
 * repair may update only quote provenance, never requirement text, category,
   location, extraction job, fingerprint, or any other protected field;
@@ -16,7 +16,7 @@ Failure modes are fixed before the tests, per repository policy:
   audit details must contain identifiers and hashes rather than tender text or
   the operator's reason;
 * a card based on a changed quote must retain its state and immutable history but
-  become needs_reconfirmation, including a comply-only decision and draft gap;
+  become invalid_citation, including a comply-only decision and draft gap;
 * a confirmed card must be reopened, a pending card withdrawn, and both edited
   and reviewed again; comply-only must be decided again by a human reviewer;
 * an unlocatable citation must still fail the strict confirmation gate after a
@@ -39,7 +39,7 @@ import pymupdf
 import pytest
 from app.core.config import Settings
 from app.providers.llm import AnthropicExtractor
-from conftest import PASSWORD, FakeQueue, credential_app
+from conftest import FakeQueue, credential_app
 from docx import Document
 from sqlalchemy import text
 from task_fixtures import confirm_requirements_async
@@ -144,20 +144,16 @@ def settings_for(tmp_path: Path) -> Settings:
     )
 
 
-async def login(api: httpx.AsyncClient, org_id: UUID, label: str) -> dict[str, str]:
-    response = await api.post(
-        "/auth/login",
-        json={"email": f"{label}@example.test", "password": PASSWORD, "org_id": str(org_id)},
-    )
+async def login(api) -> dict[str, str]:
+    import os
+
+    response = await api.post("/auth/session", json={"access_key": os.environ["BID_ACCESS_KEY"]})
     assert response.status_code == 200, response.text
-    return {
-        "Authorization": "Bearer " + response.json()["data"]["session"],
-        "X-Org-Id": str(org_id),
-    }
+    return {"Authorization": "Bearer " + response.json()["data"]["session"]}
 
 
 @asynccontextmanager
-async def repair_client(tenants, tmp_path: Path, *, vendor_replies: int = 1):
+async def repair_client(database, tmp_path: Path, *, vendor_replies: int = 1):
     vendor = Vendor(*(anthropic_reply(extraction_items()) for _ in range(vendor_replies)))
     settings = settings_for(tmp_path)
     app = await credential_app(
@@ -169,10 +165,7 @@ async def repair_client(tenants, tmp_path: Path, *, vendor_replies: int = 1):
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        headers = [
-            await login(api, org, label)
-            for org, label in zip(tenants["orgs"], ("a", "b"), strict=True)
-        ]
+        headers = await login(api)
         yield api, app, headers, vendor
 
 
@@ -182,7 +175,7 @@ async def run_document_job(api, app, header, document_id: str, action: str) -> t
     )
     assert response.status_code == 200, response.text
     job_id = response.json()["data"]["job_id"]
-    await app.state.processor(header["X-Org-Id"], job_id)
+    await app.state.processor(job_id)
     status = (await api.get(f"/jobs/{job_id}", headers=header)).json()["data"]
     return job_id, status
 
@@ -216,12 +209,6 @@ async def extract_fixture(api, app, header, tmp_path: Path, suffix: str):
     assert response.status_code == 200, response.text
     rows = response.json()["items"]
     return task_id, document_id, extraction_job_id, extraction_status, rows
-
-
-def set_role(admin_engine, org_id: UUID, user_id: UUID, role: str) -> None:
-    from task_fixtures import set_role as set_task_actor_role
-
-    set_task_actor_role(admin_engine, org_id, user_id, role)
 
 
 async def create_commitment_card(api, header, task_id, job_id, requirement, label):
@@ -350,11 +337,11 @@ def assert_hashes_and_ids_only(value) -> None:
 
 
 async def test_extraction_persists_exact_span_and_rejects_ambiguous_match(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
-    async with repair_client(tenants, tmp_path) as (api, app, headers, vendor):
+    async with repair_client(database, tmp_path) as (api, app, headers, vendor):
         task_id, _, job_id, status, rows = await extract_fixture(
-            api, app, headers[0], tmp_path, "exact-span"
+            api, app, headers, tmp_path, "exact-span"
         )
 
     assert status["result"]["created"] == 7
@@ -388,7 +375,7 @@ async def test_extraction_persists_exact_span_and_rejects_ambiguous_match(
             transport=httpx.ASGITransport(app=word_app), base_url="http://test"
         ) as word_api,
     ):
-        header = await login(word_api, tenants["orgs"][0], "a")
+        header = await login(word_api)
         word_task = (
             await word_api.post(
                 "/tasks", headers=header, json={"name": "Synthetic Chinese exact citation"}
@@ -418,12 +405,9 @@ async def test_extraction_persists_exact_span_and_rejects_ambiguous_match(
         assert word_requirement["source"]["quote"] == WORD_SOURCE_QUOTE
         assert word_requirement["model_quote"] == WORD_MODEL_QUOTE
 
-        async with word_app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with word_app.state.db.transaction() as session:
             await confirm_requirements_async(
-                session,
-                tenants["orgs"][0],
-                UUID(word_task),
-                settings=word_app.state.processor.settings,
+                session, UUID(word_task), settings=word_app.state.processor.settings
             )
         word_card = await create_commitment_card(
             word_api,
@@ -433,7 +417,7 @@ async def test_extraction_persists_exact_span_and_rejects_ambiguous_match(
             word_requirement,
             "Chinese exact citation",
         )
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
+
         word_card = await require_card_action(word_api, header, word_card, "submit")
         word_card = await require_card_action(
             word_api, header, word_card, "confirm", reviewed_evidence_ids=[]
@@ -444,24 +428,23 @@ async def test_extraction_persists_exact_span_and_rejects_ambiguous_match(
         assert len(word_vendor.requests) == 1
 
 
-async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_path, admin_engine):
-    from task_fixtures import reviewer_header
+async def test_preview_execute_permissions_cards_drafts_and_audit(database, tmp_path, admin_engine):
 
     reason = "Synthetic operator reason that must not enter the audit log."
-    async with repair_client(tenants, tmp_path, vendor_replies=2) as (api, app, headers, _):
-        header, foreign_header = headers
+    async with repair_client(database, tmp_path, vendor_replies=2) as (api, app, headers, _):
+        header = headers
         task_id, _, job_id, status, listed = await extract_fixture(
             api, app, header, tmp_path, "workflow"
         )
         assert status["result"]["created"] == 7
         requirements = {row["source"]["page"]: row for row in listed}
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             await confirm_requirements_async(
-                session, tenants["orgs"][0], UUID(task_id), settings=app.state.processor.settings
+                session, UUID(task_id), settings=app.state.processor.settings
             )
 
         foreign_task_id, _, foreign_job_id, _, _ = await extract_fixture(
-            api, app, foreign_header, tmp_path, "foreign"
+            api, app, header, tmp_path, "other-task"
         )
 
         # Cards are created while all citations are still exact. That lets the
@@ -482,9 +465,7 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         hash_bound = await create_commitment_card(
             api, header, task_id, job_id, requirements[7], "preview hash"
         )
-        _, reviewer = await reviewer_header(
-            api, admin_engine, tenants["orgs"][0], UUID(task_id), "technical"
-        )
+        reviewer = headers
         normalized = await require_card_action(api, reviewer, normalized, "submit")
         normalized = await require_card_action(
             api, reviewer, normalized, "confirm", reviewed_evidence_ids=[]
@@ -522,7 +503,7 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         )
         assert pre_repair_draft.status_code == 200, pre_repair_draft.text
         pre_repair_job_id = pre_repair_draft.json()["data"]["job_id"]
-        await app.state.processor(header["X-Org-Id"], pre_repair_job_id)
+        await app.state.processor(pre_repair_job_id)
         pre_repair_job = (await api.get(f"/jobs/{pre_repair_job_id}", headers=header)).json()[
             "data"
         ]
@@ -547,13 +528,14 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         before = requirement_rows(admin_engine, task_id)
         with admin_engine.connect() as connection:
             audit_before = connection.scalar(
-                text("SELECT count(*) FROM audit_logs WHERE action = 'requirement.repair_citation'")
+                text(
+                    "SELECT count(*) FROM audit_logs WHERE action IN ('requirement.citation_repair.executed','requirement.repair_citation')"
+                )
             )
             revision_before = connection.scalar(
                 text("SELECT count(*) FROM response_card_revisions")
             )
 
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
         preview_response = await api.get(
             f"/tasks/{task_id}/requirements/repair", headers=header, params={"job": job_id}
         )
@@ -605,7 +587,7 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
                 connection.scalar(
                     text(
                         "SELECT count(*) FROM audit_logs "
-                        "WHERE action = 'requirement.repair_citation'"
+                        "WHERE action IN ('requirement.citation_repair.executed','requirement.repair_citation')"
                     )
                 )
                 == audit_before
@@ -653,33 +635,7 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
             )
         ).status_code == 403
 
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
-        role_attempt = await api.post(
-            f"/tasks/{task_id}/requirements/repair", headers=header, json=execute_body
-        )
-        assert role_attempt.status_code == 403
-        assert role_attempt.json()["data"]["error"]["code"] == "forbidden"
-        assert (
-            await api.get(
-                f"/tasks/{task_id}/requirements/repair",
-                headers=header,
-                params={"job": job_id},
-            )
-        ).status_code == 403
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
-
-        for method, body in (("GET", None), ("POST", execute_body)):
-            foreign = await api.request(
-                method,
-                f"/tasks/{task_id}/requirements/repair",
-                headers=foreign_header,
-                params={"job": job_id} if method == "GET" else None,
-                json=body,
-            )
-            assert foreign.status_code == 404
-            assert foreign.json()["data"]["error"]["code"] == "not_found"
-
-        for task, job in ((task_id, foreign_job_id), (foreign_task_id, foreign_job_id)):
+        for task, job in ((task_id, foreign_job_id), (foreign_task_id, job_id)):
             foreign_scope = await api.get(
                 f"/tasks/{task}/requirements/repair", headers=header, params={"job": job}
             )
@@ -689,17 +645,11 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         from app.core.errors import ServiceError
         from app.schemas.citation_repair_contracts import CitationRepairRequest
         from app.services import citation_repair
-        from app.services.auth import ROLE_SCOPES, Identity
+        from app.services.auth import HUMAN_SCOPES, Identity
 
-        agent = Identity(
-            user_id=tenants["users"][0],
-            org_id=tenants["orgs"][0],
-            scopes=set(ROLE_SCOPES["admin"]),
-            role="admin",
-            actor_kind="agent",
-        )
+        agent = Identity(scopes=set(HUMAN_SCOPES), actor_kind="agent")
         with pytest.raises(ServiceError) as agent_error:
-            async with app.state.db.transaction(tenants["orgs"][0]) as session:
+            async with app.state.db.transaction() as session:
                 await citation_repair.repair_citations(
                     session,
                     agent,
@@ -716,7 +666,7 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
                 text("UPDATE requirements SET text = text || ' (legacy note)' WHERE id = :id"),
                 {"id": requirements[1]["id"]},
             )
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
+
         stale = await api.post(
             f"/tasks/{task_id}/requirements/repair", headers=header, json=execute_body
         )
@@ -766,7 +716,7 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
             audit_ids_before_execute = set(
                 connection.scalars(
                     text(
-                        "SELECT id::text FROM audit_logs WHERE action='requirement.repair_citation'"
+                        "SELECT id::text FROM audit_logs WHERE action IN ('requirement.citation_repair.executed','requirement.repair_citation')"
                     )
                 )
             )
@@ -814,8 +764,8 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
                 dict(row)
                 for row in connection.execute(
                     text(
-                        "SELECT id::text, object_id::text, actor_kind, actor_user_id::text, details FROM audit_logs "
-                        "WHERE action = 'requirement.repair_citation' ORDER BY object_id"
+                        "SELECT id::text, object_id::text, actor_kind, details FROM audit_logs "
+                        "WHERE action IN ('requirement.citation_repair.executed','requirement.repair_citation') ORDER BY object_id"
                     )
                 ).mappings()
             ]
@@ -841,16 +791,14 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         assert all(row["details"]["preview_hash"] == fresh["preview_hash"] for row in repair_audits)
         with admin_engine.connect() as connection:
             for row in invalidation_audits:
-                assert row["actor_user_id"] is None
                 recorded = connection.execute(
                     text(
-                        "SELECT org_id::text, task_id::text, requirement_id::text, revision, action, state_after "
+                        "SELECT task_id::text, requirement_id::text, revision, action, state_after "
                         "FROM requirement_review_events WHERE id=:id"
                     ),
                     {"id": UUID(row["details"]["event_id"])},
                 ).one()
                 assert tuple(recorded) == (
-                    str(tenants["orgs"][0]),
                     task_id,
                     row["object_id"],
                     row["details"]["revision"],
@@ -923,10 +871,9 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         assert strict_gate.json()["data"]["error"]["code"] == "requirement_invalidated"
         # Reaccept only currently locatable sources; this never approves response
         # cards or overrides the unresolved legacy citations on pages 5 and 6.
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             await confirm_requirements_async(
                 session,
-                tenants["orgs"][0],
                 UUID(task_id),
                 [UUID(requirements[page]["id"]) for page in (1, 2, 3, 4, 7)],
                 settings=app.state.processor.settings,
@@ -935,7 +882,7 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
             api, reviewer, changed_cards[3], "confirm", reviewed_evidence_ids=[]
         )
         assert pending_stale_confirm.status_code == 409
-        assert pending_stale_confirm.json()["data"]["error"]["code"] == "needs_reconfirmation"
+        assert pending_stale_confirm.json()["data"]["error"]["code"] == "invalid_citation"
 
         first_draft = await api.post(
             f"/tasks/{task_id}/drafts",
@@ -943,7 +890,7 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
             json={"extraction_job_id": job_id},
         )
         assert first_draft.status_code == 200, first_draft.text
-        await app.state.processor(header["X-Org-Id"], first_draft.json()["data"]["job_id"])
+        await app.state.processor(first_draft.json()["data"]["job_id"])
         draft_job = (
             await api.get(f"/jobs/{first_draft.json()['data']['job_id']}", headers=header)
         ).json()["data"]
@@ -952,7 +899,7 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         ).json()["data"]
         gaps = {row["requirement_id"]: row["reasons"] for row in stale_card_draft["gaps"]}
         for page in REPAIRED_QUOTES:
-            assert "needs_reconfirmation" in gaps[requirements[page]["id"]]
+            assert "invalid_citation" in gaps[requirements[page]["id"]]
 
         # The recovery flow remains explicitly human: leave the protected state,
         # append an edited draft revision, then submit and confirm it again.
@@ -1034,7 +981,7 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
             json={"extraction_job_id": job_id},
         )
         assert second_draft.status_code == 200, second_draft.text
-        await app.state.processor(header["X-Org-Id"], second_draft.json()["data"]["job_id"])
+        await app.state.processor(second_draft.json()["data"]["job_id"])
         second_job = (
             await api.get(f"/jobs/{second_draft.json()['data']['job_id']}", headers=header)
         ).json()["data"]

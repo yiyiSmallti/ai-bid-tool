@@ -1,9 +1,7 @@
 """Check CLI request/response snapshots at the public command boundary."""
 
 import json
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 from uuid import UUID
 
 import httpx
@@ -20,7 +18,7 @@ from app.schemas.check_contracts import (
 )
 from app.schemas.contracts import Result
 from bid_cli import main as cli
-from bid_cli.client import Client, State
+from bid_cli.client import Client
 from bid_cli.schema import command_schema
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -33,8 +31,8 @@ SHA = "a" * 64
 class InterfaceClient(Client):
     """Exercise Client.request for both labels against one DB-free ASGI boundary."""
 
-    def __init__(self, mode: str, server: str, state: State, application: FastAPI):
-        super().__init__(mode, server, state)
+    def __init__(self, mode: str, server: str, application: FastAPI):
+        super().__init__(mode, server)
         self.application = application
 
     @asynccontextmanager
@@ -52,7 +50,7 @@ class InterfaceSession:
 
 class InterfaceDatabase:
     @asynccontextmanager
-    async def transaction(self, org_id):
+    async def transaction(self):
         yield self
 
     async def get(self, model, key):
@@ -60,7 +58,7 @@ class InterfaceDatabase:
 
 
 class InterfaceQueue:
-    async def enqueue(self, org_id: str, job_id: str):
+    async def enqueue(self, job_id: str):
         return 1
 
 
@@ -76,7 +74,6 @@ def check_interface(
     from app.services import check
 
     assessment_input = {
-        "org_id": IDENTIFIER,
         "task_id": IDENTIFIER,
         "draft_id": IDENTIFIER_2,
         "extraction_job_id": IDENTIFIER,
@@ -88,7 +85,6 @@ def check_interface(
     }
     report = {
         "id": IDENTIFIER,
-        "org_id": IDENTIFIER,
         "task_id": IDENTIFIER,
         "job_id": IDENTIFIER,
         "run_id": IDENTIFIER,
@@ -110,7 +106,6 @@ def check_interface(
     }
     decision = {
         "id": IDENTIFIER,
-        "org_id": IDENTIFIER,
         "task_id": IDENTIFIER,
         "report_id": IDENTIFIER,
         "finding_id": IDENTIFIER_2,
@@ -118,7 +113,6 @@ def check_interface(
         "action": "dismiss",
         "reason": "Reviewed against the confirmed draft.",
         "reason_sha256": SHA,
-        "decided_by": IDENTIFIER,
         "decided_at": "2026-10-04T00:00:00Z",
         "actor_kind": "session",
     }
@@ -126,55 +120,51 @@ def check_interface(
     async def submit(session, actor, task_id, body, storage, settings):
         if body.dry_run:
             combined = body.mode == "combined"
-            return {
-                "dry_run": True,
-                "input": assessment_input,
-                "selected_item_ids": [],
-                "estimated_cost": {
-                    "llm_tokens": 400 if combined else 0,
-                    "ocr_pages": 0,
+            return (
+                {
+                    "dry_run": True,
+                    "input": assessment_input,
+                    "selected_item_ids": [],
+                    "estimated_cost": {"llm_tokens": 400 if combined else 0, "ocr_pages": 0},
+                    "estimate_kind": "first_pass_upper_bound",
+                    "admission_blocker": None,
+                    "estimated_duration_ms": None,
+                    "provider_config_id": None,
+                    "provider_source": "local" if combined else None,
+                    "model_revision": 1 if combined else None,
+                    "model": "synthetic-model" if combined else None,
+                    "reasoning": body.reasoning if combined else None,
+                    "redaction_revision": 1,
+                    "redaction_rule_version": "redaction-v1",
+                    "redacted_counts": {},
+                    "mode": body.mode,
+                    "rule_version": "check-rules-v1",
+                    "prompt_version": "semantic-check-v1" if combined else None,
+                    "schema_version": "check-wire-v1" if combined else "check-schema-v1",
+                    "rules_applicable": 1,
+                    "semantic_items": 2 if combined else 0,
+                    "gap_requirements": 0,
+                    "limitations": [] if combined else ["semantic_checks_not_requested"],
                 },
-                "estimate_kind": "first_pass_upper_bound",
-                "admission_blocker": None,
-                "estimated_duration_ms": None,
-                "provider_config_id": None,
-                "provider_source": "platform" if combined else None,
-                "platform_model_id": "synthetic-check" if combined else None,
-                "model_revision": 1 if combined else None,
-                "model": "synthetic-model" if combined else None,
-                "reasoning": body.reasoning if combined else None,
-                "redaction_revision": 1,
-                "redaction_rule_version": "redaction-v1",
-                "redacted_counts": {},
-                "mode": body.mode,
-                "rule_version": "check-rules-v1",
-                "prompt_version": "semantic-check-v1" if combined else None,
-                "schema_version": "check-wire-v1" if combined else "check-schema-v1",
-                "rules_applicable": 1,
-                "semantic_items": 2 if combined else 0,
-                "gap_requirements": 0,
-                "limitations": [] if combined else ["semantic_checks_not_requested"],
-            }, None
+                None,
+            )
         job = type(
-            "QueuedJob",
-            (),
-            {"id": UUID(IDENTIFIER), "status": "queued", "queue_id": None},
+            "QueuedJob", (), {"id": UUID(IDENTIFIER), "status": "queued", "queue_id": None}
         )()
-        return {"job_id": IDENTIFIER, "status": "queued", "cached": False}, job
+        return ({"job_id": IDENTIFIER, "status": "queued", "cached": False}, job)
 
     async def listing(session, actor, task_id, storage, settings, *, cursor=None, limit=50):
-        return {"task_id": IDENTIFIER, "total": 1, "next_cursor": None}, [report]
+        return ({"task_id": IDENTIFIER, "total": 1, "next_cursor": None}, [report])
 
     async def showing(session, actor, report_id, storage, settings):
         if fail_show:
             raise ServiceError("not_found", "Resource not found", 404, 4)
-        return {"report": report, "coverage": [], "certificates": []}, []
+        return ({"report": report, "coverage": [], "certificates": []}, [])
 
     async def deciding(session, actor, report_id, finding_id, body, storage, settings):
         return {
             "finding": {
                 "id": IDENTIFIER_2,
-                "org_id": IDENTIFIER,
                 "task_id": IDENTIFIER,
                 "report_id": IDENTIFIER,
                 "check_item_id": IDENTIFIER,
@@ -201,35 +191,27 @@ def check_interface(
         }
 
     async def history(
-        session,
-        actor,
-        report_id,
-        finding_id,
-        storage,
-        settings,
-        *,
-        cursor=None,
-        limit=50,
+        session, actor, report_id, finding_id, storage, settings, *, cursor=None, limit=50
     ):
-        return {"task_id": IDENTIFIER, "total": 1, "next_cursor": None}, [decision]
+        return ({"task_id": IDENTIFIER, "total": 1, "next_cursor": None}, [decision])
 
     monkeypatch.setattr(check, "submit_check", submit)
     monkeypatch.setattr(check, "list_checks", listing)
     monkeypatch.setattr(check, "show_check", showing)
     monkeypatch.setattr(check, "decide_finding", deciding)
     monkeypatch.setattr(check, "decision_history", history)
-    actor = type("Actor", (), {"org_id": UUID(IDENTIFIER)})()
+    actor = type("Actor", (), {})()
 
     async def context():
-        yield InterfaceSession(), actor
+        yield (InterfaceSession(), actor)
 
     queue = InterfaceQueue()
     if fail_queue:
 
-        async def unavailable(org_id: str, job_id: str):
+        async def unavailable(job_id: str):
             raise OSError("synthetic queue failure")
 
-        queue.enqueue = unavailable  # pyright: ignore[reportAttributeAccessIssue]
+        queue.enqueue = unavailable
     application = FastAPI()
 
     @application.middleware("http")
@@ -296,16 +278,13 @@ def invoke(arguments: list[str], capsys) -> tuple[int, dict]:
     body = json.loads(capsys.readouterr().out)
     body["duration_ms"] = 0
     assert set(body) == {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}
-    return exit_code, body
+    return (exit_code, body)
 
 
 def install_transport(monkeypatch, application: FastAPI) -> None:
-    monkeypatch.setenv("BID_SESSION", "synthetic-interface-session")
-    monkeypatch.setenv("BID_ORG", IDENTIFIER)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-interface-access-key-at-least-32-chars")
     monkeypatch.setattr(
-        cli,
-        "Client",
-        lambda mode, server, state: InterfaceClient(mode, server, state, application),
+        cli, "Client", lambda mode, server: InterfaceClient(mode, server, application)
     )
 
 
@@ -373,10 +352,7 @@ def test_check_cli_remote_and_local_transport_snapshots_db_free(monkeypatch, tmp
     for mode in ("remote", "local"):
         actual[mode] = {}
         for name, arguments in commands.items():
-            exit_code, body = invoke(
-                ["--mode", mode, "--state", str(tmp_path / f"{mode}.enc"), *arguments],
-                capsys,
-            )
+            exit_code, body = invoke(["--mode", mode, *arguments], capsys)
             assert exit_code == (5 if name == "check show" else 0), body
             actual[mode][name] = body
         CheckPreview.model_validate(actual[mode]["check run"]["data"])
@@ -389,20 +365,17 @@ def test_check_cli_remote_and_local_transport_snapshots_db_free(monkeypatch, tmp
             FindingDecisionView.model_validate(item)
             for item in actual[mode]["check history"]["items"]
         ]
-    snapshot = Path(__file__).with_name("snapshots") / "check-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(
-            json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    assert actual == json.loads(snapshot.read_text(encoding="utf-8"))
+    artifact = tmp_path / "check-cli.json"
+    artifact.write_text(
+        json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    assert json.loads(artifact.read_text(encoding="utf-8")) == actual
 
 
 def test_check_cli_public_exit_codes_and_schema(monkeypatch, tmp_path, capsys):
     application = check_interface(monkeypatch)
     install_transport(monkeypatch, application)
-    common = ["--mode", "remote", "--state", str(tmp_path / "remote.enc")]
-
+    common = ["--mode", "remote"]
     code, body = invoke([*common, "check", "run", "--task", IDENTIFIER], capsys)
     assert code == 2 and body["data"]["error"]["code"] == "invalid_input"
 
@@ -429,12 +402,10 @@ def test_check_cli_public_exit_codes_and_schema(monkeypatch, tmp_path, capsys):
     )
     assert code == 3 and body["data"]["error"]["code"] == "wait_timeout"
     assert body["data"]["job_id"] == IDENTIFIER
-
     fatal = check_interface(monkeypatch, fail_show=True)
     install_transport(monkeypatch, fatal)
     code, body = invoke([*common, "check", "show", "--id", IDENTIFIER], capsys)
     assert code == 4 and body["data"]["error"]["code"] == "not_found"
-
     schema = command_schema(cli.app)["commands"]
     assert set(name for name in schema if name.startswith("check ")) == {
         "check run",
@@ -453,8 +424,6 @@ def test_check_cli_queue_failure_is_retryable(monkeypatch, tmp_path, capsys):
         [
             "--mode",
             "local",
-            "--state",
-            str(tmp_path / "local.enc"),
             "check",
             "run",
             "--task",
@@ -474,67 +443,22 @@ def test_check_cli_queue_failure_is_retryable(monkeypatch, tmp_path, capsys):
 
 @pytest.mark.parametrize(
     "status,error_exit,expected_exit",
-    [
-        ("failed", 2, 2),
-        ("failed", 3, 3),
-        ("failed", 4, 4),
-        ("cancelled", 2, 4),
-    ],
+    [("failed", 2, 2), ("failed", 3, 3), ("failed", 4, 4), ("cancelled", 2, 4)],
 )
 def test_check_job_status_uses_terminal_error_exit(
     monkeypatch, tmp_path, capsys, status, error_exit, expected_exit
 ):
     application = check_interface(monkeypatch, job_status=status, job_exit_code=error_exit)
     install_transport(monkeypatch, application)
-    code, body = invoke(
-        [
-            "--mode",
-            "remote",
-            "--state",
-            str(tmp_path / "remote.enc"),
-            "job",
-            "status",
-            IDENTIFIER,
-        ],
-        capsys,
-    )
+    code, body = invoke(["--mode", "remote", "job", "status", IDENTIFIER], capsys)
     assert code == expected_exit and body["ok"] is False
     assert body["data"]["kind"] == "check" and body["data"]["status"] == status
-
-
-def test_check_job_status_cross_org_not_found_is_fatal(monkeypatch, tmp_path, capsys):
-    application = check_interface(monkeypatch, job_crossorg=True)
-    install_transport(monkeypatch, application)
-    code, body = invoke(
-        [
-            "--mode",
-            "local",
-            "--state",
-            str(tmp_path / "local.enc"),
-            "job",
-            "status",
-            IDENTIFIER,
-        ],
-        capsys,
-    )
-    assert code == 4 and body["data"]["error"]["code"] == "not_found"
 
 
 def test_check_job_status_rejects_malformed_remote_exit_code(monkeypatch, tmp_path, capsys):
     application = check_interface(monkeypatch, job_status="failed", job_exit_code=9)
     install_transport(monkeypatch, application)
-    code, body = invoke(
-        [
-            "--mode",
-            "remote",
-            "--state",
-            str(tmp_path / "remote.enc"),
-            "job",
-            "status",
-            IDENTIFIER,
-        ],
-        capsys,
-    )
+    code, body = invoke(["--mode", "remote", "job", "status", IDENTIFIER], capsys)
     assert code == 4
     assert body["data"]["error"]["code"] == "invalid_server_response"
 

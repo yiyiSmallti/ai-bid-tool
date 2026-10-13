@@ -3,7 +3,7 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
@@ -12,13 +12,13 @@ from app.core.errors import ServiceError
 
 
 class Storage(Protocol):
-    async def put(self, org_id: UUID, key: str, content: bytes) -> None: ...
-    async def read(self, org_id: UUID, key: str) -> bytes: ...
-    async def read_bounded(self, org_id: UUID, key: str, max_bytes: int) -> bytes: ...
+    async def put(self, key: str, content: bytes) -> None: ...
+    async def read(self, key: str) -> bytes: ...
+    async def read_bounded(self, key: str, max_bytes: int) -> bytes: ...
 
 
 class FileCipher:
-    """Authenticated file encryption bound to the exact tenant storage key."""
+    """Authenticated file encryption bound to the exact storage key."""
 
     marker = b"BIDFILE1\n"
 
@@ -80,8 +80,14 @@ class FileCipher:
             ) from exc
 
 
-def validate_key(org_id: UUID, key: str) -> None:
-    if not key.startswith(f"org/{org_id}/") or ".." in Path(key).parts or Path(key).is_absolute():
+def validate_key(key: str) -> None:
+    if (
+        not key
+        or "\\" in key
+        or "\0" in key
+        or any(part in {"", ".", ".."} for part in key.split("/"))
+        or Path(key).is_absolute()
+    ):
         raise ServiceError("invalid_storage_key", "Invalid storage scope", 400, 2)
 
 
@@ -90,15 +96,15 @@ class LocalStorage:
         self.root = root.resolve()
         self.cipher = FileCipher(encryption_key, previous)
 
-    def path(self, org_id: UUID, key: str) -> Path:
-        validate_key(org_id, key)
+    def path(self, key: str) -> Path:
+        validate_key(key)
         path = (self.root / key).resolve()
-        if not path.is_relative_to(self.root / "org" / str(org_id)):
+        if not path.is_relative_to(self.root):
             raise ServiceError("invalid_storage_key", "Invalid storage scope", 400, 2)
         return path
 
-    async def put(self, org_id: UUID, key: str, content: bytes) -> None:
-        path = self.path(org_id, key)
+    async def put(self, key: str, content: bytes) -> None:
+        path = self.path(key)
 
         def write():
             path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -119,16 +125,16 @@ class LocalStorage:
 
         await asyncio.to_thread(write)
 
-    async def read(self, org_id: UUID, key: str) -> bytes:
+    async def read(self, key: str) -> bytes:
         try:
-            stored = await asyncio.to_thread(self.path(org_id, key).read_bytes)
+            stored = await asyncio.to_thread(self.path(key).read_bytes)
             return self.cipher.decrypt(key, stored)
         except FileNotFoundError as exc:
             raise ServiceError("missing_file", "Stored file is unavailable", 404, 4) from exc
 
-    async def rotate(self, org_id: UUID) -> tuple[int, int]:
-        """Re-encrypt this org's objects under the current key: (checked, rewritten)."""
-        base = self.path(org_id, f"org/{org_id}/")
+    async def rotate(self) -> tuple[int, int]:
+        """Re-encrypt stored objects under the current key: (checked, rewritten)."""
+        base = self.root
 
         def run():
             checked = rewritten = 0
@@ -136,6 +142,7 @@ class LocalStorage:
                 if not path.is_file() or path.name.endswith(".tmp"):
                     continue
                 key = path.relative_to(self.root).as_posix()
+                self.path(key)
                 checked += 1
                 stored = self.cipher.rewrap(key, path.read_bytes())
                 if stored is None:
@@ -154,8 +161,8 @@ class LocalStorage:
 
         return await asyncio.to_thread(run)
 
-    async def read_bounded(self, org_id: UUID, key: str, max_bytes: int) -> bytes:
-        path = self.path(org_id, key)
+    async def read_bounded(self, key: str, max_bytes: int) -> bytes:
+        path = self.path(key)
         bound = self.cipher.stored_limit(key, max_bytes)
 
         def read():
@@ -198,10 +205,10 @@ class S3Storage:
             ),
         )
 
-    async def put(self, org_id: UUID, key: str, content: bytes) -> None:
+    async def put(self, key: str, content: bytes) -> None:
         from botocore.exceptions import BotoCoreError, ClientError
 
-        validate_key(org_id, key)
+        validate_key(key)
         try:
             await asyncio.to_thread(
                 self.client.put_object,
@@ -212,7 +219,7 @@ class S3Storage:
             )
         except ClientError as exc:
             if exc.response["Error"]["Code"] == "PreconditionFailed":
-                if await self.read(org_id, key) != content:
+                if await self.read(key) != content:
                     raise ServiceError(
                         "storage_conflict", "Stored content differs", 409, 4
                     ) from None
@@ -223,10 +230,10 @@ class S3Storage:
                 "storage_unavailable", "Object storage is unavailable", 503, 3
             ) from None
 
-    async def read(self, org_id: UUID, key: str) -> bytes:
+    async def read(self, key: str) -> bytes:
         from botocore.exceptions import BotoCoreError, ClientError
 
-        validate_key(org_id, key)
+        validate_key(key)
 
         def read():
             response = self.client.get_object(Bucket=self.bucket, Key=key)
@@ -244,10 +251,10 @@ class S3Storage:
                 "storage_unavailable", "Object storage is unavailable", 503, 3
             ) from None
 
-    async def read_bounded(self, org_id: UUID, key: str, max_bytes: int) -> bytes:
+    async def read_bounded(self, key: str, max_bytes: int) -> bytes:
         from botocore.exceptions import BotoCoreError, ClientError
 
-        validate_key(org_id, key)
+        validate_key(key)
         bound = self.cipher.stored_limit(key, max_bytes)
 
         def read():
@@ -270,18 +277,16 @@ class S3Storage:
                 "storage_unavailable", "Object storage is unavailable", 503, 3
             ) from None
 
-    async def rotate(self, org_id: UUID) -> tuple[int, int]:
-        """Re-encrypt this org's objects under the current key: (checked, rewritten)."""
+    async def rotate(self) -> tuple[int, int]:
+        """Re-encrypt stored objects under the current key: (checked, rewritten)."""
 
         def run():
             checked = rewritten = 0
-            pages = self.client.get_paginator("list_objects_v2").paginate(
-                Bucket=self.bucket, Prefix=f"org/{org_id}/"
-            )
+            pages = self.client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket)
             for page in pages:
                 for item in page.get("Contents", []):
                     key = item["Key"]
-                    validate_key(org_id, key)
+                    validate_key(key)
                     response = self.client.get_object(Bucket=self.bucket, Key=key)
                     try:
                         stored = self.cipher.rewrap(key, response["Body"].read())

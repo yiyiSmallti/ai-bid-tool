@@ -20,7 +20,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal, Protocol
 from urllib.parse import parse_qsl, unquote, urljoin, urlsplit, urlunsplit
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -357,12 +357,12 @@ class FetchDenial:
 
 class FetchQuota(Protocol):
     def acquire(
-        self, org_id: UUID, origin: str, *, open_egress: bool = False
+        self, origin: str, *, open_egress: bool = False
     ) -> AbstractAsyncContextManager[None]: ...
 
 
 def quota_from_env(path: Path) -> SQLiteFetchQuota:
-    """Node ledger with the operator's open-policy limit (requests per organization-minute)."""
+    """Node ledger with the operator's open-policy limit (requests per installation-minute)."""
     raw = os.environ.get("BID_SANDBOX_OPEN_FETCH_PER_MINUTE", "600")
     if not raw.isdigit() or int(raw) < 1:
         raise FetchDenied("policy_invalid")
@@ -377,7 +377,7 @@ class SQLiteFetchQuota:
     """
 
     # Named vendor policies list few resources; an open policy loads whole pages.
-    ORG_REQUESTS_PER_MINUTE = 60
+    REQUESTS_PER_MINUTE = 60
 
     def __init__(
         self, path: Path, *, origin_wait_seconds: float = 15.0, open_requests_per_minute: int = 600
@@ -386,36 +386,29 @@ class SQLiteFetchQuota:
             raise ValueError("open_requests_per_minute must be positive")
         self.path = Path(path)
         self.open_requests_per_minute = open_requests_per_minute
-        # A full origin queues for a lease up to the request timeout; the org rate denies.
+        # A full origin queues for a lease up to the request timeout; the installation rate denies.
         self.origin_wait_seconds = origin_wait_seconds
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=2, isolation_level=None)
         self.path.chmod(0o600)
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS requests (org_hash TEXT NOT NULL, at REAL NOT NULL)"
-        )
-        connection.execute("CREATE INDEX IF NOT EXISTS requests_org_at ON requests(org_hash, at)")
+        connection.execute("CREATE TABLE IF NOT EXISTS requests (at REAL NOT NULL)")
+        connection.execute("CREATE INDEX IF NOT EXISTS requests_at ON requests(at)")
         connection.execute(
             "CREATE TABLE IF NOT EXISTS leases (id TEXT PRIMARY KEY, origin_hash TEXT NOT NULL, expires REAL NOT NULL)"
         )
         return connection
 
-    def _claim(self, org_hash: str, origin_hash: str, lease_id: str, open_egress: bool = False):
+    def _claim(self, origin_hash: str, lease_id: str, open_egress: bool = False):
         connection = self._connect()
         try:
             connection.execute("BEGIN IMMEDIATE")
             now = time.time()
             connection.execute("DELETE FROM requests WHERE at <= ?", (now - 60,))
             connection.execute("DELETE FROM leases WHERE expires <= ?", (now,))
-            limit = self.open_requests_per_minute if open_egress else self.ORG_REQUESTS_PER_MINUTE
-            if (
-                connection.execute(
-                    "SELECT count(*) FROM requests WHERE org_hash = ?", (org_hash,)
-                ).fetchone()[0]
-                >= limit
-            ):
-                raise FetchDenied("org_rate_limit")
+            limit = self.open_requests_per_minute if open_egress else self.REQUESTS_PER_MINUTE
+            if connection.execute("SELECT count(*) FROM requests").fetchone()[0] >= limit:
+                raise FetchDenied("fetch_rate_limit")
             if (
                 connection.execute(
                     "SELECT count(*) FROM leases WHERE origin_hash = ?", (origin_hash,)
@@ -423,7 +416,7 @@ class SQLiteFetchQuota:
                 >= 2
             ):
                 raise FetchDenied("origin_concurrency_limit")
-            connection.execute("INSERT INTO requests VALUES (?, ?)", (org_hash, now))
+            connection.execute("INSERT INTO requests VALUES (?)", (now,))
             connection.execute(
                 "INSERT INTO leases VALUES (?, ?, ?)", (lease_id, origin_hash, now + 30)
             )
@@ -439,9 +432,7 @@ class SQLiteFetchQuota:
             connection.close()
 
     @asynccontextmanager
-    async def acquire(
-        self, org_id: UUID, origin: str, *, open_egress: bool = False
-    ) -> AsyncIterator[None]:
+    async def acquire(self, origin: str, *, open_egress: bool = False) -> AsyncIterator[None]:
         lease_id = uuid4().hex
         deadline = time.monotonic() + self.origin_wait_seconds
         try:
@@ -449,7 +440,6 @@ class SQLiteFetchQuota:
                 try:
                     await asyncio.to_thread(
                         self._claim,
-                        hashlib.sha256(str(org_id).encode()).hexdigest(),
                         hashlib.sha256(origin.encode()).hexdigest(),
                         lease_id,
                         open_egress,
@@ -481,7 +471,6 @@ class FetchBroker:
         self,
         policy_source: PolicySource,
         policy_revision: str,
-        org_id: UUID,
         *,
         quota: FetchQuota,
         transport: httpx.AsyncBaseTransport | None = None,
@@ -491,7 +480,6 @@ class FetchBroker:
     ):
         self.policy_source = policy_source
         self.policy = policy_source.check(policy_revision)
-        self.org_id = org_id
         self.quota = quota
         self.transport = transport
         self.resolver = resolver
@@ -666,11 +654,9 @@ class FetchBroker:
         ):
             raise FetchDenied("dns_denied")
         origin = str(target.copy_with(path="/", query=None)).rstrip("/")
-        # Both policies keep a per-organization minute window; an open policy uses its
+        # Both policies keep a per-installation minute window; an open policy uses its
         # own larger, operator-configured limit because whole pages load many resources.
-        async with self.quota.acquire(
-            self.org_id, origin, open_egress=self.policy.open_public_https
-        ):
+        async with self.quota.acquire(origin, open_egress=self.policy.open_public_https):
             self._live()
             # Numeric URL pins the real socket. Host and SNI preserve hostname verification.
             # Each request gets a fresh transport: no pool reuse or implicit DNS retry.

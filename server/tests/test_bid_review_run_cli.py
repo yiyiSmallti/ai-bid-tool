@@ -1,8 +1,6 @@
 """CLI-to-ASGI transport acceptance for exact text grants and slice 3a review jobs."""
 
 import json
-import os
-from pathlib import Path
 
 import pytest
 from app.schemas import bid_review_privacy as privacy
@@ -12,7 +10,15 @@ from bid_cli import main as cli
 from bid_cli.schema import command_schema
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from test_bid_review_cli import ID, NOW, SHA, SUBMISSION, InterfaceClient, invoke
+from test_bid_review_cli import (
+    ID,
+    NOW,
+    SHA,
+    SUBMISSION,
+    InterfaceClient,
+    assert_cli_contracts,
+    invoke,
+)
 
 PAGE = "00000000-0000-4000-8000-000000000003"
 REVIEW = "00000000-0000-4000-8000-000000000004"
@@ -24,7 +30,6 @@ def interface():
     pages = [{"page_id": PAGE, "sanitized_text_sha256": SHA}]
     grant = {
         "id": ID,
-        "org_id": ID,
         "task_id": ID,
         "submission_id": SUBMISSION,
         "submission_manifest_sha256": SHA,
@@ -40,7 +45,6 @@ def interface():
         "purposes": ["bid_review_text"],
         "allowed_capabilities": ["llm"],
         "pages": pages,
-        "authorized_by": ID,
         "authorized_at": NOW,
         "reason_sha256": SHA,
         "current": True,
@@ -61,7 +65,7 @@ def interface():
         "/v4/bid-submissions/{submission_id}/outbound-authorizations", methods=["GET", "POST"]
     )
     async def authorizations(request: Request, submission_id: str):
-        assert request.headers["x-org-id"] == ID and submission_id == SUBMISSION
+        assert submission_id == SUBMISSION
         if request.method == "GET":
             state["calls"].append("outbound-list")
             return Result(
@@ -89,7 +93,7 @@ def interface():
 
     @application.api_route("/v4/tasks/{task_id}/bid-reviews", methods=["POST", "GET"])
     async def reviews(request: Request, task_id: str):
-        assert request.headers["x-org-id"] == ID and task_id == ID
+        assert task_id == ID
         if request.method == "GET":
             state["calls"].append("list")
             return Result(
@@ -187,10 +191,9 @@ def interface():
 
 def setup(monkeypatch, tmp_path):
     application, state, grant = interface()
-    monkeypatch.setenv("BID_SESSION", "synthetic-review-session")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-access-key-synthetic-review-session")
     monkeypatch.setattr(
-        cli, "Client", lambda mode, server, saved: InterfaceClient(mode, server, saved, application)
+        cli, "Client", lambda mode, server: InterfaceClient(mode, server, application)
     )
     paths = {name: tmp_path / f"{name}.json" for name in ("authorize", "revoke", "run")}
     paths["authorize"].write_text(
@@ -271,10 +274,17 @@ def test_review_run_transport_snapshots_both_modes(monkeypatch, tmp_path, capsys
         assert code == 5 and not body["ok"] and body["data"]["run"]["completion"] == "partial"
         actual[f"{mode}: review show partial"] = body
         state["partial"] = False
-    snapshot = Path(__file__).with_name("snapshots") / "bid-review-run-cli-v4.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n")
-    assert actual == json.loads(snapshot.read_text())
+    assert_cli_contracts(actual)
+    for mode in ("local", "remote"):
+        prepared = runs.BidReviewPreview.model_validate(
+            actual[f"{mode}: review run --dry-run"]["data"]
+        )
+        assert prepared.input["input_hash"] == SHA
+        assert actual[f"{mode}: review run"]["data"]["job_id"] == ID
+        shown = runs.BidReviewRunView.model_validate(actual[f"{mode}: review show"]["data"]["run"])
+        assert (
+            str(shown.id) == REVIEW and shown.input_hash == SHA and shown.completion == "complete"
+        )
 
 
 @pytest.mark.parametrize(

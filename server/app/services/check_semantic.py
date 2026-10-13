@@ -58,14 +58,13 @@ HARD_STOPS = {
 
 
 async def resolve(session, settings, job=None):
-    """Use the tenant/catalog resolver, including its immutable job revision gate."""
+    """Resolve the local provider configuration and immutable job revision."""
     return await llm_providers.resolve_llm(session, settings, job=job)
 
 
 def provider_options(llm, *, rubric: bool = False) -> dict:
     configured = getattr(llm, "settings", None)
     return {
-        "org_owned": bool(getattr(llm, "org_owned", False)),
         "request_options_sha256": drafts.digest(configured.request_options())
         if configured
         else None,
@@ -263,7 +262,7 @@ async def prepare(session, fixed: CheckSnapshot, llm, requested_reasoning, setti
         "model": model_identity(llm),
         "provider_options": provider_options(llm),
         "reasoning": reasoning,
-        "provider_source": "org" if getattr(llm, "org_owned", False) else "platform",
+        "provider_source": "local",
     }
     fixed.limitations = [value for value in fixed.limitations if value != "semantic_not_checked"]
     fixed.limitations += warnings
@@ -507,7 +506,7 @@ async def usage_integrity(session, job, run_id: UUID, reported_usages) -> None:
     if len(completed) != len(usages) or {usage.call_id for usage in usages} != set(completed):
         fail("check_usage_integrity", "Check usage does not match completed calls", 500, 4)
     for usage in usages:
-        if usage.org_id != job.org_id or usage.task_id != job.task_id or usage.call_id != usage.id:
+        if usage.task_id != job.task_id or usage.call_id != usage.id:
             fail("check_usage_integrity", "Check usage call identity is invalid", 500, 4)
 
     # Multiset comparison avoids guessing call IDs from provider return order.
@@ -520,7 +519,6 @@ async def usage_integrity(session, job, run_id: UUID, reported_usages) -> None:
             usage.input_tokens,
             usage.output_tokens,
             usage.provider_config_id,
-            usage.platform_model_id,
         )
 
     available = Counter(signature(usage) for usage in usages)

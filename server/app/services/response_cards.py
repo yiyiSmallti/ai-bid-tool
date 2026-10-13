@@ -5,7 +5,7 @@ import hashlib
 import re
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import NoReturn
 from uuid import UUID, uuid4
@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
 from app.models.entities import (
-    ApiToken,
     CertificateFile,
     CertificateRevision,
     Chunk,
@@ -32,7 +31,6 @@ from app.models.entities import (
     TaskFeature,
     TaskOrgProfile,
     TaskResource,
-    User,
 )
 from app.models.response_cards import (
     CardEvidenceLink,
@@ -56,10 +54,11 @@ from app.schemas.response_card_contracts import (
 )
 from app.schemas.screenshot_contracts import ImageEvidenceInput
 from app.services import confidential, redaction, requirement_consumption
-from app.services.auth import ROLE_SCOPES, SCOPES, Identity, membership, set_actor_context
+from app.services.auth import Identity, set_actor_context
 from app.services.evidence_sources import joined_sources, require_source, source_data
 from app.services.evidence_sources import require_access as require_source_access
 from app.services.extraction import locate_quote
+from app.services.task_access import live_actor
 from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
@@ -109,7 +108,6 @@ COPY_FIELDS = (
     *CONTENT_FIELDS,
     "review_domain",
     "disposition",
-    "disposition_by",
     "disposition_at",
     "suggested_disposition",
     "review_hint",
@@ -122,53 +120,23 @@ def fail(code: str, message: str, status: int = 400, exit_code: int = 2) -> NoRe
 
 
 async def access(session: AsyncSession, actor: Identity, scope: str) -> Identity:
-    """Recheck live membership and intersect saved worker/token grants at every entry."""
-    member = await membership(session, actor.user_id, actor.org_id)
-    user = await session.get(User, actor.user_id)
-    if user is None or not user.active:
-        raise not_found()
-    scopes = actor.scopes & ROLE_SCOPES[member.role]
-    if actor.token_id is not None:
-        token = await session.get(ApiToken, actor.token_id)
-        if (
-            token is None
-            or token.user_id != actor.user_id
-            or token.revoked
-            or token.expires_at <= datetime.now(UTC)
-        ):
-            fail("forbidden", "Permission denied", 403, 4)
-        scopes &= set(token.scopes) & SCOPES
-    if actor.actor_kind in {"agent", "worker"} and actor.principal_id is not None:
-        from app.models.agent import AgentPrincipal
-        from app.services.auth import agent_identity
-
-        principal = await session.get(AgentPrincipal, actor.principal_id, populate_existing=True)
-        if (
-            principal is None
-            or principal.org_id != actor.org_id
-            or principal.user_id != actor.user_id
-        ):
-            raise not_found()
-        delegated = await agent_identity(session, principal)
-        scopes &= delegated.scopes
-    live = replace(actor, scopes=scopes, role=member.role)
+    """Recheck live session, token and delegated grants at every entry."""
+    live = await live_actor(session, actor)
     live.require(scope)
     live.require("task:read")
     await set_actor_context(session, live)
     return live
 
 
-def human(actor: Identity, domain: str | None = None, *, admin: bool = False):
+def human(actor: Identity):
     actor.require("evidence:confirm")
     if actor.actor_kind != "session" or actor.token_id is not None:
         fail("forbidden", "Human session required", 403, 4)
-    if admin:
-        if actor.role != "admin":
-            fail("forbidden", "Administrator required", 403, 4)
-    elif domain is None:
+
+
+def require_classified(domain: str | None):
+    if domain is None:
         fail("unclassified", "Assign a review domain before human decisions")
-    elif actor.role != {"commercial": "bidder", "technical": "technical"}[domain]:
-        fail("forbidden", "Review role does not match the assigned domain", 403, 4)
 
 
 async def task_lock(session: AsyncSession, task_id: UUID) -> Task:
@@ -445,7 +413,7 @@ async def resolve_material(
             raise not_found()
         if not selected.active:
             fail("stale_material", "Selected material has been replaced", 409)
-        content = await storage.read(actor.org_id, original.storage_key)
+        content = await storage.read(original.storage_key)
         if (
             len(content) != original.file["size_bytes"]
             or hashlib.sha256(content).hexdigest() != original.file["sha256"]
@@ -543,7 +511,6 @@ def evidence_view_data(row, selected, selection_id, revision_id, item, archive) 
     return EvidenceView.model_validate(
         dict(
             id=row.id,
-            org_id=row.org_id,
             task_id=row.task_id,
             card_id=row.card_id,
             input=item,
@@ -552,7 +519,6 @@ def evidence_view_data(row, selected, selection_id, revision_id, item, archive) 
             material_kind=row.material_kind,
             quote_check=row.quote_check,
             source_archive=archive,
-            confirmed_by=row.confirmed_by,
             confirmed_at=row.confirmed_at,
             active_selection=selected.active,
         )
@@ -616,10 +582,6 @@ async def card_view(
         memory_lineage,
         requirement_review=reviews.get(requirement.id),
     )
-    from app.services import task_cosign
-
-    projection = (await task_cosign.projections(session, actor.org_id, [card.id]))[card.id]
-    task_cosign.apply_eligibility(view, projection)
     from app.services.agent_tools import provenance
 
     origin_job = revision.model_job_id
@@ -677,7 +639,7 @@ def card_eligibility(
     if not valid_citation:
         return "invalid_citation"
     elif revision_quote_hash(revision, requirement) != quote_hash(requirement.quote):
-        return "needs_reconfirmation"
+        return "invalid_citation"
     elif revision.disposition == "comply_only":
         return "comply_only"
     elif generation_stale or invalid_image or inactive_evidence:
@@ -716,7 +678,6 @@ def card_view_data(
     return CardView.model_validate(
         dict(
             id=card.id,
-            org_id=card.org_id,
             task_id=card.task_id,
             extraction_job_id=card.extraction_job_id,
             requirement_id=card.requirement_id,
@@ -725,7 +686,6 @@ def card_view_data(
             state=revision.state,
             review_domain=revision.review_domain,
             disposition=revision.disposition,
-            disposition_by=revision.disposition_by,
             disposition_at=revision.disposition_at,
             suggested_disposition=revision.suggested_disposition,
             origin=revision.origin,
@@ -738,7 +698,6 @@ def card_view_data(
                 "evidence": [row["input"] for row in evidence],
             },
             evidence=evidence,
-            confirmed_by=revision.confirmed_by,
             confirmed_at=revision.confirmed_at,
             warning_codes=sorted(set(warnings_for(requirement)) | (image_warnings or set())),
             reason=revision.reason,
@@ -766,7 +725,7 @@ def memory_warning_for(revision, manifest, current_epoch):
 
     if "memory" not in manifest:
         return None  # Existing pre-memory drafts retain their historical review semantics.
-    if manifest_epoch_changed(manifest["memory"], revision.org_id, current_epoch):
+    if manifest_epoch_changed(manifest["memory"], current_epoch):
         return (
             "memory_changed_after_review" if revision.state == "confirmed" else "memory_input_stale"
         )
@@ -780,8 +739,7 @@ async def generation_memory_state(session, actor, revision, requirement_id):
 
     run = await session.scalar(
         select(CardGenerationRun).where(
-            CardGenerationRun.org_id == actor.org_id,
-            CardGenerationRun.generation_job_id == revision.model_job_id,
+            CardGenerationRun.generation_job_id == revision.model_job_id
         )
     )
     if run is None:
@@ -790,7 +748,7 @@ async def generation_memory_state(session, actor, revision, requirement_id):
         return None, {}
     actor.require("memory:read")
     return (
-        memory_warning_for(revision, run.input_manifest, await epoch(session, actor.org_id)),
+        memory_warning_for(revision, run.input_manifest, await epoch(session)),
         memory_lineage_for(run.input_manifest, requirement_id),
     )
 
@@ -852,7 +810,6 @@ class CardReadBatch:
     _generation_stale: dict[UUID, bool] = field(default_factory=dict)
     _views: dict[tuple[UUID, bool], dict] = field(default_factory=dict)
     memory_epoch: int = 0
-    cosign: dict[UUID, dict] = field(default_factory=dict)
     requirement_reviews: dict = field(default_factory=dict)
 
     @classmethod
@@ -901,11 +858,7 @@ class CardReadBatch:
         evidence: dict[UUID, Evidence] = {}
         for revision_id, row in await session.execute(
             select(CardEvidenceLink.revision_id, Evidence)
-            .join(
-                Evidence,
-                (Evidence.org_id == CardEvidenceLink.org_id)
-                & (Evidence.id == CardEvidenceLink.evidence_id),
-            )
+            .join(Evidence, Evidence.id == CardEvidenceLink.evidence_id)
             .where(CardEvidenceLink.revision_id.in_(revision_ids))
             .order_by(Evidence.created_at, Evidence.id)
         ):
@@ -971,17 +924,13 @@ class CardReadBatch:
             from app.memory.retrieval import epoch
 
             actor.require("memory:read")
-            memory_epoch = await epoch(session, actor.org_id)
-        from app.services import task_cosign
-
-        cosign = await task_cosign.projections(session, actor.org_id, list(loaded_cards))
+            memory_epoch = await epoch(session)
         citations = citation_validity_batch(requirements, chunks)
         reviews = await requirement_consumption.effective(
             session, requirements, citations=citations
         )
         return cls(
             requirement_reviews=reviews,
-            cosign=cosign,
             memory_epoch=memory_epoch,
             actor=actor,
             requirements=required,
@@ -1110,9 +1059,7 @@ class CardReadBatch:
                 if requirement_review_gate
                 else None,
             )
-        from app.services import task_cosign
-
-        return task_cosign.apply_eligibility(self._views[key], self.cosign[card.id])
+        return self._views[key]
 
 
 async def append_revision(
@@ -1137,13 +1084,11 @@ async def append_revision(
     )
     revision = ResponseCardRevision(
         id=uuid4(),
-        org_id=actor.org_id,
         card_id=card.id,
         revision=number,
         quote_sha256=quote_sha256,
-        **({key: getattr(previous, key) for key in COPY_FIELDS} | values if previous else values),
+        **{key: getattr(previous, key) for key in COPY_FIELDS} | values if previous else values,
         origin={"session": "human", "worker": "model"}.get(actor.actor_kind, "agent"),
-        actor_user_id=actor.user_id,
         actor_token_id=actor.token_id,
         actor_kind=actor.actor_kind,
     )
@@ -1151,12 +1096,7 @@ async def append_revision(
     await session.flush()
     for material in evidence:
         session.add(
-            CardEvidenceLink(
-                org_id=actor.org_id,
-                card_id=card.id,
-                revision_id=revision.id,
-                evidence_id=material.id,
-            )
+            CardEvidenceLink(card_id=card.id, revision_id=revision.id, evidence_id=material.id)
         )
     card.current_revision_id, card.revision = revision.id, number
     await session.flush()
@@ -1189,7 +1129,6 @@ async def new_card(
         fail("revision_conflict", "A card already exists for this requirement", 409)
     card = ResponseCard(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=task_id,
         extraction_job_id=job_id,
         requirement_id=requirement.id,
@@ -1233,14 +1172,7 @@ async def build_evidence(
                 "visual_observation": item.visual_observation,
             }
         fixed.setdefault("quote", quote)
-        row = Evidence(
-            id=uuid4(),
-            org_id=actor.org_id,
-            task_id=card.task_id,
-            card_id=card.id,
-            kind=item.kind,
-            **fixed,
-        )
+        row = Evidence(id=uuid4(), task_id=card.task_id, card_id=card.id, kind=item.kind, **fixed)
         session.add(row)
         rows.append(row)
     await session.flush()
@@ -1364,7 +1296,7 @@ async def list_cards(session: AsyncSession, actor: Identity, task_id: UUID, job_
 @task_authorized("evidence:confirm", parent=("card_id", "response_cards"), write=True)
 async def classify_card(session: AsyncSession, actor: Identity, card_id: UUID, body: CardClassify):
     actor = await access(session, actor, "evidence:confirm")
-    human(actor, admin=True)
+    human(actor)
     card, previous, requirement = await require_card(session, card_id, lock=True)
     expected(card, body.expected_revision)
     await card_view(session, actor, card, previous, requirement)
@@ -1387,18 +1319,19 @@ async def classify_card(session: AsyncSession, actor: Identity, card_id: UUID, b
 
 
 async def confirmation_inputs(session, actor, card, previous, requirement, storage):
-    """Expose actionable stale-input failures before a legacy round conflict."""
+    """Reject stale requirements, citations, memory and materials before confirmation."""
+    require_classified(previous.review_domain)
     await requirement_consumption.require_confirmed(session, [requirement])
     view = await card_view(session, actor, card, previous, requirement, storage)
     if "memory_input_stale" in view["warning_codes"]:
         fail("memory_input_stale", "Memory changed; edit or regenerate before review", 409, 4)
-    if view["eligibility"] in {"stale_material", "invalid_citation", "needs_reconfirmation"}:
+    if view["eligibility"] in {"stale_material", "invalid_citation"}:
         fail(view["eligibility"], "Card inputs are no longer valid", 409)
     return view
 
 
 async def validate_confirmation(session, actor, card, previous, requirement, body, storage):
-    """Validate every legacy human gate without writing Evidence or revisions."""
+    """Validate every human gate without writing Evidence or revisions."""
     view = await confirmation_inputs(session, actor, card, previous, requirement, storage)
     materials = await linked_evidence(session, previous.id)
     if not all(getattr(previous, name) for name in CONTENT_FIELDS):
@@ -1464,17 +1397,11 @@ async def card_action(
     card, previous, requirement = await require_card(session, card_id, lock=True)
     expected(card, body.expected_revision)
     if decision:
-        from app.services.task_workflow import access as task_access
+        from app.services.task_access import access as task_access
 
-        await task_access(
-            session,
-            actor,
-            card.task_id,
-            scope="evidence:confirm",
-            write=True,
-            domain=previous.review_domain,
-        )
-        human(actor, previous.review_domain)
+        await task_access(session, actor, card.task_id, scope="evidence:confirm", write=True)
+        human(actor)
+        require_classified(previous.review_domain)
     transitions = {
         "submit": ("draft", "pending_review"),
         "withdraw": ("pending_review", "draft"),
@@ -1486,18 +1413,24 @@ async def card_action(
     before, after = transitions[body.action]
     if previous.state != before or previous.disposition == "comply_only":
         fail("invalid_transition", "Action is unavailable in the current state", 409)
-    from app.services import task_cosign
-
     if body.action == "confirm":
-        if settings is None:
-            from app.core.config import Settings
-
-            settings = Settings.load()
-        return await task_cosign.legacy_confirm(
-            session, actor, card, previous, requirement, body, storage, settings
-        )
+        await validate_confirmation(session, actor, card, previous, requirement, body, storage)
     materials = await linked_evidence(session, previous.id)
     values = {"state": after, "reason": body.reason}
+    if body.action == "confirm":
+        now = datetime.now(UTC)
+        for evidence in materials:
+            if evidence.confirmed_at is None:
+                evidence.confirmed_at = now
+                if evidence.kind in {"certificate_pdf_page", "image_region"}:
+                    evidence.quote_check = (
+                        "human_page_review"
+                        if evidence.kind == "certificate_pdf_page"
+                        else "human_image_review"
+                    )
+        values |= {"confirmed_at": now, "reviewed_warning_codes": body.reviewed_warning_codes}
+        if previous.disposition is None:
+            values |= {"disposition": "respond", "disposition_at": now}
     correlation_id = uuid4()
     revision = await append_revision(
         session,
@@ -1509,9 +1442,7 @@ async def card_action(
         values=values,
         correlation_id=correlation_id,
     )
-    if body.action == "submit":
-        await task_cosign.create_round(session, actor, card, revision)
-    if body.action == "reject":
+    if body.action in {"confirm", "reject"}:
         from app.memory.feedback import record_feedback
 
         await record_feedback(
@@ -1520,10 +1451,14 @@ async def card_action(
             card,
             previous,
             revision,
-            "card_rejected",
+            "card_confirmed" if body.action == "confirm" else "card_rejected",
             body.reason,
         )
-    return await card_view(session, actor, card, revision, requirement)
+    if body.action == "confirm":
+        from app.services.annotations import enqueue_releases
+
+        await enqueue_releases(session, actor, card, revision)
+    return await card_view(session, actor, card, revision, requirement, storage)
 
 
 @task_authorized("evidence:confirm", write=True, review=True)
@@ -1548,25 +1483,6 @@ async def dispose_cards(
             )
         ).all()
     }
-    from app.models.team_workflow import RequirementWorkflow, TaskWorkflow
-
-    workflow = await session.scalar(select(TaskWorkflow).where(TaskWorkflow.task_id == task_id))
-    required_flags = set(
-        await session.scalars(
-            select(RequirementWorkflow.requirement_id).where(
-                RequirementWorkflow.task_id == task_id,
-                RequirementWorkflow.co_sign_required.is_(True),
-            )
-        )
-    )
-    for item in body.items:
-        requirement = by_id.get(item.requirement_id)
-        if requirement is None:
-            raise not_found()
-        if item.requirement_id in required_flags or (
-            workflow is not None and workflow.co_sign_starred and requirement.starred
-        ):
-            fail("cosign_required", "Use a disposition review round for every required domain", 409)
     correlation = uuid4()
     output = {}
     for item in sorted(body.items, key=lambda value: str(value.requirement_id)):
@@ -1590,7 +1506,8 @@ async def dispose_cards(
             domain = {"technical": "technical", "qualification": "commercial"}.get(
                 requirement.category
             )
-        human(actor, domain)
+        human(actor)
+        require_classified(domain)
         if item.disposition == "comply_only":
             await requirement_consumption.require_confirmed(session, [requirement])
         if card is None:
@@ -1607,7 +1524,6 @@ async def dispose_cards(
                 "state": previous.state if previous else "draft",
                 "review_domain": domain,
                 "disposition": item.disposition,
-                "disposition_by": actor.user_id,
                 "disposition_at": datetime.now(UTC),
                 "reason": item.reason,
             },
@@ -1626,13 +1542,13 @@ async def set_redaction(
     session: AsyncSession, actor: Identity, task_id: UUID, body: TaskRedactionSet
 ):
     actor = await access(session, actor, "evidence:confirm")
-    human(actor, admin=True)
+    human(actor)
     task = await task_lock(session, task_id)
     if task.model_redaction_revision != body.expected_revision:
         fail("revision_conflict", "Read the current setting revision before writing", 409)
     task.model_redaction_enabled = body.model_redaction_enabled
     task.model_redaction_revision += 1
-    task.model_redaction_by = actor.user_id
+
     audit(
         session,
         actor,
@@ -1650,5 +1566,4 @@ async def set_redaction(
         "task_id": str(task.id),
         "model_redaction_enabled": task.model_redaction_enabled,
         "revision": task.model_redaction_revision,
-        "changed_by": str(task.model_redaction_by),
     }

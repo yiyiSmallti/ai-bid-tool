@@ -5,7 +5,8 @@ import AssessmentPreflight from "../components/AssessmentPreflight.vue";
 import JobPanel from "../components/JobPanel.vue";
 import { assessmentError, enc, queryPath, stateLabels, usePreviewInvalidation } from "../assessments.js";
 import { preparationBlocker, preparationStates, requirementRefreshErrors } from "../requirement-review.js";
-import { formatTime, orgRequest } from "../org.js";
+import { request } from "../api.js";
+import { formatTime } from "../org.js";
 
 const route = useRoute();
 const taskId = computed(() => String(route.params.taskId));
@@ -53,11 +54,11 @@ function invalidate() { actionSerial++; detailSerial++; preview.value = null; pr
 watch([draftId, rubricId, assessmentDate, reasoning], invalidate, { flush: "sync" });
 usePreviewInvalidation(invalidate, taskId);
 async function loadCollection(page, path, values, validate, cursor = null, position = 0) {
-  const generation = sequence, context = scope(), request = ++page.request;
-  const active = () => current(generation, context) && request === page.request;
+  const generation = sequence, context = scope(), requestSerial = ++page.request;
+  const active = () => current(generation, context) && requestSerial === page.request;
   page.loading = true; page.error = "";
   try {
-    const result = await orgRequest("GET", queryPath(path, { ...values, limit: 50, cursor }));
+    const result = await request("GET", queryPath(path, { ...values, limit: 50, cursor }));
     if (!active()) return;
     if (result.data.task_id !== taskId.value || !result.items.every(validate)) throw { code: "invalid_response" };
     page.rows = result.items; page.meta = result.data; page.position = position;
@@ -72,13 +73,13 @@ const discover = (cursor = null, position = 0) => loadCollection(jobPage, `/task
 function pageForward(page, loader) { if (page.meta?.next_cursor) return loader(page.meta.next_cursor, page.position + 1); }
 function pageBack(page, loader) { if (page.position) return loader(page.cursors[page.position - 1], page.position - 1); }
 async function readRubric() {
-  const generation = sequence, context = scope(), id = rubricId.value, request = ++rubricSerial;
-  const active = () => current(generation, context) && id === rubricId.value && request === rubricSerial;
+  const generation = sequence, context = scope(), id = rubricId.value, requestSerial = ++rubricSerial;
+  const active = () => current(generation, context) && id === rubricId.value && requestSerial === rubricSerial;
   selectedRubric.value = null; invalidate();
   if (!id) return;
   rubricLoading.value = true; error.value = "";
   try {
-    const result = await orgRequest("GET", queryPath(`/tasks/${enc(taskId.value)}/score-rubrics/${enc(id)}`, { view: "console", part: "summary" }));
+    const result = await request("GET", queryPath(`/tasks/${enc(taskId.value)}/score-rubrics/${enc(id)}`, { view: "console", part: "summary" }));
     if (!active()) return;
     if (result.data.task_id !== taskId.value || result.data.id !== id) throw { status: 404 };
     selectedRubric.value = result.data; sourceNeedsRefresh.value = false;
@@ -89,13 +90,13 @@ async function load() {
   clear(); const generation = sequence, context = scope(); loading.value = true;
   if (!extractionId.value) { error.value = "请先在任务中明确选择成功的提取结果"; loading.value = false; return; }
   try {
-    const [taskResult, inputResult] = await Promise.all([orgRequest("GET", `/tasks/${enc(taskId.value)}`), orgRequest("GET", queryPath(`/tasks/${enc(taskId.value)}/assessment-inputs`, { job: extractionId.value }))]);
+    const [taskResult, inputResult] = await Promise.all([request("GET", `/tasks/${enc(taskId.value)}`), request("GET", queryPath(`/tasks/${enc(taskId.value)}/assessment-inputs`, { job: extractionId.value }))]);
     if (!current(generation, context)) return;
     if (taskResult.data.id !== taskId.value || inputResult.data.task_id !== taskId.value || inputResult.data.extraction_job_id !== extractionId.value) throw { status: 404 };
     task.value = taskResult.data; inputs.value = inputResult.data;
     const requestedDraft = String(route.query.draft ?? "");
     if (requestedDraft && !draftChoices.value.some(item => item.draft_id === requestedDraft)) {
-      const saved = (await orgRequest("GET", `/drafts/${enc(requestedDraft)}`)).data;
+      const saved = (await request("GET", `/drafts/${enc(requestedDraft)}`)).data;
       if (!current(generation, context)) return;
       if (saved.id !== requestedDraft || saved.task_id !== taskId.value || saved.extraction_job_id !== extractionId.value) throw { status: 404 };
       explicitDraft.value = { draft_id: saved.id, extraction_job_id: saved.extraction_job_id, validity: saved.validity, completion: saved.completion };
@@ -109,26 +110,26 @@ async function load() {
 function requestBody(dry) { return { draft_id: draftId.value, rubric_id: rubricId.value, assessment_date: assessmentDate.value, dry_run: dry, ...(reasoning.value ? { reasoning: reasoning.value } : {}), ...(!dry ? { expected_input_hash: preview.value.input.input_hash, retry: retry.value } : {}) }; }
 async function preflight() {
   if (busy.value || !canRun.value || prerequisite.value) return;
-  invalidate(); const generation = sequence, context = scope(), key = selectionKey(), request = ++actionSerial;
-  const active = () => current(generation, context) && key === selectionKey() && request === actionSerial;
+  invalidate(); const generation = sequence, context = scope(), key = selectionKey(), requestSerial = ++actionSerial;
+  const active = () => current(generation, context) && key === selectionKey() && requestSerial === actionSerial;
   busy.value = true; error.value = "";
   try {
-    const result = await orgRequest("POST", `${base.value}/preview`, requestBody(true));
+    const result = await request("POST", `${base.value}/preview`, requestBody(true));
     if (!active()) return;
     const data = result.data, input = data.input, fixed = data.preflight;
-    if (input?.task_id !== taskId.value || input.org_id !== inputs.value.org_id || input.extraction_job_id !== extractionId.value || input.document_id !== inputs.value.document_id || input.draft_id !== draftId.value || input.assessment_date !== assessmentDate.value || data.rubric_id !== rubricId.value || data.rubric_version !== selectedRubric.value.version || data.rubric_input_hash !== selectedRubric.value.input_hash || !/^[a-f0-9]{64}$/.test(input.input_hash) || fixed?.task_id !== taskId.value || fixed.input_hash !== input.input_hash) throw { code: "score_input_changed" };
+    if (input?.task_id !== taskId.value || input.extraction_job_id !== extractionId.value || input.document_id !== inputs.value.document_id || input.draft_id !== draftId.value || input.assessment_date !== assessmentDate.value || data.rubric_id !== rubricId.value || data.rubric_version !== selectedRubric.value.version || data.rubric_input_hash !== selectedRubric.value.input_hash || !/^[a-f0-9]{64}$/.test(input.input_hash) || fixed?.task_id !== taskId.value || fixed.input_hash !== input.input_hash) throw { code: "score_input_changed" };
     preview.value = data; previewKey = key;
   } catch (exc) { if (active() && exc.name !== "AbortError") { error.value = assessmentError(exc); if (requirementRefreshErrors.includes(exc.code)) { sourceNeedsRefresh.value = true; invalidate(); } } }
   finally { if (active()) busy.value = false; }
 }
 async function submit(recover = false) {
   if (busy.value || !canRun.value || prerequisite.value || (recover ? !queueRequest.value || queuedKey.value !== selectionKey() : !ready.value)) return;
-  const generation = sequence, context = scope(), key = selectionKey(), request = ++submitSerial;
-  const active = () => current(generation, context) && key === selectionKey() && request === submitSerial;
+  const generation = sequence, context = scope(), key = selectionKey(), requestSerial = ++submitSerial;
+  const active = () => current(generation, context) && key === selectionKey() && requestSerial === submitSerial;
   const body = recover ? { ...queueRequest.value } : requestBody(false);
   submitting.value = true; busy.value = true; error.value = "";
   try {
-    const result = await orgRequest("POST", base.value, body);
+    const result = await request("POST", base.value, body);
     if (!active()) return;
     if (typeof result.data.job_id !== "string" || typeof result.data.cached !== "boolean") throw { code: "invalid_response" };
     activeJob.value = result.data.job_id; cached.value = result.data.cached; invalidate(); await discover();
@@ -141,11 +142,11 @@ async function submit(recover = false) {
   } finally { if (active()) { submitting.value = false; busy.value = false; } }
 }
 async function showUnassessable(id) {
-  const generation = sequence, context = scope(), key = selectionKey(), request = ++detailSerial, rubric = rubricId.value;
-  const active = () => current(generation, context) && key === selectionKey() && request === detailSerial;
+  const generation = sequence, context = scope(), key = selectionKey(), requestSerial = ++detailSerial, rubric = rubricId.value;
+  const active = () => current(generation, context) && key === selectionKey() && requestSerial === detailSerial;
   unassessableDetail.value = null; detailError.value = ""; detailLoading.value = true;
   try {
-    const result = await orgRequest("GET", queryPath(`/tasks/${enc(taskId.value)}/score-rubrics/${enc(rubric)}`, { view: "console", part: "items", entry_id: id, limit: 1 }));
+    const result = await request("GET", queryPath(`/tasks/${enc(taskId.value)}/score-rubrics/${enc(rubric)}`, { view: "console", part: "items", entry_id: id, limit: 1 }));
     if (!active()) return;
     if (result.data.parent_id !== rubric || result.data.task_id !== taskId.value || result.data.parent_revision !== selectedRubric.value.revision || result.items.length !== 1 || result.items[0].id !== id) throw { code: "assessment_view_changed" };
     unassessableDetail.value = result.items[0];
@@ -158,8 +159,8 @@ function clear() {
   for (const page of [rubricPage, scorePage, jobPage]) { page.request++; page.rows = []; page.meta = null; page.error = ""; page.loading = false; page.cursors = [null]; page.position = 0; }
 }
 watch(() => [taskId.value, extractionId.value, route.query.draft, route.query.rubric], load, { immediate: true });
-window.addEventListener("bid:org-reset", clear);
-onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", clear); });
+window.addEventListener("bid:session-reset", clear);
+onBeforeUnmount(() => { clear(); window.removeEventListener("bid:session-reset", clear); });
 </script>
 
 <template>
@@ -179,7 +180,7 @@ onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", cle
         <el-form-item label="评估日期"><el-input v-model="assessmentDate" type="date" aria-label="评估日期" :disabled="busy" /></el-form-item>
         <el-form-item label="推理档位（留空使用默认）"><el-input v-model="reasoning" aria-label="推理档位" :disabled="busy" /></el-form-item>
 
-        <el-button native-type="submit" type="primary" plain :loading="busy" :disabled="!canRun || !!prerequisite || rubricLoading">预览评分</el-button><span v-if="!canRun">当前角色只读或尚未满足运行条件</span>
+        <el-button native-type="submit" type="primary" plain :loading="busy" :disabled="!canRun || !!prerequisite || rubricLoading">预览评分</el-button><span v-if="!canRun">当前不可运行或尚未满足运行条件</span>
       </el-form>
       <AssessmentPreflight :preview="preview" />
       <section v-if="preview" aria-label="本次评分范围"><h3>本次评分范围</h3><p>初稿 {{ preview.input.draft_id }} · 第 {{ preview.rubric_version }} 版评分规则 · 评估日期 {{ preview.input.assessment_date }}</p><p>选中评分项 {{ preview.selected_item_ids.length }} 条 · 预检无法评估 {{ unassessableIds.length }} 条</p><p v-for="limitation in preview.limitations" :key="limitation" class="hint">{{ limitation }}</p>
@@ -191,7 +192,7 @@ onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", cle
     <el-card class="section" shadow="never"><h3>可选评分规则</h3><el-alert v-if="rubricPage.error" :title="rubricPage.error" type="error" :closable="false" role="alert" /><el-skeleton v-if="rubricPage.loading" :rows="2" animated /><p v-else-if="!rubricPage.rows.length && !rubricPage.error">尚未生成评分规则</p><p v-if="rubricPage.meta" role="status">全部 {{ rubricPage.meta.total }} 个版本 · 第 {{ rubricPage.position + 1 }} 页</p><div v-for="rubric in rubricPage.rows" :key="rubric.id" class="history-row"><RouterLink :to="`/org/tasks/${taskId}/score-rubrics/${rubric.id}`">审核第 {{ rubric.version }} 版评分规则</RouterLink><span>{{ stateLabels[rubric.state] }} · {{ stateLabels[rubric.validity] }}</span></div><div class="actions"><el-button :disabled="rubricPage.position === 0 || rubricPage.loading" @click="pageBack(rubricPage, rubricHistory)">上一页评分规则</el-button><el-button :disabled="!rubricPage.meta?.next_cursor || rubricPage.loading" @click="pageForward(rubricPage, rubricHistory)">下一页评分规则</el-button></div></el-card>
   </template>
   <p v-if="cached" role="status">已复用相同输入的结果</p><el-button v-if="queueRequest" :disabled="busy || queuedKey !== selectionKey()" @click="submit(true)">重新调度已保存作业</el-button>
-  <JobPanel v-if="activeJob" assessment-mode :job-id="activeJob" :writable="!!jobPage.rows.find(job => job.id === activeJob)?.cancel.allowed" @finished="finished" />
+  <JobPanel v-if="activeJob" assessment-mode :job-id="activeJob" @finished="finished" />
   <el-card v-if="inputs" class="section" shadow="never"><h3>评分作业</h3><el-alert v-if="jobPage.error" :title="jobPage.error" type="error" :closable="false" role="alert" /><el-skeleton v-if="jobPage.loading" :rows="2" animated /><p v-else-if="!jobPage.rows.length && !jobPage.error">尚无评分作业</p><div v-for="job in jobPage.rows" :key="job.id" class="history-row"><el-button link @click="activeJob = job.id">查看作业 {{ job.id }}</el-button><span>{{ jobLabels[job.status] }} · 尝试 {{ job.attempts }} 次</span><RouterLink v-if="job.result_id" :to="`/org/tasks/${taskId}/scores/${job.result_id}`">查看评分报告</RouterLink></div><div class="actions"><el-button :disabled="!jobPage.position || jobPage.loading" @click="pageBack(jobPage, discover)">上一页作业</el-button><el-button :disabled="!jobPage.meta?.next_cursor || jobPage.loading" @click="pageForward(jobPage, discover)">下一页作业</el-button></div></el-card>
   <el-card v-if="inputs" class="section" shadow="never"><h3>评分历史</h3><el-alert v-if="scorePage.error" :title="scorePage.error" type="error" :closable="false" role="alert" /><el-skeleton v-if="scorePage.loading" :rows="2" animated /><el-empty v-else-if="!scorePage.rows.length && !scorePage.error" description="尚未运行评分" /><p v-if="scorePage.meta" role="status">全部 {{ scorePage.meta.total }} 份报告 · 第 {{ scorePage.position + 1 }} 页</p><div v-for="item in scorePage.rows" :key="item.report.id" class="history-row"><RouterLink :to="`/org/tasks/${taskId}/scores/${item.report.id}`">查看评分报告</RouterLink><span>{{ item.report.assessment_date }} · {{ stateLabels[item.report.completion] }} · {{ stateLabels[item.report.validity] }} · {{ totalLabels[item.total_status] }}</span><small>初稿 {{ item.report.draft_id }} · 第 {{ item.rubric_version }} 版规则 · {{ formatTime(item.report.created_at) }}</small></div><div class="actions"><el-button :disabled="!scorePage.position || scorePage.loading" @click="pageBack(scorePage, scoreHistory)">上一页评分历史</el-button><el-button :disabled="!scorePage.meta?.next_cursor || scorePage.loading" @click="pageForward(scorePage, scoreHistory)">下一页评分历史</el-button></div></el-card>
 </template>

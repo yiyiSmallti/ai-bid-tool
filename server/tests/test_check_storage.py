@@ -1,8 +1,8 @@
-"""PostgreSQL integration gates for immutable checks using two synthetic tenants.
+"""PostgreSQL integration gates for immutable checks using a synthetic database.
 
-Failure inventory: cross-tenant/no-context reads and inserts; mutable report history;
+Failure inventory: cross-task inserts and actor-context gates; mutable report history;
 late report children; old/expired worker attempts; mismatched report/task/draft/input;
-incomplete coverage; forged tender/draft/evidence citations; nonhuman or wrong-domain
+incomplete coverage; forged tender/draft/evidence citations; nonhuman
 human decisions; stale decision CAS; forbidden token scopes; ciphertext rotation.
 API acceptance covers current-input recomputation and public error envelopes.
 """
@@ -26,7 +26,14 @@ from app.models.check import (
     CheckRun,
 )
 from app.models.confidential import ConfidentialField, ConfidentialValue
-from app.models.entities import Certificate, CertificateRevision, Job, Membership, TaskCertificate
+from app.models.entities import (
+    Certificate,
+    CertificateRevision,
+    Document,
+    Job,
+    Task,
+    TaskCertificate,
+)
 from app.models.response_cards import (
     CardEvidenceLink,
     DraftRun,
@@ -38,7 +45,7 @@ from app.models.response_cards import (
 from sqlalchemy import insert, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
-from test_rls import seeded as seeded  # noqa: F401
+from test_response_card_db import seeded as seeded
 
 TABLES = (
     "check_runs",
@@ -51,23 +58,22 @@ TABLES = (
 )
 
 
-def actor(session, org, user, kind="worker"):
+def actor(session, kind="worker"):
     from task_fixtures import actor_context
 
-    actor_context(session, org, user, kind=kind)
+    actor_context(session, kind=kind)
 
 
-def confirmed_certificate_draft(session, org, user, ids, selection, certificate_revision):
+def confirmed_certificate_draft(session, ids, selection, certificate_revision):
     """Pass real edit, submit, confirm and draft gates for the storage fixture."""
     from task_fixtures import confirm_requirements
 
-    confirm_requirements(session, org, ids["task"])
-    actor(session, org, user, "session")
+    confirm_requirements(session, ids["task"])
+    actor(session, "session")
     old = session.get(ResponseItem, ids["item"])
     card = session.get(ResponseCard, old.card_id)
     evidence = Evidence(
         id=uuid4(),
-        org_id=org,
         task_id=ids["task"],
         card_id=card.id,
         kind="certificate",
@@ -85,38 +91,24 @@ def confirmed_certificate_draft(session, org, user, ids, selection, certificate_
 
     previous = session.get(ResponseCardRevision, card.current_revision_id)
     values = {c.name: getattr(previous, c.name) for c in ResponseCardRevision.__table__.columns}
-    values.update(
-        id=uuid4(),
-        revision=previous.revision + 1,
-        state="draft",
-        actor_user_id=user,
-        actor_kind="session",
-    )
+    values.update(id=uuid4(), revision=previous.revision + 1, state="draft", actor_kind="session")
     revision = ResponseCardRevision(**values)
     session.add(revision)
     session.flush()
-    card.current_revision_id, card.revision = revision.id, revision.revision
+    card.current_revision_id, card.revision = (revision.id, revision.revision)
     session.flush()
-    session.add(
-        CardEvidenceLink(
-            org_id=org, card_id=card.id, revision_id=revision.id, evidence_id=evidence.id
-        )
-    )
+    session.add(CardEvidenceLink(card_id=card.id, revision_id=revision.id, evidence_id=evidence.id))
     session.flush()
-    review_card(session, org, user, card.id, action="submit")
-    revision = review_card(session, org, user, card.id, action="confirm")
+    review_card(session, card.id, action="submit")
+    revision = review_card(session, card.id, action="confirm")
     _, _, draft_manifest, draft_hash, _ = service_call(
         drafts.assemble(
-            ServiceSession(session),
-            actor_context(session, org, user),
-            card.task_id,
-            card.extraction_job_id,
+            ServiceSession(session), actor_context(session), card.task_id, card.extraction_job_id
         )
     )
     original_draft = session.get(DraftRun, ids["draft"])
     draft_job = Job(
         id=uuid4(),
-        org_id=org,
         task_id=ids["task"],
         document_id=ids["document"],
         kind="draft",
@@ -128,13 +120,11 @@ def confirmed_certificate_draft(session, org, user, ids, selection, certificate_
     session.flush()
     draft = DraftRun(
         id=uuid4(),
-        org_id=org,
         task_id=ids["task"],
         extraction_job_id=original_draft.extraction_job_id,
         generation_job_id=draft_job.id,
         generation_run_id=draft_job.run_id,
         input_hash=draft_hash,
-        actor_user_id=user,
         actor_kind="session",
         input_manifest=draft_manifest,
         completion="complete",
@@ -144,7 +134,6 @@ def confirmed_certificate_draft(session, org, user, ids, selection, certificate_
     session.flush()
     response = ResponseItem(
         id=uuid4(),
-        org_id=org,
         draft_id=draft.id,
         requirement_id=old.requirement_id,
         category=old.category,
@@ -165,20 +154,16 @@ def confirmed_certificate_draft(session, org, user, ids, selection, certificate_
     session.flush()
     session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
     session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
-    return draft, response, evidence
+    return (draft, response, evidence)
 
 
-def seed_check(session, org, user, ids):
-    from task_fixtures import set_role_in_session
-
-    set_role_in_session(session, org, user, "technical", task_ids=[ids["task"]])
-    actor(session, org, user)
-    certificate = Certificate(id=uuid4(), org_id=org, created_by=user)
+def seed_check(session, ids):
+    actor(session)
+    certificate = Certificate(id=uuid4())
     session.add(certificate)
     session.flush()
     revision = CertificateRevision(
         id=uuid4(),
-        org_id=org,
         certificate_id=certificate.id,
         revision=1,
         data={
@@ -193,32 +178,21 @@ def seed_check(session, org, user, ids):
     session.flush()
     selection = TaskCertificate(
         id=uuid4(),
-        org_id=org,
         task_id=ids["task"],
         certificate_id=certificate.id,
         certificate_revision_id=revision.id,
     )
     session.add(selection)
     session.flush()
-    draft, response, evidence = confirmed_certificate_draft(
-        session, org, user, ids, selection, revision
-    )
-    actor(session, org, user)
+    draft, response, evidence = confirmed_certificate_draft(session, ids, selection, revision)
+    actor(session)
     field = ConfidentialField(
-        id=uuid4(),
-        org_id=org,
-        created_by=user,
-        key="synthetic_field",
-        label="Synthetic field",
-        kind="other",
-        scope="task",
+        id=uuid4(), key="synthetic_field", label="Synthetic field", kind="other", scope="task"
     )
     session.add(field)
     session.flush()
     value = ConfidentialValue(
         id=uuid4(),
-        org_id=org,
-        created_by=user,
         field_id=field.id,
         task_id=draft.task_id,
         version=1,
@@ -226,22 +200,28 @@ def seed_check(session, org, user, ids):
     )
     session.add(value)
     session.flush()
+    document = session.get(Document, ids["document"])
+    task = session.get(Task, ids["task"])
+    assert document is not None and task is not None and evidence.confirmed_at is not None
     input_hash = "d" * 64
     encrypted_input = Secrets.for_data(Settings()).encrypt("{}")
     manifest = {
-        "org_id": str(org),
         "task_id": str(draft.task_id),
         "draft_id": str(draft.id),
         "extraction_job_id": str(draft.extraction_job_id),
         "document_id": str(ids["document"]),
-        "document_sha256": "a" * 64,
+        "document_sha256": document.sha256,
+        "requirement_reviews": {
+            entry["requirement_id"]: entry["requirement_review"]
+            for entry in draft.input_manifest["requirements"]
+        },
         "draft_input_hash": draft.input_hash,
         "assessment_date": "2026-10-04",
         "mode": "rules",
         "rule_version": "test",
         "schema_version": "test",
-        "model_redaction_enabled": True,
-        "model_redaction_revision": 1,
+        "model_redaction_enabled": task.model_redaction_enabled,
+        "model_redaction_revision": task.model_redaction_revision,
         "confidential": [
             {"field_id": str(field.id), "field_revision": field.revision, "value_id": str(value.id)}
         ],
@@ -256,7 +236,13 @@ def seed_check(session, org, user, ids):
                 "partition": "response",
                 "review_domain": "technical",
                 "gap_reasons": [],
-                "evidence": [{"id": str(evidence.id), "active": True, "confirmed_by": str(user)}],
+                "evidence": [
+                    {
+                        "id": str(evidence.id),
+                        "active": True,
+                        "confirmed_at": evidence.confirmed_at.isoformat(),
+                    }
+                ],
                 "generation_dependencies": None,
             }
         ],
@@ -273,7 +259,6 @@ def seed_check(session, org, user, ids):
     }
     job = Job(
         id=uuid4(),
-        org_id=org,
         task_id=draft.task_id,
         document_id=ids["document"],
         kind="check",
@@ -293,7 +278,6 @@ def seed_check(session, org, user, ids):
     session.flush()
     run = CheckRun(
         id=uuid4(),
-        org_id=org,
         task_id=draft.task_id,
         job_id=job.id,
         run_id=job.run_id,
@@ -311,14 +295,12 @@ def seed_check(session, org, user, ids):
         completion="complete",
         limitations=["Synthetic fixture"],
         summary={"item_count": 1, "finding_count": 1, "unassessed_count": 0},
-        actor_user_id=user,
         actor_kind="worker",
     )
     session.add(run)
     session.flush()
     item = CheckItem(
         id=uuid4(),
-        org_id=org,
         task_id=draft.task_id,
         report_id=run.id,
         draft_id=draft.id,
@@ -333,7 +315,6 @@ def seed_check(session, org, user, ids):
     )
     cert = CheckCertificate(
         id=uuid4(),
-        org_id=org,
         task_id=draft.task_id,
         report_id=run.id,
         task_certificate_id=selection.id,
@@ -345,7 +326,6 @@ def seed_check(session, org, user, ids):
     session.flush()
     finding = CheckFinding(
         id=uuid4(),
-        org_id=org,
         task_id=draft.task_id,
         report_id=run.id,
         check_item_id=item.id,
@@ -361,7 +341,6 @@ def seed_check(session, org, user, ids):
     session.add(
         CheckCertificateItem(
             id=uuid4(),
-            org_id=org,
             task_id=draft.task_id,
             report_id=run.id,
             certificate_id=cert.id,
@@ -372,7 +351,6 @@ def seed_check(session, org, user, ids):
     session.add(
         CheckFindingCitation(
             id=uuid4(),
-            org_id=org,
             task_id=draft.task_id,
             report_id=run.id,
             finding_id=finding.id,
@@ -386,11 +364,10 @@ def seed_check(session, org, user, ids):
     session.flush()
     session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
     session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
-    actor(session, org, user, "session")
+    actor(session, "session")
     reason = "Synthetic human review"
     decision = CheckDecision(
         id=uuid4(),
-        org_id=org,
         task_id=draft.task_id,
         report_id=run.id,
         finding_id=finding.id,
@@ -399,7 +376,6 @@ def seed_check(session, org, user, ids):
         reason=reason,
         reason_sha256=sha256(reason.encode()).hexdigest(),
         expected_input_hash=input_hash,
-        decided_by=user,
         actor_kind="session",
     )
     session.add(decision)
@@ -421,11 +397,9 @@ def seed_check(session, org, user, ids):
 def check_seeded(seeded, admin_engine):
     from task_fixtures import finish_scope
 
-    ids = {}
     with Session(admin_engine) as session, session.begin():
-        for org, user in zip(seeded["orgs"], seeded["users"], strict=True):
-            ids[org] = seed_check(session, org, user, seeded["ids"][org])
-            finish_scope(session)
+        ids = seed_check(session, seeded["ids"])
+        finish_scope(session)
     return {**seeded, "checks": ids}
 
 
@@ -436,46 +410,17 @@ async def check_db(check_seeded):
     await db.engine.dispose()
 
 
-async def runtime_actor(session, data, kind="session", user=None, token=None):
+async def runtime_actor(session, data, kind="session", token=None):
     from task_fixtures import actor_context_async
 
-    await actor_context_async(
-        session, data["orgs"][0], user or data["users"][0], kind=kind, token=token
-    )
-
-
-@pytest.mark.parametrize("table", TABLES)
-async def test_check_tables_force_tenant_scope(table, check_seeded, check_db, admin_engine):
-    org_a, org_b = check_seeded["orgs"]
-    model = Base.metadata.tables[table]
-    async with check_db.transaction(org_a) as session:
-        assert (await session.execute(select(model.c.org_id))).scalars().all() == [org_a]
-        assert not (await session.execute(select(model).where(model.c.org_id == org_b))).all()
-    async with check_db.transaction() as session:
-        assert not (await session.execute(select(model))).all()
-    with admin_engine.connect() as connection:
-        assert connection.execute(
-            text("SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname=:name"),
-            {"name": table},
-        ).one() == (True, True)
-        foreign = dict(
-            connection.execute(select(model).where(model.c.org_id == org_b)).mappings().one()
-        )
-    foreign["id"] = uuid4()
-    with pytest.raises(DBAPIError):
-        async with check_db.transaction(org_a) as session:
-            await runtime_actor(session, check_seeded, "worker")
-            await session.execute(insert(model).values(foreign))
-    with pytest.raises(DBAPIError):
-        async with check_db.transaction() as session:
-            await session.execute(insert(model).values(foreign))
+    await actor_context_async(session, kind=kind, token=token)
 
 
 @pytest.mark.parametrize("table", TABLES)
 @pytest.mark.parametrize("operation", ["UPDATE", "DELETE"])
 async def test_check_history_is_immutable(table, operation, check_seeded, check_db):
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(check_seeded["orgs"][0]) as session:
+        async with check_db.transaction() as session:
             statement = (
                 f'UPDATE "{table}" SET id=id' if operation == "UPDATE" else f'DELETE FROM "{table}"'
             )
@@ -485,11 +430,10 @@ async def test_check_history_is_immutable(table, operation, check_seeded, check_
 
 @pytest.mark.parametrize("kind", ["", "worker", "token", "agent"])
 async def test_check_decisions_require_human_context(kind, check_seeded, check_db):
-    org = check_seeded["orgs"][0]
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(org) as session:
+        async with check_db.transaction() as session:
             await runtime_actor(session, check_seeded, kind)
-            original = await session.get(CheckDecision, check_seeded["checks"][org]["decision"])
+            original = await session.get(CheckDecision, check_seeded["checks"]["decision"])
             values = {c.name: getattr(original, c.name) for c in CheckDecision.__table__.columns}
             values.update(id=uuid4(), revision=3, action="reopen")
             session.add(CheckDecision(**values))
@@ -506,11 +450,10 @@ async def test_check_decisions_require_human_context(kind, check_seeded, check_d
     ],
 )
 async def test_check_decision_cas_and_hash(changes, check_seeded, check_db):
-    org = check_seeded["orgs"][0]
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(org) as session:
+        async with check_db.transaction() as session:
             await runtime_actor(session, check_seeded)
-            original = await session.get(CheckDecision, check_seeded["checks"][org]["decision"])
+            original = await session.get(CheckDecision, check_seeded["checks"]["decision"])
             values = {c.name: getattr(original, c.name) for c in CheckDecision.__table__.columns}
             values.update(id=uuid4(), revision=3, action="reopen")
             values.update(changes)
@@ -519,14 +462,13 @@ async def test_check_decision_cas_and_hash(changes, check_seeded, check_db):
 
 
 async def test_check_decision_reopen_keeps_candidate_unchanged(check_seeded, check_db):
-    org = check_seeded["orgs"][0]
-    async with check_db.transaction(org) as session:
+    async with check_db.transaction() as session:
         await runtime_actor(session, check_seeded)
-        original = await session.get(CheckDecision, check_seeded["checks"][org]["decision"])
+        original = await session.get(CheckDecision, check_seeded["checks"]["decision"])
         values = {c.name: getattr(original, c.name) for c in CheckDecision.__table__.columns}
         values.update(id=uuid4(), revision=3, action="reopen")
         session.add(CheckDecision(**values))
-    async with check_db.transaction(org) as session:
+    async with check_db.transaction() as session:
         assert (
             await session.scalars(select(CheckDecision.revision).order_by(CheckDecision.revision))
         ).all() == [2, 3]
@@ -534,9 +476,8 @@ async def test_check_decision_reopen_keeps_candidate_unchanged(check_seeded, che
 
 
 async def test_check_report_closed_to_late_children(check_seeded, check_db):
-    org = check_seeded["orgs"][0]
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(org) as session:
+        async with check_db.transaction() as session:
             await runtime_actor(session, check_seeded, "worker")
             original = await session.scalar(select(CheckFindingCitation))
             values = {
@@ -550,13 +491,10 @@ async def test_check_report_closed_to_late_children(check_seeded, check_db):
 async def test_check_scope_cannot_be_granted_to_token(check_seeded, check_db):
     from app.models.entities import ApiToken
 
-    org = check_seeded["orgs"][0]
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(org) as session:
+        async with check_db.transaction() as session:
             session.add(
                 ApiToken(
-                    org_id=org,
-                    user_id=check_seeded["users"][0],
                     name="Synthetic forbidden token",
                     digest=uuid4().hex * 2,
                     scopes=["check:decide"],
@@ -568,12 +506,10 @@ async def test_check_scope_cannot_be_granted_to_token(check_seeded, check_db):
 
 async def pending_report(session, data):
     """Create a live check attempt; callers publish valid or deliberately invalid rows."""
-    org = data["orgs"][0]
     await runtime_actor(session, data, "worker")
-    original = await session.get(CheckRun, data["checks"][org]["run"])
+    original = await session.get(CheckRun, data["checks"]["run"])
     job = Job(
         id=uuid4(),
-        org_id=org,
         task_id=original.task_id,
         document_id=original.document_id,
         kind="check",
@@ -595,7 +531,7 @@ async def pending_report(session, data):
     values.update(id=uuid4(), job_id=job.id, run_id=job.run_id)
     report = CheckRun(**values)
     session.add(report)
-    return report, job
+    return (report, job)
 
 
 @pytest.mark.parametrize(
@@ -605,17 +541,12 @@ async def pending_report(session, data):
 async def test_check_publication_requires_owning_live_attempt(failure, check_seeded, check_db):
     from task_fixtures import related_task
 
-    org = check_seeded["orgs"][0]
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(org) as session:
+        async with check_db.transaction() as session:
             other_task = None
             if failure == "wrong_task":
                 other_task = await related_task(
-                    session,
-                    org,
-                    check_seeded["users"][0],
-                    check_seeded["ids"][org]["task"],
-                    name="Another synthetic task",
+                    session, check_seeded["ids"]["task"], name="Another synthetic task"
                 )
             report, job = await pending_report(session, check_seeded)
             if failure == "old_attempt":
@@ -637,7 +568,7 @@ async def test_check_publication_requires_owning_live_attempt(failure, check_see
 
 async def test_check_rejects_incomplete_coverage_at_commit(check_seeded, check_db):
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(check_seeded["orgs"][0]) as session:
+        async with check_db.transaction() as session:
             await pending_report(session, check_seeded)
             await session.flush()
     assert error.value.orig.sqlstate == "23514"
@@ -645,12 +576,11 @@ async def test_check_rejects_incomplete_coverage_at_commit(check_seeded, check_d
 
 @pytest.mark.parametrize("change", ["source", "partition", "revision"])
 async def test_check_item_must_match_fixed_response(change, check_seeded, check_db):
-    org = check_seeded["orgs"][0]
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(org) as session:
+        async with check_db.transaction() as session:
             report, _ = await pending_report(session, check_seeded)
             await session.flush()
-            original = await session.get(CheckItem, check_seeded["checks"][org]["item"])
+            original = await session.get(CheckItem, check_seeded["checks"]["item"])
             values = {c.name: getattr(original, c.name) for c in CheckItem.__table__.columns}
             values.update(id=uuid4(), report_id=report.id)
             if change == "source":
@@ -663,43 +593,20 @@ async def test_check_item_must_match_fixed_response(change, check_seeded, check_
     assert error.value.orig.sqlstate == "23514"
 
 
-@pytest.mark.parametrize("role", ["admin", "bidder", "viewer"])
-async def test_check_decision_professional_domain(role, check_seeded, check_db, admin_engine):
-    org = check_seeded["orgs"][0]
-    with admin_engine.begin() as connection:
-        connection.execute(
-            text("UPDATE memberships SET role=:role WHERE org_id=:org AND user_id=:user"),
-            {"role": role, "org": org, "user": check_seeded["users"][0]},
-        )
-    with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(org) as session:
-            await runtime_actor(session, check_seeded)
-            original = await session.get(CheckDecision, check_seeded["checks"][org]["decision"])
-            values = {c.name: getattr(original, c.name) for c in CheckDecision.__table__.columns}
-            values.update(id=uuid4(), revision=3, action="reopen")
-            session.add(CheckDecision(**values))
-    assert error.value.orig.sqlstate == "42501"
-
-
 @pytest.mark.parametrize("table", TABLES)
-async def test_check_tables_reject_same_org_cross_task(table, check_seeded, check_db):
-    """All referenced parents exist in the same org; only task binding is changed."""
+async def test_check_tables_reject_cross_task(table, check_seeded, check_db):
+    """All referenced parents exist in the installation; only task binding is changed."""
     from task_fixtures import related_task
 
-    org = check_seeded["orgs"][0]
-    original_report_id = check_seeded["checks"][org]["run"]
+    original_report_id = check_seeded["checks"]["run"]
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(org) as session:
+        async with check_db.transaction() as session:
             other_task = await related_task(
-                session,
-                org,
-                check_seeded["users"][0],
-                check_seeded["ids"][org]["task"],
-                name="Synthetic other task",
+                session, check_seeded["ids"]["task"], name="Synthetic other task"
             )
             if table == "check_decisions":
                 await runtime_actor(session, check_seeded)
-                original = await session.get(CheckDecision, check_seeded["checks"][org]["decision"])
+                original = await session.get(CheckDecision, check_seeded["checks"]["decision"])
                 values = {
                     c.name: getattr(original, c.name) for c in CheckDecision.__table__.columns
                 }
@@ -739,7 +646,7 @@ async def test_check_tables_reject_same_org_cross_task(table, check_seeded, chec
 
 
 async def copy_report_children(session, data, report, *, omit_table=None):
-    original_report_id = data["checks"][data["orgs"][0]]["run"]
+    original_report_id = data["checks"]["run"]
     remapped = {}
     for name in TABLES[1:-1]:
         if name == omit_table:
@@ -769,7 +676,7 @@ async def copy_report_children(session, data, report, *, omit_table=None):
 @pytest.mark.parametrize("key", ["item_count", "finding_count", "unassessed_count"])
 async def test_check_report_summary_matches_persisted_rows(key, check_seeded, check_db):
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(check_seeded["orgs"][0]) as session:
+        async with check_db.transaction() as session:
             report, _ = await pending_report(session, check_seeded)
             report.summary = {**report.summary, key: 100}
             await session.flush()
@@ -779,7 +686,7 @@ async def test_check_report_summary_matches_persisted_rows(key, check_seeded, ch
 
 async def test_check_certificate_mapping_cannot_be_omitted(check_seeded, check_db):
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(check_seeded["orgs"][0]) as session:
+        async with check_db.transaction() as session:
             report, _ = await pending_report(session, check_seeded)
             await session.flush()
             await copy_report_children(
@@ -788,12 +695,10 @@ async def test_check_certificate_mapping_cannot_be_omitted(check_seeded, check_d
     assert error.value.orig.sqlstate == "23514"
 
 
-@pytest.mark.parametrize(
-    "key", ["org_id", "task_id", "draft_id", "extraction_job_id", "document_id"]
-)
+@pytest.mark.parametrize("key", ["task_id", "draft_id", "extraction_job_id", "document_id"])
 async def test_check_manifest_ids_must_match_relational_columns(key, check_seeded, check_db):
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(check_seeded["orgs"][0]) as session:
+        async with check_db.transaction() as session:
             report, job = await pending_report(session, check_seeded)
             report.input_manifest = {**report.input_manifest, key: str(uuid4())}
             job.result = {
@@ -805,7 +710,7 @@ async def test_check_manifest_ids_must_match_relational_columns(key, check_seede
 
 async def test_check_ciphertext_must_be_the_submitted_snapshot(check_seeded, check_db):
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(check_seeded["orgs"][0]) as session:
+        async with check_db.transaction() as session:
             report, _ = await pending_report(session, check_seeded)
             report.encrypted_input = Secrets.for_data(Settings()).encrypt(
                 "different synthetic snapshot"
@@ -829,40 +734,31 @@ async def test_check_ciphertext_must_be_the_submitted_snapshot(check_seeded, che
 async def test_check_stale_report_rejects_direct_decision(
     change, check_seeded, check_db, admin_engine
 ):
-    org, user = check_seeded["orgs"][0], check_seeded["users"][0]
-    ids = check_seeded["checks"][org]
+    ids = check_seeded["checks"]
     with Session(admin_engine) as session, session.begin():
-        actor(session, org, user, "session")
+        actor(session, "session")
         response = session.get(ResponseItem, ids["response"])
         if change == "certificate_selection":
             session.get(TaskCertificate, ids["certificate_selection"]).active = False
         elif change == "source":
             session.execute(
-                text("UPDATE requirements SET quote='Synthetic' WHERE org_id=:org AND id=:id"),
-                {"org": org, "id": response.requirement_id},
+                text("UPDATE requirements SET quote='Synthetic' WHERE id=:id"),
+                {"id": response.requirement_id},
             )
         elif change == "redaction":
-            member = session.scalar(
-                select(Membership).where(Membership.org_id == org, Membership.user_id == user)
-            )
-            member.role = "admin"
-            session.flush()
             session.execute(
                 text(
-                    "UPDATE tasks SET model_redaction_enabled=false,model_redaction_revision=2,model_redaction_by=:user WHERE org_id=:org AND id=:id"
+                    "UPDATE tasks SET model_redaction_enabled=false,model_redaction_revision=2 WHERE id=:id"
                 ),
-                {"user": user, "org": org, "id": check_seeded["ids"][org]["task"]},
+                {"id": check_seeded["ids"]["task"]},
             )
-            member.role = "technical"
         elif change == "field_revision":
             session.get(ConfidentialField, ids["confidential_field"]).revision += 1
         elif change == "value_revision":
             session.add(
                 ConfidentialValue(
-                    org_id=org,
-                    created_by=user,
                     field_id=ids["confidential_field"],
-                    task_id=check_seeded["ids"][org]["task"],
+                    task_id=check_seeded["ids"]["task"],
                     version=2,
                     encrypted_value=Secrets.for_data(Settings()).encrypt("new-synthetic-value"),
                 )
@@ -870,12 +766,10 @@ async def test_check_stale_report_rejects_direct_decision(
         elif change == "new_field":
             session.add(
                 ConfidentialField(
-                    org_id=org,
-                    created_by=user,
                     key="another_synthetic",
                     label="Another synthetic field",
                     kind="other",
-                    scope="org",
+                    scope="library",
                 )
             )
         else:
@@ -888,28 +782,24 @@ async def test_check_stale_report_rejects_direct_decision(
                 id=uuid4(),
                 revision=previous.revision + 1,
                 state="draft",
-                confirmed_by=None,
                 confirmed_at=None,
                 reason="Synthetic reopening",
             )
             revised = ResponseCardRevision(**values)
             session.add(revised)
             session.flush()
-            card.current_revision_id, card.revision = revised.id, revised.revision
+            card.current_revision_id, card.revision = (revised.id, revised.revision)
             session.flush()
             for link in session.scalars(
                 select(CardEvidenceLink).where(CardEvidenceLink.revision_id == previous.id)
             ).all():
                 session.add(
                     CardEvidenceLink(
-                        org_id=org,
-                        card_id=card.id,
-                        revision_id=revised.id,
-                        evidence_id=link.evidence_id,
+                        card_id=card.id, revision_id=revised.id, evidence_id=link.evidence_id
                     )
                 )
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(org) as session:
+        async with check_db.transaction() as session:
             await runtime_actor(session, check_seeded)
             original = await session.get(CheckDecision, ids["decision"])
             values = {c.name: getattr(original, c.name) for c in CheckDecision.__table__.columns}
@@ -919,19 +809,17 @@ async def test_check_stale_report_rejects_direct_decision(
 
 
 async def test_check_certificate_relation_requires_actual_confirmed_link(check_seeded, check_db):
-    org = check_seeded["orgs"][0]
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(org) as session:
+        async with check_db.transaction() as session:
             report, _ = await pending_report(session, check_seeded)
             await session.flush()
             await copy_report_children(
                 session, check_seeded, report, omit_table="check_certificate_items"
             )
             original = await session.get(
-                TaskCertificate, check_seeded["checks"][org]["certificate_selection"]
+                TaskCertificate, check_seeded["checks"]["certificate_selection"]
             )
             unrelated = TaskCertificate(
-                org_id=org,
                 task_id=report.task_id,
                 certificate_id=original.certificate_id,
                 certificate_revision_id=original.certificate_revision_id,
@@ -940,7 +828,6 @@ async def test_check_certificate_relation_requires_actual_confirmed_link(check_s
             session.add(unrelated)
             await session.flush()
             certificate = CheckCertificate(
-                org_id=org,
                 task_id=report.task_id,
                 report_id=report.id,
                 task_certificate_id=unrelated.id,
@@ -953,7 +840,6 @@ async def test_check_certificate_relation_requires_actual_confirmed_link(check_s
             item = await session.scalar(select(CheckItem).where(CheckItem.report_id == report.id))
             session.add(
                 CheckCertificateItem(
-                    org_id=org,
                     task_id=report.task_id,
                     report_id=report.id,
                     certificate_id=certificate.id,
@@ -967,11 +853,10 @@ async def test_check_certificate_relation_requires_actual_confirmed_link(check_s
 
 @pytest.mark.parametrize("reason", ["", "   ", "\t\n"])
 async def test_check_decision_rejects_whitespace_only_reason(reason, check_seeded, check_db):
-    org = check_seeded["orgs"][0]
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(org) as session:
+        async with check_db.transaction() as session:
             await runtime_actor(session, check_seeded)
-            original = await session.get(CheckDecision, check_seeded["checks"][org]["decision"])
+            original = await session.get(CheckDecision, check_seeded["checks"]["decision"])
             values = {c.name: getattr(original, c.name) for c in CheckDecision.__table__.columns}
             values.update(
                 id=uuid4(),

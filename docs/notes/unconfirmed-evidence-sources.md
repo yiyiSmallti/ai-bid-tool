@@ -11,13 +11,13 @@ revision while current declarations and task selections evolve.
 Use the three `evidence source` commands in the CLI guide with an existing active
 same-task certificate snapshot that has a PDF original. The only input is that
 snapshot ID and a1-based page. An archive is always unconfirmed_source with null
-confirmed_by and false eligible_for_draft_export. No confirmation/export endpoint
+confirmed_at and false eligible_for_draft_export. No confirmation/export endpoint
 or permission is added. A replaced source is available through --history and its
 same authenticated preview ID; it is never inherited by a new selection.
 
 ## How it works
 
-Validate scope intersections and active membership before reading any parent. Join
+Validate current actor scopes before reading any parent. Join
 immutable snapshot/revision/file identities and check original length/SHA/
 descriptor. A disposable child validates the original PDF and renders the actual
 whole page at 150 DPI RGB without alpha, preserving rotation, using PyMuPDF.
@@ -32,24 +32,26 @@ The slot is released after the child is reaped, and a full pool fails with retry
 certificate selection and the snapshot and duplicate checks are repeated, so a
 selection replaced during rendering fails with `inactive_snapshot` and writes nothing.
 
-Store encrypted immutable bytes under org/{org_id}/evidence-source/{source_id}/SHA.png
+Store encrypted immutable bytes under evidence-source/{source_id}/SHA.png
 using existing Storage. Save archive/audit atomically; commit precedes response.
-Task locking plus unique(org,snapshot,page,profile) serializes duplicate requests.
+Task locking plus unique(snapshot,page,profile) serializes duplicate requests.
 A repeated source has the same ID and no object write or new creation audit; one
 already archived before the request is not read or rendered either. New page/new
 snapshot is independent. UTC output normalizes database timezone presentation.
 Active status is read from the original snapshot, not copied.
 
-Migration0009 adds NOTNULL org_id/FORCERLS and exact composite task/snapshot/certificate/
-revision/file/creator FKs. An invoker page-bounds trigger follows caller RLS; SQL
-checks enforce PNG metadata limits and permanent unconfirmed state. Runtime access
-is SELECT/INSERT only. Old-table payloads are unchanged by the additive migration.
-Source read/write intersects all task:read/certificate:read/certificate:file:read
-and live role grants. Only admin/bidder/technical create; viewers read. Old tokens
-obtain neither added scope, and no token can confirm/export.
+The `evidence_sources` parent keys in
+[40_foreign_keys.sql](../../server/migrations/baseline/40_foreign_keys.sql) bind the
+task, snapshot, certificate revision and original file. `evidence_source_page_bounds`
+in [00_functions_rubric.sql](../../server/migrations/baseline/00_functions_rubric.sql)
+checks the original page count; `source_preview_*` and `source_unconfirmed` in
+[10_tables.sql](../../server/migrations/baseline/10_tables.sql) enforce PNG metadata
+and permanent unconfirmed state. Source read/write
+requires `task:read`, `certificate:read`, `certificate:file:read` and the appropriate
+source scope. Tokens cannot confirm or export.
 
-A300second org/source/kind signed URL still requires valid authenticated identity,
-membership and scopes. Link Result.items contains exactly one source archive so
+A 300-second source/kind signed URL still requires a current authenticated identity
+and read scopes. Link Result.items contains exactly one source archive so
 the CLI can validate its PNG descriptor. Final CLI receipt has empty items. Reject
 foreign/redirect paths, bound streamed length, verify hash/PNG/dimensions before
 atomic0600 save, and never overwrite existing output or follow symlinks.
@@ -66,7 +68,7 @@ final write. Child timeout, resource exhaustion or crash returns non-retryable
 `pdf_resource_limits`; no partial image is archived. Storage succeeds before
 DB commit; a failed commit may leave an encrypted unreferenced object, retained
 for an explicitly designed later cleanup policy. Never delete historical source
-or original data to roll back; revert application behavior while retaining0009.
+or original data to roll back; revert application behavior while retaining the baseline.
 
 When verifying a browser download, check the saved file at its exact path; a
 download link alone is insufficient.
@@ -76,7 +78,6 @@ download link alone is insufficient.
 - server/app/schemas/evidence_source_contracts.py
 - server/app/services/evidence_sources.py
 - server/app/models/entities.py:EvidenceSource
-- server/migrations/versions/0009_evidence_sources.py
 - server/app/api/resources.py:evidence_source_* routes
 - cli/bid_cli/client.py:download_evidence_source and CLI/source schema entries
 - server/tests/test_evidence_sources.py, test_evidence_source_client.py,

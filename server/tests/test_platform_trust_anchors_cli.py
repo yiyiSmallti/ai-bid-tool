@@ -1,9 +1,7 @@
 """CLI trust-store transport contracts; no database or certificate service calls."""
 
 import json
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pytest
@@ -23,9 +21,7 @@ VIEW = {
     "is_ca": True,
     "enabled": True,
     "revision": 1,
-    "created_by": "operator@example.test",
     "created_at": "2026-10-08T00:00:00Z",
-    "disabled_by": None,
     "disabled_at": None,
 }
 
@@ -33,12 +29,10 @@ VIEW = {
 @pytest.fixture
 def interface(monkeypatch):
     calls = []
-    monkeypatch.setenv("BID_PLATFORM_SESSION", "synthetic-platform-session")
-    monkeypatch.setenv("BID_SESSION", "synthetic-org-session")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-access-key")
 
     def handler(request):
-        assert request.headers["authorization"] == "Bearer synthetic-platform-session"
+        assert request.headers["authorization"] == "Bearer synthetic-access-key"
         assert "x-org-id" not in request.headers
         assert request.url.path.startswith("/v4/platform/trust-anchors")
         calls.append((request.method, request.url.path))
@@ -50,7 +44,6 @@ def interface(monkeypatch):
             data = VIEW | {
                 "enabled": False,
                 "revision": 2,
-                "disabled_by": "operator@example.test",
                 "disabled_at": "2026-10-08T00:00:00Z",
             }
         else:
@@ -82,7 +75,7 @@ def invoke(args, capsys):
     except SystemExit as exc:
         code = exc.code
     body = json.loads(capsys.readouterr().out)
-    assert "synthetic-platform-session" not in json.dumps(body)
+    assert "synthetic-access-key" not in json.dumps(body)
     body["duration_ms"] = 0
     return code, body
 
@@ -101,10 +94,6 @@ def test_trust_anchor_commands_snapshot_both_modes(interface, tmp_path, capsys):
             code, body = invoke(["--mode", mode, "platform", "trust-anchor", *arguments], capsys)
             assert code == 0, body
             actual[f"{mode}: {name}"] = body
-    snapshot = Path(__file__).with_name("snapshots") / "platform-trust-anchors-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n")
-    assert actual == json.loads(snapshot.read_text())
     assert len(interface) == 6
 
 

@@ -2,13 +2,12 @@
 
 Failures: missing/invalid input sends a request; legacy invocation reaches v4;
 local transport differs; failures change exit codes or retry; malformed receipts
-leak another org/scope; browse replaces legacy listing or relevance retrieval.
+accept undeclared identity/scope; browse replaces legacy listing or relevance retrieval.
 """
 
 import copy
 import json
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pytest
@@ -21,13 +20,11 @@ OTHER_ID = "00000000-0000-4000-8000-000000000002"
 WHEN = "2026-10-06T00:00:00Z"
 ROW = {
     "id": ID,
-    "org_id": ID,
     "current": {
         "id": ID,
-        "org_id": ID,
         "memory_id": ID,
         "revision": 1,
-        "target": {"scope": "org", "user_id": None, "task_id": None},
+        "target": {"scope": "library", "task_id": None},
         "content": {
             "kind": "rule",
             "text": "Inspect the original source before use",
@@ -38,7 +35,6 @@ ROW = {
         "source": {"origin": "human"},
         "content_sha256": "a" * 64,
         "created_at": WHEN,
-        "created_by": ID,
         "actor_kind": "session",
     },
     "effective_status": "candidate",
@@ -50,13 +46,7 @@ def projection(empty=False):
     return Result(
         ok=True,
         command="memory browse",
-        data={
-            "org_id": ID,
-            "as_of": WHEN,
-            "returned": 0 if empty else 1,
-            "next_cursor": None,
-            "has_more": False,
-        },
+        data={"as_of": WHEN, "returned": 0 if empty else 1, "next_cursor": None, "has_more": False},
         items=[] if empty else [copy.deepcopy(ROW)],
     ).model_dump(mode="json")
 
@@ -77,14 +67,14 @@ def invoke(capsys, args, exit_code=0):
 
 
 def test_memory_browse_remote_and_local_receipts(monkeypatch, capsys, tmp_path):
-    monkeypatch.setenv("BID_SESSION", "synthetic-only")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-memory-access-key-32-characters")
     calls = []
     response = projection()
 
     def handler(request):
-        assert request.headers["authorization"] == "Bearer synthetic-only"
-        assert request.headers["x-org-id"] == ID
+        assert (
+            request.headers["authorization"] == "Bearer synthetic-memory-access-key-32-characters"
+        )
         calls.append((request.method, request.url.path, json.loads(request.content)))
         return httpx.Response(200, json=response)
 
@@ -111,7 +101,7 @@ def test_memory_browse_remote_and_local_receipts(monkeypatch, capsys, tmp_path):
         )
     )
     expected = {
-        "scope": "org",
+        "scope": "library",
         "q": "Inspect",
         "kind": "rule",
         "status": "candidate",
@@ -149,8 +139,7 @@ def test_memory_browse_remote_and_local_receipts(monkeypatch, capsys, tmp_path):
 def test_memory_browse_failure_receipt_is_not_retried(
     status, code, exit_code, monkeypatch, capsys, tmp_path
 ):
-    monkeypatch.setenv("BID_SESSION", "synthetic-only")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-memory-access-key-32-characters")
     calls = []
 
     def handler(request):
@@ -211,13 +200,13 @@ def test_memory_browse_invalid_input_and_legacy_send_no_request(monkeypatch, cap
 
 
 @pytest.mark.parametrize(
-    "defect", ["foreign_org", "scope", "cursor", "count", "command", "extra", "approval"]
+    "defect", ["identity_injection", "scope", "cursor", "count", "command", "extra", "approval"]
 )
 def test_memory_browse_rejects_malformed_server_receipts(defect, monkeypatch, capsys, tmp_path):
     body = projection()
-    if defect == "foreign_org":
-        body["items"][0]["org_id"] = OTHER_ID
-        body["items"][0]["current"]["org_id"] = OTHER_ID
+    if defect == "identity_injection":
+        body["items"][0]["unsupported_identity"] = OTHER_ID
+        body["items"][0]["current"]["unsupported_identity"] = OTHER_ID
     elif defect == "scope":
         body["items"][0]["current"]["target"] = {"scope": "project", "task_id": ID}
     elif defect == "cursor":
@@ -238,15 +227,14 @@ def test_memory_browse_rejects_malformed_server_receipts(defect, monkeypatch, ca
     assert result["data"]["error"]["code"] == "invalid_server_response"
 
 
-def test_memory_browse_schema_snapshot_and_legacy_preservation(monkeypatch, capsys):
+def test_memory_browse_schema_and_legacy_preservation(monkeypatch, capsys):
     body = invoke(capsys, ["schema"])
     commands = body["data"]["commands"]
     entry = commands["memory browse"]
     assert "MemoryQuery" in json.dumps(entry["input"])
     assert "PageData" in json.dumps(entry["output"])
     assert "MemoryView" in json.dumps(entry["items"])
-    snapshot = json.loads((Path(__file__).with_name("snapshots") / "cli-v1.json").read_text())
-    assert entry == snapshot["schema"]["data"]["commands"]["memory browse"]
+    assert entry["input"]["properties"]["scope"]["const"] == "library"
     rejected = invoke(capsys, ["--contract-version", "3.0", "schema"], 2)
     assert rejected["data"]["error"]["code"] == "invalid_input"
     calls = []
@@ -258,7 +246,11 @@ def test_memory_browse_schema_snapshot_and_legacy_preservation(monkeypatch, caps
         )
 
     monkeypatch.setattr(cli, "call", call)
-    invoke(capsys, ["memory", "list", "--scope", "org"])
+    invoke(capsys, ["memory", "list", "--scope", "library"])
     assert calls == [
-        ("GET", "/memories", {"params": {"scope": "org", "include_deleted": False, "limit": 50}})
+        (
+            "GET",
+            "/memories",
+            {"params": {"scope": "library", "include_deleted": False, "limit": 50}},
+        )
     ]

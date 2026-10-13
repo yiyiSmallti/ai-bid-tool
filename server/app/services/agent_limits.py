@@ -45,7 +45,6 @@ def remaining_seconds(row: AgentSession, now: datetime) -> float:
 
 def own_jobs(row: AgentSession):
     return select(AgentJobLink.job_id).where(
-        AgentJobLink.org_id == row.org_id,
         AgentJobLink.session_id == row.id,
         AgentJobLink.owned.is_(True),
     )
@@ -159,7 +158,6 @@ async def enforce(
             or quote.model != model["model"]
             or quote.version != model["adapter_version"]
             or str(quote.provider_config_id or "") != str(model.get("provider_config_id") or "")
-            or quote.platform_model_id != model.get("platform_model_id")
         ):
             raise ProviderFailure("Pinned agent model changed", code="agent_model_changed")
         if len(calls) >= limits.max_vendor_calls:
@@ -171,7 +169,7 @@ async def enforce(
 
 async def task_authority(session: AsyncSession, actor: Identity, task_id):
     """Agent work requires live task write access even when the next tool only reads."""
-    from app.services.task_workflow import access
+    from app.services.task_access import access
 
     try:
         await access(
@@ -179,7 +177,6 @@ async def task_authority(session: AsyncSession, actor: Identity, task_id):
             actor,
             task_id,
             write=True,
-            require_member=True,
             bind_context=False,
         )
     except ServiceError as error:

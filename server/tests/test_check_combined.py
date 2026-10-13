@@ -1,7 +1,7 @@
 """B09 combined-check acceptance through the public API and durable worker.
 
 The synthetic model uses ``httpx.MockTransport``.  These scenarios keep the
-semantic capability inside the normal resolver, accounting, lease and RLS
+semantic capability inside the normal resolver, accounting, lease and database
 boundaries while making every outbound string and response reproducible.
 """
 
@@ -21,40 +21,21 @@ import pytest
 from app.core.config import Settings
 from app.jobs.execution import JobExecution
 from app.models.check import CheckFinding, CheckFindingCitation, CheckItem, CheckRun
-from app.models.entities import AuditLog, Job, PlatformModel, UsageRecord, VendorCall
+from app.models.entities import AuditLog, Job, UsageRecord, VendorCall
 from app.providers.llm import OpenAICompatibleExtractor
 from app.schemas.contracts import ProviderUsage
-from app.schemas.platform_credentials import CatalogResolveTarget
 from app.services import drafts
-from app.services.platform_credentials import PlatformCredentialResolver
 from bid_cli import main as cli
-from conftest import seed_platform_credential
 from sqlalchemy import func, select, update
-from test_check import (
-    ASSESSMENT_DATE,  # noqa: F401
-    LiveCheckClient,
-    invoke_live_cli,
-    publish_draft,
-)
+from test_check import ASSESSMENT_DATE, LiveCheckClient, invoke_live_cli, publish_draft
 from test_check import check_case as check_case
-from test_response_cards import (
-    create_card,
-    create_tender,
-    phase_one_client,
-    require_action,
-    set_role,
-)
+from test_response_cards import create_card, create_tender, phase_one_client, require_action
 
 
 class SemanticVendor:
     """Answer from the exact local IDs and refs sent by the check service."""
 
-    def __init__(
-        self,
-        failures: dict[int, str] | None = None,
-        *,
-        attack: str | None = None,
-    ):
+    def __init__(self, failures: dict[int, str] | None = None, *, attack: str | None = None):
         self.requests: list[dict] = []
         self.failures = failures or {}
         self.attack = attack
@@ -81,12 +62,7 @@ class SemanticVendor:
             response_ref = f"{local}.response_text"
             if response_ref not in refs:
                 items.append(
-                    {
-                        "requirement_id": local,
-                        "status": "unknown",
-                        "citations": [],
-                        "findings": [],
-                    }
+                    {"requirement_id": local, "status": "unknown", "citations": [], "findings": []}
                 )
                 continue
             items.append(
@@ -149,75 +125,23 @@ class SemanticVendor:
         )
 
 
-def semantic_llm(
-    tmp_path,
-    vendor: SemanticVendor,
-    *,
-    org_owned: bool = True,
-    platform_model_id: str | None = None,
-    **changes,
-):
+def semantic_llm(tmp_path, vendor: SemanticVendor, **changes):
     values = {
-        "data_dir": tmp_path,
+        "data_dir": tmp_path.data_dir if isinstance(tmp_path, Settings) else tmp_path,
         "llm_provider": "openai",
         "llm_model": "synthetic-check-model",
         "llm_api_key": "synthetic-check-key",
         "llm_base_url": "https://semantic.example.test/v1",
-        "llm_batch_chars": 100_000,
+        "llm_batch_chars": 100000,
     }
-    settings = Settings(**(values | changes))
-    return OpenAICompatibleExtractor(
-        settings,
-        httpx.MockTransport(vendor),
-        org_owned=org_owned,
-        platform_model_id=platform_model_id,
-    )
-
-
-async def seed_platform(
-    admin_engine, settings: Settings, org_id: UUID, model_id: str = "semantic-paid"
-) -> None:
-    await seed_platform_credential(
-        settings,
-        name="synthetic",
-        provider="openai",
-        endpoint="https://semantic.example.test/v1",
-        key="synthetic-check-key",
-    )
-    with admin_engine.begin() as connection:
-        connection.execute(
-            PlatformModel.__table__.insert().values(
-                id=model_id,
-                capability="llm_extract",
-                provider="openai",
-                model="synthetic-check-model",
-                base_url="https://semantic.example.test/v1",
-                credential="synthetic",
-                is_default=True,
-                enabled=True,
-                reasoning=[],
-                default_reasoning=None,
-                revision=1,
-                updated_by="synthetic@example.test",
-            )
-        )
-
-
-def platform_llm(settings: Settings, vendor: SemanticVendor, model_id: str = "semantic-paid"):
-    llm = semantic_llm(
-        settings.data_dir,
-        vendor,
-        org_owned=False,
-        platform_model_id=model_id,
-        llm_api_key=None,
-    )
-    llm.model_revision = 1
-    llm.credential_resolver = PlatformCredentialResolver(settings)
-    llm.credential_target = CatalogResolveTarget(model_id=model_id, expected_model_revision=1)
-    return llm
+    if isinstance(tmp_path, Settings):
+        values.update(database_url=tmp_path.database_url, access_key=tmp_path.access_key)
+    settings = Settings(**values | changes)
+    return OpenAICompatibleExtractor(settings, httpx.MockTransport(vendor))
 
 
 def install_resolver(monkeypatch, llm):
+
     async def resolved(session, settings, transport=None, job=None):
         return llm
 
@@ -225,7 +149,7 @@ def install_resolver(monkeypatch, llm):
 
 
 async def combined_counts(case) -> dict[str, int | Decimal | None]:
-    async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
+    async with case["app"].state.db.transaction() as session:
         counts = {
             model.__tablename__: await session.scalar(select(func.count()).select_from(model))
             for model in (
@@ -253,8 +177,7 @@ def write_combined_artifact(tmp_path: Path, manifest: dict, report: dict, reques
     }
     for name, value in files.items():
         (output / name).write_text(
-            json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-            encoding="utf-8",
+            json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
         )
     report_id = report["data"]["report"]["id"]
     input_hash = report["data"]["report"]["input"]["input_hash"]
@@ -285,7 +208,7 @@ async def combined_preview(case, **changes) -> tuple[httpx.Response, dict]:
             **changes,
         },
     )
-    return response, response.json().get("data", {})
+    return (response, response.json().get("data", {}))
 
 
 async def submit_combined(case, preview: dict, **changes) -> httpx.Response:
@@ -303,20 +226,19 @@ async def submit_combined(case, preview: dict, **changes) -> httpx.Response:
 
 
 async def run_combined(case, receipt: dict) -> dict:
-    await case["app"].state.processor(case["header"]["X-Org-Id"], receipt["job_id"])
+    await case["app"].state.processor(receipt["job_id"])
     response = await case["api"].get(f"/jobs/{receipt['job_id']}", headers=case["header"])
     assert response.status_code == 200, response.text
     return response.json()["data"]
 
 
 @pytest.fixture
-async def combined_scope_case(tenants, admin_engine, tmp_path):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+async def combined_scope_case(database, admin_engine, tmp_path):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, suffix="check-scope", confirmed=True
         )
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
         disposition = await api.post(
             f"/tasks/{task}/cards/dispositions",
             headers=header,
@@ -376,10 +298,7 @@ async def test_combined_scope_only_sends_confirmed_responses(
     await scope_draft(case, response=response)
     vendor = SemanticVendor()
     install_resolver(
-        monkeypatch,
-        semantic_llm(tmp_path, vendor)
-        if response
-        else semantic_llm(tmp_path, vendor, org_owned=False),
+        monkeypatch, semantic_llm(tmp_path, vendor) if response else semantic_llm(tmp_path, vendor)
     )
     plans = []
     original_plan = JobExecution.plan
@@ -432,7 +351,7 @@ async def test_combined_scope_only_sends_confirmed_responses(
         payload = vendor.requests[0]
         assert payload["requested_requirement_ids"] == ["r3"]
         assert {row["ref"].split(".")[0] for row in payload["context"]["texts"]} == {"r3"}
-    async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
+    async with case["app"].state.db.transaction() as session:
         job_id = UUID(result["job_id"])
         for model in (VendorCall, UsageRecord):
             assert await session.scalar(
@@ -505,7 +424,7 @@ async def test_combined_nonresponse_storage_rejects_semantic_content(
     assert queued.status_code == 200, queued.text
     terminal = await run_combined(case, queued.json()["data"])
     assert terminal["status"] == "failed", terminal
-    async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
+    async with case["app"].state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(CheckRun)) == 0
 
 
@@ -522,9 +441,7 @@ async def test_combined_old_pending_scope_requires_new_preview(
     assert queued.status_code == 200, queued.text
     job_id = UUID(queued.json()["data"]["job_id"])
     before = await combined_counts(case)
-    async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
-        # The prerequisite extraction is already metered. Rejecting this check
-        # must neither erase that call nor add any new admission or usage.
+    async with case["app"].state.db.transaction() as session:
         prerequisite_calls = (await session.scalars(select(VendorCall))).all()
         assert len(prerequisite_calls) == 1
         assert prerequisite_calls[0].job_id == UUID(case["extraction"])
@@ -542,7 +459,7 @@ async def test_combined_old_pending_scope_requires_new_preview(
     after = await combined_counts(case)
     for key in ("vendor_calls", "usage_records"):
         assert after[key] == before[key], key
-    async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
+    async with case["app"].state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(CheckRun)) == 0
         for model in (VendorCall, UsageRecord):
             assert (
@@ -571,8 +488,8 @@ async def test_combined_old_pending_scope_requires_new_preview(
     )
 
 
-async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation(
-    check_case, tenants, tmp_path, monkeypatch
+async def test_combined_dry_run_worker_verified_outcomes_and_usage(
+    check_case, database, tmp_path, monkeypatch
 ):
     case = check_case
     vendor = SemanticVendor()
@@ -591,7 +508,7 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
     assert preview["mode"] == "combined"
     assert preview["semantic_items"] == 2
     assert preview["admission_blocker"] is None
-    assert preview["provider_source"] == "org"
+    assert preview["provider_source"] == "local"
     assert preview["reasoning"] == "high"
     mismatch = await case["api"].post(
         f"/tasks/{case['task']}/checks",
@@ -656,10 +573,7 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
         and (row["semantic_citations"] == [])
         for row in deterministic
     )
-    assert (
-        await case["api"].get(f"/checks/{result['report_id']}", headers=case["headers"][1])
-    ).status_code == 404
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         usage = list(
             (
                 await session.scalars(
@@ -668,7 +582,6 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
             ).all()
         )
         assert len(usage) == 1
-        assert usage[0].platform_model_id is None
         stored = await session.get(CheckRun, UUID(result["report_id"]))
         assert stored is not None
         fixed_manifest = stored.input_manifest
@@ -697,15 +610,12 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
     assert case["header"]["Authorization"].removeprefix("Bearer ") not in artifact_text
     assert case["task"] in artifact_text and result["report_id"] in artifact_text
     cli_settings = Settings(data_dir=tmp_path)
-    monkeypatch.setenv("BID_SESSION", case["header"]["Authorization"].removeprefix("Bearer "))
-    monkeypatch.setenv("BID_ORG", case["header"]["X-Org-Id"])
+    monkeypatch.setenv("BID_ACCESS_KEY", case["header"]["Authorization"].removeprefix("Bearer "))
     monkeypatch.setattr(
-        cli,
-        "Client",
-        lambda mode, server, state: LiveCheckClient(mode, server, state, cli_settings),
+        cli, "Client", lambda mode, server: LiveCheckClient(mode, server, cli_settings)
     )
     for mode in ("remote", "local"):
-        common = ["--mode", mode, "--state", str(tmp_path / f"combined-{mode}.enc")]
+        common = ["--mode", mode]
         run_code, run_body = await asyncio.to_thread(
             invoke_live_cli,
             [
@@ -750,7 +660,6 @@ async def test_combined_requires_redaction_without_calls_or_writes(
     )
     assert changed.status_code == 200, changed.text
     before = await combined_counts(case)
-
     response, preview = await combined_preview(case)
     assert response.status_code == 200, response.text
     assert preview["admission_blocker"] == "redaction_required"
@@ -761,12 +670,7 @@ async def test_combined_requires_redaction_without_calls_or_writes(
     assert vendor.requests == [] and await combined_counts(case) == before
 
 
-@pytest.mark.parametrize(
-    "replacement",
-    [
-        {"llm_model": "synthetic-check-model-v2"},
-    ],
-)
+@pytest.mark.parametrize("replacement", [{"llm_model": "synthetic-check-model-v2"}])
 async def test_combined_preview_rejects_model_identity_change(
     check_case, tmp_path, monkeypatch, replacement
 ):
@@ -831,11 +735,11 @@ async def test_combined_rejects_adversarial_conclusions_at_publication(
 
 @pytest.mark.parametrize("failure", ["refused", "truncated"])
 async def test_combined_later_batch_failure_keeps_one_bill_and_partial_report(
-    check_case, tenants, tmp_path, monkeypatch, failure
+    check_case, database, tmp_path, monkeypatch, failure
 ):
     case = check_case
     vendor = SemanticVendor({2: failure})
-    llm = semantic_llm(tmp_path, vendor, llm_batch_chars=1_200)
+    llm = semantic_llm(tmp_path, vendor, llm_batch_chars=1200)
     install_resolver(monkeypatch, llm)
     response, preview = await combined_preview(case)
     assert response.status_code == 200, response.text
@@ -850,7 +754,7 @@ async def test_combined_later_batch_failure_keeps_one_bill_and_partial_report(
         "provider_refused" if failure == "refused" else "provider_output_truncated"
     )
     assert [request["requested_requirement_ids"] for request in vendor.requests] == [["r2"], ["r3"]]
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         usages = list(
             (
                 await session.scalars(
@@ -870,18 +774,12 @@ async def test_combined_later_batch_failure_keeps_one_bill_and_partial_report(
 
 
 @pytest.mark.parametrize("failure", ["refused", "truncated"])
-async def test_combined_platform_failure_settles_exactly_once(
-    check_case, tenants, tmp_path, monkeypatch, admin_engine, failure
+async def test_combined_local_provider_failure_settles_exactly_once(
+    check_case, database, tmp_path, monkeypatch, admin_engine, failure
 ):
     case = check_case
-    model_id = "semantic-paid"
-    await seed_platform(
-        admin_engine, case["app"].state.processor.settings, tenants["orgs"][0], model_id
-    )
     vendor = SemanticVendor({1: failure})
-    install_resolver(
-        monkeypatch, platform_llm(case["app"].state.processor.settings, vendor, model_id)
-    )
+    install_resolver(monkeypatch, semantic_llm(case["app"].state.processor.settings, vendor))
     before = await combined_counts(case)
     response, preview = await combined_preview(case)
     assert response.status_code == 200, response.text
@@ -897,7 +795,7 @@ async def test_combined_platform_failure_settles_exactly_once(
     )
     assert len(vendor.requests) == 1
     job_id = UUID(queued.json()["data"]["job_id"])
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         usage = list(
             (await session.scalars(select(UsageRecord).where(UsageRecord.job_id == job_id))).all()
         )
@@ -907,19 +805,15 @@ async def test_combined_platform_failure_settles_exactly_once(
         assert len(usage) == len(calls) == 1
         job = await session.get(Job, job_id)
         assert job is not None and job.run_id is not None
-        run_id, call_id = job.run_id, calls[0].id
+        run_id, call_id = (job.run_id, calls[0].id)
         replay = ProviderUsage(
             **{key: getattr(usage[0], key) for key in ProviderUsage.model_fields}
         )
     execution = JobExecution(
-        case["app"].state.processor.settings,
-        case["app"].state.db,
-        tenants["orgs"][0],
-        job_id,
-        run_id,
+        case["app"].state.processor.settings, case["app"].state.db, job_id, run_id
     )
     await execution.complete(call_id, replay)
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         assert (
             await session.scalar(
                 select(func.count()).select_from(UsageRecord).where(UsageRecord.job_id == job_id)
@@ -929,7 +823,7 @@ async def test_combined_platform_failure_settles_exactly_once(
 
 
 async def test_combined_hard_stop_overrides_call_limit_and_blocks_publication(
-    check_case, tenants, tmp_path, monkeypatch
+    check_case, database, tmp_path, monkeypatch
 ):
     case = check_case
     vendor = SemanticVendor()
@@ -949,7 +843,7 @@ async def test_combined_hard_stop_overrides_call_limit_and_blocks_publication(
     assert terminal["status"] == "failed", terminal
     assert terminal["error"]["code"] == "job_heartbeat_failed"
     assert vendor.requests == []
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         assert (
             await session.scalar(
                 select(func.count()).select_from(CheckRun).where(CheckRun.job_id == job_id)
@@ -965,12 +859,11 @@ async def test_combined_hard_stop_overrides_call_limit_and_blocks_publication(
 
 
 async def test_combined_per_call_admission_stop_after_submit_publishes_fixed_partial(
-    check_case, tenants, tmp_path, monkeypatch, admin_engine
+    check_case, database, tmp_path, monkeypatch, admin_engine
 ):
     case = check_case
-    await seed_platform(admin_engine, case["app"].state.processor.settings, tenants["orgs"][0])
     vendor = SemanticVendor()
-    install_resolver(monkeypatch, platform_llm(case["app"].state.processor.settings, vendor))
+    install_resolver(monkeypatch, semantic_llm(case["app"].state.processor.settings, vendor))
     response, preview = await combined_preview(case)
     assert response.status_code == 200, response.text
     assert preview["admission_blocker"] is None
@@ -988,7 +881,7 @@ async def test_combined_per_call_admission_stop_after_submit_publishes_fixed_par
     result = terminal["result"]
     assert result["completion"] == "partial" and result["stop_reason"] == reason
     assert vendor.requests == []
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         assert (
             await session.scalar(
                 select(func.count()).select_from(UsageRecord).where(UsageRecord.job_id == job_id)
@@ -1010,18 +903,18 @@ async def test_combined_per_call_admission_stop_after_submit_publishes_fixed_par
 
 
 async def test_combined_input_change_during_call_retains_usage_without_publication(
-    check_case, tenants, tmp_path, monkeypatch
+    check_case, database, tmp_path, monkeypatch
 ):
     case = check_case
     vendor = SemanticVendor()
-    vendor.entered, vendor.release = asyncio.Event(), asyncio.Event()
+    vendor.entered, vendor.release = (asyncio.Event(), asyncio.Event())
     install_resolver(monkeypatch, semantic_llm(tmp_path, vendor))
     response, preview = await combined_preview(case)
     assert response.status_code == 200, response.text
     queued = await submit_combined(case, preview)
     assert queued.status_code == 200, queued.text
     job_id = queued.json()["data"]["job_id"]
-    running = asyncio.create_task(case["app"].state.processor(case["header"]["X-Org-Id"], job_id))
+    running = asyncio.create_task(case["app"].state.processor(job_id))
     await asyncio.wait_for(vendor.entered.wait(), 5)
     changed = await case["api"].put(
         f"/tasks/{case['task']}/model-redaction",
@@ -1034,7 +927,7 @@ async def test_combined_input_change_during_call_retains_usage_without_publicati
     status = (await case["api"].get(f"/jobs/{job_id}", headers=case["header"])).json()["data"]
     assert status["status"] == "failed", status
     assert status["error"]["code"] == "check_input_changed"
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         assert (
             await session.scalar(
                 select(func.count())
@@ -1060,7 +953,7 @@ async def test_combined_input_change_during_call_retains_usage_without_publicati
 
 
 async def test_combined_accounting_failure_marks_call_unknown_and_blocks_publication(
-    check_case, tenants, tmp_path, monkeypatch
+    check_case, database, tmp_path, monkeypatch
 ):
     case = check_case
     vendor = SemanticVendor()
@@ -1079,7 +972,7 @@ async def test_combined_accounting_failure_marks_call_unknown_and_blocks_publica
     assert terminal["status"] == "failed", terminal
     assert terminal["error"]["code"] == "usage_accounting_failed"
     assert len(vendor.requests) == 1
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         calls = list(
             (await session.scalars(select(VendorCall).where(VendorCall.job_id == job_id))).all()
         )
@@ -1099,23 +992,21 @@ async def test_combined_accounting_failure_marks_call_unknown_and_blocks_publica
 
 
 async def test_combined_changed_run_takeover_retains_late_usage_and_fences_old_attempt(
-    check_case, tenants, tmp_path, monkeypatch
+    check_case, database, tmp_path, monkeypatch
 ):
     case = check_case
     vendor = SemanticVendor()
-    vendor.entered, vendor.release = asyncio.Event(), asyncio.Event()
+    vendor.entered, vendor.release = (asyncio.Event(), asyncio.Event())
     install_resolver(monkeypatch, semantic_llm(tmp_path, vendor))
     response, preview = await combined_preview(case)
     assert response.status_code == 200, response.text
     queued = await submit_combined(case, preview)
     assert queued.status_code == 200, queued.text
     job_id = UUID(queued.json()["data"]["job_id"])
-    running = asyncio.create_task(
-        case["app"].state.processor(case["header"]["X-Org-Id"], str(job_id))
-    )
+    running = asyncio.create_task(case["app"].state.processor(str(job_id)))
     await asyncio.wait_for(vendor.entered.wait(), 5)
     takeover_run = uuid4()
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         job = await session.get(Job, job_id)
         assert job is not None and job.run_id is not None
         old_run = job.run_id
@@ -1123,7 +1014,7 @@ async def test_combined_changed_run_takeover_retains_late_usage_and_fences_old_a
         job.lease_until = datetime.now(UTC) + timedelta(minutes=5)
     vendor.release.set()
     await running
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         job = await session.get(Job, job_id)
         assert job is not None
         assert job.status == "running" and job.run_id == takeover_run
@@ -1144,18 +1035,18 @@ async def test_combined_changed_run_takeover_retains_late_usage_and_fences_old_a
 
 
 async def test_combined_cancelled_call_is_settled_once_and_cannot_publish(
-    check_case, tenants, tmp_path, monkeypatch
+    check_case, database, tmp_path, monkeypatch
 ):
     case = check_case
     vendor = SemanticVendor()
-    vendor.entered, vendor.release = asyncio.Event(), asyncio.Event()
+    vendor.entered, vendor.release = (asyncio.Event(), asyncio.Event())
     install_resolver(monkeypatch, semantic_llm(tmp_path, vendor))
     response, preview = await combined_preview(case)
     assert response.status_code == 200, response.text
     queued = await submit_combined(case, preview)
     assert queued.status_code == 200, queued.text
     job_id = queued.json()["data"]["job_id"]
-    running = asyncio.create_task(case["app"].state.processor(case["header"]["X-Org-Id"], job_id))
+    running = asyncio.create_task(case["app"].state.processor(job_id))
     await asyncio.wait_for(vendor.entered.wait(), 5)
     cancelled = await case["api"].post(f"/jobs/{job_id}/cancel", headers=case["header"])
     assert cancelled.status_code == 200, cancelled.text
@@ -1163,7 +1054,7 @@ async def test_combined_cancelled_call_is_settled_once_and_cannot_publish(
     await running
     status = (await case["api"].get(f"/jobs/{job_id}", headers=case["header"])).json()["data"]
     assert status["status"] == "cancelled"
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         assert (
             await session.scalar(
                 select(func.count())
@@ -1189,19 +1080,19 @@ async def test_combined_cancelled_call_is_settled_once_and_cannot_publish(
 
 
 async def test_combined_expired_attempt_bills_response_but_old_run_cannot_publish(
-    check_case, tenants, tmp_path, monkeypatch
+    check_case, database, tmp_path, monkeypatch
 ):
     case = check_case
     vendor = SemanticVendor()
-    vendor.entered, vendor.release = asyncio.Event(), asyncio.Event()
+    vendor.entered, vendor.release = (asyncio.Event(), asyncio.Event())
     install_resolver(monkeypatch, semantic_llm(tmp_path, vendor))
     response, preview = await combined_preview(case)
     assert response.status_code == 200, response.text
     queued = await submit_combined(case, preview)
     job_id = queued.json()["data"]["job_id"]
-    running = asyncio.create_task(case["app"].state.processor(case["header"]["X-Org-Id"], job_id))
+    running = asyncio.create_task(case["app"].state.processor(job_id))
     await asyncio.wait_for(vendor.entered.wait(), 5)
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         await session.execute(
             update(Job)
             .where(Job.id == UUID(job_id))
@@ -1209,7 +1100,7 @@ async def test_combined_expired_attempt_bills_response_but_old_run_cannot_publis
         )
     vendor.release.set()
     await running
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         assert (
             await session.scalar(
                 select(func.count())

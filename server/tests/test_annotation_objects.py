@@ -5,7 +5,7 @@ must retain a delayed delivery in the same transaction, and cleanup must be
 idempotent for absent or uploaded bytes. A current live attempt and every committed
 rendition remain intact. An expired or superseded run cannot delete a committed
 winner. Early delivery reschedules after grace without requeuing cancelled render.
-Foreign-org or forged keys never cause reads/deletes. Clock advancement is explicit
+Forged keys never cause reads/deletes. Clock advancement is explicit
 and test-local; no bucket scan, provider call or fabricated material is involved.
 
 The full API/PostgreSQL paths require the isolated external test fixture. This
@@ -35,8 +35,8 @@ class WorkerKilled(BaseException):
     """Simulate disappearance outside Processor's ordinary failure recovery."""
 
 
-def _exists(storage, org, key):
-    return storage.path(org, key).is_file()
+def _exists(storage, key):
+    return storage.path(key).is_file()
 
 
 def _record(name, value):
@@ -44,8 +44,8 @@ def _record(name, value):
     (ARTIFACT / f"{name}.json").write_text(json.dumps(value, sort_keys=True, indent=2) + "\n")
 
 
-async def ledger(app, org, job_id):
-    async with app.state.db.transaction(org) as session:
+async def ledger(app, job_id):
+    async with app.state.db.transaction() as session:
         job = await session.get(Job, UUID(job_id))
         assert job is not None
         return job.result[annotation_objects.FIELD], job.status, job.run_id, job.lease_until
@@ -58,64 +58,63 @@ def set_clock(monkeypatch, now):
     monkeypatch.setattr(annotation_objects, "_clock", clock)
 
 
-async def crash_after_stage(api, app, auth, task, target, org, monkeypatch, *, uploaded):
+async def crash_after_stage(api, app, auth, task, target, monkeypatch, *, uploaded):
     _, _, accepted = await preview_submit(api, auth, task, target)
     storage = app.state.processor.storage
     original_put = storage.put
     captured = {}
 
-    async def put(org_id, key, content):
-        if "/screenshots/" in key:
+    async def put(key, content):
+        if key.startswith("screenshots/"):
             captured.update(key=key, image_sha256=hashlib.sha256(content).hexdigest())
             if uploaded:
-                await original_put(org_id, key, content)
+                await original_put(key, content)
             raise WorkerKilled()
-        await original_put(org_id, key, content)
+        await original_put(key, content)
 
-    async def lost_finally(storage, org_id, key):
+    async def lost_finally(storage, key):
         # A dead process cannot execute the ordinary best-effort finally cleanup.
         return None
 
     monkeypatch.setattr(storage, "put", put)
     monkeypatch.setattr(annotation_jobs, "discard", lost_finally)
     with pytest.raises(WorkerKilled):
-        await app.state.processor(str(org), accepted["job_id"])
-    descriptors, status, run_id, _ = await ledger(app, org, accepted["job_id"])
+        await app.state.processor(accepted["job_id"])
+    descriptors, status, run_id, _ = await ledger(app, accepted["job_id"])
     assert status == "running" and len(descriptors) == 1
     staged = descriptors[0]
     assert staged["key"] == captured["key"] and staged["image_sha256"] == captured["image_sha256"]
     assert UUID(staged["run_id"]) == run_id
-    assert app.state.queue.annotation_cleanups == [(str(org), accepted["job_id"], 300)]
-    assert await asyncio.to_thread(_exists, storage, org, staged["key"]) is uploaded
+    assert app.state.queue.annotation_cleanups == [(accepted["job_id"], 300)]
+    assert await asyncio.to_thread(_exists, storage, staged["key"]) is uploaded
     return accepted["job_id"], staged
 
 
 @pytest.mark.parametrize("uploaded", [False, True])
 async def test_crash_before_or_after_upload_reconciles_only_saved_attempt(
-    tenants, tmp_path, monkeypatch, uploaded
+    database, tmp_path, monkeypatch, uploaded
 ):
     configure_renderer(monkeypatch)
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        task, _, _, _, target = await seed_annotation(api, app, headers[0], tmp_path)
-        org = tenants["orgs"][0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        task, _, _, _, target = await seed_annotation(api, app, headers, tmp_path)
         job_id, staged = await crash_after_stage(
-            api, app, headers[0], task, target, org, monkeypatch, uploaded=uploaded
+            api, app, headers, task, target, monkeypatch, uploaded=uploaded
         )
-        cancelled = await api.post(f"/v4/jobs/{job_id}/cancel", headers=headers[0])
+        cancelled = await api.post(f"/v4/jobs/{job_id}/cancel", headers=headers)
         assert cancelled.status_code == 200, cancelled.text
         calls = list(app.state.queue.calls)
         created = datetime.fromisoformat(staged["created_at"])
         set_clock(monkeypatch, created + timedelta(seconds=annotation_objects.GRACE_SECONDS - 1))
-        early = await annotation_objects.reconcile(app.state.processor, org, UUID(job_id))
+        early = await annotation_objects.reconcile(app.state.processor, UUID(job_id))
         assert early == {"deleted": 0, "retained": 0, "pending": 1}
-        assert await asyncio.to_thread(_exists, app.state.storage, org, staged["key"]) is uploaded
+        assert await asyncio.to_thread(_exists, app.state.storage, staged["key"]) is uploaded
         set_clock(monkeypatch, created + timedelta(seconds=annotation_objects.GRACE_SECONDS + 1))
-        result = await annotation_objects.reconcile(app.state.processor, org, UUID(job_id))
+        result = await annotation_objects.reconcile(app.state.processor, UUID(job_id))
         assert result == {"deleted": 1, "retained": 0, "pending": 0}
-        assert not await asyncio.to_thread(_exists, app.state.storage, org, staged["key"])
-        assert (await ledger(app, org, job_id))[1] == "cancelled"
+        assert not await asyncio.to_thread(_exists, app.state.storage, staged["key"])
+        assert (await ledger(app, job_id))[1] == "cancelled"
         assert app.state.queue.calls == calls
-        assert await annotation_objects.reconcile(app.state.processor, org, UUID(job_id)) == result
+        assert await annotation_objects.reconcile(app.state.processor, UUID(job_id)) == result
         await asyncio.to_thread(
             _record,
             f"crash-{'after' if uploaded else 'before'}-put",
@@ -132,38 +131,36 @@ async def test_crash_before_or_after_upload_reconciles_only_saved_attempt(
 
 
 async def test_live_same_run_is_not_deleted_and_only_cleanup_is_rescheduled(
-    tenants, tmp_path, monkeypatch
+    database, tmp_path, monkeypatch
 ):
     configure_renderer(monkeypatch)
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        task, _, _, _, target = await seed_annotation(api, app, headers[0], tmp_path)
-        org = tenants["orgs"][0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        task, _, _, _, target = await seed_annotation(api, app, headers, tmp_path)
         job_id, staged = await crash_after_stage(
-            api, app, headers[0], task, target, org, monkeypatch, uploaded=True
+            api, app, headers, task, target, monkeypatch, uploaded=True
         )
-        _, _, _, lease = await ledger(app, org, job_id)
+        _, _, _, lease = await ledger(app, job_id)
         now = datetime.fromisoformat(staged["created_at"]) + timedelta(seconds=301)
         assert lease > now
         set_clock(monkeypatch, now)
         calls = list(app.state.queue.calls)
-        result = await annotation_objects.reconcile(app.state.processor, org, UUID(job_id))
+        result = await annotation_objects.reconcile(app.state.processor, UUID(job_id))
         assert result == {"deleted": 0, "retained": 0, "pending": 1}
-        assert await asyncio.to_thread(_exists, app.state.storage, org, staged["key"])
+        assert await asyncio.to_thread(_exists, app.state.storage, staged["key"])
         assert app.state.queue.calls == calls and len(app.state.queue.annotation_cleanups) == 2
 
 
 @pytest.mark.parametrize("fence", ["expired", "superseded"])
 async def test_expired_or_superseded_run_allows_orphan_cleanup(
-    tenants, tmp_path, monkeypatch, admin_engine, fence
+    database, tmp_path, monkeypatch, admin_engine, fence
 ):
     configure_renderer(monkeypatch)
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        task, _, _, _, target = await seed_annotation(api, app, headers[0], tmp_path)
-        org = tenants["orgs"][0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        task, _, _, _, target = await seed_annotation(api, app, headers, tmp_path)
         job_id, staged = await crash_after_stage(
-            api, app, headers[0], task, target, org, monkeypatch, uploaded=True
+            api, app, headers, task, target, monkeypatch, uploaded=True
         )
-        _, _, old_run, lease = await ledger(app, org, job_id)
+        _, _, old_run, lease = await ledger(app, job_id)
         if fence == "expired":
             now = lease + timedelta(seconds=1)
         else:
@@ -174,30 +171,29 @@ async def test_expired_or_superseded_run_allows_orphan_cleanup(
                 )
             now = datetime.fromisoformat(staged["created_at"]) + timedelta(seconds=301)
         set_clock(monkeypatch, now)
-        result = await annotation_objects.reconcile(app.state.processor, org, UUID(job_id))
+        result = await annotation_objects.reconcile(app.state.processor, UUID(job_id))
         assert result == {"deleted": 1, "retained": 0, "pending": 0}
-        assert not await asyncio.to_thread(_exists, app.state.storage, org, staged["key"])
+        assert not await asyncio.to_thread(_exists, app.state.storage, staged["key"])
         assert UUID(staged["run_id"]) == old_run
 
 
 async def test_committed_rendition_survives_cleanup_and_ledger_is_private(
-    tenants, tmp_path, monkeypatch
+    database, tmp_path, monkeypatch
 ):
     configure_renderer(monkeypatch)
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        task, _, _, _, target = await seed_annotation(api, app, headers[0], tmp_path)
-        org = tenants["orgs"][0]
-        _, _, accepted = await preview_submit(api, headers[0], task, target)
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        task, _, _, _, target = await seed_annotation(api, app, headers, tmp_path)
+        _, _, accepted = await preview_submit(api, headers, task, target)
         job_id = accepted["job_id"]
-        await app.state.processor(str(org), job_id)
-        descriptors, status, _, _ = await ledger(app, org, job_id)
+        await app.state.processor(job_id)
+        descriptors, status, _, _ = await ledger(app, job_id)
         assert status == "succeeded" and len(descriptors) == 1
         staged = descriptors[0]
         set_clock(monkeypatch, datetime.fromisoformat(staged["created_at"]) + timedelta(days=1))
-        result = await annotation_objects.reconcile(app.state.processor, org, UUID(job_id))
+        result = await annotation_objects.reconcile(app.state.processor, UUID(job_id))
         assert result == {"deleted": 0, "retained": 1, "pending": 0}
-        assert await asyncio.to_thread(_exists, app.state.storage, org, staged["key"])
-        public = await api.get(f"/v4/jobs/{job_id}", headers=headers[0])
+        assert await asyncio.to_thread(_exists, app.state.storage, staged["key"])
+        public = await api.get(f"/v4/jobs/{job_id}", headers=headers)
         assert public.status_code == 200
         assert annotation_objects.FIELD not in public.json()["data"]["result"]
         assert staged["key"] not in public.text
@@ -215,25 +211,18 @@ async def test_committed_rendition_survives_cleanup_and_ledger_is_private(
         )
 
 
-async def test_wrong_org_and_forged_saved_key_never_delete_objects(
-    tenants, tmp_path, monkeypatch, admin_engine
-):
+async def test_forged_saved_key_never_delete_objects(database, tmp_path, monkeypatch, admin_engine):
     configure_renderer(monkeypatch)
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        task, _, _, _, target = await seed_annotation(api, app, headers[0], tmp_path)
-        org = tenants["orgs"][0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        task, _, _, _, target = await seed_annotation(api, app, headers, tmp_path)
         job_id, staged = await crash_after_stage(
-            api, app, headers[0], task, target, org, monkeypatch, uploaded=True
+            api, app, headers, task, target, monkeypatch, uploaded=True
         )
-        cancelled = await api.post(f"/v4/jobs/{job_id}/cancel", headers=headers[0])
+        cancelled = await api.post(f"/v4/jobs/{job_id}/cancel", headers=headers)
         assert cancelled.status_code == 200
         set_clock(monkeypatch, datetime.fromisoformat(staged["created_at"]) + timedelta(days=1))
-        result = await annotation_objects.reconcile(
-            app.state.processor, tenants["orgs"][1], UUID(job_id)
-        )
-        assert result == {"deleted": 0, "retained": 0, "pending": 0}
-        assert await asyncio.to_thread(_exists, app.state.storage, org, staged["key"])
-        forged = {**staged, "key": staged["key"].replace(str(org), str(tenants["orgs"][1]))}
+        assert await asyncio.to_thread(_exists, app.state.storage, staged["key"])
+        forged = {**staged, "key": staged["key"].replace(staged["asset_id"], str(uuid4()))}
         with admin_engine.begin() as connection:
             connection.execute(
                 text(
@@ -242,19 +231,18 @@ async def test_wrong_org_and_forged_saved_key_never_delete_objects(
                 {"ledger": json.dumps([forged]), "id": UUID(job_id)},
             )
         with pytest.raises(ServiceError) as error:
-            await annotation_objects.reconcile(app.state.processor, org, UUID(job_id))
+            await annotation_objects.reconcile(app.state.processor, UUID(job_id))
         assert error.value.code == "annotation_cleanup_ledger"
-        assert await asyncio.to_thread(_exists, app.state.storage, org, staged["key"])
+        assert await asyncio.to_thread(_exists, app.state.storage, staged["key"])
 
 
 async def test_cleanup_delivery_failure_rolls_back_stage_before_upload(
-    tenants, tmp_path, monkeypatch
+    database, tmp_path, monkeypatch
 ):
     configure_renderer(monkeypatch)
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        task, _, _, _, target = await seed_annotation(api, app, headers[0], tmp_path)
-        org = tenants["orgs"][0]
-        _, _, accepted = await preview_submit(api, headers[0], task, target)
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        task, _, _, _, target = await seed_annotation(api, app, headers, tmp_path)
+        _, _, accepted = await preview_submit(api, headers, task, target)
         job_id = accepted["job_id"]
 
         async def failed_delivery(*args, **kwargs):
@@ -268,17 +256,17 @@ async def test_cleanup_delivery_failure_rolls_back_stage_before_upload(
         uploaded = []
         original_put = app.state.storage.put
 
-        async def put(org_id, key, content):
-            if "/screenshots/" in key:
+        async def put(key, content):
+            if key.startswith("screenshots/"):
                 uploaded.append(key)
-            await original_put(org_id, key, content)
+            await original_put(key, content)
 
         monkeypatch.setattr(app.state.storage, "put", put)
         from app.providers.base import ProviderFailure
 
         with pytest.raises(ProviderFailure):
-            await app.state.processor(str(org), job_id)
-        async with app.state.db.transaction(org) as session:
+            await app.state.processor(job_id)
+        async with app.state.db.transaction() as session:
             job = await session.get(Job, UUID(job_id))
             assert job is not None and annotation_objects.FIELD not in job.result
             assert job.status == "queued"
@@ -286,31 +274,30 @@ async def test_cleanup_delivery_failure_rolls_back_stage_before_upload(
 
 
 async def test_upload_finishing_after_cancellation_requeues_only_object_cleanup(
-    tenants, tmp_path, monkeypatch
+    database, tmp_path, monkeypatch
 ):
     configure_renderer(monkeypatch)
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        org = tenants["orgs"][0]
-        task, _, _, _, target = await seed_annotation(api, app, headers[0], tmp_path)
-        _, _, accepted = await preview_submit(api, headers[0], task, target)
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        task, _, _, _, target = await seed_annotation(api, app, headers, tmp_path)
+        _, _, accepted = await preview_submit(api, headers, task, target)
         original = app.state.storage.put
         started, finish, completed = asyncio.Event(), asyncio.Event(), asyncio.Event()
 
-        async def delayed(org_id, key, content):
-            if "/screenshots/" in key:
+        async def delayed(key, content):
+            if key.startswith("screenshots/"):
                 started.set()
                 await finish.wait()
-            await original(org_id, key, content)
+            await original(key, content)
             completed.set()
 
         monkeypatch.setattr(app.state.storage, "put", delayed)
-        worker = asyncio.create_task(app.state.processor(str(org), accepted["job_id"]))
+        worker = asyncio.create_task(app.state.processor(accepted["job_id"]))
         try:
             await asyncio.wait_for(started.wait(), 3)
-            cancelled = await api.post(f"/v4/jobs/{accepted['job_id']}/cancel", headers=headers[0])
+            cancelled = await api.post(f"/v4/jobs/{accepted['job_id']}/cancel", headers=headers)
             assert cancelled.status_code == 200, cancelled.text
             await asyncio.wait_for(worker, 2)
-            descriptors, status, _, _ = await ledger(app, org, accepted["job_id"])
+            descriptors, status, _, _ = await ledger(app, accepted["job_id"])
             assert status == "cancelled"
             finish.set()
             await asyncio.wait_for(completed.wait(), 2)
@@ -324,13 +311,11 @@ async def test_upload_finishing_after_cancellation_requeues_only_object_cleanup(
                 datetime.fromisoformat(descriptors[0]["created_at"]) + timedelta(seconds=601),
             )
             receipt = await annotation_objects.reconcile(
-                app.state.processor, org, UUID(accepted["job_id"])
+                app.state.processor, UUID(accepted["job_id"])
             )
             assert receipt["deleted"] == 1
-            assert not await asyncio.to_thread(
-                _exists, app.state.storage, org, descriptors[0]["key"]
-            )
-            assert (await api.get(f"/v4/jobs/{accepted['job_id']}", headers=headers[0])).json()[
+            assert not await asyncio.to_thread(_exists, app.state.storage, descriptors[0]["key"])
+            assert (await api.get(f"/v4/jobs/{accepted['job_id']}", headers=headers)).json()[
                 "data"
             ]["status"] == "cancelled"
         finally:

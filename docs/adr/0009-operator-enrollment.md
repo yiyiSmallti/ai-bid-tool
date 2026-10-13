@@ -4,7 +4,7 @@ kind: adr
 
 # 0009 Browser enrollment of allowlisted platform operators
 
-Date: 2026-10-08. Status: **accepted.**
+Date: 2026-10-08. Status: superseded by 0012.
 
 ## Context
 
@@ -20,8 +20,8 @@ the outbound-service credential table.
 
 ## Decision
 
-The approved [operator enrollment contract](../plan/operator-enrollment.md) defines
-the flow, payloads, error codes and acceptance.
+The approved operator enrollment contract is retained in version-control history.
+[ADR 0012](0012-single-user-installation.md) removes its browser and command entry points.
 
 - Amend ADR 0001's deployment-only TOTP sentence: operator identities remain
   exclusively in `BID_PLATFORM_ADMIN_EMAILS`, while each TOTP factor may come from

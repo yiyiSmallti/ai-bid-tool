@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, ref } from "vue";
-import { errorText, orgRequest } from "../org.js";
+import { request } from "../api.js";
+import { errorText } from "../org.js";
 // A Word original shown from its parsed blocks: paragraphs in order, table cells regrouped
 // into tables. It is the structure citations point to, not Word's page layout.
 const props = defineProps({ modelValue: Boolean, title: { type: String, required: true }, documentId: { type: String, required: true }, highlight: { type: String, default: "" } });
@@ -21,7 +22,7 @@ const sections = computed(() => (chunks.value ?? []).map((chunk) => {
 async function opened() {
   error.value = "";
   try {
-    if (!chunks.value) chunks.value = (await orgRequest("GET", `/documents/${props.documentId}/chunks`)).items;
+    if (!chunks.value) chunks.value = (await request("GET", `/documents/${props.documentId}/chunks`)).items;
     await nextTick();
     body.value?.querySelector(".is-target")?.scrollIntoView({ block: "center" });
   } catch (exc) { error.value = errorText(exc); }

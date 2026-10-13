@@ -1,7 +1,8 @@
 <script setup>
 import { View } from "@element-plus/icons-vue";
 import { onBeforeUnmount, ref } from "vue";
-import { errorText, orgRequest } from "../org.js";
+import { request } from "../api.js";
+import { errorText } from "../org.js";
 import PageViewer from "./PageViewer.vue";
 // The released DOCX is converted to PDF once per file; pages appear when conversion succeeds.
 const props = defineProps({ exportId: { type: String, required: true }, title: { type: String, required: true } });
@@ -16,7 +17,7 @@ function applyState(next) {
 async function poll() {
   clearTimeout(timer);
   try {
-    const next = (await orgRequest("GET", `/exports/${props.exportId}/preview`)).data;
+    const next = (await request("GET", `/exports/${props.exportId}/preview`)).data;
     if (!active) return;
     applyState(next);
     if (["queued", "running"].includes(next.status)) timer = setTimeout(poll, 2000);
@@ -25,18 +26,18 @@ async function poll() {
 async function start(retry = false) {
   busy.value = true; error.value = "";
   try {
-    const next = (await orgRequest("POST", `/exports/${props.exportId}/preview${retry ? "?retry=true" : ""}`)).data;
+    const next = (await request("POST", `/exports/${props.exportId}/preview${retry ? "?retry=true" : ""}`)).data;
     applyState(next);
     if (["queued", "running"].includes(next.status)) poll();
   } catch (exc) { busy.value = false; error.value = errorText(exc); }
 }
-const load = (page, zoom) => orgRequest("GET", `/exports/${props.exportId}/preview/pages/${page}?zoom=${zoom}`, undefined, { binary: true });
+const load = (page, zoom) => request("GET", `/exports/${props.exportId}/preview/pages/${page}?zoom=${zoom}`, undefined, { binary: true });
 onBeforeUnmount(() => { active = false; clearTimeout(timer); });
 </script>
 <template>
   <span class="export-preview">
     <el-button size="small" type="primary" plain :icon="View" :loading="busy" :disabled="state?.status === 'invalidated'" :aria-label="`在线预览：${title}`" @click="start()">{{ busy ? "正在生成预览…" : "在线预览" }}</el-button>
-    <span v-if="state?.status === 'invalidated'" class="error" role="alert">导出内容或发起人权限已变化，在线预览已失效，请重新生成并发布。</span>
+    <span v-if="state?.status === 'invalidated'" class="error" role="alert">导出内容已变化，在线预览已失效，请重新生成并发布。</span>
     <template v-if="state?.status === 'failed'">
       <span class="error">预览生成失败：{{ state.error?.message ?? "未知原因" }}</span>
       <el-button size="small" link type="primary" @click="start(true)">重试</el-button>

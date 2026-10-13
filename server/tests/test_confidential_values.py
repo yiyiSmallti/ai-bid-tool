@@ -5,7 +5,7 @@ Failure modes identified before implementation:
 * Leak: a registered value appears in a vendor request, a preview/manifest, a job
   result, an audit row, a list/history view, an export run manifest or a CLI result.
 * Over-reach: a token or agent sets or reveals a value, directly or through a token
-  scope; technical/viewer roles reveal a value; org B reads or writes org A's fields.
+  scope.
 * Wrong fill: the export fills a stale value after it changed, fills nothing silently
   when a value is missing, or leaves a raw `{{secret.key}}` in the delivered file.
 * Bad references: a card names a field that does not exist or is archived, a model
@@ -21,12 +21,11 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
-from app.models.confidential import ConfidentialField, ConfidentialValue
 from app.models.entities import ApiToken, AuditLog
 from app.models.exports import ExportRun
 from app.models.response_cards import CardGenerationRun
-from sqlalchemy import select, text
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from test_api import create_document, run_job
 from test_card_generation import (
@@ -47,7 +46,6 @@ from test_response_cards import (
     labelled_pdf,
     phase_one_client,
     require_action,
-    set_role,
 )
 
 CONTACT = "Synthetic Contact Zhang"
@@ -97,16 +95,16 @@ async def release(api, header, run):
 
 
 async def test_export_fills_fixed_values_and_blocks_missing_or_changed(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
-        contact = await add_field(api, header, "contact_name", "联系人", "contact", "org")
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
+        contact = await add_field(api, header, "contact_name", "联系人", "contact", "library")
         total = await add_field(api, header, "bid_total", "投标总价", "amount", "task")
         await set_value(api, header, contact, CONTACT)
         text_with_fields = "联系人：{{secret.contact_name}}，投标总价 {{secret.bid_total}} 元。"
         task, body, _, _ = await complete_inputs(
-            api, app, header, tenants, admin_engine, tmp_path, texts={0: text_with_fields}
+            api, app, header, database, admin_engine, tmp_path, texts={0: text_with_fields}
         )
         # The task value is still missing: a final section is blocked, a review copy is not.
         preview = await api.post(
@@ -142,7 +140,7 @@ async def test_export_fills_fixed_values_and_blocks_missing_or_changed(
         assert CONTACT in final_xml and NEW_TOTAL in final_xml
         assert BID_TOTAL not in final_xml and "{{secret." not in final_xml
 
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             stored = json.dumps(
                 [row.manifest for row in (await session.scalars(select(ExportRun))).all()]
                 + [row.details for row in (await session.scalars(select(AuditLog))).all()],
@@ -168,11 +166,11 @@ async def test_export_fills_fixed_values_and_blocks_missing_or_changed(
 
 
 async def test_declaration_naming_a_field_is_filled_in_the_export_excerpt(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
-        bank = await add_field(api, header, "bank_account", "银行账号", "bank_account", "org")
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
+        bank = await add_field(api, header, "bank_account", "银行账号", "bank_account", "library")
         await set_value(api, header, bank, "6222 0212 3456 7890 123")
         refused = await api.post(
             "/resources/profiles",
@@ -182,7 +180,7 @@ async def test_declaration_naming_a_field_is_filled_in_the_export_excerpt(
         assert refused.json()["data"]["error"]["code"] == "unknown_confidential_field"
         wording = "开户账号：{{secret.bank_account}}"
         task, body, _, _ = await complete_inputs(
-            api, app, header, tenants, admin_engine, tmp_path, profile_wording=wording
+            api, app, header, database, admin_engine, tmp_path, profile_wording=wording
         )
         preview = await api.post(
             f"/tasks/{task}/export-runs", headers=header, json={**body, "dry_run": True}
@@ -199,7 +197,7 @@ async def test_declaration_naming_a_field_is_filled_in_the_export_excerpt(
 
 @pytest.mark.parametrize("enabled", [True, False])
 async def test_drafting_sends_placeholders_never_registered_values(
-    tenants, tmp_path, admin_engine, enabled
+    database, tmp_path, admin_engine, enabled
 ):
     registered = {
         "contact_person": ("contact", SENSITIVE["contact"]),
@@ -207,20 +205,20 @@ async def test_drafting_sends_placeholders_never_registered_values(
         "legal_identity": ("identity", SENSITIVE["identity"]),
         "bank_account": ("bank_account", SENSITIVE["bank_account"]),
     }
-    async with drafting_client(tenants, tmp_path, lines=SENSITIVE_LINES) as (
+    async with drafting_client(database, tmp_path, lines=SENSITIVE_LINES) as (
         api,
         app,
         headers,
         vendor,
         _,
     ):
-        header = headers[0]
+        header = headers
         task, document = await create_document(api, header, labelled_pdf(SENSITIVE_LINES))
         await run_job(api, app, header, document, "parse")
         extraction, status = await run_job(api, app, header, document, "extract")
         assert status["status"] == "succeeded", status
         for key, (kind, value) in registered.items():
-            field = await add_field(api, header, key, key.replace("_", " "), kind, "org")
+            field = await add_field(api, header, key, key.replace("_", " "), kind, "library")
             await set_value(api, header, field, value)
         total = await add_field(api, header, "bid_total", "投标总价", "amount", "task")
         await set_value(api, header, total, SENSITIVE["amount"], task)
@@ -262,7 +260,7 @@ async def test_drafting_sends_placeholders_never_registered_values(
         for value in [v for _, v in registered.values()] + [SENSITIVE["amount"]]:
             assert value not in json.dumps(preview, ensure_ascii=False)
             assert value not in json.dumps(terminal, ensure_ascii=False)
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             run = await session.scalar(select(CardGenerationRun))
             assert run is not None
             assert all(v not in run.encrypted_input for _, v in registered.values())
@@ -281,12 +279,10 @@ async def test_drafting_sends_placeholders_never_registered_values(
         )
 
 
-async def test_permissions_isolation_and_card_references(tenants, tmp_path, admin_engine):
-    org_a, org_b = tenants["orgs"]
-    user_a = tenants["users"][0]
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header, other = headers
-        field = await add_field(api, header, "bank_account", "银行账号", "bank_account", "org")
+async def test_human_token_permissions_and_card_references(database, tmp_path, admin_engine):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
+        field = await add_field(api, header, "bank_account", "银行账号", "bank_account", "library")
         value = await set_value(api, header, field, "6222 0212 3456 7890 123")
         assert value["tail"] == "0123" and value["status"] == "filled"
         task, _, extraction, requirements = await create_tender(
@@ -297,7 +293,7 @@ async def test_permissions_isolation_and_card_references(tenants, tmp_path, admi
         duplicate = await api.post(
             "/confidential-fields",
             headers=header,
-            json={"key": "bank_account", "label": "x", "kind": "other", "scope": "org"},
+            json={"key": "bank_account", "label": "x", "kind": "other", "scope": "library"},
         )
         assert duplicate.json()["data"]["error"]["code"] == "confidential_key_exists"
         misplaced = await api.post(
@@ -318,24 +314,11 @@ async def test_permissions_isolation_and_card_references(tenants, tmp_path, admi
         }
         assert "6222" not in listed.text
 
-        # Org B sees nothing of org A and cannot address A's rows.
-        assert (await api.get("/confidential-fields", headers=other)).json()["items"] == []
-        for method, path, payload in (
-            ("post", f"/confidential-fields/{field['id']}/revisions", {"expected_revision": 1, "archived": True}),
-            ("post", f"/confidential-fields/{field['id']}/values", {"value": "9"}),
-            ("get", f"/confidential-fields/{field['id']}/values", None),
-            ("post", f"/confidential-values/{value['value_id']}/reveal", None),
-        ):  # fmt: skip
-            response = await getattr(api, method)(
-                path, headers=other, **({"json": payload} if payload else {})
-            )
-            assert response.status_code == 404, (path, response.text)
-
         # Tokens can list and name fields but never set or reveal, nor be granted to.
         agent = await token_header(api, header, scopes=["confidential:read", "task:read"])
         assert (await api.get("/confidential-fields", headers=agent)).status_code == 200
         for path, payload in (
-            ("/confidential-fields", {"key": "x_y", "label": "x", "kind": "other", "scope": "org"}),
+            ("/confidential-fields", {"key": "x_y", "label": "x", "kind": "other", "scope": "library"}),
             (f"/confidential-fields/{field['id']}/values", {"value": "9"}),
             (f"/confidential-values/{value['value_id']}/reveal", {}),
         ):  # fmt: skip
@@ -351,18 +334,14 @@ async def test_permissions_isolation_and_card_references(tenants, tmp_path, admi
         )
         assert granted.json()["data"]["error"]["code"] == "forbidden_scopes"
         with pytest.raises(IntegrityError), Session(admin_engine) as session, session.begin():
-            token = session.scalar(select(ApiToken).where(ApiToken.org_id == org_a))
+            token = session.scalar(select(ApiToken))
             assert token is not None
             token.scopes = [*token.scopes, "confidential:write"]
 
-        # Only admin and bidder may reveal; every reveal is audited without the value.
-        set_role(admin_engine, org_a, user_a, "technical")
-        denied = await api.post(f"/confidential-values/{value['value_id']}/reveal", headers=header)
-        assert denied.status_code == 403
-        set_role(admin_engine, org_a, user_a, "bidder")
+        # Human reveals are audited without retaining the value.
         shown = await api.post(f"/confidential-values/{value['value_id']}/reveal", headers=header)
         assert shown.json()["data"]["value"] == "6222 0212 3456 7890 123"
-        async with app.state.db.transaction(org_a) as session:
+        async with app.state.db.transaction() as session:
             audits = (
                 await session.scalars(
                     select(AuditLog).where(AuditLog.action.like("confidential.%"))
@@ -394,12 +373,10 @@ async def test_permissions_isolation_and_card_references(tenants, tmp_path, admi
             header,
             task,
             extraction,
-            # A technical requirement, so the technical reviewer below owns the decision.
             requirements[2],
             {**content, "response_text": "账号 {{secret.bank_account}}，报价 [REDACTED_AMOUNT]"},
         )
         submitted = await require_action(api, header, card, "submit")
-        set_role(admin_engine, org_a, user_a, "technical")
         refused = await card_action(
             api,
             header,
@@ -410,31 +387,3 @@ async def test_permissions_isolation_and_card_references(tenants, tmp_path, admi
             reason="Synthetic review.",
         )
         assert refused.json()["data"]["error"]["code"] == "redacted_placeholder_in_response"
-
-        # Tables fail closed without an org and reject rows for another org.
-        async with app.state.db.transaction() as session:
-            for model in (ConfidentialField, ConfidentialValue):
-                assert (await session.scalars(select(model))).all() == []
-        with pytest.raises(DBAPIError) as error:
-            async with app.state.db.transaction(org_a) as session:
-                session.add(
-                    ConfidentialField(
-                        org_id=org_b,
-                        created_by=tenants["users"][1],
-                        key="foreign",
-                        label="x",
-                        kind="other",
-                        scope="org",
-                    )
-                )
-        assert error.value.orig.sqlstate == "42501"  # pyright: ignore[reportAttributeAccessIssue]
-        with admin_engine.connect() as connection:
-            for table in ("confidential_fields", "confidential_values"):
-                flags = connection.execute(
-                    text(
-                        "SELECT relrowsecurity, relforcerowsecurity FROM pg_class "
-                        "WHERE relname=:table"
-                    ),
-                    {"table": table},
-                ).one()
-                assert flags.relrowsecurity and flags.relforcerowsecurity

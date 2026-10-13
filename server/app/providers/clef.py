@@ -129,8 +129,8 @@ def telemetry_id(value):
 
 
 class HTTPClefProvider:
-    def __init__(self, config, settings, *, transport=None, remaining_calls=40):
-        self.config, self.settings, self.transport = config, settings, transport
+    def __init__(self, config, settings, db, *, transport=None, remaining_calls=40):
+        self.config, self.settings, self.db, self.transport = config, settings, db, transport
         self.remaining_calls = remaining_calls
         self.attempts = 0
         self.before_send: Callable[[], Awaitable[None]] | None = None
@@ -145,7 +145,6 @@ class HTTPClefProvider:
                 provider="cloudflare",
                 model=MODEL,
                 version=VERSION,
-                platform_model_id="bid-review-clef",
                 request_sha256=hashlib.sha256(encoded).hexdigest(),
                 image_count=len(redacted_images),
             ),
@@ -160,7 +159,7 @@ class HTTPClefProvider:
         try:
             try:
                 workers, gateway = await platform_clef.resolve_credentials(
-                    self.settings, self.config
+                    self.settings, self.db, self.config
                 )
             except (ServiceError, ProviderFailure):
                 raise ProviderFailure(
@@ -230,7 +229,6 @@ class HTTPClefProvider:
                 tokens=reported_tokens,
                 input_tokens=reported_tokens,
                 duration_ms=int((time.monotonic() - started) * 1000),
-                platform_model_id="bid-review-clef",
                 capability="vision",
                 image_count=len(redacted_images),
                 image_input_sha256=request.images[0].sha256,

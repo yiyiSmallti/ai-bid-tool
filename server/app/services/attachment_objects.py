@@ -19,8 +19,8 @@ SUFFIX = re.compile(
 )
 
 
-async def reconcile(session, org_id: UUID, records: list[dict], storage):
-    """Operator-only helper over a bounded stage manifest in an org DB context.
+async def reconcile(session, records: list[dict], storage):
+    """Local maintenance helper over a bounded stage manifest.
 
     A stage record is an attempted immutable put, not proof of business commit or
     even proof that the put completed. Reconcile both stores before retry/recovery.
@@ -33,8 +33,7 @@ async def reconcile(session, org_id: UUID, records: list[dict], storage):
     output = []
     for record in records:
         key, expected = record.get("key", ""), record.get("sha256", "")
-        prefix = f"org/{org_id}/"
-        match = SUFFIX.fullmatch(key[len(prefix) :]) if key.startswith(prefix) else None
+        match = SUFFIX.fullmatch(key)
         if match is None:
             raise ServiceError(
                 "invalid_reconciliation_record", "Stage record has invalid scope", 422, 2
@@ -59,11 +58,9 @@ async def reconcile(session, org_id: UUID, records: list[dict], storage):
                 else (ScreenshotRendition, ScreenshotRendition.id)
             )
         )
-        persisted = await session.scalar(
-            select(model.storage_key).where(model.org_id == org_id, column == identifier)
-        )
+        persisted = await session.scalar(select(model.storage_key).where(column == identifier))
         try:
-            content = await storage.read_bounded(org_id, key, FILE_BYTE_LIMIT)
+            content = await storage.read_bounded(key, FILE_BYTE_LIMIT)
             intact = hashlib.sha256(content).hexdigest() == expected
             status = (
                 ("committed" if persisted == key else "retained_orphan")

@@ -2,7 +2,8 @@
 import { Reading } from "@element-plus/icons-vue";
 import { onBeforeUnmount, ref, watch } from "vue";
 import { loadAuthorizedImage } from "../annotation.js";
-import { errorText, orgRequest } from "../org.js";
+import { request } from "../api.js";
+import { errorText } from "../org.js";
 import DocxViewer from "./DocxViewer.vue";
 import PageViewer from "./PageViewer.vue";
 // A tender original opened in place: PDF pages as images, Word as its parsed structure.
@@ -20,21 +21,21 @@ const document = ref(null), pdfOpen = ref(false), docxOpen = ref(false), busy = 
 let controller = null;
 function clear() { controller?.abort(); controller = null; document.value = null; pdfOpen.value = false; docxOpen.value = false; }
 watch(() => [props.documentId, JSON.stringify(props.source)], clear);
-window.addEventListener("bid:org-reset", clear);
-onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", clear); });
+window.addEventListener("bid:session-reset", clear);
+onBeforeUnmount(() => { clear(); window.removeEventListener("bid:session-reset", clear); });
 async function open() {
   busy.value = true; error.value = "";
   try {
     if (props.source) { controller?.abort(); controller = new AbortController(); document.value = { page_count: 1 }; pdfOpen.value = true; return; }
     if (!props.documentId) throw new Error("请选择文档或受权图片来源");
-    document.value ??= (await orgRequest("GET", `/documents/${props.documentId}`)).data;
+    document.value ??= (await request("GET", `/documents/${props.documentId}`)).data;
     // Page count and citation mode are known once the document is parsed.
     if (document.value.citation_mode === "block") docxOpen.value = true;
     else if (document.value.page_count) pdfOpen.value = true;
     else { document.value = null; throw new Error("文档解析完成后才能在线预览"); }
   } catch (exc) { error.value = errorText(exc); } finally { busy.value = false; }
 }
-const load = (page, zoom, signal) => props.source ? loadAuthorizedImage(props.source, signal) : orgRequest("GET", `/documents/${props.documentId}/pages/${page}/preview?zoom=${zoom}`, undefined, { binary: true, signal });
+const load = (page, zoom, signal) => props.source ? loadAuthorizedImage(props.source, signal) : request("GET", `/documents/${props.documentId}/pages/${page}/preview?zoom=${zoom}`, undefined, { binary: true, signal });
 </script>
 <template>
   <el-button :size="size" :icon="Reading" :loading="busy" :aria-label="`${label}：${name}`" @click="open">{{ label }}</el-button>

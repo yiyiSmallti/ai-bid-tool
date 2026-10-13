@@ -58,27 +58,21 @@ async def access(session, actor, *, task_id=None):
     actor = await memory_access(session, actor, "memory:read")
     actor.require("memory:retrieve")
     if task_id is not None:
-        from app.services.task_workflow import access as task_access
+        from app.services.task_access import access as task_access
 
         await task_access(session, actor, task_id)
         task = await session.get(Task, task_id)
-        if task is None or task.org_id != actor.org_id:
+        if task is None:
             raise not_found()
     return actor
 
 
-async def epoch(session, org_id, *, lock=False) -> int:
+async def epoch(session, *, lock=False) -> int:
     if lock:
         await session.execute(
-            insert(MemoryScopeEpoch)
-            .values(org_id=org_id, scope="org", owner_id=org_id, epoch=0)
-            .on_conflict_do_nothing()
+            insert(MemoryScopeEpoch).values(scope="library", epoch=0).on_conflict_do_nothing()
         )
-    query = select(MemoryScopeEpoch.epoch).where(
-        MemoryScopeEpoch.org_id == org_id,
-        MemoryScopeEpoch.scope == "org",
-        MemoryScopeEpoch.owner_id == org_id,
-    )
+    query = select(MemoryScopeEpoch.epoch).where(MemoryScopeEpoch.scope == "library")
     row = await session.scalar(query.with_for_update(read=True) if lock else query)
     return row if row is not None else 0
 
@@ -96,12 +90,10 @@ def public_manifest(output: MemoryRetrievalOutput) -> dict:
 
 def prompt_context(output: MemoryRetrievalOutput) -> MemoryPromptContext:
     if output.data.retrieval_id is None:
-        # Previews are never admitted; this stable zero ID only sizes their wire input.
         retrieval_id = UUID(int=0)
     else:
         retrieval_id = output.data.retrieval_id
     return MemoryPromptContext(
-        org_id=output.data.org_id,
         retrieval_id=retrieval_id,
         manifest_sha256=output.data.manifest_sha256,
         rules=[item for item in output.items if item.kind == "rule"],
@@ -110,43 +102,32 @@ def prompt_context(output: MemoryRetrievalOutput) -> MemoryPromptContext:
 
 
 async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, preview=False):
-    if body.org_id != actor.org_id:
-        raise not_found()
-    if body.scopes != ["org"]:
-        raise ServiceError(
-            "memory_scope_unavailable", "Only organization memory is enabled", 403, 4
-        )
-    if body.user_id is not None:
-        raise ServiceError("memory_scope_unavailable", "User memory is unavailable", 403, 4)
+    if body.scopes != ["library"]:
+        raise ServiceError("memory_scope_unavailable", "Only library memory is enabled", 403, 4)
     if body.mode != "keyword":
         raise ServiceError(
             "embedding_unconfigured", "Embedding retrieval is not configured", 403, 4
         )
     actor = await access(session, actor, task_id=body.task_id)
-    current_epoch = await epoch(session, actor.org_id, lock=not preview)
+    current_epoch = await epoch(session, lock=not preview)
     now = datetime.now(UTC)
     base = (
         select(MemoryRevision)
         .join(
             Memory,
             and_(
-                Memory.org_id == MemoryRevision.org_id,
                 Memory.current_revision_id == MemoryRevision.id,
                 Memory.id == MemoryRevision.memory_id,
             ),
         )
         .where(
-            Memory.org_id == actor.org_id,
-            MemoryRevision.org_id == actor.org_id,
-            Memory.scope == "org",
-            Memory.user_id.is_(None),
+            Memory.scope == "library",
             Memory.task_id.is_(None),
             Memory.deleted_at.is_(None),
             MemoryRevision.status == "active",
             or_(MemoryRevision.expires_at.is_(None), MemoryRevision.expires_at > now),
         )
     )
-    # Expiry covers the entire accessible active set, even zero-score/top-k omissions.
     active = base.subquery()
     valid_until = await session.scalar(select(func.min(active.c.expires_at)))
     query = normalize(body.query)
@@ -168,8 +149,6 @@ async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, pr
     if len(rows) > MAX_SEARCH_ROWS:
         raise ServiceError("memory_query_limit", "Narrow the memory query", 422, 2)
     scored = []
-    # Literal JSON keys: bound keys render as different parameters in SELECT and GROUP BY,
-    # which PostgreSQL then refuses as ungrouped columns.
     kind = active.c.content.op("->>")(literal_column("'kind'"))
     conflict_key = active.c.content.op("->>")(literal_column("'conflict_key'"))
     conflict_rows = await session.execute(
@@ -197,7 +176,7 @@ async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, pr
                 memory_id=row.memory_id,
                 revision_id=row.id,
                 revision=row.revision,
-                scope="org",
+                scope="library",
                 content_sha256=row.content_sha256,
                 sent_sha256=text_hash(content["text"]),
                 expires_at=row.expires_at,
@@ -211,7 +190,7 @@ async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, pr
             matched_by=matched,
         )
         scored.append(hit)
-    omitted, selected, chars = [], [], 0
+    omitted, selected, chars = ([], [], 0)
     scored.sort(
         key=lambda hit: (
             hit.kind != "rule",
@@ -222,7 +201,7 @@ async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, pr
     )
     for hit in scored:
         reason = None
-        if conflicts[(hit.kind, hit.conflict_key)] > 1:
+        if conflicts[hit.kind, hit.conflict_key] > 1:
             reason = "same_priority_conflict"
         elif len(selected) >= body.top_k:
             reason = "top_k_limit"
@@ -240,15 +219,10 @@ async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, pr
             hit.rank = len(selected) + 1
             selected.append(hit)
             chars += len(hit.text)
-    epochs = [
-        MemoryEpochView(
-            org_id=actor.org_id, scope="org", owner_id=actor.org_id, epoch=current_epoch
-        )
-    ]
+    epochs = [MemoryEpochView(scope="library", epoch=current_epoch)]
     query_hash = digest(body.model_dump(mode="json"))
     manifest_hash = digest(
         {
-            "org_id": str(actor.org_id),
             "query_sha256": query_hash,
             "epochs": [x.model_dump(mode="json") for x in epochs],
             "valid_until": valid_until.isoformat() if valid_until else None,
@@ -262,13 +236,12 @@ async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, pr
     output = MemoryRetrievalOutput(
         data=MemoryRetrievalData(
             retrieval_id=None,
-            org_id=actor.org_id,
             mode="keyword",
             retrieval_version=RETRIEVAL_VERSION,
             priority_version=PRIORITY_VERSION,
             query_sha256=query_hash,
             manifest_sha256=manifest_hash,
-            scopes=["org"],
+            scopes=["library"],
             epochs=epochs,
             valid_until=valid_until,
             omitted=omitted,
@@ -285,23 +258,16 @@ async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, pr
 
 
 async def persist(session, actor, body, output, settings, *, all_hits=None):
-    await require_current(session, actor.org_id, public_manifest(output))
+    await require_current(session, public_manifest(output))
     rid = uuid4()
-    output.data.retrieval_id, output.data.preview = rid, False
+    output.data.retrieval_id, output.data.preview = (rid, False)
     crypto = Secrets.for_data(settings)
 
     def encrypted(payload):
-        return crypto.encrypt(
-            json.dumps(
-                {"org_id": str(actor.org_id), "id": str(rid), "payload": payload},
-                ensure_ascii=False,
-            )
-        )
+        return crypto.encrypt(json.dumps({"id": str(rid), "payload": payload}, ensure_ascii=False))
 
     row = MemoryRetrieval(
         id=rid,
-        org_id=actor.org_id,
-        user_id=actor.user_id,
         task_id=body.task_id,
         actor_token_id=actor.token_id,
         data=output.data.model_dump(mode="json"),
@@ -323,7 +289,7 @@ async def persist(session, actor, body, output, settings, *, all_hits=None):
                         memory_id=revision.memory_id,
                         revision_id=revision.id,
                         revision=revision.revision,
-                        scope="org",
+                        scope="library",
                         content_sha256=revision.content_sha256,
                         sent_sha256=text_hash(revision.content["text"]),
                         expires_at=revision.expires_at,
@@ -342,7 +308,6 @@ async def persist(session, actor, body, output, settings, *, all_hits=None):
         session.add(
             MemoryRetrievalItem(
                 id=uuid4(),
-                org_id=actor.org_id,
                 retrieval_id=rid,
                 memory_id=ref.memory_id,
                 memory_revision_id=ref.revision_id,
@@ -368,13 +333,12 @@ async def persist(session, actor, body, output, settings, *, all_hits=None):
     await session.flush()
 
 
-def manifest_epoch_changed(manifest, org_id, current):
+def manifest_epoch_changed(manifest, current):
     return (
         manifest.get("retrieval_version") != RETRIEVAL_VERSION
         or manifest.get("priority_version") != PRIORITY_VERSION
         or manifest.get("sanitizer_version") != SANITIZER_VERSION
-        or manifest.get("epochs")
-        != [{"org_id": str(org_id), "scope": "org", "owner_id": str(org_id), "epoch": current}]
+        or (manifest.get("epochs") != [{"scope": "library", "epoch": current}])
         or bool(
             manifest.get("valid_until")
             and datetime.fromisoformat(manifest["valid_until"]) <= datetime.now(UTC)
@@ -383,7 +347,7 @@ def manifest_epoch_changed(manifest, org_id, current):
 
 
 async def stale_reasons(
-    session, org_id, manifest, *, lock=False
+    session, manifest, *, lock=False
 ) -> list[Literal["epoch_changed", "expired", "policy_changed", "memory_changed"]]:
     if not manifest:
         return ["policy_changed"]
@@ -394,10 +358,8 @@ async def stale_reasons(
         or manifest.get("sanitizer_version", SANITIZER_VERSION) != SANITIZER_VERSION
     ):
         reasons.append("policy_changed")
-    current = await epoch(session, org_id, lock=lock)
-    if manifest.get("epochs") != [
-        {"org_id": str(org_id), "scope": "org", "owner_id": str(org_id), "epoch": current}
-    ]:
+    current = await epoch(session, lock=lock)
+    if manifest.get("epochs") != [{"scope": "library", "epoch": current}]:
         reasons.append("epoch_changed")
     expiry = manifest.get("valid_until")
     if expiry and datetime.fromisoformat(expiry) <= datetime.now(UTC):
@@ -406,7 +368,6 @@ async def stale_reasons(
         memory = await session.get(Memory, UUID(ref["memory_id"]))
         if (
             memory is None
-            or memory.org_id != org_id
             or memory.deleted_at is not None
             or str(memory.current_revision_id) != ref["revision_id"]
         ):
@@ -415,8 +376,8 @@ async def stale_reasons(
     return list(dict.fromkeys(reasons))
 
 
-async def require_current(session, org_id, manifest, *, lock=False):
-    if await stale_reasons(session, org_id, manifest, lock=lock):
+async def require_current(session, manifest, *, lock=False):
+    if await stale_reasons(session, manifest, lock=lock):
         raise ServiceError(
             "memory_input_changed", "Fixed memory input changed; submit again", 409, 4
         )
@@ -424,14 +385,14 @@ async def require_current(session, org_id, manifest, *, lock=False):
 
 async def show_retrieval(session, actor, retrieval_id, settings):
     row = await session.get(MemoryRetrieval, retrieval_id)
-    if row is None or row.org_id != actor.org_id:
+    if row is None:
         raise not_found()
     await access(session, actor, task_id=row.task_id)
     envelope = json.loads(Secrets.for_data(settings).decrypt(row.encrypted_snapshot))
-    if envelope["org_id"] != str(actor.org_id) or envelope["id"] != str(row.id):
+    if envelope["id"] != str(row.id):
         raise ServiceError("memory_snapshot_invalid", "Memory snapshot binding is invalid", 500, 4)
     output = MemoryRetrievalOutput.model_validate(envelope["payload"])
-    reasons = await stale_reasons(session, actor.org_id, public_manifest(output))
+    reasons = await stale_reasons(session, public_manifest(output))
     output.data.stale_reasons = reasons
     output.data.currently_valid = not reasons
     return output
@@ -445,11 +406,11 @@ async def used(session, actor, job_id, storage):
     actor.require("card:read")
     actor.require("task:read")
     job = await session.get(Job, job_id)
-    if job is None or job.org_id != actor.org_id:
+    if job is None:
         raise not_found()
     rows = await session.scalars(
         select(MemoryCallInput)
-        .where(MemoryCallInput.org_id == actor.org_id, MemoryCallInput.job_id == job_id)
+        .where(MemoryCallInput.job_id == job_id)
         .order_by(MemoryCallInput.created_at, MemoryCallInput.id)
     )
     return MemoryCallData(
@@ -478,17 +439,13 @@ async def attach_call(session, execution, call_id, payload):
             "memory_snapshot_invalid", "Sent memory text does not match its fixed hash", 409, 4
         )
     submitted = job.result["submission"]
-    await require_current(session, job.org_id, submitted["input_manifest"]["memory"], lock=True)
-    if (
-        context.org_id != job.org_id
-        or str(context.retrieval_id) != submitted["memory_retrieval_id"]
-    ):
+    await require_current(session, submitted["input_manifest"]["memory"], lock=True)
+    if str(context.retrieval_id) != submitted["memory_retrieval_id"]:
         raise not_found()
     row_id = uuid4()
     session.add(
         MemoryCallInput(
             id=row_id,
-            org_id=job.org_id,
             task_id=job.task_id,
             job_id=job.id,
             run_id=execution.run_id,
@@ -503,20 +460,20 @@ async def attach_call(session, execution, call_id, payload):
             prompt_version=submitted["input_manifest"]["prompt_version"],
             state="admitted",
             encrypted_prompt=Secrets.for_data(execution.settings).encrypt(
-                json.dumps(
-                    {"org_id": str(job.org_id), "id": str(row_id), "payload": payload["body"]},
-                    ensure_ascii=False,
-                )
+                json.dumps({"id": str(row_id), "payload": payload["body"]}, ensure_ascii=False)
             ),
         )
     )
     actor = Identity(
-        UUID(submitted["actor_user_id"]),
-        job.org_id,
-        set(submitted["scopes"]),
-        "viewer",
-        UUID(submitted["actor_token_id"]) if submitted["actor_token_id"] else None,
-        "worker",
+        scopes=set(submitted["scopes"]),
+        token_id=job.actor_token_id,
+        actor_kind="worker",
+        principal_id=job.agent_principal_id,
+        session_id=job.agent_session_id,
+        step_id=job.agent_step_id,
+        invocation_id=job.invocation_id,
+        job_id=job.id,
+        run_id=execution.run_id,
     )
     audit(
         session,
@@ -534,11 +491,10 @@ async def attach_call(session, execution, call_id, payload):
     await session.flush()
 
 
-async def settle_call(session, org_id, job_id, run_id, call_id, state):
+async def settle_call(session, job_id, run_id, call_id, state):
     await session.execute(
         update(MemoryCallInput)
         .where(
-            MemoryCallInput.org_id == org_id,
             MemoryCallInput.job_id == job_id,
             MemoryCallInput.run_id == run_id,
             MemoryCallInput.call_id == call_id,
@@ -554,19 +510,11 @@ async def recover_unsettled_calls(session, job):
 
     await session.execute(
         update(VendorCall)
-        .where(
-            VendorCall.org_id == job.org_id,
-            VendorCall.job_id == job.id,
-            VendorCall.state == "pending",
-        )
+        .where(VendorCall.job_id == job.id, VendorCall.state == "pending")
         .values(state="unknown")
     )
     await session.execute(
         update(MemoryCallInput)
-        .where(
-            MemoryCallInput.org_id == job.org_id,
-            MemoryCallInput.job_id == job.id,
-            MemoryCallInput.state == "admitted",
-        )
+        .where(MemoryCallInput.job_id == job.id, MemoryCallInput.state == "admitted")
         .values(state="unknown")
     )

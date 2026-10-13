@@ -318,12 +318,11 @@ class Harness:
         return {origin.name: len(origin.requests) for origin in self.origins.values()}
 
     def broker(self, resolver=None) -> FetchBroker:
-        # A fresh organization per broker keeps the minute window out of the results.
+        # Each broker uses the shared installation quota.
         return FetchBroker(
             PolicySource(self.policy),
             "proxy-acceptance-v1",
-            uuid4(),
-            quota=SQLiteFetchQuota(self.work / "quota.sqlite3"),
+            quota=SQLiteFetchQuota(self.work / "quota.sqlite3", open_requests_per_minute=10000),
             transport=self.transport,
             resolver=resolver or Rebinding(),
         )
@@ -577,7 +576,6 @@ async def relay_cases(h: Harness, work: Path) -> list[dict[str, Any]]:
         await supervisor.start()
         broker = h.broker()
         descriptor = RunDescriptor(
-            org_id=uuid4(),
             job_id=uuid4(),
             attempt_id=uuid4(),
             input_sha256=hashlib.sha256(source.encode()).hexdigest(),

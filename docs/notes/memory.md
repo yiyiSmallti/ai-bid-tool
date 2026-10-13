@@ -1,93 +1,87 @@
-# Organization memory
+---
+kind: reference
+---
 
-## Problem
+# Memory mechanisms
 
-Reusable drafting guidance must remain separate from evidence and human decisions. Copying a
-rejected model answer into an active rule would amplify the original error. A cache tied only to
-selected memory IDs also misses newly approved rules when the previous retrieval had no hits.
+Memory stores reusable drafting guidance separately from evidence and human decisions.
+The enabled `library` scope belongs to the installation. The wire contracts and
+remaining scope enablement work are defined in [the memory plan](../plan/memory.md).
+The installation identity boundary is defined by [ADR 0012](../adr/0012-single-user-installation.md).
 
-## Usage
+## Lifecycle and authority
 
-The [management pages](memory-management.md) provide bounded org browse, exact
-revision detail and task feedback recovery over these services.
+A new entry starts as a candidate. A local human session approves or rejects the
+exact current revision. Approval records `confirmed_at`; actor attribution records
+session, token, agent and job context without a human account identifier. Tokens
+and agents cannot approve, disable, delete or review evaluation samples, including
+when a caller fabricates human scopes. Every mutation rechecks live authority.
 
-Create an organization candidate with `bid memory add --input FILE --json`, inspect it with
-`memory show` and `memory history`, then approve its exact revision through an administrator human
-session using `memory approve --id UUID --input FILE`. Editing active content creates a new candidate
-and withdraws the old rule. Disable and delete are human administrator operations; deletion preserves
-history. Request shapes and every command are defined by the [memory contract](../plan/memory.md#interfaces)
-and exposed by `bid schema`.
+Editing an active entry appends a candidate and withdraws the previous effective
+rule. A token may edit only its own candidate, provided that entry has never been
+active. Human disablement and logical deletion preserve historical revisions and
+model inputs. Expiry uses server time and never changes historical snapshots.
 
-Use `memory retrieve --input FILE --dry-run` to preview selection without creating a retrieval, job,
-audit or usage row. A persisted retrieval has a historical show endpoint. `memory used --job UUID`
-reports the context admitted to each vendor call, including unsuccessful calls; it does not claim
-that the model relied on a particular rule internally.
+The application checks these transitions in
+[`crud.py`](../../server/app/memory/crud.py). Independent database checks live in
+`memory_parent_gate`, `memory_revision_gate` and `memory_revision_complete` in the
+[baseline functions](../../server/migrations/baseline/00_functions_core.sql).
+Revisions, feedback and retrieval items are immutable; only the declared lifecycle,
+evaluation review and admitted-call settlement paths may change their mutable rows.
 
-Human changes to model-derived cards create feedback and evaluation samples. A dispatch warning
-contains a durable job ID; inspect feedback and replay selected event IDs through `memory candidates
-run`. Do not repeat the card decision. Administrators review samples inside the organization;
-accepting a sample grants neither memory approval nor permission to share it externally.
+## Retrieval and cache validity
 
-## How it works
+[`retrieval.retrieve`](../../server/app/memory/retrieval.py) selects only current,
+approved, unexpired entries without a deletion tombstone. Exact text, keyword and
+tag matching use normalized text. Rules precede preferences; deterministic ranking,
+conflict exclusions, hit limits and context limits are recorded in the result.
+Memory remains guidance and cannot satisfy evidence or human confirmation gates.
 
-The [memory migration](../../server/migrations/versions/0037_memory.py) binds all business rows to an
-organization using forced RLS and composite foreign keys. Revisions, feedback, retrievals and input
-snapshots are append-only. Database predicates independently enforce the human administrator gate,
-exact current revision, source bindings and worker attempt lease. API tokens cannot receive the
-human-only scopes.
+A persisted retrieval fixes the selected revision IDs, content and sent-text hashes,
+policy versions, omitted entries and a `library` epoch. The epoch table is keyed by
+scope alone. Changes to effective entries advance that epoch, so a new approval also
+invalidates a previous empty retrieval. The earliest expiry across the complete
+active library bounds validity, including entries excluded from the selected hits.
+`require_current` rechecks this manifest before a vendor call is admitted.
+`memory_manifest_current` supplies the corresponding database check.
 
-[Retrieval](../../server/app/memory/retrieval.py) restricts PostgreSQL queries to current, active,
-undeleted, unexpired organization revisions before scoring or limiting. Normalized text and tags
-use NFKC, case folding and collapsed whitespace. The approved [scoring and priority rules](../plan/memory.md#retrieval-and-precedence)
-resolve explicit conflict keys, retain whole entries and preserve stable ordering. The service does
-not make embedding calls and rejects unavailable modes explicitly.
+Retrieval queries, snapshots and exact prompts are encrypted with their object IDs
+bound inside each envelope. A dry-run retrieval does not persist a retrieval, job,
+audit or usage row. Historical retrieval reads report explicit stale reasons rather
+than rebuilding the original result from current entries.
 
-Scope epochs advance atomically when the effective set changes. A retrieval also fixes the earliest
-expiry of the complete accessible active set. Drafting snapshots fix those dependencies, exact
-revision hashes and policy versions, including an explicit empty memory context. Admission and
-publication check them again. Changed memory blocks confirmation of an unreviewed model draft;
-a previously confirmed human decision remains valid with a warning. Evidence eligibility checks
-remain independent.
+## Calls and feedback
 
-Memory cannot become a material reference.
-`JobExecution.admit` stores the per-request manifest in the same transaction as `VendorCall`.
-Settlement attaches the matching usage record atomically, even after cancellation or revoked
-membership.
-Retries and split batches each have their own call ID.
-Card and draft views retain
-only authorized IDs and hashes; encrypted prompts are not returned.
+`attach_call` records the admitted retrieval, exact prompt hash, requirements, job,
+run and call IDs. `settle_call` distinguishes completed calls from calls with unknown
+outcomes. Replacement attempts preserve an unknown predecessor outcome.
+`memory used` reports what was admitted to each actual call; it does not claim that
+a model relied on each rule internally.
 
-[Feedback](../../server/app/memory/feedback.py) captures adjacent human card revisions before an
-edit clears model provenance. It writes the bounded sanitized event, evaluation sample and candidate
-outbox in the original transaction. The deterministic candidate worker rechecks current grants and
-its lease before publishing. Unique source and generator keys prevent duplicate candidates. It
-never produces a vendor usage row.
+Human rejection or relevant editing of a model-derived response card creates
+sanitized feedback, an evaluation sample and a durable candidate job in the card
+transaction. Human confirmation creates only an evaluation sample. The sanitizer
+removes confidential values, identifiers, contacts, prices and evidence quotations
+before reusable guidance is proposed. Candidate generation is deterministic and
+never approves its own proposal.
 
-## Pitfalls
+Queue failure preserves the card decision and returns a durable job ID. Explicit
+retry reuses the recorded event set and immutable submission provenance. The original
+submission actor must retain its authority; a retry may narrow recorded grants but
+cannot enlarge them. Lease and run checks fence stale workers.
+Evaluation acceptance remains separate from memory approval. Feedback envelopes
+bind their event or sample IDs, and hash checks reject substituted summaries.
+These paths are defined in [`feedback.py`](../../server/app/memory/feedback.py),
+[`candidates.py`](../../server/app/memory/candidates.py),
+[`memory_candidate.py`](../../server/app/jobs/memory_candidate.py) and
+[`safety.py`](../../server/app/memory/safety.py).
 
-Memory contains reusable methods, never proof that a product satisfies a requirement. Known sensitive
-values and redaction detections are rejected regardless of the task's model-redaction switch.
-Feedback, queries and sent snapshots use organization/record-bound encrypted envelopes; audits contain
-hashes and identifiers only. Pattern detection has limits, which is why candidates require review.
+## Interfaces
 
-User, project and global scopes remain unavailable until their ownership and publication boundaries
-are implemented.
-A scope is never silently mapped to the organization.
-The optional embedding table
-is absent; any later vector migration must check that pgvector is installed before declaring a vector
-column.
-
-Migration rollback retains historical tables. Reverting application code must not delete the audit
-trail. PostgreSQL acceptance tests use two organizations and synthetic transports; their reproducible
-reports belong under `data/work/memory-validation/`.
-
-## Code
-
-- [Schemas](../../server/app/schemas/memory_contracts.py): HTTP, CLI, retrieval and provider boundaries.
-- [Storage](../../server/app/models/memory.py) and [migration](../../server/migrations/versions/0037_memory.py): tenant keys and SQL gates.
-- [CRUD](../../server/app/memory/crud.py), [access](../../server/app/memory/access.py), [safety](../../server/app/memory/safety.py): authorization, revisions and sensitive-value handling.
-- [Retrieval](../../server/app/memory/retrieval.py) and [card generation](../../server/app/services/card_generation.py): fixed context, epochs and call lineage.
-- [Call accounting](../../server/app/jobs/execution.py): atomic admission and settlement.
-- [Feedback](../../server/app/memory/feedback.py), [candidates](../../server/app/memory/candidates.py), [worker](../../server/app/jobs/memory_candidate.py): outbox, deterministic proposals and recovery.
-- [API](../../server/app/api/memory.py) and [CLI](../../cli/bid_cli/memory.py): discoverable entry points.
-- [Storage acceptance](../../server/tests/test_memory_storage.py), [API acceptance](../../server/tests/test_memory_api.py), [drafting acceptance](../../server/tests/test_memory_drafting.py), [feedback acceptance](../../server/tests/test_memory_feedback.py), [CLI snapshots](../../server/tests/test_memory_cli.py).
+The HTTP adapters are [`api/memory.py`](../../server/app/api/memory.py); CLI commands
+are [`bid_cli/memory.py`](../../cli/bid_cli/memory.py). Request and result models
+have their single definition in
+[`memory_contracts.py`](../../server/app/schemas/memory_contracts.py) and are exposed
+by `bid schema`. Task provenance requires task read authority and is redacted when
+that authority is absent. Bounded browse, exact detail and feedback recovery are
+specified in [memory management](memory-management.md).

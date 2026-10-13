@@ -7,7 +7,7 @@ import httpx
 import pytest
 from app.core.errors import ServiceError
 from app.schemas.contracts import Result
-from bid_cli.client import Client, State, new_output_path, save_download
+from bid_cli.client import Client, new_output_path, save_download
 from bid_cli.main import main
 
 IDENTIFIER = "00000000-0000-0000-0000-000000000001"
@@ -19,9 +19,9 @@ def contract_version(request):
     return request.param
 
 
-class SyntheticState(State):
-    def load(self):
-        return {"session": "synthetic-only-session", "org_id": IDENTIFIER}
+@pytest.fixture(autouse=True)
+def access_key(monkeypatch):
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-only-session")
 
 
 def download_client(
@@ -31,14 +31,12 @@ def download_client(
     link=None,
     served=None,
     redirect=False,
-    wrong_scope=False,
     transport_error=None,
     contract_version="5.0",
 ):
     client = Client(
         "remote",
         "https://synthetic.example.test",
-        SyntheticState(tmp_path / "unused.enc"),
         contract_version=contract_version,
     )
     prefix = "/v4" if contract_version == "5.0" else ""
@@ -55,7 +53,7 @@ def download_client(
     def handler(request):
         calls.append(request.url)
         assert request.headers["Authorization"] == "Bearer synthetic-only-session"
-        assert request.headers["X-Org-Id"] == IDENTIFIER
+        assert "x-org-id" not in request.headers
         if request.url.path == prefix + "/resources/certificates/files":
             return httpx.Response(
                 200,
@@ -65,7 +63,6 @@ def download_client(
                     items=[
                         {
                             "certificate_revision_id": IDENTIFIER,
-                            "org_id": "foreign" if wrong_scope else IDENTIFIER,
                             "file": descriptor,
                         }
                     ],
@@ -137,7 +134,7 @@ async def test_certificate_file_download_rejects_external_or_malformed_links(
     assert error.value.code == "invalid_download_link" and len(calls) == 2 and not output.exists()
 
 
-@pytest.mark.parametrize("failure", ["hash", "short", "long", "redirect", "foreign"])
+@pytest.mark.parametrize("failure", ["hash", "short", "long", "redirect"])
 async def test_certificate_file_download_never_writes_bad_response(
     contract_version, tmp_path, pdf_bytes, failure
 ):
@@ -151,7 +148,6 @@ async def test_certificate_file_download_never_writes_bad_response(
         pdf_bytes,
         served=served,
         redirect=failure == "redirect",
-        wrong_scope=failure == "foreign",
         contract_version=contract_version,
     )
     output = tmp_path.resolve() / "new.pdf"
@@ -186,7 +182,6 @@ async def test_certificate_file_metadata_transport_errors_share_cli_contract(
     client = Client(
         "remote",
         "https://synthetic.example.test",
-        SyntheticState(tmp_path / "unused.enc"),
         contract_version=contract_version,
     )
 
@@ -256,7 +251,7 @@ def test_certificate_file_cli_invalid_input_before_network(
         metadata.write_bytes(b"\xff")
     else:
         if failure == "extra":
-            data["org_id"] = IDENTIFIER
+            data["unexpected"] = IDENTIFIER
         metadata.write_text(json.dumps(data))
         if failure == "invalid_file":
             file.write_bytes(b"Synthetic invalid file")

@@ -1,7 +1,8 @@
 <script setup>
 import { MagicStick, Search } from "@element-plus/icons-vue";
 import { computed, ref, watch } from "vue";
-import { confirmAction, errorText, orgRequest } from "../org.js";
+import { request } from "../api.js";
+import { confirmAction, errorText } from "../org.js";
 import JobPanel from "./JobPanel.vue";
 // Demonstration only: the model proposes a product per hardware item, the worker searches and
 // fetches its official page and keeps verbatim parameter quotes as simulated materials.
@@ -16,14 +17,14 @@ const attempts = { quoted: "已采用", no_product: "非此类产品页", no_par
 const statusTag = { quoted: "success", no_page: "warning", no_parameters: "warning", no_search_result: "warning", no_product: "warning" };
 async function check() {
   busy.value = true; error.value = ""; preview.value = null;
-  try { preview.value = (await orgRequest("POST", `/tasks/${props.taskId}/product-simulations`, { extraction_job_id: extraction.value, dry_run: true })).data; }
+  try { preview.value = (await request("POST", `/tasks/${props.taskId}/product-simulations`, { extraction_job_id: extraction.value, dry_run: true })).data; }
   catch (exc) { error.value = errorText(exc); } finally { busy.value = false; }
 }
 async function start() {
   if (!(await confirmAction(`模型将为 ${preview.value.items.length} 个采购项中的硬件提出候选厂商，搜索并抓取官网页面，摘取参数后作为“模拟材料”录入资源库并固定到本任务。模拟材料只用于演示，不能进入正式件。继续？`, "开始模拟拟投"))) return;
   busy.value = true; error.value = ""; result.value = null;
   try {
-    const data = (await orgRequest("POST", `/tasks/${props.taskId}/product-simulations`, { extraction_job_id: extraction.value, expected_input_hash: preview.value.input_hash, retry: true })).data;
+    const data = (await request("POST", `/tasks/${props.taskId}/product-simulations`, { extraction_job_id: extraction.value, expected_input_hash: preview.value.input_hash, retry: true })).data;
     jobId.value = data.job_id;
   } catch (exc) { error.value = errorText(exc); } finally { busy.value = false; }
 }
@@ -55,7 +56,7 @@ function finished(job) {
     </div>
     <div class="actions"><el-button type="primary" :icon="MagicStick" :disabled="busy || !preview || !!preview.admission_blocker || !preview.items.length" @click="start">开始模拟拟投</el-button></div>
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" />
-    <JobPanel v-if="jobId" :job-id="jobId" :writable="true" @finished="finished" />
+    <JobPanel v-if="jobId" :job-id="jobId" @finished="finished" />
     <div v-if="result" class="table-scroll">
       <table class="data-table"><caption class="sr-only">模拟拟投结果</caption>
         <thead><tr><th>采购项</th><th>类型</th><th>拟投型号</th><th>结果</th><th class="num">参数</th><th>来源</th></tr></thead>

@@ -79,7 +79,7 @@ def test_agent_command_snapshots_without_database(monkeypatch, tmp_path, capsys,
 
     monkeypatch.setattr(cli, "call", call)
     code, body = invoke(
-        ["--mode", mode, "--state", str(tmp_path / "state.enc"), *arguments(action, tmp_path)],
+        ["--mode", mode, *arguments(action, tmp_path)],
         capsys,
     )
     assert code == 0, body
@@ -125,7 +125,7 @@ def test_agent_invalid_input_does_not_call_server(monkeypatch, tmp_path, capsys,
     else:
         source = Path(args[args.index("--input") + 1])
         source.write_text(
-            "{" if failure == "malformed" else json.dumps({**INPUTS[action], "org_id": KEY})
+            "{" if failure == "malformed" else json.dumps({**INPUTS[action], "unexpected": KEY})
         )
     code, body = invoke(args, capsys)
     assert code == 2 and body["data"]["error"]["code"] == "invalid_input"

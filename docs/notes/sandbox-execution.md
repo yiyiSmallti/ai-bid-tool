@@ -28,22 +28,22 @@ there is no public arbitrary URL, script, command, image or mount parameter.
 
 ## How it works
 
-The request hash binds explicit spec defaults, org, task, initiating identity,
+The request hash binds explicit spec defaults, task, actor kind and token,
 effective scopes, fixed selection and input hashes, runtime profile and network
-policy digest. Original HTML is stored as tenant-key-bound ciphertext. Vendor
-URLs come from the fixed product revision and are separately encrypted. Neither
-HTML nor exact URLs are exposed in job results or audit details.
+policy digest. Original HTML and fixed-product vendor URLs are encrypted with
+the installation data key. Neither HTML nor exact URLs are exposed in job
+results or audit details.
 
-Migration [0022](../../server/migrations/versions/0022_sandbox.py) adds the input,
-run, attempt, artifact and fetch-receipt relations. Composite foreign keys bind
-org, task, document, extraction, selection, run and attempt. Every relation has
-FORCE RLS and an explicit WITH CHECK policy. Inputs, runs, artifacts and receipts
-are append-only. Attempts allow a single terminal transition. A transaction stamp
-seals artifact and receipt insertion with that transition, and deferred checks
-require a complete artifact set and the current successful job attempt.
+The [baseline schema](../../server/migrations/baseline/10_tables.sql) binds task,
+document, extraction, selection, run and attempt through foreign keys and
+consistency triggers. Inputs, runs, artifacts and receipts are append-only.
+Attempts allow a single terminal transition. A transaction stamp seals artifact
+and receipt insertion with that transition; deferred checks require a complete
+artifact set and the current successful job attempt. Actor and token checks
+remain enforced; the installation has no organization or membership boundary.
 
 The processor claims the same `Job.run_id` lease used by existing jobs. A live
-watcher rechecks the initiating member, token intersection, selection, policy and
+watcher rechecks the token expiry and scope intersection, selection, policy and
 lease while execution runs. Publication locks the task and rechecks those gates.
 An old or cancelled attempt can retain resource accounting and failure audit but
 cannot publish artifacts. Capacity waits use a separate bounded dispatch retry
@@ -141,4 +141,4 @@ replaced.
 - [supervisor.py](../../server/app/sandbox/supervisor.py): execution-node lifecycle and Docker backend.
 - [runner.py](../../server/app/sandbox/runner.py): fixed render and validation programs.
 - [sandbox_gc.py](../../server/app/services/sandbox_gc.py): age-gated orphan cleanup.
-- [test_sandbox.py](../../server/tests/test_sandbox.py): API/processor integration and two-org SQL gates.
+- [test_sandbox.py](../../server/tests/test_sandbox.py): API/processor integration, parent bindings and immutable SQL history.

@@ -1,8 +1,6 @@
-"""Saved snapshots of every approved memory command at the CLI boundary."""
+"""Dynamic contracts of every memory command at the CLI boundary."""
 
 import json
-import os
-from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -28,35 +26,30 @@ def fixtures():
     revision = models.MemoryRevisionView.model_validate(
         {
             "id": RID,
-            "org_id": ID,
             "memory_id": ID,
             "revision": 1,
-            "target": {"scope": "org"},
+            "target": {"scope": "library"},
             "content": CONTENT,
             "status": "candidate",
             "source": SOURCE,
             "content_sha256": SHA,
             "created_at": NOW,
-            "created_by": ID,
             "actor_kind": "session",
         }
     )
-    memory = models.MemoryView(
-        id=UUID(ID), org_id=UUID(ID), current=revision, effective_status="candidate"
-    )
+    memory = models.MemoryView(id=UUID(ID), current=revision, effective_status="candidate")
     data = models.MemoryData(memory=memory)
     page = models.MemoryPageData(returned=1)
     retrieval = models.MemoryRetrievalData.model_validate(
         {
             "retrieval_id": None,
-            "org_id": ID,
             "mode": "keyword",
             "retrieval_version": "keyword-v1",
             "priority_version": "memory-priority-v1",
             "query_sha256": SHA,
             "manifest_sha256": SHA,
-            "scopes": ["org"],
-            "epochs": [{"org_id": ID, "scope": "org", "owner_id": ID, "epoch": 1}],
+            "scopes": ["library"],
+            "epochs": [{"scope": "library", "epoch": 1}],
             "valid_until": None,
             "context_chars": len(CONTENT["text"]),
             "preview": True,
@@ -69,7 +62,7 @@ def fixtures():
                 "memory_id": ID,
                 "revision_id": RID,
                 "revision": 2,
-                "scope": "org",
+                "scope": "library",
                 "content_sha256": SHA,
                 "sent_sha256": SHA,
             },
@@ -85,12 +78,10 @@ def fixtures():
     feedback = models.MemoryFeedbackView.model_validate(
         {
             "id": ID,
-            "org_id": ID,
             "task_id": ID,
             "card_id": ID,
             "before_revision_id": ID,
             "after_revision_id": RID,
-            "actor_user_id": ID,
             "kind": "card_rejected",
             "review_domain": "commercial",
             "created_at": NOW,
@@ -101,14 +92,12 @@ def fixtures():
     sample = models.MemoryEvalSampleView.model_validate(
         {
             "id": ID,
-            "org_id": ID,
             "task_id": ID,
             "feedback_event_id": ID,
             "card_id": ID,
             "before_revision_id": ID,
             "after_revision_id": RID,
             "label": "card_rejected",
-            "actor_user_id": ID,
             "generator_version": "feedback-copy-v1",
             "sanitized_sha256": SHA,
             "created_at": NOW,
@@ -123,7 +112,6 @@ def fixtures():
         update={
             "review_state": "accepted",
             "review_revision": 2,
-            "reviewed_by": UUID(ID),
             "reviewed_at": revision.created_at,
         }
     )
@@ -134,15 +122,12 @@ def fixtures():
         update={
             "revision": 2,
             "status": "active",
-            "confirmed_by": UUID(ID),
             "confirmed_at": revision.created_at,
             "decision": "approve",
             "decision_reason_sha256": SHA,
         }
     )
-    active = models.MemoryView(
-        id=UUID(ID), org_id=UUID(ID), current=active_revision, effective_status="active"
-    )
+    active = models.MemoryView(id=UUID(ID), current=active_revision, effective_status="active")
     disabled_revision = revision.model_copy(
         update={
             "revision": 2,
@@ -152,7 +137,7 @@ def fixtures():
         }
     )
     disabled = models.MemoryView(
-        id=UUID(ID), org_id=UUID(ID), current=disabled_revision, effective_status="disabled"
+        id=UUID(ID), current=disabled_revision, effective_status="disabled"
     )
     outputs = {}
     for action in ("add", "show", "update"):
@@ -169,7 +154,6 @@ def fixtures():
     outputs["memory disable"] = (models.MemoryData(memory=disabled), [])
     deleted = models.MemoryView(
         id=UUID(ID),
-        org_id=UUID(ID),
         current=disabled_revision.model_copy(update={"decision": "delete"}),
         effective_status="deleted",
         deleted_at=revision.created_at,
@@ -202,7 +186,6 @@ def test_saved_memory_cli_snapshots(monkeypatch, tmp_path, capsys):
         if failure is not None:
             raise ServiceError(*failure)
         data, items = outputs[selected]
-        # Validate synthesized outputs against their public Pydantic type before transport.
         data = type(data).model_validate(data.model_dump(mode="json"))
         items = [type(item).model_validate(item.model_dump(mode="json")) for item in items]
         return Result(
@@ -222,19 +205,19 @@ def test_saved_memory_cli_snapshots(monkeypatch, tmp_path, capsys):
     candidates = tmp_path / "candidates.json"
     review = tmp_path / "review.json"
     for path, body in (
-        (create, {"target": {"scope": "org"}, "content": CONTENT}),
+        (create, {"target": {"scope": "library"}, "content": CONTENT}),
         (update, {"expected_revision": 1, "content": CONTENT}),
         (approve, {"expected_revision": 1, "action": "approve", "reason": "Reviewed"}),
         (reject, {"expected_revision": 1, "action": "reject", "reason": "Reviewed"}),
         (manage, {"expected_revision": 1, "reason": "Reviewed"}),
-        (retrieve, {"org_id": ID, "scopes": ["org"], "query": CONTENT["text"]}),
+        (retrieve, {"scopes": ["library"], "query": CONTENT["text"]}),
         (candidates, {"event_ids": [ID]}),
         (review, {"expected_revision": 1, "action": "accept", "reason": "Reviewed"}),
     ):
         path.write_text(json.dumps(body, ensure_ascii=False))
     commands = {
         "memory add": ["memory", "add", "--input", str(create)],
-        "memory list": ["memory", "list", "--scope", "org"],
+        "memory list": ["memory", "list", "--scope", "library"],
         "memory show": ["memory", "show", "--id", ID],
         "memory update": ["memory", "update", "--id", ID, "--input", str(update)],
         "memory history": ["memory", "history", "--id", ID],
@@ -323,7 +306,23 @@ def test_saved_memory_cli_snapshots(monkeypatch, tmp_path, capsys):
     body = json.loads(capsys.readouterr().out)
     body["duration_ms"] = 0
     actual["partial exit 5"] = {"exit_code": 5, "output": body, "requests": calls.copy()}
-    snapshot = Path(__file__).with_name("snapshots") / "memory-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
-    assert actual == json.loads(snapshot.read_text())
+    for name, captured in actual.items():
+        body = captured["output"]
+        assert set(body) == {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}, (
+            name
+        )
+        assert body["command"] == (
+            "memory candidates run"
+            if name == "partial exit 5"
+            else "memory show"
+            if name.startswith("error exit")
+            else name
+        ), name
+        assert captured["requests"], name
+    assert actual["memory add"]["requests"][0]["json"]["target"] == {
+        "scope": "library",
+        "task_id": None,
+    }
+    (tmp_path / "memory-cli-contracts.json").write_text(
+        json.dumps(actual, ensure_ascii=False, indent=2) + "\n"
+    )

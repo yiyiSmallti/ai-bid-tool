@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 CONTRACT_VERSION = "5.0"
 
@@ -33,10 +33,8 @@ class Result(Contract):
     duration_ms: int = 0
 
 
-class Login(Contract):
-    email: str = Field(min_length=3, max_length=254)
-    password: str = Field(min_length=1, max_length=1024)
-    org_id: UUID
+class SessionCreate(Contract):
+    access_key: SecretStr
 
 
 class TaskCreate(Contract):
@@ -135,8 +133,6 @@ class ProviderUsage(Contract):
     test_only: bool = False
     input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
-    # Fixed catalog identity for calls routed through a platform model.
-    platform_model_id: str | None = None
     capability: Literal["llm", "vision", "ocr", "search", "embedding", "browser"] = "llm"
     search_requests: int = Field(default=0, ge=0)
     browser_units: int = Field(default=0, ge=0)

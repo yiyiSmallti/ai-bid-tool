@@ -24,8 +24,8 @@ calls, token/page/request estimates and configuration blockers. A human reviews
 the exact input hash and explicitly authorizes a model run.
 
 A report link opens its pinned inputs. A responsible human can dismiss or reopen a
-finding with a reason. Rubric review separates administrator classification, bidder
-coverage decisions, domain review and whole-set confirmation. Correcting a response
+finding with a reason. Rubric review separates domain classification, coverage decisions, section/item
+review and whole-set confirmation; each requires the installation human. Correcting a response
 returns to its requirement in the existing response-card review flow.
 
 ## How it works
@@ -36,12 +36,12 @@ additional reads needed by the console. Writes reuse the existing check and scor
 requests and services. No console persistence or independent assessment engine is added.
 
 Read services authorize the parent and its complete dependency graph before exposing
-counts. Task visibility, lifecycle and responsibility domains follow the
-[task-workflow mechanism](team-workflow.md#how-it-works). Projections, capability
+counts. Task visibility and lifecycle follow
+[Task access](../../server/app/services/task_access.py). Projections, capability
 hints and shared human writes reuse its authorization service; hints may reuse a
 permission result within one projection, while every mutation reauthorizes.
 SQL selects keyset positions before hydrating selected row narratives.
-Authenticated cursors bind the principal, org, parent, filters and review snapshot;
+Authenticated cursors bind the principal/session, parent, filters and review snapshot;
 a changed snapshot requires reloading the view. A separate stable snapshot identity
 lets a replacement editor verify sections, items and coverage belong to one revision.
 
@@ -60,11 +60,11 @@ No arbitrary document, URL or supplied quote is accepted as a citation source.
 The console sends assessment and associated job requests through the unversioned
 API paths and validates the Result 5.0 resource-count fields. The API adapter recognizes only specified
 partial assessment results and terminal job states. Ordinary error envelopes still fail.
-Org reset aborts requests, invalidates the response epoch and clears unsaved assessment
+Session reset aborts requests, invalidates the response epoch and clears unsaved assessment
 state. Reasons and replacement content are never persisted in browser navigation storage.
 
 The full replacement editor loads every page before allowing edits to be saved. It retains
-source identities and other-domain content. Section source selectors can be kept,
+source identities and the complete loaded baseline. Section source selectors can be kept,
 removed or added from the pinned requirements, with at least one retained; the editor
 sends only requirement IDs and selected quotes, never rewritten Source objects. It
 compares changes with that baseline and
@@ -93,7 +93,7 @@ overall percentage from elapsed time or an absent batch count.
   review or requirement coverage decisions. An advisory finding decision does not
   confirm evidence or satisfy export gates.
 - Mocked browser flows verify UI requests and state transitions. They do not prove
-  PostgreSQL RLS, publication constraints or production Provider effectiveness.
+  task relationships, publication constraints or production Provider effectiveness.
 
 ## Code
 
@@ -101,7 +101,7 @@ overall percentage from elapsed time or an absent batch count.
 - [Projection boundaries](../../server/app/services/assessment_bounds.py): cursor/snapshot bindings and encoded page limits.
 - [Inputs, jobs and checking reads](../../server/app/services/assessment_reads.py): dependency authorization and citation traversal.
 - [Rubric projections](../../server/app/services/assessment_rubrics.py) and [score projections](../../server/app/services/assessment_scores.py): bounded review/report reads.
-- [Check API](../../server/app/api/check.py), [score API](../../server/app/api/score.py) and [org-console API](../../server/app/api/org_console.py): existing writes and additive reads.
+- [Check API](../../server/app/api/check.py), [score API](../../server/app/api/score.py) and [console API](../../server/app/api/org_console.py): existing writes and additive reads.
 - [CLI read adapter](../../cli/bid_cli/assessments.py) and [schema registry](../../cli/bid_cli/schema.py): remote/local parity and discovery.
 - [Console helpers](../../web/src/assessments.js), [check workspace](../../web/src/views/OrgChecks.vue), [rubric review](../../web/src/views/OrgRubricReview.vue) and [replacement editor](../../web/src/components/RubricReplacement.vue): explicit user transitions.
-- [Browser acceptance](../../web/e2e/console-assessments.spec.js), [two-org API acceptance](../../server/tests/test_console_assessments_db.py) and [task-authority acceptance](../../server/tests/test_console_task_authority.py): separate UI, org isolation and task-role checks. Repeatable generated artifacts belong under `data/work/console-assessments-validation/`.
+- [Browser acceptance](../../web/e2e/console-assessments.spec.js), [single-user API acceptance](../../server/tests/test_console_assessments_db.py) and [task-authority acceptance](../../server/tests/test_console_task_authority.py): separate UI, task relationships and human/token/worker checks. Repeatable generated artifacts belong under `data/work/console-assessments-validation/`.

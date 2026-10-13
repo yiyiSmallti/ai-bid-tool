@@ -21,7 +21,7 @@ from app.schemas import bid_review_findings as c
 from app.services import bid_review as bids
 from app.services import bid_review_privacy as privacy
 from app.services import bid_review_run as runs
-from app.services import confidential, redaction, task_workflow
+from app.services import confidential, redaction, task_access
 from app.services.versioned import audit
 
 
@@ -56,8 +56,7 @@ async def publish_bid_review_findings(session, run, findings, *, settings):
                 .join(
                     BidOutboundAuthorizedPage,
                     (BidOutboundAuthorizedPage.snapshot_id == BidRedactedPage.snapshot_id)
-                    & (BidOutboundAuthorizedPage.page_id == BidRedactedPage.page_id)
-                    & (BidOutboundAuthorizedPage.org_id == BidRedactedPage.org_id),
+                    & (BidOutboundAuthorizedPage.page_id == BidRedactedPage.page_id),
                 )
                 .where(BidOutboundAuthorizedPage.authorization_id == run.authorization_id)
             )
@@ -98,7 +97,6 @@ async def publish_bid_review_findings(session, run, findings, *, settings):
         session.add(
             BidReviewFinding(
                 id=value.id,
-                org_id=run.org_id,
                 task_id=run.task_id,
                 submission_id=run.submission_id,
                 review_id=run.id,
@@ -127,7 +125,7 @@ async def publish_bid_review_findings(session, run, findings, *, settings):
                 if value.absence_search
                 else None,
                 limitation_count=len(value.limitation_codes),
-                details_encrypted=bids.seal(settings, run.org_id, value.id, payload),
+                details_encrypted=bids.seal(settings, value.id, payload),
                 details_sha256=bids.digest(payload),
             )
         )
@@ -301,7 +299,6 @@ async def publish_bid_review_findings(session, run, findings, *, settings):
 def source(run, finding_id, kind, ordinal, document_id, page_id=None, **values):
     return BidReviewFindingSource(
         id=uuid4(),
-        org_id=run.org_id,
         task_id=run.task_id,
         submission_id=run.submission_id,
         preparation_id=run.preparation_id,
@@ -335,7 +332,7 @@ async def required_finding(session, run, finding_id, *, lock=False):
     if lock:
         # Findings are immutable and bid_app has no UPDATE privilege, so FOR UPDATE
         # is unavailable. A transaction advisory lock per finding serializes human
-        # decisions; UNIQUE(org_id, finding_id, revision) still rejects a lost race.
+        # decisions; UNIQUE(finding_id, revision) still rejects a lost race.
         await session.execute(
             text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
             {"key": f"bid-review-finding:{finding_id}"},
@@ -379,7 +376,8 @@ def protected(actor):
     return (
         actor.actor_kind == "session"
         and actor.token_id is None
-        and actor.role in {"admin", "bidder"}
+        and actor.principal_id is None
+        and actor.session_id is None
         and "bid-review:original:read" in actor.scopes
     )
 
@@ -552,7 +550,6 @@ async def event_view(row, settings, *, project=None):
         state=row.state,
         reason=project(reason) if project else reason,
         reason_sha256=row.reason_sha256,
-        decided_by=row.decided_by,
         decided_at=row.created_at,
     )
 
@@ -560,30 +557,27 @@ async def event_view(row, settings, *, project=None):
 async def decide(session, actor, review_id, finding_id, body, settings, *, classify=False):
     run, _ = await required_run(session, actor, review_id)
     finding = await required_finding(session, run, finding_id)
-    if actor.actor_kind != "session" or actor.token_id is not None:
+    if (
+        actor.actor_kind != "session"
+        or actor.token_id is not None
+        or actor.principal_id is not None
+        or actor.session_id is not None
+    ):
         bids.fail("human_session_required", "Finding decisions require a human session", 403, 4)
     scope = "bid-review:classify" if classify else "bid-review:decide"
     current = await state(session, finding)
     if not classify and current["review_domain"] is None:
         bids.fail("unclassified", "Classify this finding before deciding", 409, 2)
-    await task_workflow.access(
+    await task_access.access(
         session,
         actor,
         run.task_id,
         scope=scope,
         write=True,
-        management=classify,
-        domain=None if classify else current["review_domain"],
     )
-    if classify and actor.role != "admin":
-        bids.fail("forbidden", "Finding classification requires an org administrator", 403, 4)
     finding = await required_finding(session, run, finding_id, lock=True)
     current = await state(session, finding)
     domain = body.review_domain if classify else current["review_domain"]
-    if not classify and actor.role != {"commercial": "bidder", "technical": "technical"}.get(
-        domain
-    ):
-        bids.fail("forbidden", "Finding domain requires its authorized human reviewer", 403, 4)
     payload_hash = bids.digest(
         {
             "review_id": str(run.id),
@@ -595,7 +589,6 @@ async def decide(session, actor, review_id, finding_id, body, settings, *, class
     await bids.replay_lock(session, actor, "bid_review_decision", body.request_id)
     replay = await session.scalar(
         select(BidReviewFindingEvent).where(
-            BidReviewFindingEvent.decided_by == actor.user_id,
             BidReviewFindingEvent.request_id == body.request_id,
         )
     )
@@ -635,7 +628,6 @@ async def decide(session, actor, review_id, finding_id, body, settings, *, class
     )
     row = BidReviewFindingEvent(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=run.task_id,
         submission_id=run.submission_id,
         review_id=run.id,
@@ -650,9 +642,8 @@ async def decide(session, actor, review_id, finding_id, body, settings, *, class
         expected_input_hash=run.input_hash,
         reason_sha256=privacy.text_hash(body.reason),
         reason_encrypted="",
-        decided_by=actor.user_id,
     )
-    row.reason_encrypted = bids.seal(settings, actor.org_id, row.id, body.reason)
+    row.reason_encrypted = bids.seal(settings, row.id, body.reason)
     session.add(row)
     await session.flush()
     audit(
@@ -682,7 +673,12 @@ async def history(
 ):
     run, _ = await required_run(session, actor, review_id)
     finding = await required_finding(session, run, finding_id)
-    if actor.actor_kind != "session" or actor.token_id is not None:
+    if (
+        actor.actor_kind != "session"
+        or actor.token_id is not None
+        or actor.principal_id is not None
+        or actor.session_id is not None
+    ):
         bids.fail("human_session_required", "Decision history requires a human session", 403, 4)
     actor.require("bid-review:report:read")
     valid = await runs.privacy_validity(session, run, settings)

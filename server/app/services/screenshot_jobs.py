@@ -32,7 +32,6 @@ def submission(actor, manifest):
     return {
         "input_manifest": manifest,
         "input_hash": images.digest(manifest),
-        "actor_user_id": str(actor.user_id),
         "actor_token_id": str(actor.token_id) if actor.token_id else None,
         "actor_kind": actor.actor_kind,
         "scopes": sorted(actor.scopes),
@@ -42,11 +41,9 @@ def submission(actor, manifest):
 async def create_job(session, actor, task_id, extraction, kind, manifest, retry, *, reasoning=None):
     cache_key = images.digest(
         {
-            "org_id": str(actor.org_id),
             "task_id": str(task_id),
             "kind": kind,
             "manifest": manifest,
-            "actor_user_id": str(actor.user_id),
             "actor_token_id": str(actor.token_id) if actor.token_id else None,
         }
     )
@@ -55,7 +52,6 @@ async def create_job(session, actor, task_id, extraction, kind, manifest, retry,
     if job is None:
         job = Job(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task_id,
             document_id=extraction.document_id,
             kind=kind,
@@ -197,7 +193,7 @@ async def check_job_access(session, actor, job, *, active=False, storage=None):
 async def process_render(execution, storage):
     from app.providers.screenshot_renderer import render
 
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         actor = await cards.access(session, worker(job), "screenshot:write")
         manifest = job.result["submission"]["input_manifest"]
@@ -264,10 +260,10 @@ async def process_render(execution, storage):
     if rendered["image"]["size_bytes"] > min(images.MAX_BYTES, execution.settings.max_upload_bytes):
         images.fail("image_limits", "Derived image exceeds configured image limit", 413, 2)
     rendition_id = uuid4()
-    key = f"org/{execution.org_id}/screenshots/{asset.id}/{rendition_id}/{rendered['image']['sha256']}.png"
-    await storage.put(execution.org_id, key, output)
+    key = f"screenshots/{asset.id}/{rendition_id}/{rendered['image']['sha256']}.png"
+    await storage.put(key, output)
     try:
-        async with execution.db.transaction(execution.org_id) as session:
+        async with execution.db.transaction() as session:
             await cards.task_lock(session, task_id)
             job = await execution.owned_job(session)
             actor = await cards.access(session, worker(job), "screenshot:write")
@@ -296,7 +292,6 @@ async def process_render(execution, storage):
                 # Keep the immediate parent crop. Parent links compose back to the source.
                 row = ScreenshotRendition(
                     id=rendition_id,
-                    org_id=execution.org_id,
                     task_id=task_id,
                     extraction_job_id=asset.extraction_job_id,
                     asset_id=asset.id,
@@ -312,7 +307,6 @@ async def process_render(execution, storage):
                     profile=manifest["profile"],
                     storage_key=key,
                     generation_job_id=job.id,
-                    actor_user_id=actor.user_id,
                 )
                 session.add(row)
                 await session.flush()
@@ -341,12 +335,12 @@ async def process_render(execution, storage):
     finally:
         from app.providers.screenshot_objects import discard
 
-        async with execution.db.transaction(execution.org_id) as cleanup:
+        async with execution.db.transaction() as cleanup:
             retained = await cleanup.scalar(
                 select(ScreenshotRendition.id).where(ScreenshotRendition.storage_key == key)
             )
         if retained is None:
-            await discard(storage, execution.org_id, key)
+            await discard(storage, key)
 
 
 async def analysis_inputs(session, actor, task_id, body, storage, provider):
@@ -433,8 +427,8 @@ async def submit_analysis(session, actor, task_id, body, storage, provider, sett
     from app.providers.screenshot_vision import preview
 
     actor = await cards.access(session, actor, "screenshot:write")
-    if not isinstance(provider, HTTPExtractor) or provider.platform_model_id is None:
-        images.fail("vision_catalog_required", "Choose a verified platform image model", 400, 4)
+    if not isinstance(provider, HTTPExtractor):
+        images.fail("vision_provider_required", "Choose a configured image model", 400, 4)
     provider, reasoning, _ = with_reasoning(provider, body.reasoning)
     body = body.model_copy(update={"reasoning": reasoning})
     extraction, manifest, requirements, outgoing = await analysis_inputs(
@@ -514,7 +508,7 @@ async def rebuild_analysis(session, actor, job, storage, provider):
 async def process_analysis(execution, storage, provider):
     from app.providers.screenshot_vision import analyze
 
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         provider, _, _ = with_reasoning(provider, job.reasoning)
         actor = await cards.access(session, worker(job), "screenshot:write")
@@ -560,14 +554,13 @@ async def process_analysis(execution, storage, provider):
         rejected.extend({"image_ref": image.ref, **asdict(item)} for item in output.rejected)
     if rejected and not proposals:
         raise ProviderFailure("No usable image suggestions", code="invalid_vision_suggestions")
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         await cards.task_lock(session, task_id)
         job = await execution.owned_job(session)
         actor = await cards.access(session, worker(job), "screenshot:write")
         await rebuild_analysis(session, actor, job, storage, provider)
         run = ScreenshotAnalysisRun(
             id=uuid4(),
-            org_id=execution.org_id,
             task_id=task_id,
             extraction_job_id=UUID(manifest["extraction_job_id"]),
             job_id=job.id,
@@ -584,7 +577,6 @@ async def process_analysis(execution, storage, provider):
             req = "requirement_id" in entry
             record = ScreenshotAnalysisInput(
                 id=uuid4(),
-                org_id=execution.org_id,
                 task_id=task_id,
                 extraction_job_id=run.extraction_job_id,
                 analysis_run_id=run.id,
@@ -611,7 +603,6 @@ async def process_analysis(execution, storage, provider):
             session.add(
                 ScreenshotSuggestion(
                     id=uuid4(),
-                    org_id=execution.org_id,
                     task_id=task_id,
                     extraction_job_id=run.extraction_job_id,
                     analysis_run_id=run.id,
@@ -689,7 +680,6 @@ async def suggestions(session, actor, analysis_id, cursor):
                 "requirement_id": str(requirement.requirement_id) if requirement else None,
                 "proposal": row.proposal,
                 "status": "unreviewed",
-                "confirmed_by": None,
             }
         )
     return {

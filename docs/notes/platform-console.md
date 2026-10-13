@@ -1,135 +1,50 @@
-# Platform console
+---
+kind: reference
+---
 
-## Problem
+# Human-managed installation settings
 
-The console provisions orgs, manages the model catalog and reviews attributed
-resource usage. It must not expose an org's business data, and nothing in the application may be able to grant
-itself operator rights or read other orgs through ordinary queries.
+## Identity and authority
 
-## Usage
+The installation access key or its console session acts as the human under
+[ADR 0012](../adr/0012-single-user-installation.md). Settings use the same ordinary
+request context and runtime database as business routes. `HUMAN_ONLY_SCOPES` in
+[auth.py](../../server/app/services/auth.py) includes `provider:write`,
+`credential:manage`, `clef:manage`, and `trust-anchor:manage`. API tokens and
+agents cannot receive or exercise these scopes. Database actor checks preserve
+the same human boundary for writes.
 
-Operators sign in at `/app/platform/login` or with `bid platform login`, using a
-password and a TOTP code. Setup steps are in
-[development.md](../guides/development.md#run-the-platform-console); CLI
-commands are in [cli.md](../guides/cli.md#operate-the-platform). Why the
-cross-org access is shaped this way is recorded in
-[ADR 0001](../adr/0001-platform-console-access.md).
+## Resources
 
-## How it works
+The resource paths retain `/platform` for compatibility; they carry no separate
+login or identity authority. They accept the ordinary bearer access key or
+console session. CLI commands read the ordinary access-key/token configuration
+in [Client](../../cli/bid_cli/client.py).
 
-Operators are the emails in `BID_PLATFORM_ADMIN_EMAILS`. Authentication factors
-come from deployment overrides or encrypted database enrollment, with authority and
-precedence defined by [Operator enrollment](operator-enrollment.md#how-it-works).
-Sign-in checks the password and an RFC 6238 code with one step of drift. The shared
-password admission and
-atomic TOTP consumption rules are described below. A platform session is a Fernet token under `BID_TOKEN_KEY` of
-kind `platform`, valid for 30 minutes and re-checked against the configured
-list on every request. Org routes accept only `session` tokens and `bid_`
-API tokens, so the two kinds never cross.
+| Settings | Routes | Required scope | Contract |
+| --- | --- | --- | --- |
+| Model | `/providers`, `/management/providers` | `provider:read`; human `provider:write` for saves/tests | [Model settings](model-settings.md) |
+| Service credential | `/platform/credentials` | Human `credential:manage` | [Credential settings](platform-credentials.md) |
+| Clef | `/platform/clef` | Human `clef:manage` | [Clef contracts](../../server/app/schemas/clef.py) |
+| Offline CA trust | `/platform/trust-anchors` | Human `trust-anchor:manage` | [Signature trust](bid-review.md) |
 
-### Password admission and TOTP consumption
+Clef stores separate Workers AI and gateway credential references and revisions.
+Its check admits a bounded gateway metadata request and records the checked
+configuration revision. Offline CA management accepts supported public CA
+certificates, exposes metadata, and pins enabled snapshots for preparation.
+Disabling an anchor changes future snapshots without rewriting saved evidence.
 
-`/auth/orgs`, `/auth/login`, `/platform/auth/login` and operator enrollment use
-`PasswordAttempts` in [password_attempts.py](../../server/app/core/password_attempts.py). The
-account key is the email after trimming whitespace and lowercasing. Five
-failed attempts in a rolling 15-minute window block every entry point,
-regardless of source or org. The existing `platform.login` failures count
-alongside `auth.password` and `platform.operator.enroll` failures; a successful
-password check does not clear them. A platform attempt with invalid or replayed
-TOTP also counts.
+## Error and secret boundaries
 
-When the ASGI request provides a client address, 30 failures from that source
-in the same window additionally block attempts across accounts. Source failure
-records use a SHA-256-derived actor key and the `auth.source` action, so both
-dimensions use the existing audit actor/action/time index. The routes use
-`request.client.host`, never parse `X-Forwarded-For` themselves, and keep the
-account limit when a client address is unavailable. Missing, inactive and
-setup-only accounts follow the same failure and dummy PBKDF2 path. Invalid
-credentials, and a correct password for an org the account does not belong
-to, return the same `401 invalid_login`; limits return the same
-`429 too_many_attempts`, without an identity-existence check.
+Settings return the shared seven-field Result envelope and `Cache-Control:
+no-store`. Secret inputs and unknown credential validation properties cannot be
+reflected in errors. CLI projections validate paths, commands, status, and
+allowlisted response schemas before output. Management operations do not prove
+vendor availability; only explicit checks produce receipts.
 
-PostgreSQL transaction advisory locks are taken in source-then-account order
-before counting failures. The authentication transaction explicitly uses
-`READ COMMITTED`, so a waiter sees the preceding attempt's committed writes.
-Password verification, TOTP verification and audit
-inserts run under those locks. Failures commit before the API raises the
-credential error. For TOTP, `login.consume_totp` in
-[platform.py](../../server/app/services/platform.py) re-reads the last accepted
-counter from login or successful enrollment inside that transaction and rejects
-a counter no greater than it.
-The success row commits before session issuance, so concurrent API workers
-cannot issue two sessions for the same counter. No schema change is needed.
+## Implementation
 
-Each API application admits at most four active attempts and eight queued
-attempts. Waiting for local admission or a database advisory lock has a
-one-second timeout. Four additional transaction advisory slots limit password
-verification across all API processes using the same database; acquiring a
-slot never waits. PBKDF2 runs in a dedicated four-thread executor, not the
-shared asyncio executor. Full queues, expired waits and unavailable database
-slots return `503 auth_busy` with `Retry-After: 1` and CLI exit code 3. A lockout
-returns exit code 3 and a conservative `Retry-After: 900`. Neither rejection
-performs PBKDF2 or appends another failure. Cancelled HTTP requests retain
-their admission until their authentication task finishes and commits; shutdown
-drains those tasks before disposing of the database and executor.
-
-`membership()` in
-[auth.py](../../server/app/services/auth.py) rejects a disabled org, so login,
-sessions and tokens of that org fail at once with `org_inactive`.
-
-Provisioning creates the admin account with the unusable hash `!setup` when the
-email is new. The response carries `/app/setup-password#token=...`: a 24-hour
-signed token bound to a fingerprint of the current hash, so setting a password
-invalidates it. The token sits in the URL fragment, which browsers do not send
-to the server or in a `Referer`. Migration `0011` grants `bid_app` the
-column update this needs.
-
-The `NOLOGIN` role `bid_platform_fn` has no `BYPASSRLS`; its fixed summary
-functions read only orgs, memberships and usage_records across orgs. They never
-return org business content. Catalog adapters use the key in `BID_PLATFORM_CREDENTIAL_<NAME>`.
-Tenant selection,
-fallback order and queued-job identity are defined in
-[provider-config.md](provider-config.md#resolution-and-cache).
-Usage summaries expose only attributed resource counts.
-A default whose credential is missing fails extraction
-with `provider_unavailable` instead of falling back.
-Catalog models may list
-the vendor's official reasoning levels; see
-[reasoning-levels.md](reasoning-levels.md).
-
-The API serves the built console from `BID_WEB_DIR` under `/app`, returning
-`index.html` for client routes and never a file outside the build, with a
-strict Content-Security-Policy and `Referrer-Policy: no-referrer`.
-
-## Pitfalls
-
-- The summary functions are executable by `bid_app`; the operator check in
-  [platform.py](../../server/app/api/platform.py) is what keeps org users out.
-  Every new platform route must depend on `operator`.
-- A new column in a summary function's result is a disclosure decision. Keep
-  business tables out of `bid_platform_fn`'s policies.
-- Catalog models cannot be deleted, only disabled, so usage keeps its reference.
-- Catalog edits can stop queued jobs whose fixed model identity no longer matches;
-  a fresh submission uses the new catalog revision.
-- The model test button makes an explicitly authorized synthetic provider call
-  and reports its durable job and resource usage.
-- The limits above also affect ordinary org users. Accounts recover when fewer
-  than five failures remain in the rolling window; locked requests do not
-  extend it. Users behind one NAT or proxy share the source budget. Configure
-  the ASGI server's trusted proxies correctly; untrusted forwarding headers
-  must not determine its client address.
-- All API workers must run the shared authentication implementation; old
-  workers do not acquire its advisory locks. The local queue bound applies
-  per application, while the PBKDF2 slot bound applies per database.
-- Authentication failures add append-only audit rows, including source
-  counters. Retention must preserve the active failure window and the last
-  accepted TOTP counter; deleting those rows resets that protection.
-
-## Code
-
-- [0010_platform_admin.py](../../server/migrations/versions/0010_platform_admin.py), [0011_password_setup.py](../../server/migrations/versions/0011_password_setup.py)
-- [server/app/services/platform.py](../../server/app/services/platform.py), [server/app/api/platform.py](../../server/app/api/platform.py), [server/app/core/totp.py](../../server/app/core/totp.py)
-- [server/app/core/password_attempts.py](../../server/app/core/password_attempts.py), [server/app/services/auth.py](../../server/app/services/auth.py)
-- [server/app/schemas/platform_contracts.py](../../server/app/schemas/platform_contracts.py), `mount_console` in [server/app/api/main.py](../../server/app/api/main.py)
-- [web/src/](../../web/src/main.js) and [web/e2e/platform.spec.js](../../web/e2e/platform.spec.js)
-- Tests: [test_platform_db.py](../../server/tests/test_platform_db.py), [test_platform_auth.py](../../server/tests/test_platform_auth.py), [test_auth_limits.py](../../server/tests/test_auth_limits.py), [test_platform_api.py](../../server/tests/test_platform_api.py), [test_console.py](../../server/tests/test_console.py)
+[main.py](../../server/app/api/main.py) mounts ordinary-context settings routes:
+[credentials](../../server/app/api/platform_credentials.py),
+[Clef](../../server/app/api/platform_clef.py), and
+[trust anchors](../../server/app/api/platform_trust_anchors.py).

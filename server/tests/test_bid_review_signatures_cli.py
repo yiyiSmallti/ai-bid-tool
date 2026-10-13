@@ -1,14 +1,14 @@
 """Additive submission signature output through the CLI HTTP transport."""
 
 import json
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
+from app.schemas import bid_review as models
 from app.schemas.contracts import Result
 from bid_cli import main as cli
 from bid_cli.client import Client
+from test_bid_review_cli import assert_cli_contracts
 
 ID = "00000000-0000-4000-8000-000000000001"
 SUBMISSION = "00000000-0000-4000-8000-000000000002"
@@ -22,7 +22,6 @@ def detail(restricted):
         {
             "id": f"00000000-0000-4000-8000-{10 + index:012}",
             "file_id": f"00000000-0000-4000-8000-{20 + index:012}",
-            "org_id": ID,
             "task_id": ID,
             "submission_id": SUBMISSION,
             "role": role,
@@ -74,7 +73,6 @@ def detail(restricted):
     return {
         "submission": {
             "id": SUBMISSION,
-            "org_id": ID,
             "task_id": ID,
             "revision": 1,
             "manifest_sha256": SHA,
@@ -90,7 +88,6 @@ def detail(restricted):
                 }
                 for file in files
             ],
-            "created_by": ID,
             "created_at": NOW,
             "state": "prepared",
             "preparation_job_id": ID,
@@ -121,13 +118,12 @@ def detail(restricted):
 
 
 def test_signature_detail_snapshot_protected_and_restricted_both_modes(monkeypatch, capsys):
-    monkeypatch.setenv("BID_SESSION", "synthetic-org-session")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-access-key-synthetic-org-session")
     current = {"restricted": False}
 
     def handler(request):
         assert request.url.path == f"/v4/bid-submissions/{SUBMISSION}"
-        assert request.headers["x-org-id"] == ID
+        assert "x-org-id" not in request.headers
         return httpx.Response(
             200,
             json=Result(
@@ -149,13 +145,22 @@ def test_signature_detail_snapshot_protected_and_restricted_both_modes(monkeypat
             current["restricted"] = restricted
             cli.main(["--mode", mode, "review", "submission", "show", "--id", SUBMISSION, "--json"])
             output = capsys.readouterr().out
-            assert "synthetic-org-session" not in output
+            assert "synthetic-access-key-synthetic-org-session" not in output
             if restricted:
                 assert "protected signer" not in output and "投标文件须" not in output
             body = json.loads(output)
             body["duration_ms"] = 0
             actual[f"{mode}: {'restricted' if restricted else 'protected'}"] = body
-    snapshot = Path(__file__).with_name("snapshots") / "bid-review-signatures-cli-v4.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n")
-    assert actual == json.loads(snapshot.read_text())
+    assert_cli_contracts(actual)
+    for mode in ("local", "remote"):
+        for projection in ("restricted", "protected"):
+            value = models.BidSubmissionDetail.model_validate(
+                actual[f"{mode}: {projection}"]["data"]
+            )
+            assert (
+                str(value.submission.id) == SUBMISSION and value.submission.manifest_sha256 == SHA
+            )
+            signature = value.signature_validations[0].signatures[0]
+            assert signature.crypto_status == "valid" and signature.field_name_sha256 == SHA
+            assert signature.modified_after_signing and not signature.final_revision_covered
+            assert signature.certificate.fingerprint_sha256 == SHA

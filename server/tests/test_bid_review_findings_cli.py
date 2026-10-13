@@ -1,8 +1,6 @@
 """CLI-to-ASGI acceptance for run-bound findings and append-only human requests."""
 
 import json
-import os
-from pathlib import Path
 
 import pytest
 from app.schemas import bid_review_findings as models
@@ -11,7 +9,7 @@ from bid_cli import main as cli
 from bid_cli.schema import command_schema
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from test_bid_review_cli import ID, NOW, SHA, InterfaceClient, invoke
+from test_bid_review_cli import ID, NOW, SHA, InterfaceClient, assert_cli_contracts, invoke
 
 REVIEW = "00000000-0000-4000-8000-000000000002"
 FINDING = "00000000-0000-4000-8000-000000000003"
@@ -68,13 +66,12 @@ def interface():
         state="dismissed",
         reason="Synthetic human review reason",
         reason_sha256=SHA,
-        decided_by=ID,
         decided_at=NOW,
     ).model_dump(mode="json")
 
     @application.get("/v4/bid-reviews/{review_id}/findings")
     async def findings(request: Request, review_id: str):
-        assert request.headers["x-org-id"] == ID and review_id == REVIEW
+        assert review_id == REVIEW
         assert request.query_params["limit"] == "50"
         state["calls"].append({"method": "GET", "query": dict(request.query_params)})
         row = finding
@@ -98,7 +95,7 @@ def interface():
         "/v4/bid-reviews/{review_id}/findings/{finding_id}/{section}", methods=["GET", "POST"]
     )
     async def action(request: Request, review_id: str, finding_id: str, section: str):
-        assert request.headers["x-org-id"] == ID and review_id == REVIEW and finding_id == FINDING
+        assert review_id == REVIEW and finding_id == FINDING
         assert section in {"decisions", "classification"}
         state["calls"].append({"method": request.method, "section": section})
         if request.method == "GET":
@@ -164,10 +161,9 @@ def interface():
 
 def setup(monkeypatch, tmp_path):
     application, state = interface()
-    monkeypatch.setenv("BID_SESSION", "synthetic-findings-session")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-access-key-synthetic-findings-session")
     monkeypatch.setattr(
-        cli, "Client", lambda mode, server, saved: InterfaceClient(mode, server, saved, application)
+        cli, "Client", lambda mode, server: InterfaceClient(mode, server, application)
     )
     paths = {}
     for action in ("dismiss", "reopen", "confirm", "classify"):
@@ -223,10 +219,23 @@ def test_findings_cli_asgi_snapshots_both_modes(monkeypatch, tmp_path, capsys):
             assert "reason" not in body["items"][0] and "tender_support" not in body["items"][0]
             actual[f"{mode}: review findings {projection}"] = body
             state[projection] = False
-    snapshot = Path(__file__).with_name("snapshots") / "bid-review-findings-cli-v4.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n")
-    assert actual == json.loads(snapshot.read_text())
+    assert_cli_contracts(actual)
+    for mode in ("local", "remote"):
+        listing = actual[f"{mode}: review findings"]
+        models.BidReviewFindingsData.model_validate(listing["data"])
+        finding = models.BidReviewFindingView.model_validate(listing["items"][0])
+        assert str(finding.id) == FINDING and str(finding.review_id) == REVIEW
+        assert finding.tender_support[0].quote == "Synthetic tender obligation"
+        for action in ("dismiss", "reopen", "confirm", "classify"):
+            event = models.BidReviewEventView.model_validate(
+                actual[f"{mode}: review {action}"]["data"]
+            )
+            assert event.action == action and event.reason_sha256 == SHA
+            assert event.decided_at.isoformat().replace("+00:00", "Z") == NOW
+        for projection in ("safe", "stale"):
+            models.BidReviewSafeFinding.model_validate(
+                actual[f"{mode}: review findings {projection}"]["items"][0]
+            )
 
 
 @pytest.mark.parametrize(

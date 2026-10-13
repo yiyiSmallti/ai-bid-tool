@@ -184,11 +184,11 @@ async def submit(
 ):
     actor = await access(session, actor)
     extraction, items = await items_for(session, task_id, body.extraction_job_id)
+    from app.providers.configured import model_identity
+
     manifest = manifest_for(
         task_id, extraction.id, items, provider.identity if provider is not None else None
     )
-    from app.providers.configured import model_identity
-
     manifest["model"] = model_identity(llm) if llm is not None else None
     input_hash = images.digest(manifest)
     blocker = (
@@ -257,10 +257,11 @@ async def submit(
             "simulation_no_items", "No table-listed technical requirements to simulate", 400, 2
         )
     await cards.task_lock(session, task_id)
-    return await create_job(session, actor, task_id, extraction, JOB_KIND, manifest, body.retry)
+    _, job = await create_job(session, actor, task_id, extraction, JOB_KIND, manifest, body.retry)
+    return {"job_id": str(job.id), "status": job.status}, job
 
 
-async def fetch_page(org_id: UUID, url: str, processor) -> simulation.Page:
+async def fetch_page(url: str, processor) -> simulation.Page:
     """Fetch one public page through the trusted broker, or raise FetchDenied."""
     from app.services.sandbox import policy_source
 
@@ -269,7 +270,6 @@ async def fetch_page(org_id: UUID, url: str, processor) -> simulation.Page:
     broker = FetchBroker(
         source,
         policy.revision,
-        org_id,
         quota=quota_from_env(Path(os.environ["BID_SANDBOX_FETCH_QUOTA"])),
         transport=processor.sandbox_fetch_transport,
         resolver=processor.sandbox_resolver or system_resolver,
@@ -349,9 +349,7 @@ def item_text(item: dict, quotes: dict[str, str]) -> dict:
     return {"item_key": item["key"], "name": item["name"], "requirements": lines}
 
 
-async def read_vendor_page(
-    llm, client, item, vendor, url, extract, org_id, processor, limit, tried
-):
+async def read_vendor_page(llm, client, item, vendor, url, extract, processor, limit, tried):
     """Quote one page; returns (model, kept quotes, url, followable links) and logs the attempt.
 
     When the page cannot be fetched, the search service's extract of it is read instead
@@ -360,7 +358,7 @@ async def read_vendor_page(
     attempt = {"vendor": vendor, "url": url, "source": "page"}
     tried.append(attempt)
     try:
-        page = await fetch_page(org_id, url, processor)
+        page = await fetch_page(url, processor)
     except FetchDenied as denied:
         text = simulation.normalize(extract)[: simulation.MAX_PAGE_CHARS]
         if len(text) < MIN_PAGE_CHARS:
@@ -388,7 +386,7 @@ async def read_vendor_page(
     return model, kept[:30], page.url, []
 
 
-async def simulate_item(llm, client, item, proposal, quotes, search, processor, org_id, limit):
+async def simulate_item(llm, client, item, proposal, quotes, search, processor, limit):
     """Try each proposed vendor's pages, one link level deep, until one names a product."""
     outcome = {"key": item["key"], "name": item["name"], "kind": proposal.kind, "tried": []}
     if proposal.item_key != item["key"]:
@@ -410,7 +408,7 @@ async def simulate_item(llm, client, item, proposal, quotes, search, processor, 
             url, extract, may_follow = queue.pop(0)
             tried = outcome["tried"]
             model, kept, url, follow = await read_vendor_page(
-                llm, client, text, vendor, url, extract, org_id, processor, limit, tried
+                llm, client, text, vendor, url, extract, processor, limit, tried
             )
             named = named or bool(model)
             if kept:
@@ -448,7 +446,6 @@ async def record(session, actor, task_id: UUID, job_id: UUID, outcome: dict) -> 
     session.add(
         SimulatedResource(
             id=uuid4(),
-            org_id=actor.org_id,
             job_id=job_id,
             product_id=product_id,
             source_url=outcome["url"],
@@ -477,7 +474,6 @@ async def record(session, actor, task_id: UUID, job_id: UUID, outcome: dict) -> 
         session.add(
             SimulatedResource(
                 id=uuid4(),
-                org_id=actor.org_id,
                 job_id=job_id,
                 feature_id=feature_id,
                 source_url=outcome["url"],
@@ -492,11 +488,16 @@ async def record(session, actor, task_id: UUID, job_id: UUID, outcome: dict) -> 
 
 async def process(execution: JobExecution, processor, llm) -> None:
     from app.providers.search import create_search_provider
+    from app.services.platform_credentials import PlatformCredentialResolver
 
-    search = await create_search_provider(processor.settings, processor.search_transport)
+    search = await create_search_provider(
+        processor.settings,
+        processor.search_transport,
+        credential_resolver=PlatformCredentialResolver(processor.settings, execution.db),
+    )
     if search is None:
         raise ProviderFailure("Vendor search is not configured", code="search_unavailable")
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         manifest = job.result["submission"]["input_manifest"]
         if manifest.get("search_identity") != search.identity:
@@ -556,13 +557,12 @@ async def process(execution: JobExecution, processor, llm) -> None:
                     quotes,
                     search,
                     processor,
-                    execution.org_id,
                     limit,
                 )
                 for item in items
             )
         )
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         # Resource selection also locks Task; acquire it before the job publication fence.
         await session.scalar(select(Task).where(Task.id == task_id).with_for_update())
         job = await execution.owned_job(session)
@@ -603,7 +603,7 @@ async def task_marks(session, actor, task_id: UUID) -> dict:
 
 
 async def simulated_ids(session) -> tuple[set[UUID], set[UUID]]:
-    """Product and feature roots registered as simulated in the current org."""
+    """Product and feature roots registered as simulated in the installation."""
     rows = (await session.scalars(select(SimulatedResource))).all()
     return (
         {row.product_id for row in rows if row.product_id},

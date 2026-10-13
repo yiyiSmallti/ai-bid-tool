@@ -1,8 +1,6 @@
-import base64
 import hashlib
 import hmac
 import json
-import secrets
 import time
 from collections.abc import Sequence
 
@@ -11,25 +9,11 @@ from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from app.core.errors import ServiceError
 
 
-def hash_password(password: str) -> str:
-    salt = secrets.token_bytes(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 600_000)
-    return (
-        "pbkdf2$600000$" + base64.b64encode(salt).decode() + "$" + base64.b64encode(digest).decode()
+def access_key_matches(value: str, expected: str) -> bool:
+    """Compare fixed-size digests so malformed lengths share the same comparison path."""
+    return hmac.compare_digest(
+        hashlib.sha256(value.encode()).digest(), hashlib.sha256(expected.encode()).digest()
     )
-
-
-def verify_password(password: str, encoded: str) -> bool:
-    try:
-        algorithm, rounds, salt, digest = encoded.split("$")
-        if algorithm != "pbkdf2":
-            return False
-        actual = hashlib.pbkdf2_hmac(
-            "sha256", password.encode(), base64.b64decode(salt), int(rounds)
-        )
-        return hmac.compare_digest(actual, base64.b64decode(digest))
-    except (ValueError, TypeError):
-        return False
 
 
 class Secrets:

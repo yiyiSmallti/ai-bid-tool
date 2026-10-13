@@ -6,37 +6,34 @@ import JobPanel from "../components/JobPanel.vue";
 import BidSignatureResults from "../components/BidSignatureResults.vue";
 import BidOutboundAuthorization from "../components/BidOutboundAuthorization.vue";
 import BidReviewRuns from "../components/BidReviewRuns.vue";
-import { formatTime, orgRequest } from "../org.js";
-import { fileKinds, mib, preparationStatuses, reviewAuthorityInfo, reviewError, safeWarning, submissionPath, submissionStates } from "../bid-review.js";
+import { request } from "../api.js";
+import { formatTime } from "../org.js";
+import { fileKinds, mib, preparationStatuses, reviewError, safeWarning, submissionPath, submissionStates } from "../bid-review.js";
 const route = useRoute();
 const taskId = computed(() => String(route.params.taskId)), submissionId = computed(() => String(route.params.submissionId));
-const detail = ref(null), preview = ref(null), consent = ref(false), writable = ref(false), busy = ref(false), error = ref(""), activeJob = ref(""), retry = ref(false);
+const detail = ref(null), preview = ref(null), consent = ref(false), busy = ref(false), error = ref(""), activeJob = ref(""), retry = ref(false);
 const submission = computed(() => detail.value?.submission), documents = computed(() => submission.value?.documents ?? submission.value?.files ?? []);
-const canPrepare = computed(() => writable.value && submission.value?.state === "uploaded" && !["queued", "running"].includes(detail.value?.preparation?.status));
+const canPrepare = computed(() => submission.value?.state === "uploaded" && !["queued", "running"].includes(detail.value?.preparation?.status));
 const expired = computed(() => preview.value && Date.parse(preview.value.expires_at) <= Date.now());
 const candidatesBusy = ref(false);
-const owner = ref(false), runWritable = ref(false), authorizationEpoch = ref(0);
-const findingAuthority = ref(null);
+const authorizationEpoch = ref(0);
 let serial = 0, controller, requestId = crypto.randomUUID(), expiryTimer;
 function invalidate() { clearTimeout(expiryTimer); preview.value = null; consent.value = false; requestId = crypto.randomUUID(); }
 async function reread() {
-  const result = await orgRequest("GET", `/bid-submissions/${encodeURIComponent(submissionId.value)}`, undefined, { signal: controller?.signal });
+  const result = await request("GET", `/bid-submissions/${encodeURIComponent(submissionId.value)}`, undefined, { signal: controller?.signal });
   if (result.data.submission?.task_id !== taskId.value || result.data.submission?.id !== submissionId.value) throw new Error("submission mismatch");
   detail.value = result.data; activeJob.value = result.data.preparation?.job_id ?? "";
 }
 async function load() {
-  const run = ++serial; controller?.abort(); controller = new AbortController(); detail.value = null; writable.value = false; busy.value = false; candidatesBusy.value = false; activeJob.value = ""; retry.value = false; error.value = ""; invalidate();
-  owner.value = false;
-  runWritable.value = false;
-  findingAuthority.value = null;
-  try { const allowed = await reviewAuthorityInfo(taskId.value); if (run !== serial) return; writable.value = allowed.writable; runWritable.value = allowed.runWritable; owner.value = allowed.owner; findingAuthority.value = allowed; await reread(); }
+  serial++; controller?.abort(); controller = new AbortController(); detail.value = null; busy.value = false; candidatesBusy.value = false; activeJob.value = ""; retry.value = false; error.value = ""; invalidate();
+  try { await reread(); }
   catch (exc) { if (exc.name !== "AbortError") error.value = reviewError(exc); }
 }
 async function inspect() {
   const run = serial;
   busy.value = true; error.value = ""; invalidate();
   try {
-    const result = await orgRequest("POST", `${submissionPath(taskId.value)}/${encodeURIComponent(submissionId.value)}/prepare`, { request_id: requestId, submission_id: submissionId.value, dry_run: true }, { signal: controller?.signal });
+    const result = await request("POST", `${submissionPath(taskId.value)}/${encodeURIComponent(submissionId.value)}/prepare`, { request_id: requestId, submission_id: submissionId.value, dry_run: true }, { signal: controller?.signal });
     if (run !== serial) return;
     preview.value = result.data;
     expiryTimer = setTimeout(() => { invalidate(); error.value = "预检已过期，请重新预检"; }, Math.max(0, Date.parse(result.data.expires_at) - Date.now()));
@@ -48,7 +45,7 @@ async function submit() {
   if (!consent.value || !preview.value || expired.value || preview.value.admission_blockers.length) return;
   busy.value = true; error.value = "";
   const body = { request_id: requestId, submission_id: submissionId.value, dry_run: false, retry: retry.value, expected_input_hash: preview.value.input_hash, preflight_token: preview.value.preflight_token };
-  try { const result = await orgRequest("POST", `${submissionPath(taskId.value)}/${encodeURIComponent(submissionId.value)}/prepare`, body, { signal: controller?.signal }); if (run !== serial) return; activeJob.value = result.data.job_id; invalidate(); await reread(); }
+  try { const result = await request("POST", `${submissionPath(taskId.value)}/${encodeURIComponent(submissionId.value)}/prepare`, body, { signal: controller?.signal }); if (run !== serial) return; activeJob.value = result.data.job_id; invalidate(); await reread(); }
   catch (exc) { if (run !== serial || exc.name === "AbortError") return; error.value = reviewError(exc); if (exc.status === 409 || exc.code?.includes("preflight")) invalidate(); }
   finally { if (run === serial) busy.value = false; }
 }
@@ -58,7 +55,7 @@ async function moreCandidates() {
   if (cursor === null || cursor === undefined || candidatesBusy.value) return;
   candidatesBusy.value = true;
   try {
-    const result = await orgRequest("GET", `/bid-submissions/${encodeURIComponent(submissionId.value)}/signing-candidates?cursor=${cursor}&limit=20`, undefined, { signal: controller?.signal });
+    const result = await request("GET", `/bid-submissions/${encodeURIComponent(submissionId.value)}/signing-candidates?cursor=${cursor}&limit=20`, undefined, { signal: controller?.signal });
     if (run !== serial || detail.value !== current) return;
     const known = new Set(current.signing_candidates.map(item => item.id));
     if (!Array.isArray(result.data.items) || result.data.items.length > 20 || result.data.total !== current.signing_candidate_count || (result.data.next_cursor !== null && (!Number.isInteger(result.data.next_cursor) || result.data.next_cursor <= cursor))) throw new Error("invalid candidate page");
@@ -71,8 +68,8 @@ async function moreCandidates() {
   finally { if (run === serial) candidatesBusy.value = false; }
 }
 watch([taskId, submissionId], load, { immediate: true });
-window.addEventListener("bid:org-reset", load);
-onBeforeUnmount(() => { serial++; controller?.abort(); invalidate(); detail.value = null; window.removeEventListener("bid:org-reset", load); });
+window.addEventListener("bid:session-reset", load);
+onBeforeUnmount(() => { serial++; controller?.abort(); invalidate(); detail.value = null; window.removeEventListener("bid:session-reset", load); });
 </script>
 <template>
   <TaskNavigation :task-id="taskId" />
@@ -101,7 +98,7 @@ onBeforeUnmount(() => { serial++; controller?.abort(); invalidate(); detail.valu
       </div>
     </el-card>
     <p v-if="detail.preparation" role="status">准备状态：{{ preparationStatuses[detail.preparation.status] }}</p>
-    <JobPanel :job-id="activeJob" :writable="writable" assessment-mode bid-preparation @finished="finished" />
+    <JobPanel :job-id="activeJob" assessment-mode bid-preparation @finished="finished" />
     <BidSignatureResults :validations="detail.signature_validations" :candidates="detail.signing_candidates" :candidate-count="detail.signing_candidate_count" :next-cursor="detail.signing_candidates_next_cursor ?? null" :busy="candidatesBusy" @more="moreCandidates" />
     <el-card class="section" shadow="never"><template #header><h3>页面清单</h3></template>
       <p class="hint">PDF 使用原件页码；DOCX 使用固定转换后的页码，原文引用仍使用结构块。图片页未做 OCR；签名字段数量仅代表发现字段。</p>
@@ -114,8 +111,8 @@ onBeforeUnmount(() => { serial++; controller?.abort(); invalidate(); detail.valu
         <el-table-column label="解析警示" min-width="220"><template #default="{ row }"><p v-for="(warning, index) in row.parsing_warnings" :key="index">{{ safeWarning(warning) }}</p><span v-if="!row.parsing_warnings.length">无警示</span></template></el-table-column>
       </el-table>
     </el-card>
-    <BidOutboundAuthorization :task-id="taskId" :submission-id="submissionId" :owner="owner" :prepared="submission.state === 'prepared'" @changed="authorizationEpoch++" />
-    <BidReviewRuns :task-id="taskId" :submission-id="submissionId" :writable="runWritable" :prepared="submission.state === 'prepared'" :authorization-epoch="authorizationEpoch" :authority="findingAuthority" />
+    <BidOutboundAuthorization :task-id="taskId" :submission-id="submissionId" :prepared="submission.state === 'prepared'" @changed="authorizationEpoch++" />
+    <BidReviewRuns :task-id="taskId" :submission-id="submissionId" :prepared="submission.state === 'prepared'" :authorization-epoch="authorizationEpoch" />
   </template>
 </template>
 <style scoped>

@@ -1,8 +1,8 @@
 """Human review acceptance against the API and immutable PostgreSQL snapshots.
 
-Failure cases: wrong actor/domain, stale revision/hash, pending coverage, invalid
+Failure cases: nonhuman actor, stale revision/hash, pending coverage, invalid
 normalization, rewriting old snapshots, inherited classification after revision,
-cross-tenant routes, and pagination crossing its task/rubric binding.
+cross-task routes, and pagination crossing its task/rubric binding.
 """
 
 from __future__ import annotations
@@ -16,13 +16,8 @@ from app.models.entities import AuditLog
 from app.schemas.score_contracts import RubricReportData
 from sqlalchemy import select
 from test_card_generation import token_header
-from test_response_cards import set_role
 from test_score_api import rubric_case as rubric_case
 from test_score_api import rubric_input_case as rubric_input_case
-
-
-def role(case, value):
-    set_role(case["admin_engine"], case["tenants"]["orgs"][0], case["tenants"]["users"][0], value)
 
 
 def base(case, report=None):
@@ -50,7 +45,6 @@ def decision(report, subject, action="confirm", **extra):
 
 async def classify_all(case, report=None, domain="commercial"):
     report = await show(case, report)
-    role(case, "admin")
     for collection in ("sections", "items"):
         for subject in report[collection]:
             body = decision(report, subject)
@@ -61,7 +55,6 @@ async def classify_all(case, report=None, domain="commercial"):
                 json={**body, "review_domain": domain},
             )
             assert response.status_code == 200, response.text
-    role(case, "bidder" if domain == "commercial" else "technical")
     return await show(case, report)
 
 
@@ -175,7 +168,6 @@ async def test_rubric_review_confirmation_revision_and_paginated_history(rubric_
     assert response.status_code == 200, response.text
     confirmed = await show(case)
     assert confirmed["rubric"]["state"] == "confirmed"
-    assert all(row["confirmed_by"] for row in confirmed["sections"] + confirmed["items"])
     stale = await case["api"].post(
         base(case) + "/decisions",
         headers=case["header"],
@@ -191,17 +183,14 @@ async def test_rubric_review_confirmation_revision_and_paginated_history(rubric_
     assert new["rubric"]["version"] == confirmed["rubric"]["version"] + 1
     assert new["rubric"]["state"] == "candidate"
     assert all(
-        row["review_domain"] is None and row["revision"] == 1 and row["state"] == "candidate"
+        row["review_domain"] is None and row["revision"] == 1 and (row["state"] == "candidate")
         for row in new["sections"] + new["items"]
-    )
-    assert all(
-        row["disposition"] == "pending" and row["decided_by"] is None for row in new["coverage"]
     )
     assert {row["id"] for row in new["items"]}.isdisjoint(row["id"] for row in confirmed["items"])
     previous = await show(case)
     assert previous["rubric"]["state"] == "superseded"
     assert previous["items"] == confirmed["items"]
-    events, cursor = [], None
+    events, cursor = ([], None)
     while True:
         response = await case["api"].get(
             base(case) + "/history",
@@ -237,11 +226,6 @@ async def test_rubric_responsible_session_and_hash_gates(rubric_case):
     subject = report["items"][0]
     path = f"{base(case)}/items/{subject['id']}/decisions"
     body = decision(report, subject)
-    for wrong_role in ("admin", "bidder"):
-        role(case, wrong_role)
-        denied = await case["api"].post(path, headers=case["header"], json=body)
-        assert denied.status_code == 403, denied.text
-    role(case, "admin")
     token = await token_header(case["api"], case["header"], scopes=["task:read", "score:read"])
     denied = await case["api"].post(path, headers=token, json=body)
     assert denied.status_code == 403
@@ -255,7 +239,6 @@ async def test_rubric_responsible_session_and_hash_gates(rubric_case):
         },
     )
     assert forbidden_token.status_code in {400, 403, 422}
-    role(case, "technical")
     stale = await case["api"].post(
         path, headers=case["header"], json={**body, "expected_input_hash": "0" * 64}
     )
@@ -268,8 +251,8 @@ async def test_rubric_responsible_session_and_hash_gates(rubric_case):
     revised = replacement(report)
     revised["overall_score_range"]["maximum"] = "6"
     denied = await case["api"].post(base(case) + "/revisions", headers=case["header"], json=revised)
-    assert denied.status_code == 403
-    async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
+    assert denied.status_code == 200, denied.text
+    async with case["app"].state.db.transaction() as session:
         audits = list(
             (
                 await session.scalars(
@@ -285,7 +268,6 @@ async def test_rubric_responsible_session_and_hash_gates(rubric_case):
         assert len(token_denials) == 1
         assert token_denials[0].actor_kind == "token"
         assert token_denials[0].initiated_by == "external_agent"
-        assert token_denials[0].on_behalf_of_user_id == token_denials[0].actor_user_id
         assert token_denials[0].invocation_id is not None
 
 
@@ -393,42 +375,6 @@ async def test_replacement_distinguishes_semantic_errors_from_malformed_input(ru
     assert len(listing.json()["items"]) == (2 if change in semantic_errors else 1)
 
 
-async def test_rubric_every_route_hides_other_org(rubric_case):
-    case = rubric_case
-    report = await classify_all(case)
-    prefix = base(case)
-    foreign = case["headers"][1]
-    for path in (f"/tasks/{case['task']}/score-rubrics", prefix, prefix + "/history"):
-        assert (await case["api"].get(path, headers=case["header"])).status_code == 200
-        response = await case["api"].get(path, headers=foreign)
-        assert response.status_code == 404, response.text
-    requests = [
-        (prefix + "/decisions", decision(report, report["rubric"])),
-        (prefix + "/revisions", replacement(report)),
-    ]
-    for collection in ("sections", "items"):
-        entry = report[collection][0]
-        classify = decision(report, entry)
-        classify.pop("action")
-        requests += [
-            (
-                f"{prefix}/{collection}/{entry['id']}/classification",
-                {**classify, "review_domain": "commercial"},
-            ),
-            (f"{prefix}/{collection}/{entry['id']}/decisions", decision(report, entry)),
-        ]
-    entry = report["coverage"][0]
-    requests.append(
-        (
-            f"{prefix}/coverage/{entry['requirement_id']}/decisions",
-            decision(report, entry, "mapped", rubric_item_ids=[report["items"][0]["id"]]),
-        )
-    )
-    for path, body in requests:
-        response = await case["api"].post(path, headers=foreign, json=body)
-        assert response.status_code == 404, response.text
-
-
 @pytest.mark.parametrize("algorithm", ["weighted_sum", "capped_sum", "formula", "non_additive"])
 async def test_confirmed_rules_record_supported_and_unexecuted_aggregations(rubric_case, algorithm):
     case = rubric_case
@@ -476,7 +422,6 @@ async def test_confirmed_rules_record_supported_and_unexecuted_aggregations(rubr
 async def test_reclassification_resets_subject_confirmation_and_coverage_reopen(rubric_case):
     case = rubric_case
     complete = await confirm_contents(case)
-    role(case, "admin")
     item = complete["items"][0]
     body = decision(complete, item)
     body.pop("action")
@@ -487,9 +432,7 @@ async def test_reclassification_resets_subject_confirmation_and_coverage_reopen(
     )
     assert response.status_code == 200, response.text
     report = await show(case)
-    assert report["items"][0]["state"] == "candidate" and report["items"][0]["confirmed_by"] is None
     assert not report["rubric"]["completeness"]["complete"]
-    role(case, "bidder")
     coverage = report["coverage"][0]
     response = await case["api"].post(
         f"{base(case)}/coverage/{coverage['requirement_id']}/decisions",
@@ -503,7 +446,7 @@ async def test_reclassification_resets_subject_confirmation_and_coverage_reopen(
 
 
 @pytest.fixture
-async def many_rubric_case(tenants, tmp_path, admin_engine, monkeypatch):
+async def many_rubric_case(database, tmp_path, admin_engine, monkeypatch):
     from app.schemas.contracts import Category
     from test_check import check_client
     from test_check_combined import semantic_llm
@@ -516,7 +459,7 @@ async def many_rubric_case(tenants, tmp_path, admin_engine, monkeypatch):
         submit_rubric,
     )
 
-    async with check_client(tenants, tmp_path) as (api, app, headers, provider):
+    async with check_client(database, tmp_path) as (api, app, headers, provider):
         original = provider._extract
 
         async def all_scoring(chunks, schema):
@@ -527,17 +470,16 @@ async def many_rubric_case(tenants, tmp_path, admin_engine, monkeypatch):
 
         monkeypatch.setattr(provider, "_extract", all_scoring)
         task, document, extraction, requirements = await create_tender(
-            api, app, headers[0], tmp_path, suffix="multi-rubric", confirmed=True
+            api, app, headers, tmp_path, suffix="multi-rubric", confirmed=True
         )
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
         vendor = RubricVendor()
         install_rubric_resolver(monkeypatch, semantic_llm(tmp_path, vendor))
         case = {
             "api": api,
             "app": app,
             "headers": headers,
-            "header": headers[0],
-            "tenants": tenants,
+            "header": headers,
+            "database": database,
             "tmp_path": tmp_path,
             "admin_engine": admin_engine,
             "task": task,
@@ -552,7 +494,7 @@ async def many_rubric_case(tenants, tmp_path, admin_engine, monkeypatch):
         terminal = await finish_rubric(case, submitted.json()["data"])
         assert terminal["status"] == "succeeded", terminal
         response = await api.get(
-            f"/tasks/{task}/score-rubrics/{terminal['result']['rubric_id']}", headers=headers[0]
+            f"/tasks/{task}/score-rubrics/{terminal['result']['rubric_id']}", headers=headers
         )
         assert response.status_code == 200, response.text
         yield {**case, "rubric": response.json()["data"]}
@@ -631,34 +573,6 @@ async def test_coverage_duplicates_cycles_exclusions_and_foreign_mapping(many_ru
     )
     assert response.status_code == 200, response.text
     assert response.json()["data"]["state"] == "confirmed"
-
-
-async def test_mixed_responsibility_revision_preserves_other_domain(rubric_case):
-    case = rubric_case
-    report = await classify_all(case)
-    role(case, "admin")
-    item = report["items"][0]
-    body = decision(report, item)
-    body.pop("action")
-    response = await case["api"].post(
-        f"{base(case)}/items/{item['id']}/classification",
-        headers=case["header"],
-        json={**body, "review_domain": "technical"},
-    )
-    assert response.status_code == 200, response.text
-    report = await show(case)
-    role(case, "bidder")
-    body = replacement(report)
-    body["items"][0]["title"] = "Unauthorized cross-domain rewrite"
-    denied = await case["api"].post(base(case) + "/revisions", headers=case["header"], json=body)
-    assert denied.status_code == 403
-    body = replacement(report)
-    body["sections"][0]["title"] = "Allowed commercial section correction"
-    revised = await case["api"].post(base(case) + "/revisions", headers=case["header"], json=body)
-    assert revised.status_code == 200, revised.text
-    new = revised.json()["data"]
-    assert new["items"][0]["title"] == report["items"][0]["title"]
-    assert new["items"][0]["review_domain"] is None and new["sections"][0]["review_domain"] is None
 
 
 @pytest.mark.parametrize(
@@ -747,7 +661,7 @@ async def test_human_review_rejects_sensitive_prose_and_preserves_coverage_propo
     assert response.status_code == 200, response.text
     revised = response.json()["data"]
     assert revised["coverage"][0]["disposition"] == "pending"
-    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         event = await session.scalar(
             select(ScoreRubricRevisionEvent).where(
                 ScoreRubricRevisionEvent.rubric_id == UUID(revised["rubric"]["id"])

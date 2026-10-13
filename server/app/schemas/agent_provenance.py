@@ -12,7 +12,6 @@ class AgentProvenance(Contract):
     """Business origin survives worker publication; actor_kind remains the actual executor."""
 
     initiated_by: Literal["builtin_agent", "external_agent"]
-    on_behalf_of_user_id: UUID
     principal_id: UUID | None = None
     session_id: UUID | None = None
     step_id: UUID | None = None

@@ -3,7 +3,7 @@
 import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, text
@@ -11,17 +11,17 @@ from sqlalchemy import select, text
 from app.core.config import Settings
 from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets
-from app.models.entities import Chunk, Document, Job, Membership, Requirement, User
+from app.models.entities import Chunk, Document, Job, Requirement
 from app.models.requirement_confirmation import (
     RequirementReview,
     RequirementReviewEvent,
     RequirementReviewRequest,
     RequirementReviewSet,
 )
-from app.models.team_workflow import RequirementWorkflow, TaskMember
 from app.schemas import requirement_confirmation as schema
 from app.schemas.contracts import ExtractedRequirement
 from app.services.extraction import fingerprint
+from app.services.requirement_seeds import seed_reviews
 from app.services.requirement_source import (
     canonical,
     content_of,
@@ -30,7 +30,7 @@ from app.services.requirement_source import (
     raw_digest,
     verify,
 )
-from app.services.task_workflow import access, fail
+from app.services.task_access import access
 from app.services.versioned import audit
 
 __all__ = [
@@ -44,39 +44,35 @@ __all__ = [
     "decide",
     "confirm_batch",
     "consumption_manifest",
-    "seed_reviews",
 ]
+
+
+def fail(code, message, status=409, exit_code=2) -> NoReturn:
+    raise ServiceError(code, message, status, exit_code)
 
 
 def config(settings):
     return settings if settings is not None else Settings.model_validate({})
 
 
-def seal(settings, org_id, record_id, payload):
+def seal(settings, record_id, payload):
     return Secrets.for_data(settings).encrypt(
-        canonical({"org_id": str(org_id), "record_id": str(record_id), "payload": payload})
+        canonical({"record_id": str(record_id), "payload": payload})
     )
 
 
-def unseal(settings, org_id, record_id, ciphertext):
+def unseal(settings, record_id, ciphertext):
     value = json.loads(Secrets.for_data(settings).decrypt(ciphertext))
-    if (value.get("org_id"), value.get("record_id")) != (str(org_id), str(record_id)):
+    if value.get("record_id") != str(record_id):
         fail("content_integrity", "Encrypted review record binding differs", 409, 4)
     return value["payload"]
 
 
 async def requirement(session, actor, requirement_id, *, write=False, settings=None):
     req = await session.get(Requirement, requirement_id, populate_existing=True)
-    if req is None or req.org_id != actor.org_id:
+    if req is None:
         raise not_found()
-    await access(
-        session,
-        actor,
-        req.task_id,
-        "req:confirm" if write else "task:read",
-        write=write,
-        require_member=write,
-    )
+    await access(session, actor, req.task_id, "req:confirm" if write else "task:read", write=write)
     if write:
         metadata = await session.scalar(
             select(RequirementReview.id).where(RequirementReview.requirement_id == req.id)
@@ -97,14 +93,11 @@ async def requirement(session, actor, requirement_id, *, write=False, settings=N
 
 async def scope_row(session, actor, task_id, job_id, *, lock=False):
     job = await session.get(Job, job_id, populate_existing=True)
-    if job is None or (job.org_id, job.task_id, job.kind) != (actor.org_id, task_id, "extract"):
+    if job is None or (job.task_id, job.kind) != (task_id, "extract"):
         raise not_found()
     if job.status != "succeeded":
         fail("invalid_extraction_job", "Choose a succeeded extraction scope")
-    query = select(RequirementReviewSet).where(
-        RequirementReviewSet.org_id == actor.org_id,
-        RequirementReviewSet.extraction_job_id == job_id,
-    )
+    query = select(RequirementReviewSet).where(RequirementReviewSet.extraction_job_id == job_id)
     if lock:
         query = query.with_for_update()
     scope = await session.scalar(query.execution_options(populate_existing=True))
@@ -114,7 +107,6 @@ async def scope_row(session, actor, task_id, job_id, *, lock=False):
                 "requirement_review_missing", "Review metadata must be initialized before mutation"
             )
         scope = RequirementReviewSet(
-            org_id=actor.org_id,
             task_id=task_id,
             extraction_job_id=job.id,
             document_id=job.document_id,
@@ -126,49 +118,9 @@ async def scope_row(session, actor, task_id, job_id, *, lock=False):
     return scope
 
 
-async def members(session, actor, task_id):
-    rows = (
-        await session.execute(
-            select(TaskMember, Membership, User)
-            .join(
-                Membership,
-                (Membership.org_id == TaskMember.org_id)
-                & (Membership.user_id == TaskMember.user_id),
-            )
-            .join(User, User.id == TaskMember.user_id)
-            .where(
-                TaskMember.org_id == actor.org_id,
-                TaskMember.task_id == task_id,
-                TaskMember.active.is_(True),
-                Membership.active.is_(True),
-                User.active.is_(True),
-                TaskMember.role.in_(["owner", "contributor"]),
-                Membership.role.in_(["admin", "bidder", "technical"]),
-            )
-        )
-    ).all()
-    return {m.user_id: (m, om) for m, om, _ in rows}
-
-
-async def render_many(session, actor, reqs, workflow, *, effective=None):
+async def render_many(session, actor, reqs, *, effective=None):
     if effective is None:
         effective = await effective_reviews(session, reqs)
-    eligible = await members(session, actor, workflow.task_id)
-    assigned = (
-        {
-            r.requirement_id: r.assignee_user_id
-            for r in (
-                await session.scalars(
-                    select(RequirementWorkflow).where(
-                        RequirementWorkflow.task_id == workflow.task_id,
-                        RequirementWorkflow.requirement_id.in_([r.id for r in reqs]),
-                    )
-                )
-            ).all()
-        }
-        if reqs
-        else {}
-    )
     out = []
     readable_jobs = {}
     for req in reqs:
@@ -176,41 +128,16 @@ async def render_many(session, actor, reqs, workflow, *, effective=None):
         row = eff.stored
         hint = None
         if not eff.confirmed:
-            action_people = (
-                eligible
-                if eff.citation_valid
-                else {
-                    user_id: person
-                    for user_id, person in eligible.items()
-                    if person[1].role == "admin"
-                }
-            )
-            user_id = assigned.get(req.id)
-            basis = "assignee"
-            if user_id not in action_people:
-                user_id, basis = workflow.owner_user_id, "owner"
-            if user_id not in action_people:
-                user_id, basis = None, "owner_recovery"
             action = "confirm_requirement" if eff.citation_valid else "repair_requirement"
-            if workflow.state == "archived":
-                action = "unarchive"
-            if basis == "owner_recovery" and action != "unarchive":
-                action = "assign"
-            can = actor.actor_kind == "session" and actor.token_id is None
-            if action == "confirm_requirement":
-                can = can and actor.user_id in eligible and "req:confirm" in actor.scopes
-            elif action == "repair_requirement":
-                can = (
-                    can
-                    and actor.role == "admin"
-                    and actor.user_id in eligible
-                    and {"req:extract", "evidence:confirm"} <= actor.scopes
-                )
-            else:
-                can = can and (actor.role == "admin" or actor.user_id == workflow.owner_user_id)
-            hint = schema.RequirementActorHint(
-                user_id=user_id, basis=basis, action=action, can_current_actor_act=can
+            required = (
+                {"req:confirm"} if eff.citation_valid else {"req:extract", "evidence:confirm"}
             )
+            can = (
+                actor.actor_kind == "session"
+                and actor.token_id is None
+                and required <= actor.scopes
+            )
+            hint = schema.RequirementActorHint(action=action, can_current_actor_act=can)
         reference = None
         if row and row.rejected_job_id:
             if row.rejected_job_id not in readable_jobs:
@@ -233,7 +160,6 @@ async def render_many(session, actor, reqs, workflow, *, effective=None):
                 )
         out.append(
             schema.RequirementReviewView(
-                org_id=req.org_id,
                 task_id=req.task_id,
                 extraction_job_id=req.job_id,
                 requirement_id=req.id,
@@ -245,7 +171,6 @@ async def render_many(session, actor, reqs, workflow, *, effective=None):
                 state=eff.state,
                 citation_valid=eff.citation_valid,
                 source_pin=eff.source_pin,
-                confirmed_by_user_id=eff.confirmed_by_user_id,
                 confirmed_at=eff.confirmed_at,
                 rejected_item=reference,
                 next_actor=hint,
@@ -268,7 +193,7 @@ def summary_rows(requirements, reviews):
     ]
 
 
-async def _scope_view(session, actor, scope, workflow, settings, *, views=None):
+async def _scope_view(session, actor, scope, settings, *, views=None):
     from app.services.task_events import current_cursor
 
     if views is None:
@@ -301,7 +226,6 @@ async def _scope_view(session, actor, scope, workflow, settings, *, views=None):
             if isinstance(job.result.get("rejected"), list):
                 rejected_count = len(job.result["rejected"])
     return schema.RequirementSetView(
-        org_id=actor.org_id,
         task_id=scope.task_id,
         extraction_job_id=scope.extraction_job_id,
         document_id=scope.document_id,
@@ -326,28 +250,28 @@ async def _scope_view(session, actor, scope, workflow, settings, *, views=None):
             rejected_reported=rejected_count,
             manual_added=sum(v.origin.startswith("manual_") for v in views),
         ),
-        last_event_cursor=await current_cursor(session, actor, scope.task_id, settings, workflow),
+        last_event_cursor=await current_cursor(session, actor, scope.task_id, settings),
     )
 
 
 async def show(session, actor, requirement_id, *, settings=None):
     settings = config(settings)
     req = await requirement(session, actor, requirement_id)
-    _, workflow, _ = await access(session, actor, req.task_id)
+    await access(session, actor, req.task_id)
     scope = await scope_row(session, actor, req.task_id, req.job_id)
-    view = (await render_many(session, actor, [req], workflow))[0]
+    view = (await render_many(session, actor, [req]))[0]
     bounded_page([view], 0, 1)
     return schema.RequirementReviewData(
-        requirement=view, scope=await _scope_view(session, actor, scope, workflow, settings)
+        requirement=view, scope=await _scope_view(session, actor, scope, settings)
     )
 
 
-def page_offset(query, actor, task_id, workflow, settings, purpose, binding):
+def page_offset(query, actor, task_id, settings, purpose, binding):
     from app.services.task_events import open_cursor
 
     if query.cursor is None:
         return 0
-    value = open_cursor(query.cursor, actor, task_id, workflow, settings, purpose=purpose)
+    value = open_cursor(query.cursor, actor, task_id, settings, purpose=purpose)
     if value.get("binding") != binding:
         fail("invalid_cursor", "Cursor filters or source changed", 409)
     offset = value.get("offset")
@@ -356,14 +280,13 @@ def page_offset(query, actor, task_id, workflow, settings, purpose, binding):
     return offset
 
 
-def next_page(actor, task_id, workflow, settings, purpose, binding, offset, limit, total):
+def next_page(actor, task_id, settings, purpose, binding, offset, limit, total):
     from app.services.task_events import issue_cursor
 
     return (
         issue_cursor(
             actor,
             task_id,
-            workflow,
             settings,
             purpose=purpose,
             binding=binding,
@@ -394,20 +317,14 @@ def bounded_page(items, offset, limit):
 
 async def list_reviews(session, actor, task_id, extraction_job_id, query, *, settings=None):
     settings = config(settings)
-    _, workflow, _ = await access(session, actor, task_id)
+    await access(session, actor, task_id)
     scope = await scope_row(session, actor, task_id, extraction_job_id)
     pairs = list(
         (
             await session.execute(
                 select(Requirement, Chunk)
-                .join(
-                    Chunk, (Chunk.org_id == Requirement.org_id) & (Chunk.id == Requirement.chunk_id)
-                )
-                .where(
-                    Requirement.org_id == actor.org_id,
-                    Requirement.task_id == task_id,
-                    Requirement.job_id == extraction_job_id,
-                )
+                .join(Chunk, Chunk.id == Requirement.chunk_id)
+                .where(Requirement.task_id == task_id, Requirement.job_id == extraction_job_id)
                 .limit(5001)
             )
         ).all()
@@ -429,9 +346,7 @@ async def list_reviews(session, actor, task_id, extraction_job_id, query, *, set
 
     reqs = [req for req, _ in sorted(pairs, key=reading_order)]
     effective = await effective_reviews(session, reqs)
-    scoped = await _scope_view(
-        session, actor, scope, workflow, settings, views=summary_rows(reqs, effective)
-    )
+    scoped = await _scope_view(session, actor, scope, settings, views=summary_rows(reqs, effective))
     if query.rejected_job_id is not None:
         await rejection_job(session, actor, task_id, query.rejected_job_id)
     filtered = []
@@ -458,15 +373,14 @@ async def list_reviews(session, actor, task_id, extraction_job_id, query, *, set
             query.model_dump(mode="json", exclude={"cursor", "limit"}),
         ]
     )
-    offset = page_offset(query, actor, task_id, workflow, settings, "requirement-reviews", binding)
+    offset = page_offset(query, actor, task_id, settings, "requirement-reviews", binding)
     candidates = await render_many(
-        session, actor, filtered[offset : offset + query.limit], workflow, effective=effective
+        session, actor, filtered[offset : offset + query.limit], effective=effective
     )
     selected = bounded_page(candidates, 0, query.limit)
     cursor = next_page(
         actor,
         task_id,
-        workflow,
         settings,
         "requirement-reviews",
         binding,
@@ -486,7 +400,7 @@ async def list_reviews(session, actor, task_id, extraction_job_id, query, *, set
 async def history(session, actor, requirement_id, query, *, settings=None):
     settings = config(settings)
     req = await requirement(session, actor, requirement_id)
-    _, workflow, _ = await access(session, actor, req.task_id)
+    await access(session, actor, req.task_id)
     events = list(
         (
             await session.scalars(
@@ -497,18 +411,15 @@ async def history(session, actor, requirement_id, query, *, settings=None):
         ).all()
     )
     binding = digest([str(req.id), len(events)])
-    offset = page_offset(
-        query, actor, req.task_id, workflow, settings, "requirement-history", binding
-    )
+    offset = page_offset(query, actor, req.task_id, settings, "requirement-history", binding)
     items = []
     for row in events[offset : offset + query.limit]:
-        snapshot = unseal(settings, actor.org_id, row.review_id, row.snapshot_ciphertext)
+        snapshot = unseal(settings, row.review_id, row.snapshot_ciphertext)
         if digest(snapshot) != row.snapshot_sha256:
             fail("content_integrity", "Review snapshot hash differs", 409, 4)
         items.append(
             schema.RequirementReviewEvent(
                 id=row.id,
-                org_id=row.org_id,
                 task_id=row.task_id,
                 extraction_job_id=row.extraction_job_id,
                 requirement_id=row.requirement_id,
@@ -519,7 +430,6 @@ async def history(session, actor, requirement_id, query, *, settings=None):
                 review_hash=row.review_hash,
                 source_pin=row.source_pin,
                 actor_kind=row.actor_kind,
-                actor_user_id=row.actor_user_id,
                 reason_sha256=row.reason_sha256,
                 request_id=row.request_id,
                 occurred_at=row.occurred_at,
@@ -533,7 +443,6 @@ async def history(session, actor, requirement_id, query, *, settings=None):
         next_cursor=next_page(
             actor,
             req.task_id,
-            workflow,
             settings,
             "requirement-history",
             binding,
@@ -548,7 +457,7 @@ async def rejection_job(session, actor, task_id, job_id):
     from app.services.jobs import read_access
 
     job = await session.get(Job, job_id)
-    if job is None or (job.org_id, job.task_id, job.kind) != (actor.org_id, task_id, "extract"):
+    if job is None or (job.task_id, job.kind) != (task_id, "extract"):
         raise not_found()
     await read_access(session, actor, job, cast(Any, None))
     return job
@@ -556,13 +465,13 @@ async def rejection_job(session, actor, task_id, job_id):
 
 async def rejected(session, actor, task_id, job_id, query, *, settings=None):
     settings = config(settings)
-    _, workflow, _ = await access(session, actor, task_id)
+    await access(session, actor, task_id)
     job = await rejection_job(session, actor, task_id, job_id)
     summaries = job.result.get("rejected", [])
     if not isinstance(summaries, list):
         fail("rejected_reference_changed", "Rejected receipt is unavailable", 409)
     binding = digest([str(job_id), summaries])
-    offset = page_offset(query, actor, task_id, workflow, settings, "requirement-rejected", binding)
+    offset = page_offset(query, actor, task_id, settings, "requirement-rejected", binding)
     linked = list(
         (
             await session.scalars(
@@ -594,7 +503,6 @@ async def rejected(session, actor, task_id, job_id, query, *, settings=None):
         next_cursor=next_page(
             actor,
             task_id,
-            workflow,
             settings,
             "requirement-rejected",
             binding,
@@ -610,9 +518,8 @@ async def manual_parents(session, actor, task_id, request):
     source = request.content.source
     found = await session.scalar(
         select(Chunk.id)
-        .join(Document, (Document.org_id == Chunk.org_id) & (Document.id == Chunk.document_id))
+        .join(Document, Document.id == Chunk.document_id)
         .where(
-            Chunk.org_id == actor.org_id,
             Chunk.task_id == task_id,
             Chunk.id == source.chunk_id,
             Document.task_id == task_id,
@@ -632,7 +539,7 @@ async def manual_parents(session, actor, task_id, request):
 
 
 async def preview_manual(session, actor, task_id, request, *, settings=None):
-    await access(session, actor, task_id, "req:manual", write=True, lock=False, require_member=True)
+    await access(session, actor, task_id, "req:manual", write=True, lock=False)
     if len(request.model_dump_json().encode()) > 256 * 1024:
         fail("input_too_large", "Manual request exceeds 256 KiB", 422)
     await manual_parents(session, actor, task_id, request)
@@ -670,7 +577,7 @@ async def preview_manual(session, actor, task_id, request, *, settings=None):
         extraction_job_id=request.extraction_job_id,
         creates_manual_scope=scope is None,
         expected_set_revision=request.expected_set_revision,
-        preview_hash=digest([str(actor.org_id), str(task_id), body, pin.model_dump(mode="json")]),
+        preview_hash=digest([str(task_id), body, pin.model_dump(mode="json")]),
         verified_source=pin,
         duplicate_requirement_id=duplicate,
         estimated_cost=schema.Cost(),
@@ -678,23 +585,21 @@ async def preview_manual(session, actor, task_id, request, *, settings=None):
 
 
 async def replay(session, actor, task_id, request, route, settings):
-    # Serialize globally per org/user/request before touching a receipt in any task.
+    # Serialize each request ID before touching a receipt in any task.
     await session.execute(
         text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"),
-        {"key": f"req-review:{actor.org_id}:{actor.user_id}:{request.request_id}"},
+        {"key": f"req-review:{request.request_id}"},
     )
     row = await session.scalar(
         select(RequirementReviewRequest).where(
-            RequirementReviewRequest.org_id == actor.org_id,
-            RequirementReviewRequest.actor_user_id == actor.user_id,
-            RequirementReviewRequest.request_id == request.request_id,
+            RequirementReviewRequest.request_id == request.request_id
         )
     )
     request_hash = digest([route, str(task_id), request.model_dump(mode="json")])
     if row:
         if row.task_id != task_id or row.request_sha256 != request_hash:
             fail("idempotency_conflict", "Request ID is already bound to another operation")
-        return unseal(settings, actor.org_id, row.id, row.receipt_ciphertext), request_hash
+        return unseal(settings, row.id, row.receipt_ciphertext), request_hash
     return None, request_hash
 
 
@@ -703,135 +608,13 @@ def save_receipt(session, actor, task_id, request, action, request_hash, payload
     session.add(
         RequirementReviewRequest(
             id=row_id,
-            org_id=actor.org_id,
             task_id=task_id,
-            actor_user_id=actor.user_id,
             request_id=request.request_id,
             action=action,
             request_sha256=request_hash,
-            receipt_ciphertext=seal(settings, actor.org_id, row_id, payload),
+            receipt_ciphertext=seal(settings, row_id, payload),
         )
     )
-
-
-async def seed_reviews(
-    session,
-    actor,
-    task_id,
-    extraction_job_id,
-    *,
-    settings,
-    origin="extracted",
-    manual_request=None,
-    manual_requirement_id=None,
-):
-    """Publish encrypted seeds in the extract transaction; never reset existing decisions."""
-    if origin == "legacy":
-        await access(session, actor, task_id, "req:confirm", write=True, require_member=True)
-    job = await session.get(Job, extraction_job_id)
-    if job is None or (job.org_id, job.task_id, job.kind, job.status) != (
-        actor.org_id,
-        task_id,
-        "extract",
-        "succeeded",
-    ):
-        raise not_found()
-    scope = await session.scalar(
-        select(RequirementReviewSet).where(
-            RequirementReviewSet.org_id == actor.org_id,
-            RequirementReviewSet.extraction_job_id == job.id,
-        )
-    )
-    if scope is None:
-        scope = RequirementReviewSet(
-            id=uuid4(),
-            org_id=actor.org_id,
-            task_id=task_id,
-            extraction_job_id=job.id,
-            document_id=job.document_id,
-            origin="manual" if origin.startswith("manual") else "model",
-            revision=1,
-            membership_sha256=digest([]),
-            confirmation_sha256=digest([]),
-        )
-        session.add(scope)
-        await session.flush()
-    reqs = list(
-        (
-            await session.scalars(
-                select(Requirement).where(Requirement.job_id == job.id).order_by(Requirement.id)
-            )
-        ).all()
-    )
-    if manual_request is not None:
-        # A manual add owns only its new ID, never historical model rows.
-        if manual_requirement_id is None:
-            fail("invalid_manual_entry", "Manual seed requires its newly inserted requirement", 422)
-        reqs = [req for req in reqs if req.id == manual_requirement_id]
-    states = await effective_reviews(session, reqs)
-    for req in reqs:
-        if states[req.id].stored is not None:
-            continue
-        eff = states[req.id]
-        rid, eid = uuid4(), uuid4()
-        snapshot = content_of(req).model_dump(mode="json")
-        ciphertext = seal(settings, actor.org_id, rid, snapshot)
-        pin = eff.source_pin.model_dump(mode="json") if eff.source_pin else None
-        row = RequirementReview(
-            id=rid,
-            org_id=actor.org_id,
-            task_id=task_id,
-            extraction_job_id=job.id,
-            requirement_id=req.id,
-            origin=origin,
-            revision=1,
-            current_event_id=eid,
-            state="legacy_unconfirmed" if origin == "legacy" else "unconfirmed",
-            review_hash=eff.review_hash,
-            source_pin=pin,
-            snapshot_ciphertext=ciphertext,
-            rejected_job_id=manual_request.rejected_item.job_id
-            if manual_request and manual_request.rejected_item
-            else None,
-            rejected_index=manual_request.rejected_item.index
-            if manual_request and manual_request.rejected_item
-            else None,
-            rejected_summary_sha256=manual_request.rejected_item.summary_sha256
-            if manual_request and manual_request.rejected_item
-            else None,
-        )
-        session.add(row)
-        await session.flush()
-        session.add(
-            RequirementReviewEvent(
-                id=eid,
-                org_id=actor.org_id,
-                task_id=task_id,
-                extraction_job_id=job.id,
-                requirement_id=req.id,
-                review_id=rid,
-                revision=1,
-                action="manual_add" if manual_request else "seed",
-                state_after="legacy_unconfirmed" if origin == "legacy" else "unconfirmed",
-                review_hash=eff.review_hash,
-                snapshot_sha256=digest(snapshot),
-                snapshot_ciphertext=ciphertext,
-                source_pin=pin,
-                actor_kind="session" if manual_request or origin == "legacy" else "worker",
-                actor_user_id=actor.user_id if manual_request or origin == "legacy" else None,
-                request_id=manual_request.request_id if manual_request else None,
-                reason_sha256=raw_digest(manual_request.reason) if manual_request else None,
-                reason_ciphertext=seal(
-                    settings, actor.org_id, rid, {"reason": manual_request.reason}
-                )
-                if manual_request
-                else None,
-                occurred_at=datetime.now(UTC),
-            )
-        )
-        await session.flush()
-    await session.refresh(scope)
-    return scope
 
 
 async def apply_decision(session, actor, req, body, settings, *, effective=None):
@@ -854,14 +637,13 @@ async def apply_decision(session, actor, req, body, settings, *, effective=None)
     row.state = "confirmed" if body.action == "confirm" else "unconfirmed"
     row.review_hash = eff.review_hash
     row.source_pin = eff.source_pin.model_dump(mode="json") if eff.source_pin else None
-    row.confirmed_by_user_id = actor.user_id if row.state == "confirmed" else None
+
     row.confirmed_at = datetime.now(UTC) if row.state == "confirmed" else None
     snapshot = content_of(req).model_dump(mode="json")
-    row.snapshot_ciphertext = seal(settings, actor.org_id, row.id, snapshot)
+    row.snapshot_ciphertext = seal(settings, row.id, snapshot)
     session.add(
         RequirementReviewEvent(
             id=row.current_event_id,
-            org_id=actor.org_id,
             task_id=req.task_id,
             extraction_job_id=req.job_id,
             requirement_id=req.id,
@@ -872,11 +654,10 @@ async def apply_decision(session, actor, req, body, settings, *, effective=None)
             review_hash=row.review_hash,
             snapshot_sha256=digest(snapshot),
             snapshot_ciphertext=row.snapshot_ciphertext,
-            reason_ciphertext=seal(settings, actor.org_id, row.id, {"reason": body.reason}),
+            reason_ciphertext=seal(settings, row.id, {"reason": body.reason}),
             reason_sha256=raw_digest(body.reason),
             source_pin=row.source_pin,
             actor_kind="session",
-            actor_user_id=actor.user_id,
             request_id=body.request_id,
             occurred_at=datetime.now(UTC),
         )
@@ -935,11 +716,7 @@ async def decide(session, actor, requirement_id, request, *, settings=None):
 
 async def confirm_batch(session, actor, task_id, extraction_job_id, request, *, settings=None):
     settings = config(settings)
-    _, workflow, member = await access(
-        session, actor, task_id, "req:confirm", write=True, require_member=True
-    )
-    if member is None or member.role != "owner":
-        fail("forbidden", "Batch confirmation requires the task owner", 403, 4)
+    await access(session, actor, task_id, "req:confirm", write=True)
     await scope_row(session, actor, task_id, extraction_job_id)
     ids = [item.requirement_id for item in request.items]
     reqs = list(
@@ -947,7 +724,6 @@ async def confirm_batch(session, actor, task_id, extraction_job_id, request, *, 
             await session.scalars(
                 select(Requirement)
                 .where(
-                    Requirement.org_id == actor.org_id,
                     Requirement.task_id == task_id,
                     Requirement.job_id == extraction_job_id,
                     Requirement.id.in_(ids),
@@ -1032,7 +808,7 @@ async def confirm_batch(session, actor, task_id, extraction_job_id, request, *, 
         )
     await session.refresh(scope)
     return schema.ConfirmationBatchData(
-        scope=await _scope_view(session, actor, scope, workflow, settings),
+        scope=await _scope_view(session, actor, scope, settings),
         request_id=request.request_id,
         event_ids=[i.event_id for i in items],
         changed=len(items),
@@ -1042,7 +818,7 @@ async def confirm_batch(session, actor, task_id, extraction_job_id, request, *, 
 
 async def add_manual(session, actor, task_id, request, *, settings=None):
     settings = config(settings)
-    await access(session, actor, task_id, "req:manual", write=True, require_member=True)
+    await access(session, actor, task_id, "req:manual", write=True)
     await manual_parents(session, actor, task_id, request)
     receipt, request_hash = await replay(session, actor, task_id, request, "manual", settings)
     replayed = receipt is not None
@@ -1077,7 +853,6 @@ async def add_manual(session, actor, task_id, request, *, settings=None):
             session.add(
                 Job(
                     id=job_id,
-                    org_id=actor.org_id,
                     task_id=task_id,
                     document_id=content.source.document_id,
                     kind="extract",
@@ -1086,7 +861,6 @@ async def add_manual(session, actor, task_id, request, *, settings=None):
                     cache_key=digest(
                         [
                             "manual-extract-v1",
-                            str(actor.org_id),
                             str(task_id),
                             str(content.source.document_id),
                             str(request.request_id),
@@ -1094,7 +868,6 @@ async def add_manual(session, actor, task_id, request, *, settings=None):
                     ),
                     result={"origin": "manual", "created": 0, "rejected": []},
                     finished_at=datetime.now(UTC),
-                    actor_user_id=actor.user_id,
                     actor_kind="session",
                     actor_scopes=sorted(actor.scopes),
                     command="req add",
@@ -1103,7 +876,6 @@ async def add_manual(session, actor, task_id, request, *, settings=None):
             await session.flush()
         req = Requirement(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task_id,
             job_id=job_id,
             document_id=content.source.document_id,
@@ -1173,7 +945,7 @@ async def add_manual(session, actor, task_id, request, *, settings=None):
 
 async def consumption_manifest(session, actor, task_id, extraction_job_id, *, settings=None):
     settings = config(settings)
-    _, workflow, _ = await access(session, actor, task_id)
+    await access(session, actor, task_id)
     scope = await scope_row(session, actor, task_id, extraction_job_id)
     reqs = list(
         (
@@ -1187,8 +959,8 @@ async def consumption_manifest(session, actor, task_id, extraction_job_id, *, se
     )
     if len(reqs) > 2000:
         fail("review_limit_exceeded", "Consumption scope exceeds 2000 requirements", 422)
-    views = await render_many(session, actor, reqs, workflow)
-    value = await _scope_view(session, actor, scope, workflow, settings, views=views)
+    views = await render_many(session, actor, reqs)
+    value = await _scope_view(session, actor, scope, settings, views=views)
     return schema.RequirementConsumptionManifest(
         task_id=task_id,
         extraction_job_id=extraction_job_id,
@@ -1214,7 +986,7 @@ async def scope_view(
 ):
     """Public batched scope projection for board/history consumers."""
     settings = config(settings)
-    _, workflow, _ = await access(session, actor, task_id)
+    await access(session, actor, task_id)
     scope = await scope_row(session, actor, task_id, extraction_job_id)
     views = reviews
     if isinstance(reviews, dict):
@@ -1232,4 +1004,4 @@ async def scope_view(
         views = summary_rows(requirements, reviews)
     elif views is None and requirements is not None:
         views = summary_rows(requirements, await effective_reviews(session, requirements))
-    return await _scope_view(session, actor, scope, workflow, settings, views=views)
+    return await _scope_view(session, actor, scope, settings, views=views)

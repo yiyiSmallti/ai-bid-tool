@@ -1,9 +1,11 @@
-// End-to-end check of the platform console. Requires E2E_BASE_URL, E2E_EMAIL,
-// E2E_PASSWORD, E2E_TOTP_SECRET and E2E_OUTPUT (a new artifact directory).
-import { createHmac } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
+import { openConsole } from "./access-key.js";
+
+process.env.PLAYWRIGHT_NO_COPY_PROMPT = "1";
+test.use({ trace: "off", screenshot: "off", video: "off" });
 
 const env = (name) => {
   const value = process.env[name];
@@ -13,173 +15,50 @@ const env = (name) => {
 const output = env("E2E_OUTPUT");
 mkdirSync(output, { recursive: true });
 
-function totp(secret, offset = 0) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let bits = "";
-  for (const char of secret.replace(/=+$/, "").toUpperCase()) bits += alphabet.indexOf(char).toString(2).padStart(5, "0");
-  const key = Buffer.from(bits.match(/.{8}/g).map((byte) => parseInt(byte, 2)));
-  const counter = Buffer.alloc(8);
-  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000) + offset));
-  const digest = createHmac("sha1", key).update(counter).digest();
-  const start = digest[digest.length - 1] & 0x0f;
-  return String((digest.readUInt32BE(start) & 0x7fffffff) % 1_000_000).padStart(6, "0");
-}
-
-test("operator manages orgs, models, usage and audit", async ({ page, browser }) => {
+test("service credential configuration and sign-out", async ({ page }) => {
+  const credentialName = `e2e_${randomUUID().replaceAll("-", "")}`;
   const steps = [];
   const consoleErrors = [];
   page.on("console", (message) => message.type() === "error" && consoleErrors.push(message.text()));
   page.on("dialog", (dialog) => dialog.accept());
-  const shot = async (name) => {
-    await page.screenshot({ path: join(output, `${String(steps.length + 1).padStart(2, "0")}-${name}.png`), fullPage: true });
-    steps.push(name);
-  };
+  const recordStep = (name) => steps.push(name);
 
-  const first = await page.goto("/app/platform/orgs");
-  expect(first.headers()["content-security-policy"]).toContain("default-src 'self'");
-  await expect(page).toHaveURL(/\/app\/platform\/login$/);
-
-  await page.fill("input[name=email]", env("E2E_EMAIL"));
-  await page.fill("input[name=password]", env("E2E_PASSWORD"));
-  await page.fill("input[name=totp]", totp(env("E2E_TOTP_SECRET"), 10));
-  await page.click("button[type=submit]");
-  await expect(page.getByRole("alert")).toHaveText("邮箱、密码或验证码不正确");
-  await shot("login-rejected");
-
-  await page.fill("input[name=password]", env("E2E_PASSWORD"));
-  await page.fill("input[name=totp]", totp(env("E2E_TOTP_SECRET")));
-  await page.click("button[type=submit]");
-  await expect(page).toHaveURL(/\/app\/platform\/orgs$/);
-  await expect(page.getByText("用量演示单位")).toBeVisible();
-  await shot("orgs");
-
-  await page.click("text=开通单位");
-  await page.fill("input[name=org-name]", "端到端测试单位");
-  await page.fill("input[name=admin-email]", "e2e-admin@example.test");
-  await page.click("form.panel button[type=submit]");
-  const link = (await page.getByTestId("setup-link").textContent()).trim();
-  expect(link).toMatch(/\/app\/setup-password#token=/);
-  await expect(page.getByRole("row", { name: /端到端测试单位/ })).toContainText("e2e-admin@example.test");
-  await shot("org-created");
-
-  await page.click("nav >> text=服务凭据");
+  await openConsole(page, "/platform/credentials");
+  await expect(page.getByRole("heading", { name: "服务凭据", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "添加凭据" }).click();
-  await page.fill("input[name=credential-name]", "e2e_catalog");
-  await page.fill("input[name=credential-key]", "synthetic-e2e-catalog-key");
+  await page.fill("input[name=credential-name]", credentialName);
+  await page.fill("input[name=credential-key]", "synthetic-e2e-service-key");
   await page.check("input[name=credential-active]");
   await page.locator("form.panel button[type=submit]").click();
-  await expect(page.getByRole("row", { name: /e2e_catalog/ })).toContainText("已启用");
+  const row = page.getByRole("row").filter({ has: page.getByText(credentialName, { exact: true }) });
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText("已启用");
   await expect(page.locator("input[name=credential-key]")).toHaveCount(0);
-  await shot("credential-created");
+  recordStep("credential-created");
 
-  // Model content tests use a deterministic failure, never a real vendor request.
-  let modelTests = 0;
-  await page.route("**/platform/models/e2e-model/test", async (route) => {
-    const names = modelTests++ ? ["low", "max"] : [null];
-    const levels = names.map((reasoning) => ({ reasoning, passed: false, error: { code: "provider_unavailable", message: "Synthetic vendor unavailable" }, usage: null }));
-    await route.fulfill({ json: { ok: true, command: "platform model test", data: { passed: false, levels, error: levels[0].error }, items: [], warnings: [], cost: { calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 }, duration_ms: 0 } });
-  });
-  await page.click("nav >> text=模型");
-  await page.click("text=添加模型");
-  await page.fill("input[name=model-id]", "e2e-model");
-  await page.getByTestId("model-credential-select").click();
-  await page.getByRole("option", { name: /e2e_catalog/ }).click();
+  await row.getByRole("button", { name: "移除", exact: true }).click();
+  await page.locator("form.panel button[type=submit]").click();
+  await expect(row).toContainText("已移除");
+  await expect(row.getByRole("button", { name: "替换密钥", exact: true })).toHaveCount(0);
+  recordStep("credential-removed");
 
-  await page.check("input[name=default]");
-  await page.click("form.panel button[type=submit]");
-  const row = page.getByRole("row", { name: /e2e-model/ });
-  await expect(row).toContainText("已配置");
-  await expect(row).toContainText("默认");
-  await row.getByRole("button", { name: "测试" }).click();
-  await expect(row.getByTestId("test-result")).toContainText("未通过：provider_unavailable");
-  await shot("models");
-
-  // Register the vendor's official reasoning levels and test each one.
-  await row.getByRole("button", { name: "编辑" }).click();
-  await page.click("text=添加档位");
-  await page.click("text=添加档位");
-  await page.fill("input[name=level-name-0]", "low");
-  await page.fill("textarea[name=level-options-0]", '{"thinking": {"type": "enabled"}, "reasoning_effort": "low"}');
-  await page.fill("input[name=level-name-1]", "max");
-  await page.fill("input[name=level-label-1]", "深度推理");
-  await page.fill("textarea[name=level-options-1]", "not json");
-  await page.fill("input[name=level-batch-1]", "4000");
-  await page.click("form.panel button[type=submit]");
-  await expect(page.getByRole("alert")).toContainText("档位 max 的请求参数必须是 JSON 对象");
-  await expect(page.getByRole("alert")).toContainText("请选择一个默认档位");
-  await page.fill("textarea[name=level-options-1]", '{"thinking": {"type": "enabled"}, "reasoning_effort": "max"}');
-  await page.getByLabel("默认档位 2").check();
-  await page.click("form.panel button[type=submit]");
-  await expect(row.getByTestId("levels-summary")).toHaveText("推理强度：low / max（默认）");
-  await row.getByRole("button", { name: "测试" }).click();
-  await expect(row.getByTestId("level-result-low")).toContainText("low：未通过：provider_unavailable");
-  await expect(row.getByTestId("level-result-max")).toContainText("max：未通过：provider_unavailable");
-  await shot("model-levels");
-
-  await page.click("nav >> text=用量");
-  const usageRow = page.getByRole("row", { name: /用量演示单位/ });
-
-
-  const [download] = await Promise.all([page.waitForEvent("download"), page.click("text=导出 CSV")]);
-  const csvPath = join(output, download.suggestedFilename());
-  await download.saveAs(csvPath);
-  const csv = readFileSync(csvPath, "utf8");
-  expect(csv.split("\n")[0]).toContain("month,org_name,org_id,provider");
-  expect(csv).toContain("用量演示单位");
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "用量" })).toBeVisible();
-  await shot("usage");
-
-
-  await page.click("nav >> text=审计");
-  for (const label of ["登录", "开通单位", "修改模型", "测试模型"]) {
-    await expect(page.getByRole("cell", { name: label, exact: true }).first()).toBeVisible();
-  }
-  await shot("audit");
-
-  const anonymous = await browser.newPage();
-  await anonymous.goto(link);
-  await expect(anonymous).toHaveURL(/\/app\/setup-password$/);
-  await anonymous.fill("input[name=new-password]", "e2e-admin-password-1");
-  await anonymous.fill("input[name=confirm-password]", "e2e-admin-password-1");
-  await anonymous.click("button[type=submit]");
-  await expect(anonymous.getByRole("status")).toContainText("密码已设置");
-  await anonymous.screenshot({ path: join(output, "org-1-setup-password.png") });
-
-  // The new org admin signs in.
-  await anonymous.getByRole("link", { name: "登录单位" }).click();
-  await anonymous.fill("input[name=email]", "e2e-admin@example.test");
-  await anonymous.fill("input[name=password]", "e2e-admin-password-1");
-  await anonymous.click("button[type=submit]");
-  await expect(anonymous).toHaveURL(/\/app\/org\/tasks$/);
-  // Opening the same link again in a fresh tab must not allow a second password change.
-  const reuse = await browser.newPage();
-  await reuse.goto(link);
-  await reuse.fill("input[name=new-password]", "e2e-admin-password-2");
-  await reuse.fill("input[name=confirm-password]", "e2e-admin-password-2");
-  await reuse.click("button[type=submit]");
-  await expect(reuse.getByRole("alert")).toContainText("链接已失效或已使用");
-  await reuse.screenshot({ path: join(output, "org-3-setup-link-reused.png") });
-  await reuse.close();
-
-  await page.click("nav >> text=单位");
-  const created = page.getByRole("row", { name: /端到端测试单位/ });
-
-  await created.getByRole("button", { name: "停用" }).click();
-  await expect(created).toContainText("已停用");
-  await shot("org-disabled");
-  await anonymous.reload();
-  await expect(anonymous.getByRole("alert")).toHaveText("该单位已停用，请联系平台管理员");
-  await anonymous.close();
-
-  await page.click("text=退出登录");
-  await expect(page).toHaveURL(/\/app\/platform\/login$/);
-  await page.goto("/app/platform/orgs");
-  await expect(page).toHaveURL(/\/app\/platform\/login$/);
+  await page.getByRole("button", { name: "退出", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/login$/);
+  await page.goto("/app/platform/credentials");
+  await expect(page).toHaveURL(/\/app\/login$/);
 
   expect(consoleErrors.filter((text) => !text.includes("401"))).toEqual([]);
   writeFileSync(
     join(output, "result.json"),
-    JSON.stringify({ passed: true, steps: [...steps, "setup-password", "link-reuse-rejected", "disabled-org-blocked", "signed-out"], csv: download.suggestedFilename() }, null, 2),
+    JSON.stringify({ passed: true, steps: [...steps, "signed-out"] }, null, 2),
   );
+});
+
+test("console settings pages are reachable under one access-key session", async ({ page }) => {
+  await openConsole(page, "/platform/credentials");
+  await expect(page.getByRole("heading", { name: "服务凭据", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Clef 初筛配置", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Clef 初筛配置", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "信任根证书", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "信任根证书", exact: true })).toBeVisible();
 });

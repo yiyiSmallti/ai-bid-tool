@@ -4,7 +4,7 @@
 
 Certificate metadata may change while a task must retain the exact selected
 declaration. Date classification must not imply authenticated validity or invent a
-business date. Maintenance roles differ from product/feature maintenance roles.
+business date.
 
 ## Usage
 
@@ -16,14 +16,13 @@ unknown. Each result warns that authenticity, legality and compliance are unveri
 
 ## How it works
 
-Three FORCE RLS tables preserve the existing versioning algorithm with separate
-certificate:read/certificate:write/task:certificate scopes. Explicit role allowlists
-preserve every previous grant: admin/bidder write, technical/viewer read, and
-admin/bidder/technical select. Token grants intersect actual membership rights;
-pre-existing resource grants alone confer no certificate access.
+The tables preserve the shared versioning algorithm with separate
+`certificate:read`, `certificate:write` and `task:certificate` scopes.
+Tokens receive only explicitly granted scopes; resource grants alone confer no
+certificate access.
 
-Deferred tenant-bound current pointers require real revisions at commit. Composite
-snapshot keys enforce the certificate/revision/task org relationship. Revisions
+Deferred current pointers require real revisions at commit. Composite
+snapshot keys enforce the certificate/revision/task relationship. Revisions
 and audit are append-only for the runtime; snapshots only permit active updates.
 Certificate updates lock the resource; selections serialize on the task and share
 lock the resource. Duplicate selections return one ID and one audit event.
@@ -47,5 +46,5 @@ task deadline inference or evidence confirmation is implemented here.
 ## Code
 
 - server/app/schemas/certificate_contracts.py and services/certificates.py.
-- Migration 0005_versioned_certificates.py, models/entities.py, services/versioned.py and api/resources.py.
+- server/migrations/baseline/, models/entities.py, services/versioned.py and api/resources.py.
 - test_certificates.py, test_resource_rls.py, CLI snapshots and genuine runtime test.
