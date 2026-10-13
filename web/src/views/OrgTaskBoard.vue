@@ -1,9 +1,9 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { orgSession } from "../api.js";
+import { request } from "../api.js";
 import { reviewStates } from "../requirement-review.js";
-import { categories, domains, errorText, formatTime, label, orgRequest } from "../org.js";
+import { categories, domains, errorText, formatTime, label } from "../org.js";
 import { buckets, blockers, actions, activityActions } from "../task-labels.js";
 import { useTaskLive } from "../task-live.js";
 import TaskNavigation from "../components/TaskNavigation.vue";
@@ -22,8 +22,8 @@ async function load(){
   const params=new URLSearchParams({extraction_job_id:job.value,view:"requirement-review",limit:String(filters.value.limit)});
   for(const [key,value] of Object.entries(filters.value))if(value&&key!=="limit")params.set(key,typeof value==="boolean"?"true":String(value));
   if(cursor.value)params.set("cursor",cursor.value);
-  try{const result=await orgRequest("GET",`/tasks/${taskId}/board?${params}`, undefined, {});if(epoch!==requestGeneration.value)return null;
-    if(result.data.board?.task_id!==taskId||result.data.board?.org_id!==orgSession.get()?.orgId||result.data.board?.extraction_job_id!==job.value||result.data.scope?.extraction_job_id!==job.value||result.items.length>filters.value.limit||result.items.some(item=>item.response?.requirement_id!==item.requirement?.requirement_id))throw new Error("看板范围不符合契约");
+  try{const result=await request("GET",`/tasks/${taskId}/board?${params}`, undefined, {});if(epoch!==requestGeneration.value)return null;
+    if(result.data.board?.task_id!==taskId||result.data.board?.extraction_job_id!==job.value||result.data.scope?.extraction_job_id!==job.value||result.items.length>filters.value.limit||result.items.some(item=>item.response?.requirement_id!==item.requirement?.requirement_id))throw new Error("看板范围不符合契约");
     extended.value=result.data;data.value=result.data.board;rows.value=result.items.map(item=>({...item.response,requirementReview:item.requirement}));return result.data.board.event_cursor;
   }catch(exc){if(epoch===requestGeneration.value){data.value=null;rows.value=[];error.value=errorText(exc);if(["board_cursor_expired","invalid_board_cursor"].includes(exc.code)){cursor.value=null;prior.value=[];error.value+="；请重新读取首页。";}}throw exc;}
   finally{if(epoch===requestGeneration.value)loading.value=false;}
@@ -34,13 +34,13 @@ async function next(){if(!data.value?.next_cursor)return;prior.value.push(cursor
 async function previous(){cursor.value=prior.value.pop()??null;await live.refresh();}
 function actionPath(row,action){if(["inspect_annotated_material","confirm_annotated_material","retry_annotation_release","replace_annotation_source"].includes(action.code)&&row.card_id)return `/org/tasks/${taskId}/cards/${row.card_id}/annotation?job=${job.value}`;if(row.requirementReview?.bucket==="requirement_review")return `/org/tasks/${taskId}/requirements?job=${job.value}&requirement=${row.requirement_id}`;if(action.code==="view_job")return `/org/tasks/${taskId}/progress`;return `/org/tasks/${taskId}/review?job=${job.value}&requirement=${row.requirement_id}`;}
 watch(()=>route.query,async()=>{await live.start();},{deep:true});
-onMounted(async()=>{try{history.value=(await orgRequest("GET",`/tasks/${taskId}/extractions`)).items.filter(item=>item.status==="succeeded");if(job.value)await live.start();}catch(exc){clear(exc);}});
+onMounted(async()=>{try{history.value=(await request("GET",`/tasks/${taskId}/extractions`)).items.filter(item=>item.status==="succeeded");if(job.value)await live.start();}catch(exc){clear(exc);}});
 </script>
 <template>
   <div class="page-header"><div><h2>任务看板</h2><p class="subtitle">进度只覆盖明确选定的抽取集合。计数和可执行动作来自当前授权的后端快照。已确认不代表无遗漏。</p></div><div><span role="status" aria-live="polite">{{live.status.value}}</span><el-button v-if="job" @click="cursor=null;prior=[];live.refresh()">重新读取首页</el-button></div></div>
   <TaskNavigation :task-id="taskId" />
   <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" class="section" />
-  <el-card class="section" shadow="never"><el-form label-position="top"><el-form-item label="成功的抽取集合"><el-select :model-value="job" data-testid="extraction-select" placeholder="请明确选择抽取" @update:model-value="update('job',$event)"><el-option v-for="item in history" :key="item.job_id" :label="`${item.job_id}${item.created_at ? ' · '+formatTime(item.created_at) : ''}`" :value="item.job_id" /></el-select></el-form-item></el-form><p v-if="!job" class="hint">选择抽取后读取看板；不会自动选用最近一次结果。</p><template v-if="data"><p>负责人：<span class="mono">{{data.workflow.owner_user_id}}</span> · <el-tag>{{data.workflow.state==='archived'?'已归档':'进行中'}}</el-tag></p><p class="hint">快照 {{formatTime(data.as_of)}}；匹配 {{data.matching}} / {{data.counts.total}} 项</p></template></el-card>
+  <el-card class="section" shadow="never"><el-form label-position="top"><el-form-item label="成功的抽取集合"><el-select :model-value="job" data-testid="extraction-select" placeholder="请明确选择抽取" @update:model-value="update('job',$event)"><el-option v-for="item in history" :key="item.job_id" :label="`${item.job_id}${item.created_at ? ' · '+formatTime(item.created_at) : ''}`" :value="item.job_id" /></el-select></el-form-item></el-form><p v-if="!job" class="hint">选择抽取后读取看板；不会自动选用最近一次结果。</p><template v-if="data"><p class="hint">快照 {{formatTime(data.as_of)}}；匹配 {{data.matching}} / {{data.counts.total}} 项</p></template></el-card>
   <template v-if="data">
     <div class="buckets section" role="group" aria-label="看板状态"><el-button :type="!filters.bucket?'primary':'default'" @click="update('bucket','')">全部 {{data.counts.total}}</el-button><el-button data-testid="bucket-requirement_review" :type="filters.bucket==='requirement_review'?'primary':'default'" @click="update('bucket','requirement_review')">要求待确认 {{extended.buckets.requirement_review}}</el-button><el-button v-for="(text,key) in buckets" :key="key" :data-testid="`bucket-${key}`" :type="filters.bucket===key?'primary':'default'" @click="update('bucket',key)">{{text}} {{responseCounts[key]}}</el-button></div>
     <el-card class="section" shadow="never"><el-form class="filters" label-position="top"><el-form-item label="分类"><el-select :model-value="filters.category" clearable @update:model-value="update('category',$event)"><el-option v-for="(text,key) in categories" :key="key" :label="text" :value="key" /></el-select></el-form-item><el-form-item label="审阅职责"><el-select :model-value="filters.review_domain" clearable @update:model-value="update('domain',$event)"><el-option v-for="(text,key) in domains" :key="key" :label="text" :value="key" /></el-select></el-form-item><el-form-item label="阻塞原因"><el-select :model-value="filters.blocker" clearable @update:model-value="update('blocker',$event)"><el-option v-for="(text,key) in blockers" :key="key" :label="text" :value="key" /></el-select></el-form-item><el-form-item label="每页条数"><el-select :model-value="filters.limit" @update:model-value="update('limit',$event)"><el-option v-for="size in [25,50,100]" :key="size" :label="String(size)" :value="size" /></el-select></el-form-item></el-form><div class="actions"><el-checkbox :model-value="filters.starred" @update:model-value="update('starred',$event)">★ 条款</el-checkbox><el-checkbox :model-value="filters.mine" @update:model-value="update('mine',$event)">待我处理</el-checkbox></div></el-card>

@@ -1,9 +1,9 @@
 """Feedback boundary failure matrix, written before its implementation.
 
-Reject copying sensitive-only text, evidence quotes, oversized rules, foreign org
+Reject copying sensitive-only text, evidence quotes, oversized rules, foreign task
 inputs, confirmations as candidates, and nonhuman/model-free/no-op feedback.
 Replay must keep candidate state and produce no provider usages; encryption must
-reject a swapped org/event/sample binding. DB/API integration gates are exercised
+reject a swapped event/sample binding. DB/API integration gates are exercised
 by the memory acceptance suite against PostgreSQL, never an alternate database.
 """
 
@@ -17,24 +17,21 @@ from pydantic import ValidationError
 
 
 def candidate_input(summary="Use exact versioned models", kind="card_rejected"):
-    org, event = uuid4(), uuid4()
+    event = uuid4()
     return MemoryCandidateInput(
-        org_id=org,
         event=MemoryFeedbackView(
             id=event,
-            org_id=org,
             task_id=uuid4(),
             card_id=uuid4(),
             before_revision_id=uuid4(),
             after_revision_id=uuid4(),
-            actor_user_id=uuid4(),
             kind=kind,
             review_domain="technical",
             created_at=datetime.now(UTC),
             sanitized_sha256="a" * 64,
             sanitizer_version="test-v1",
         ),
-        target=MemoryTarget(scope="org"),
+        target=MemoryTarget(scope="library"),
         sanitized_summary=summary,
         generator_version="feedback-copy-v1",
     )
@@ -50,7 +47,7 @@ async def test_deterministic_candidate_keeps_human_approval_gate():
     assert first.proposal is not None
     assert first.proposal.status == "candidate"
     assert first.proposal.origin == "system"
-    assert first.proposal.confirmed_by is None
+    assert "confirmed_at" not in first.proposal.model_dump()
     assert first.proposal.content.kind == "rule"
     assert str(request.event.id) in first.proposal.content.conflict_key
     assert first.usages == []
@@ -64,11 +61,11 @@ async def test_sensitive_only_candidate_skips():
     assert output.skip_reason == "sensitive_only"
 
 
-def test_confirmation_and_foreign_org_cannot_be_candidate_input():
+def test_confirmation_and_identity_injection_cannot_be_candidate_input():
     with pytest.raises(ValidationError):
         candidate_input(kind="card_confirmed")
     data = candidate_input().model_dump()
-    data["org_id"] = uuid4()
+    data["unsupported_identity"] = str(uuid4())
     with pytest.raises(ValidationError):
         MemoryCandidateInput.model_validate(data)
 
@@ -93,8 +90,8 @@ def test_summary_is_bounded_and_has_no_evidence_content():
     assert summarize_edit(before, {**after, "deviation_note": "x" * 2100}) == ""
 
 
-async def test_feedback_api_candidate_replay_and_tenant_isolation(tenants, tmp_path, admin_engine):
-    """Real API/worker/RLS chain with only synthetic providers and documents."""
+async def test_feedback_api_candidate_replay_and_human_review(database, tmp_path, admin_engine):
+    """Real API/worker/database chain with only synthetic providers and documents."""
     import asyncio
     import json
     from pathlib import Path
@@ -102,86 +99,56 @@ async def test_feedback_api_candidate_replay_and_tenant_isolation(tenants, tmp_p
     from app.models.memory import Memory, MemoryEvalSample, MemoryFeedbackEvent, MemoryRevision
     from sqlalchemy import select
     from test_card_generation import drafting_client, execute, slots, submit
-    from test_response_cards import (
-        create_tender,
-        login,
-        require_action,
-        select_real_materials,
-        set_role,
-    )
+    from test_response_cards import create_tender, login, require_action, select_real_materials
 
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        admin = headers[0]
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        admin = headers
         task, _, extraction, _ = await create_tender(api, app, admin, tmp_path)
         await select_real_materials(api, admin, task, tmp_path)
         terminal = await execute(api, app, admin, await submit(api, admin, task, extraction))
         assert terminal["data"]["status"] == "succeeded"
         current = await slots(api, admin, task, extraction)
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
-        human = await login(api, tenants["orgs"][0], "a")
+        human = await login(api)
         pending = await require_action(api, human, current[2]["card"], "submit")
         rejected = await require_action(
             api, human, pending, "reject", reason="Use concrete delivery wording"
         )
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             event = await session.scalar(select(MemoryFeedbackEvent))
             sample = await session.scalar(select(MemoryEvalSample))
             assert event is not None and sample is not None
             assert str(event.after_revision_id) == rejected["revision_id"]
-            event_id, sample_id = str(event.id), str(sample.id)
-        foreign = headers[1]
-        for route in (
-            f"/tasks/{task}/memory-feedback",
-            f"/tasks/{task}/memory-evaluations",
-            f"/memory-evaluations/{sample_id}",
-        ):
-            denied = await api.get(route, headers=foreign)
-            assert denied.status_code == 404, denied.text
-        denied = await api.post(
-            f"/memory-evaluations/{sample_id}/review",
-            headers=foreign,
-            json={"expected_revision": 1, "action": "accept", "reason": "Synthetic review"},
-        )
-        assert denied.status_code == 404, denied.text
-        denied = await api.post(
-            f"/tasks/{task}/memory-candidates", headers=foreign, json={"event_ids": [event_id]}
-        )
-        assert denied.status_code == 404, denied.text
+            event_id, sample_id = (str(event.id), str(sample.id))
         run = await api.post(
             f"/tasks/{task}/memory-candidates", headers=human, json={"event_ids": [event_id]}
         )
         assert run.status_code == 200, run.text
         job = run.json()["data"]["job_id"]
-        await app.state.processor(human["X-Org-Id"], job)
-        await app.state.processor(human["X-Org-Id"], job)
+        await app.state.processor(job)
+        await app.state.processor(job)
         status = await api.get(f"/jobs/{job}", headers=human)
         assert status.json()["data"]["status"] == "succeeded", status.text
-        assert (await api.get(f"/jobs/{job}", headers=headers[1])).status_code == 404
-        assert (await api.post(f"/jobs/{job}/cancel", headers=headers[1])).status_code == 404
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             memories = list(await session.scalars(select(Memory)))
             assert len(memories) == 1
             revision = await session.get(MemoryRevision, memories[0].current_revision_id)
-            assert revision.status == "candidate" and revision.confirmed_by is None
+            assert revision.status == "candidate"
             assert revision.source["origin"] == "system"
-            memory_id, candidate_text = str(memories[0].id), revision.content["text"]
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
-        reviewing_admin = await login(api, tenants["orgs"][0], "a")
+            memory_id, candidate_text = (str(memories[0].id), revision.content["text"])
+        reviewing_admin = await login(api)
         reviewed = await api.post(
             f"/memory-evaluations/{sample_id}/review",
             headers=reviewing_admin,
             json={
                 "expected_revision": 1,
                 "action": "accept",
-                "reason": "Reviewed organization-only synthetic sample",
+                "reason": "Reviewed installation-local synthetic sample",
             },
         )
         assert reviewed.status_code == 200, reviewed.text
         assert reviewed.json()["data"]["sample"]["review_state"] == "accepted"
-        assert reviewed.json()["data"]["sample"]["org_id"] == str(tenants["orgs"][0])
         shown = await api.get(f"/memories/{memory_id}", headers=reviewing_admin)
         assert shown.json()["data"]["memory"]["current"]["status"] == "candidate"
-        # Save the rejected-card cache state before changing only the memory epoch.
         before_approval = await submit(api, reviewing_admin, task, extraction)
         approved = await api.post(
             f"/memories/{memory_id}/decisions",
@@ -219,12 +186,11 @@ async def test_feedback_api_candidate_replay_and_tenant_isolation(tenants, tmp_p
                 {
                     "version": "feedback-copy-v1",
                     "candidate_count": 1,
-                    "tenant_isolation": True,
                     "replay_unique": True,
                     "system_candidate_approved": True,
                     "approved_feedback_in_next_model_context": True,
                     "approval_invalidated_cache": True,
-                    "sample_accepted_within_source_org": True,
+                    "sample_accepted_locally": True,
                 },
                 sort_keys=True,
             ),
@@ -232,14 +198,14 @@ async def test_feedback_api_candidate_replay_and_tenant_isolation(tenants, tmp_p
 
 
 @asynccontextmanager
-async def feedback_client(tenants, tmp_path, admin_engine, *, masked=False):
+async def feedback_client(database, tmp_path, admin_engine, *, masked=False):
     from test_card_generation import drafting_client, execute, slots, submit
     from test_llm_providers import provider_reply
-    from test_response_cards import create_tender, login, select_real_materials, set_role
+    from test_response_cards import create_tender, login, select_real_materials
 
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
-        task, _, extraction, _ = await create_tender(api, app, headers[0], tmp_path, confirmed=True)
-        await select_real_materials(api, headers[0], task, tmp_path)
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, llm):
+        task, _, extraction, _ = await create_tender(api, app, headers, tmp_path, confirmed=True)
+        await select_real_materials(api, headers, task, tmp_path)
         if masked:
 
             async def masked_reply(sent):
@@ -249,14 +215,11 @@ async def feedback_client(tenants, tmp_path, admin_engine, *, masked=False):
                 return provider_reply("openai", proposals)
 
             vendor.respond = masked_reply
-        terminal = await execute(
-            api, app, headers[0], await submit(api, headers[0], task, extraction)
-        )
+        terminal = await execute(api, app, headers, await submit(api, headers, task, extraction))
         assert terminal["data"]["status"] == "succeeded", terminal
-        current = await slots(api, headers[0], task, extraction)
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
-        human = await login(api, tenants["orgs"][0], "a")
-        yield api, app, human, task, current, llm.settings
+        current = await slots(api, headers, task, extraction)
+        human = await login(api)
+        yield (api, app, human, task, current, llm.settings)
 
 
 async def feedback_artifact(name, findings):
@@ -276,7 +239,7 @@ async def feedback_artifact(name, findings):
     "action", ["edit", "confirm", "sensitive_reject", "sensitive_edit", "no_op"]
 )
 async def test_human_feedback_labels_and_sanitized_candidates(
-    tenants, tmp_path, admin_engine, action
+    database, tmp_path, admin_engine, action
 ):
     from app.memory.feedback import unseal
     from app.models.entities import Job
@@ -285,7 +248,7 @@ async def test_human_feedback_labels_and_sanitized_candidates(
     from test_response_cards import require_action
 
     async with feedback_client(
-        tenants, tmp_path, admin_engine, masked=action == "sensitive_edit"
+        database, tmp_path, admin_engine, masked=action == "sensitive_edit"
     ) as (api, app, human, task, current, settings):
         card = current[2]["card"]
         if action in {"edit", "no_op", "sensitive_edit"}:
@@ -314,7 +277,7 @@ async def test_human_feedback_labels_and_sanitized_candidates(
                 )
             else:
                 await require_action(api, human, pending, "reject", reason="[REDACTED_IDENTITY]")
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             events = list(await session.scalars(select(MemoryFeedbackEvent)))
             samples = list(await session.scalars(select(MemoryEvalSample)))
             jobs = list(await session.scalars(select(Job).where(Job.kind == "memory_candidate")))
@@ -328,21 +291,19 @@ async def test_human_feedback_labels_and_sanitized_candidates(
                 else:
                     assert len(jobs) == 1
                     job_id = str(jobs[0].id)
-                    summary = unseal(
-                        settings, events[0].org_id, events[0].id, events[0].encrypted_summary
-                    )
+                    summary = unseal(settings, events[0].id, events[0].encrypted_summary)
                     assert "{{secret." not in summary
         if action not in {"confirm", "no_op"}:
-            await app.state.processor(human["X-Org-Id"], job_id)
+            await app.state.processor(job_id)
             status = await api.get(f"/jobs/{job_id}", headers=human)
             assert status.json()["data"]["status"] == "succeeded", status.text
             outcome = status.json()["data"]["result"]["items"][0]
-            async with app.state.db.transaction(tenants["orgs"][0]) as session:
+            async with app.state.db.transaction() as session:
                 memories = list(await session.scalars(select(Memory)))
                 if action == "edit":
                     assert len(memories) == 1 and outcome["outcome"] == "created"
                     revision = await session.get(MemoryRevision, memories[0].current_revision_id)
-                    assert revision.status == "candidate" and revision.confirmed_by is None
+                    assert revision.status == "candidate"
                     assert "Use a concrete delivery date" in revision.content["text"]
                 else:
                     assert memories == [] and outcome["outcome"] == "skipped"
@@ -351,14 +312,14 @@ async def test_human_feedback_labels_and_sanitized_candidates(
 
 
 async def test_enqueue_failure_preserves_human_decision_and_recovers(
-    tenants, tmp_path, admin_engine, monkeypatch
+    database, tmp_path, admin_engine, monkeypatch
 ):
     from app.models.entities import Job
     from app.models.memory import MemoryFeedbackEvent
     from sqlalchemy import select
     from test_response_cards import card_action, require_action
 
-    async with feedback_client(tenants, tmp_path, admin_engine) as (
+    async with feedback_client(database, tmp_path, admin_engine) as (
         api,
         app,
         human,
@@ -382,17 +343,17 @@ async def test_enqueue_failure_preserves_human_decision_and_recovers(
             warning.startswith("memory_candidate_dispatch_pending:")
             for warning in response.json()["warnings"]
         )
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             event = await session.scalar(select(MemoryFeedbackEvent))
             job = await session.scalar(select(Job).where(Job.kind == "memory_candidate"))
-            assert event and job and job.status == "queued" and job.queue_id is None
-            event_id, original_job = str(event.id), str(job.id)
+            assert event and job and (job.status == "queued") and (job.queue_id is None)
+            event_id, original_job = (str(event.id), str(job.id))
         monkeypatch.setattr(app.state.queue, "enqueue", original)
         receipt = await api.post(
             f"/tasks/{task}/memory-candidates", headers=human, json={"event_ids": [event_id]}
         )
         assert receipt.status_code == 200 and receipt.json()["data"]["job_id"] == original_job
-        await app.state.processor(human["X-Org-Id"], original_job)
+        await app.state.processor(original_job)
         status = await api.get(f"/jobs/{original_job}", headers=human)
         assert status.json()["data"]["status"] == "succeeded", status.text
         await feedback_artifact(
@@ -401,7 +362,7 @@ async def test_enqueue_failure_preserves_human_decision_and_recovers(
 
 
 async def test_partial_candidate_batch_replays_only_failed_event(
-    tenants, tmp_path, admin_engine, monkeypatch
+    database, tmp_path, admin_engine, monkeypatch
 ):
     from app.core.errors import ServiceError
     from app.memory.candidates import FeedbackCopyProvider
@@ -409,7 +370,7 @@ async def test_partial_candidate_batch_replays_only_failed_event(
     from sqlalchemy import select
     from test_response_cards import require_action
 
-    async with feedback_client(tenants, tmp_path, admin_engine) as (
+    async with feedback_client(database, tmp_path, admin_engine) as (
         api,
         app,
         human,
@@ -422,7 +383,7 @@ async def test_partial_candidate_batch_replays_only_failed_event(
             await require_action(
                 api, human, pending, "reject", reason="Use concrete delivery wording"
             )
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             events = list(
                 await session.scalars(
                     select(MemoryFeedbackEvent).order_by(
@@ -443,9 +404,9 @@ async def test_partial_candidate_batch_replays_only_failed_event(
             f"/tasks/{task}/memory-candidates", headers=human, json={"event_ids": ids}
         )
         batch_id = receipt.json()["data"]["job_id"]
-        await app.state.processor(human["X-Org-Id"], batch_id)
+        await app.state.processor(batch_id)
         partial = await api.get(f"/jobs/{batch_id}", headers=human)
-        assert partial.json()["data"]["status"] == "succeeded" and not partial.json()["ok"], (
+        assert partial.json()["data"]["status"] == "succeeded" and (not partial.json()["ok"]), (
             partial.text
         )
         assert partial.json()["data"]["result"]["completion"] == "partial"
@@ -465,8 +426,8 @@ async def test_partial_candidate_batch_replays_only_failed_event(
         )
         failed_id = retry.json()["data"]["job_id"]
         assert failed_id != batch_id
-        await app.state.processor(human["X-Org-Id"], failed_id)
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        await app.state.processor(failed_id)
+        async with app.state.db.transaction() as session:
             assert len(list(await session.scalars(select(Memory)))) == 2
         await feedback_artifact(
             "partial-recovery",
@@ -476,7 +437,7 @@ async def test_partial_candidate_batch_replays_only_failed_event(
 
 @pytest.mark.parametrize("stop", ["cancel", "lease_takeover"])
 async def test_candidate_attempt_fences_old_publication(
-    tenants, tmp_path, admin_engine, monkeypatch, stop
+    database, tmp_path, admin_engine, monkeypatch, stop
 ):
     from datetime import timedelta
 
@@ -486,7 +447,7 @@ async def test_candidate_attempt_fences_old_publication(
     from sqlalchemy import select
     from test_response_cards import require_action
 
-    async with feedback_client(tenants, tmp_path, admin_engine) as (
+    async with feedback_client(database, tmp_path, admin_engine) as (
         api,
         app,
         human,
@@ -496,7 +457,7 @@ async def test_candidate_attempt_fences_old_publication(
     ):
         pending = await require_action(api, human, current[2]["card"], "submit")
         await require_action(api, human, pending, "reject", reason="Use firm delivery wording")
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             event = await session.scalar(select(MemoryFeedbackEvent))
             event_id = str(event.id)
         receipt = await api.post(
@@ -504,11 +465,11 @@ async def test_candidate_attempt_fences_old_publication(
         )
         job_id = receipt.json()["data"]["job_id"]
         original = FeedbackCopyProvider.propose
-        old_run, replacement_run = None, uuid4()
+        old_run, replacement_run = (None, uuid4())
 
         async def stop_during_prepare(self, request):
             nonlocal old_run
-            async with app.state.db.transaction(tenants["orgs"][0]) as session:
+            async with app.state.db.transaction() as session:
                 job = await session.scalar(
                     select(Job).where(Job.id == UUID(job_id)).with_for_update()
                 )
@@ -522,8 +483,8 @@ async def test_candidate_attempt_fences_old_publication(
             return await original(self, request)
 
         monkeypatch.setattr(FeedbackCopyProvider, "propose", stop_during_prepare)
-        await app.state.processor(human["X-Org-Id"], job_id)
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        await app.state.processor(job_id)
+        async with app.state.db.transaction() as session:
             assert list(await session.scalars(select(Memory))) == []
             job = await session.get(Job, UUID(job_id))
             assert job.status == ("cancelled" if stop == "cancel" else "running")
@@ -536,8 +497,9 @@ async def test_candidate_attempt_fences_old_publication(
             headers=human,
             json={"event_ids": [event_id], "action": {"retry": True}},
         )
-        assert retry.status_code == 200 and retry.json()["data"]["job_id"] == job_id
-        await app.state.processor(human["X-Org-Id"], job_id)
+        assert retry.status_code == 200, retry.text
+        assert retry.json()["data"]["job_id"] == job_id
+        await app.state.processor(job_id)
         status = await api.get(f"/jobs/{job_id}", headers=human)
         assert status.json()["data"]["status"] == "succeeded", status.text
         assert status.json()["data"]["result"]["run_id"] != str(old_run)

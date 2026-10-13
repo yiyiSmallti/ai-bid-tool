@@ -142,7 +142,6 @@ def source_data(row: EvidenceSource, snapshot: TaskCertificate, original: Certif
     return EvidenceSourceArchive.model_validate(
         {
             "id": row.id,
-            "org_id": row.org_id,
             "task_id": row.task_id,
             "task_certificate_id": row.task_certificate_id,
             "certificate_id": row.certificate_id,
@@ -152,12 +151,11 @@ def source_data(row: EvidenceSource, snapshot: TaskCertificate, original: Certif
             "page": row.page,
             "preview": EvidenceSourcePreview.model_validate(row.preview),
             "rendered_at": row.rendered_at.astimezone(UTC),
-            "created_by": row.created_by,
+            "confirmed_at": row.confirmed_at,
             "active_selection": snapshot.active,
             "render_profile": row.render_profile,
             "dpi": row.dpi,
             "status": row.status,
-            "confirmed_by": row.confirmed_by,
             "eligible_for_draft_export": row.eligible_for_draft_export,
         }
     ).model_dump(mode="json")
@@ -170,14 +168,12 @@ def joined_sources():
         .join(
             TaskCertificate,
             and_(
-                TaskCertificate.org_id == EvidenceSource.org_id,
                 TaskCertificate.id == EvidenceSource.task_certificate_id,
             ),
         )
         .join(
             CertificateFile,
             and_(
-                CertificateFile.org_id == EvidenceSource.org_id,
                 CertificateFile.id == EvidenceSource.certificate_file_id,
             ),
         )
@@ -249,7 +245,7 @@ async def create_source(
     if body.page > descriptor.page_count:
         raise ServiceError("invalid_source_page", "Page is outside original PDF", 400, 2)
     # The original revision is immutable, so reading and rendering it needs no task lock.
-    content = await storage.read(actor.org_id, original.storage_key)
+    content = await storage.read(original.storage_key)
     identifier = uuid4()
     name = f"source-{identifier}-page-{body.page}.png"
     png, preview, rendered_at = await bounded_render_async(
@@ -263,17 +259,15 @@ async def create_source(
     snapshot, original, existing = await source_inputs(session, task_id, body)
     if existing is not None:
         return {"source": source_data(existing, snapshot, original), "duplicate": True}
-    key = f"org/{actor.org_id}/evidence-source/{identifier}/{preview.sha256}.png"
-    await storage.put(actor.org_id, key, png)
+    key = f"evidence-source/{identifier}/{preview.sha256}.png"
+    await storage.put(key, png)
     row = EvidenceSource(
         id=identifier,
-        org_id=actor.org_id,
         task_id=task_id,
         task_certificate_id=snapshot.id,
         certificate_id=snapshot.certificate_id,
         certificate_revision_id=snapshot.certificate_revision_id,
         certificate_file_id=original.id,
-        created_by=actor.user_id,
         page=body.page,
         preview=preview.model_dump(mode="json"),
         storage_key=key,
@@ -313,16 +307,15 @@ async def list_sources(
     query = joined_sources().where(EvidenceSource.task_id == task_id)
     if not history:
         query = query.where(TaskCertificate.active.is_(True))
-    workflow = None
     if limit is not None:
         from app.services import task_access, task_events
 
         if not 1 <= limit <= 100:
             raise ServiceError("invalid_source_limit", "Source limit must be 1 through 100", 422, 2)
-        _, workflow, _ = await task_access.access(session, actor, task_id)
+        await task_access.access(session, actor, task_id)
         if cursor:
             value = task_events.open_cursor(
-                cursor, actor, task_id, workflow, settings, purpose="annotation-sources"
+                cursor, actor, task_id, settings, purpose="annotation-sources"
             )
             if value.get("history") != history:
                 raise ServiceError("invalid_source_cursor", "Source filters changed", 409, 2)
@@ -356,7 +349,6 @@ async def list_sources(
             next_cursor=task_events.issue_cursor(
                 actor,
                 task_id,
-                workflow,
                 settings,
                 purpose="annotation-sources",
                 history=history,
@@ -393,7 +385,7 @@ async def read_preview(session: AsyncSession, actor: Identity, source_id: UUID, 
     row, snapshot, original = await require_source(session, actor, source_id)
     descriptor = EvidenceSourcePreview.model_validate(row.preview)
     content = await storage.read_bounded(
-        actor.org_id, row.storage_key, min(MAX_PREVIEW_BYTES, descriptor.size_bytes)
+        row.storage_key, min(MAX_PREVIEW_BYTES, descriptor.size_bytes)
     )
     await asyncio.to_thread(check_png, content, descriptor)
     return content, descriptor

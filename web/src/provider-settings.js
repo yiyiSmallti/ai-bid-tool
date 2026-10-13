@@ -1,27 +1,21 @@
-import { ApiError, orgSession } from "./api.js";
-import { orgRequest } from "./org.js";
+import { ApiError, request } from "./api.js";
 
 export const providerPath = "/management/providers";
 const configFields = [
-  "capability", "source", "platform_model_id", "provider", "model", "base_url",
+  "capability", "provider", "model", "base_url",
   "json_mode", "reasoning", "default_reasoning", "expected_revision",
 ];
 const metadataFields = [
-  "id", "org_id", "revision", "configuration", "provider", "model", "catalog_state",
-  "credential_state", "updated_by", "updated_at", "revised_at", "revised_by",
-  "reasoning", "default_reasoning", "catalog_revision",
-];
-const choiceFields = [
-  "id", "revision", "provider", "model", "default", "reasoning", "default_reasoning",
+  "id", "revision", "configuration", "provider", "model", "credential_state",
+  "updated_at", "revised_at", "reasoning", "default_reasoning",
 ];
 const settingsFields = [
-  "org_id", "capability", "effective_source", "current", "default_model", "reasoning", "actions", "connection_status",
+  "capability", "configured", "current", "reasoning", "actions", "connection_status",
 ];
 const levelFields = ["name", "label", "request_options", "effort", "batch_chars"];
-const actionReasons = ["role_required", "human_required", "provider_unavailable"];
+const actionReasons = ["human_required", "provider_unavailable"];
 
 export const validId = value => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-const validCatalogId = value => typeof value === "string" && /^[a-z0-9][a-z0-9_-]{0,39}$/.test(value);
 const object = value => value && typeof value === "object" && !Array.isArray(value);
 const keys = (value, fields) => object(value) && Object.keys(value).length === fields.length && fields.every(field => Object.hasOwn(value, field));
 const bounded = (value, size) => new TextEncoder().encode(JSON.stringify(value)).length <= size;
@@ -61,49 +55,28 @@ function editableReasoning(value) {
   }
 }
 
-export function checkModelChoice(value) {
-  if (!keys(value, choiceFields) || !validCatalogId(value.id) || !revision(value.revision) ||
-    !provider(value.provider) || !model(value.model) ||
-     typeof value.default !== "boolean") invalid();
-  choices(value.reasoning, value.default_reasoning);
-  return value;
-}
 export function checkProviderMetadata(value, id = null) {
-  if (!keys(value, metadataFields) || value.org_id !== orgSession.get()?.orgId ||
+  if (!keys(value, metadataFields) ||
     !validId(value.id) || id && value.id !== id || !revision(value.revision) ||
-    !provider(value.provider) || !model(value.model) || !validId(value.updated_by) ||
+    !provider(value.provider) || !model(value.model) || value.credential_state !== "configured" ||
     !time(value.updated_at) || !time(value.revised_at) ||
-    !(value.revised_by === null || validId(value.revised_by)) ||
-    !(value.catalog_revision === null || revision(value.catalog_revision)) ||
     !bounded(value, 1024 * 1024)) invalid();
   const config = value.configuration;
   if (!keys(config, configFields) || config.capability !== "llm_extract" ||
-    config.expected_revision !== null || !["platform", "org"].includes(config.source) ||
+    config.expected_revision !== null || config.provider !== value.provider ||
+    config.model !== value.model || !safeEndpoint(config.base_url) ||
     !["json_schema", "json_object"].includes(config.json_mode)) invalid();
   editableReasoning(config.reasoning);
-  if (config.source === "platform") {
-    if (!validCatalogId(config.platform_model_id) || config.provider !== null ||
-      config.model !== null || config.base_url !== null ||
-      config.default_reasoning !== null ||
-      config.reasoning.length || !["enabled", "unavailable"].includes(value.catalog_state) ||
-      value.credential_state !== "platform_managed") invalid();
-  } else if (config.provider !== value.provider || config.model !== value.model ||
-    config.platform_model_id !== null || value.catalog_state !== "not_applicable" ||
-    value.credential_state !== "configured" || !safeEndpoint(config.base_url) ||
-    value.catalog_revision !== null) invalid();
   choices(value.reasoning, value.default_reasoning);
   return value;
 }
 export function checkProviderSettings(value) {
-  if (!keys(value, settingsFields) || value.org_id !== orgSession.get()?.orgId ||
+  if (!keys(value, settingsFields) ||
     value.capability !== "llm_extract" || value.connection_status !== "not_checked" ||
+    typeof value.configured !== "boolean" || value.configured !== (value.current !== null) ||
     !Array.isArray(value.actions) ||
     value.actions.length > 16 || !bounded(value, 1024 * 1024)) invalid();
   if (value.current !== null) checkProviderMetadata(value.current);
-  if (value.default_model !== null) checkModelChoice(value.default_model);
-  if (value.current !== null && value.default_model !== null) invalid();
-  const source = value.current?.configuration.source ?? (value.default_model ? "platform" : "unconfigured");
-  if (value.effective_source !== source) invalid();
   choices(value.reasoning);
   if (value.actions.length !== 2 || new Set(value.actions.map(item => item.action)).size !== 2) invalid();
   for (const hint of value.actions) {
@@ -112,29 +85,25 @@ export function checkProviderSettings(value) {
   }
   return value;
 }
-export function checkProviderPage(response, kind) {
+export function checkProviderPage(response) {
   const { data, items } = response;
-  if (data.org_id !== orgSession.get()?.orgId || data.returned !== items.length ||
+  if (!keys(data, ["as_of", "returned", "next_cursor", "has_more"]) || data.returned !== items.length ||
     items.length > 25 || !time(data.as_of) || typeof data.has_more !== "boolean" ||
     data.has_more !== (data.next_cursor !== null) ||
     data.next_cursor !== null && (typeof data.next_cursor !== "string" || !data.next_cursor || data.next_cursor.length > 2048) ||
     !bounded(response, 256 * 1024)) invalid();
-  items.forEach(item => kind === "catalog" ? checkModelChoice(item) : checkProviderMetadata(item));
+  items.forEach(item => checkProviderMetadata(item));
   return response;
 }
 
 export const blankProvider = () => ({
-  source: "platform", platform_model_id: "", provider: "openai", model: "", base_url: "",
+  provider: "openai", model: "", base_url: "",
   json_mode: "json_schema", reasoning: [], default_reasoning: null,
 });
 // Construct an input from named editable fields. Never spread a read projection.
 export function providerInput(form, expectedRevision) {
-  if (form.source === "platform") return {
-    capability: "llm_extract", source: "platform",
-    platform_model_id: form.platform_model_id, expected_revision: expectedRevision,
-  };
   return {
-    capability: "llm_extract", source: "org", provider: form.provider,
+    capability: "llm_extract", provider: form.provider,
     model: form.model.trim(), base_url: form.base_url.trim() || null, json_mode: form.json_mode,
     reasoning: form.reasoning.map(level => ({
       name: level.name, label: level.label || null, request_options: level.request_options,
@@ -143,6 +112,21 @@ export function providerInput(form, expectedRevision) {
     default_reasoning: form.default_reasoning,
     expected_revision: expectedRevision,
   };
+}
+// A credential never becomes component state or a read-view serialization. The
+// password DOM value is consumed once, cleared before fetch, and the temporary
+// wire object is cleared as soon as request has serialized its body.
+export function submitProviderConfiguration(fields, control, options = {}) {
+  const wire = {
+    capability: "llm_extract", expected_revision: fields.expected_revision,
+    provider: fields.provider, model: fields.model, base_url: fields.base_url, json_mode: fields.json_mode,
+    reasoning: fields.reasoning, default_reasoning: fields.default_reasoning,
+  };
+  try {
+    if (control?.value) wire.api_key = control.value;
+    if (control) control.value = "";
+    return request("POST", "/providers", wire, { ...options, providerWrite: true });
+  } finally { if (control) control.value = ""; delete wire.api_key; }
 }
 
 export function providerReader() {
@@ -164,7 +148,7 @@ export function providerReader() {
     const controller = new AbortController();
     channels.set(channel, controller);
     return new Promise((resolve, reject) => {
-      pending.push({ controller, resolve, reject, execute: () => orgRequest(method, path, body, { signal: controller.signal}) });
+      pending.push({ controller, resolve, reject, execute: () => request(method, path, body, { signal: controller.signal}) });
       pump();
     });
   }
@@ -180,7 +164,7 @@ export function providerError(error) {
   const text = {
     revision_conflict: "修订已变化，草稿已保留；请重新读取后核对并主动保存。",
     provider_key_required: "首次设置或更换供应商、端点需要输入新密钥。",
-    forbidden: "当前身份无权维护配置。", human_required: "需要单位管理员本人登录。",
+    forbidden: "当前身份无权维护配置。", human_required: "需要本人登录后操作。",
     invalid_input: "配置参数无效，请核对非密钥字段并重新输入新密钥。",
     provider_unavailable: "模型服务不可用。",
     management_cursor_invalid: "分页已失效，请从第一页读取。",

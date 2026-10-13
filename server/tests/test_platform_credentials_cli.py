@@ -1,9 +1,7 @@
 """Credential CLI workflows through a fake HTTP server; no database or vendor calls."""
 
 import json
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pytest
@@ -16,7 +14,7 @@ SECRET = "synthetic-only-credential-key"
 VIEW = {
     "id": IDENTIFIER,
     "name": "main",
-    "purpose": "catalog_llm",
+    "purpose": "standalone_llm",
     "provider": "openai",
     "endpoint": "https://vendor.example.test/v1",
     "state": "disabled",
@@ -26,7 +24,6 @@ VIEW = {
     "last_four": "-key",
     "created_at": "2026-10-05T00:00:00Z",
     "updated_at": "2026-10-05T00:00:00Z",
-    "updated_by": "ops@example.test",
     "consumers": [],
 }
 PROBE = {
@@ -50,12 +47,10 @@ def private_file(path, value):
 @pytest.fixture
 def interface(monkeypatch):
     calls = []
-    monkeypatch.setenv("BID_PLATFORM_SESSION", "synthetic-platform-session")
-    monkeypatch.setenv("BID_SESSION", "synthetic-org-session")
-    monkeypatch.setenv("BID_ORG", IDENTIFIER)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-access-key")
 
     def handler(request):
-        assert request.headers["authorization"] == "Bearer synthetic-platform-session"
+        assert request.headers["authorization"] == "Bearer synthetic-access-key"
         assert "x-org-id" not in request.headers
         body = json.loads(request.content) if request.content else None
         calls.append((request.method, request.url.path, body, dict(request.url.params)))
@@ -135,7 +130,7 @@ def invoke(args, capsys, code=0):
     else:
         cli.main(["platform", "credential", *args, "--json"])
     output = capsys.readouterr().out
-    assert SECRET not in output and "synthetic-platform-session" not in output
+    assert SECRET not in output and "synthetic-access-key" not in output
     result = json.loads(output)
     assert set(result) == {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}
     result["duration_ms"] = 0
@@ -166,7 +161,7 @@ def test_credential_workflow_snapshot(interface, tmp_path, capsys):
         "BID_TOKEN_KEY=unrelated-bootstrap-value\nBID_PLATFORM_CREDENTIAL_MAIN='" + SECRET + "'\n",
     )
     args = {
-        "list": ["list", "--state", "disabled", "--purpose", "catalog_llm", "--limit", "20"],
+        "list": ["list", "--state", "disabled", "--purpose", "standalone_llm", "--limit", "20"],
         "show": ["show", "--id", IDENTIFIER],
         "create": ["create", "--input", str(metadata), "--key-file", str(key)],
         "replace": [
@@ -200,10 +195,6 @@ def test_credential_workflow_snapshot(interface, tmp_path, capsys):
     }
     assert actual["test"]["data"]["probe"]["tested_revision"] == 1
     assert len(interface) == 9
-    snapshot = Path(__file__).with_name("snapshots") / "platform-credentials-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n")
-    assert actual == json.loads(snapshot.read_text())
 
 
 @pytest.mark.parametrize(

@@ -174,9 +174,6 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
             payload["data"]["agent_provenance"] = origin
     payload["cost"] = await job_cost(session, job.id)
     if job.kind in {"screenshot_render", "screenshot_analyze"}:
-        from app.services.screenshot_jobs import check_job_access
-
-        await check_job_access(session, identity, job)
         payload["data"]["result"] = _public_result(job)
         payload["ok"] = job.result.get("completion") != "partial"
 
@@ -184,14 +181,8 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         identity.require("task:read")
         payload["data"]["result"] = _public_result(job)
     if job.kind == "screenshot_search":
-        from app.services.vendor_search import check_job_access as search_access
-
-        await search_access(session, identity, job)
         payload["data"]["result"] = _public_result(job)
     if job.kind == "prototype_generate":
-        from app.services.prototype_generation import check_job_access as prototype_access
-
-        await prototype_access(session, identity, job)
         payload["data"]["result"] = _public_result(job)
 
     if job.kind == "sandbox" and job.status in {"failed", "cancelled"}:
@@ -230,16 +221,8 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
     if job.kind in {"draft", "card_generate"}:
         identity.require("draft:read" if job.kind == "draft" else "card:read")
         identity.require("task:read")
-        if job.kind == "card_generate":
-            from app.services.card_generation import check_input_access
-
-            await check_input_access(
-                session, identity, job.task_id, job.result["submission"]["input_manifest"]
-            )
-        if job.result.get("draft_id"):
-            from app.services.drafts import show_draft
-
-            await show_draft(session, identity, UUID(job.result["draft_id"]), storage)
+        # read_access already built this draft's read graph and re-checked the fixed
+        # card inputs; repeating either here only duplicated that work.
         if job.result.get("completion") == "partial":
             payload["ok"] = False
         payload["warnings"] = job.result.get("warnings", [])

@@ -218,7 +218,6 @@ class SandboxProvenance(Contract):
 
 class SandboxRunView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     job_id: UUID
     purpose: Purpose

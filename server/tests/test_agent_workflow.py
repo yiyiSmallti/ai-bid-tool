@@ -17,7 +17,6 @@ from app.models.agent import AgentJobLink, AgentMessage, AgentSession, AgentStep
 from app.models.entities import AuditLog, Job, VendorCall
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
-from task_fixtures import reviewer_header
 from test_card_generation import DraftVendor, drafting_client, slots
 from test_response_cards import (
     create_tender,
@@ -41,9 +40,9 @@ SCOPES = (
 )
 
 
-def workflow_client(tenants, tmp_path):
+def workflow_client(database, tmp_path):
     return drafting_client(
-        tenants,
+        database,
         tmp_path,
     )
 
@@ -81,7 +80,7 @@ async def advance(api, app, header, session_id, *, maximum=30):
         state = data["session"]
         if state["state"] in {"paused", "completed", "partial", "failed", "cancelled"}:
             return data
-        async with app.state.db.transaction(UUID(header["X-Org-Id"])) as db:
+        async with app.state.db.transaction() as db:
             links = (
                 await db.scalars(
                     select(AgentJobLink).where(
@@ -95,14 +94,14 @@ async def advance(api, app, header, session_id, *, maximum=30):
                 if job.status == "queued":
                     queued.append(str(job.id))
         for job_id in queued:
-            await app.state.processor(header["X-Org-Id"], job_id)
-        await wake(app.state.processor, UUID(header["X-Org-Id"]), UUID(session_id))
+            await app.state.processor(job_id)
+        await wake(app.state.processor, UUID(session_id))
     raise AssertionError("Agent failed to reach a checkpoint")
 
 
 async def checkpoint_receipt(app, header, session_id, expected_state, *, reason=None):
     """A committed pause/terminal checkpoint releases the binding and the worker lease."""
-    async with app.state.db.transaction(UUID(header["X-Org-Id"])) as session:
+    async with app.state.db.transaction() as session:
         state = await session.get(AgentSession, UUID(session_id))
         assert state is not None and state.state == expected_state
         assert state.current_job_id is None and state.current_run_id is None
@@ -145,7 +144,7 @@ async def checkpoint_receipt(app, header, session_id, expected_state, *, reason=
     "publication_error", [False, True], ids=["complete", "publication-failure"]
 )
 async def test_proposals_human_review_and_confirmed_draft(
-    tenants, tmp_path, admin_engine, monkeypatch, publication_error
+    database, tmp_path, admin_engine, monkeypatch, publication_error
 ):
     from app.jobs import agent as controller
 
@@ -184,8 +183,8 @@ async def test_proposals_human_review_and_confirmed_draft(
         await record_output(session, state, step, job, output, settings)
 
     monkeypatch.setattr(controller, "record_tool_output", observe_output)
-    async with workflow_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
-        header = headers[0]
+    async with workflow_client(database, tmp_path) as (api, app, headers, vendor, llm):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, confirmed=True
         )
@@ -237,17 +236,13 @@ async def test_proposals_human_review_and_confirmed_draft(
         paused_checkpoint = await checkpoint_receipt(app, header, session_id, "paused")
         cards = await slots(api, header, task, extraction)
         assert len(cards) == len(requirements)
-        assert all(row["card"]["confirmed_by"] is None for row in cards)
-        async with app.state.db.transaction(tenants["orgs"][0]) as db:
+        assert all(row["card"]["confirmed_at"] is None for row in cards)
+        async with app.state.db.transaction() as db:
             messages = (await db.scalars(select(AgentMessage))).all()
             assert all(row.content_enc != row.content for row in messages)
             controls = (await db.scalars(select(Job).where(Job.kind == "agent"))).all()
             assert all(row.status == "succeeded" and row.lease_until is None for row in controls)
-        review_headers = {}
-        for domain in ("technical", "commercial"):
-            _, review_headers[domain] = await reviewer_header(
-                api, admin_engine, tenants["orgs"][0], UUID(task), domain
-            )
+        review_headers = {"technical": header, "commercial": header}
         for row in cards:
             review_header = review_headers[row["card"]["review_domain"]]
             pending = await require_action(api, review_header, row["card"], "submit")
@@ -278,7 +273,7 @@ async def test_proposals_human_review_and_confirmed_draft(
             expected,
             reason="agent_processing_failed" if publication_error else None,
         )
-        async with app.state.db.transaction(tenants["orgs"][0]) as db:
+        async with app.state.db.transaction() as db:
             collected = list(
                 (
                     await db.scalars(
@@ -334,9 +329,9 @@ async def test_proposals_human_review_and_confirmed_draft(
         )
 
 
-async def test_unknown_decision_pauses_without_resending(tenants, tmp_path):
-    async with workflow_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
-        header = headers[0]
+async def test_unknown_decision_pauses_without_resending(database, tmp_path):
+    async with workflow_client(database, tmp_path) as (api, app, headers, vendor, llm):
+        header = headers
         task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
         sent = []
 
@@ -366,7 +361,7 @@ async def test_unknown_decision_pauses_without_resending(tenants, tmp_path):
             },
         )
         assert again.status_code == 409 and len(sent) == 1
-        async with app.state.db.transaction(tenants["orgs"][0]) as db:
+        async with app.state.db.transaction() as db:
             uncertain = (
                 await db.scalars(
                     select(AgentStep).where(
@@ -385,10 +380,10 @@ async def test_unknown_decision_pauses_without_resending(tenants, tmp_path):
 
 @pytest.mark.parametrize("max_steps,max_calls", [(1, 32), (24, 1)])
 async def test_session_limits_do_not_reset_across_control_jobs(
-    tenants, tmp_path, max_steps, max_calls
+    database, tmp_path, max_steps, max_calls
 ):
-    async with workflow_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
-        header = headers[0]
+    async with workflow_client(database, tmp_path) as (api, app, headers, vendor, llm):
+        header = headers
         task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
 
         async def read_again(sent):
@@ -432,7 +427,7 @@ async def test_session_limits_do_not_reset_across_control_jobs(
 
 
 async def test_atomic_queue_deferral_rolls_back_with_business_transaction(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
     from app.core.config import Settings
     from app.core.db import Database
@@ -475,9 +470,9 @@ async def test_atomic_queue_deferral_rolls_back_with_business_transaction(
     probe = str(uuid4())
     try:
         with pytest.raises(RuntimeError, match="Synthetic rollback"):
-            async with db.transaction(tenants["orgs"][0]) as session:
-                await queue.enqueue_agent_wake(session, str(tenants["orgs"][0]), probe)
-                await queue.enqueue_in_transaction(session, str(tenants["orgs"][0]), probe)
+            async with db.transaction() as session:
+                await queue.enqueue_agent_wake(session, probe)
+                await queue.enqueue_in_transaction(session, probe)
                 raise RuntimeError("Synthetic rollback")
         async with db.transaction() as session:
             assert not await session.scalar(

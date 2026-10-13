@@ -154,7 +154,6 @@ def create_router(context, storage, queue, settings, tokens, processor):
         signature = tokens.issue(
             {
                 "purpose": "annotation-preview",
-                "org_id": str(actor.org_id),
                 "object_id": str(row.id),
                 "rendition_id": str(row.rendition_id),
                 "sha256": rendition.image_sha256,
@@ -259,7 +258,6 @@ def create_router(context, storage, queue, settings, tokens, processor):
             raise not_found() from None
         expected = {
             "purpose": "annotation-preview",
-            "org_id": str(actor.org_id),
             "object_id": str(row.id),
             "rendition_id": str(row.rendition_id),
             "sha256": rendition.image_sha256,

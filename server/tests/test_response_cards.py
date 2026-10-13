@@ -3,23 +3,21 @@
 Gate failure matrix (enumerated before the gate tests, per repository policy):
 
 * actor context: a missing actor, API token, agent, or worker must not perform a
-  human decision even when a user id and a confirm scope are supplied;
-* responsibility: an admin cannot confirm across a professional domain, a
-  bidder cannot decide technical cards, a technical member cannot decide
-  commercial cards, and an unclassified card cannot be decided;
+  human decision even when a confirm scope is supplied;
+* classification: an unclassified card cannot be decided;
 * state and concurrency: decisions from the wrong state, stale expected
   revisions, protected pending/confirmed content, and an illegal current
   revision pointer must fail without a partial revision or success audit;
 * evidence completeness: evidence responses need at least one real linked
   material, reviewed ids must be unique and exactly cover the links, every
   linked item must be confirmed, and commitment responses must have none;
-* decision completeness: confirmed revisions need a human confirmer and time,
+* decision completeness: confirmed revisions need a human decision and time,
   disposition=respond, complete response/deviation fields, and no unresolved
   warning; comply_only needs its own human decision and cannot masquerade as a
   confirmed response;
 * immutable history: card revisions, evidence, evidence links, draft runs, and
   response items cannot be changed or deleted after insertion;
-* relational binding: cross-organization, cross-task, cross-extraction-job,
+* relational binding: cross-task, cross-extraction-job,
   cross-card, wrong selection/revision, and wrong certificate page bindings
   must fail or be hidden as not found;
 * material freshness: replacing a task selection makes dependent evidence and
@@ -31,7 +29,7 @@ Gate failure matrix (enumerated before the gate tests, per repository policy):
   response row, comply-only entry, or gap; gaps force partial completion and a
   negative deviation remains visible in its table row;
 * job boundaries: dry-run writes nothing and enqueues nothing, cancelled or
-  foreign-organization jobs cannot publish response items, and a re-extraction
+  mismatched task jobs cannot publish response items, and a re-extraction
   never imports cards from another extraction job.
 """
 
@@ -57,11 +55,10 @@ from app.schemas.contracts import (
     LLMResult,
     ProviderUsage,
 )
-from conftest import PASSWORD, FakeQueue
+from conftest import FakeQueue
 from fakes import FakeLLM, source_for
 from sqlalchemy import select, text
-from task_fixtures import confirm_requirements_async, reviewer_header
-from task_fixtures import set_role as set_task_actor_role
+from task_fixtures import confirm_requirements_async
 
 TENDER_LINES = [
     "The offered appliance memory shall be at least 64 GB.",
@@ -150,23 +147,19 @@ class PhaseOneExtraction(FakeLLM):
         )
 
 
-async def login(api, org_id: UUID, label: str) -> dict[str, str]:
-    response = await api.post(
-        "/auth/login",
-        json={"email": f"{label}@example.test", "password": PASSWORD, "org_id": str(org_id)},
-    )
+async def login(api) -> dict[str, str]:
+    import os
+
+    response = await api.post("/auth/session", json={"access_key": os.environ["BID_ACCESS_KEY"]})
     assert response.status_code == 200, response.text
-    return {
-        "Authorization": "Bearer " + response.json()["data"]["session"],
-        "X-Org-Id": str(org_id),
-    }
+    return {"Authorization": "Bearer " + response.json()["data"]["session"]}
 
 
 async def run_document_job(api, app, header, document_id, action, body=None):
     response = await api.post(f"/documents/{document_id}/{action}", headers=header, json=body or {})
     assert response.status_code == 200, response.text
     job_id = response.json()["data"]["job_id"]
-    await app.state.processor(header["X-Org-Id"], job_id)
+    await app.state.processor(job_id)
     status = await api.get(f"/jobs/{job_id}", headers=header)
     assert status.status_code == 200 and status.json()["data"]["status"] == "succeeded", status.text
     return job_id
@@ -194,9 +187,9 @@ async def create_tender(
     ).json()["items"]
     assert [row["source"]["page"] for row in requirements] == [1, 2, 3, 4, 5]
     if confirmed:
-        async with app.state.db.transaction(UUID(header["X-Org-Id"])) as session:
+        async with app.state.db.transaction() as session:
             await confirm_requirements_async(
-                session, UUID(header["X-Org-Id"]), UUID(task), settings=app.state.processor.settings
+                session, UUID(task), settings=app.state.processor.settings
             )
     return task, document, extraction, requirements
 
@@ -255,22 +248,15 @@ async def select_real_materials(api, header, task, tmp_path: Path):
     return product, product_selection, certificate, selected_certificate, source
 
 
-def set_role(admin_engine, org_id, user_id, role):
-    set_task_actor_role(admin_engine, org_id, user_id, role)
-
-
 @asynccontextmanager
-async def phase_one_client(tenants, tmp_path):
+async def phase_one_client(database, tmp_path):
     provider = PhaseOneExtraction()
     app = create_app(Settings(data_dir=tmp_path), llm=provider, queue=FakeQueue())
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        headers = [
-            await login(api, org, label)
-            for org, label in zip(tenants["orgs"], ("a", "b"), strict=True)
-        ]
+        headers = await login(api)
         yield api, app, headers, provider
 
 
@@ -305,10 +291,10 @@ async def require_action(api, header, card, action, **extra):
     return response.json()["data"]
 
 
-async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_engine):
+async def test_full_review_chain_and_draft_partition(database, tmp_path, admin_engine):
     """Human decisions consume fixed materials and the deterministic worker partitions all rows."""
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, provider):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, provider):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, confirmed=True
         )
@@ -316,9 +302,8 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
             api, header, task, tmp_path
         )
 
-        # A scoring requirement starts unclassified.  Admin classification and a
-        # subsequent update exercise both routes without pretending admin owns the
-        # technical review decision.
+        # A scoring requirement starts unclassified. Human classification and a
+        # subsequent update exercise both routes before its technical review.
         substantive = await create_card(
             api,
             header,
@@ -332,6 +317,36 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
                 "deviation_note": None,
                 "evidence": [],
             },
+        )
+        unclassified = await api.post(
+            f"/tasks/{task}/cards/dispositions",
+            headers=header,
+            json={
+                "extraction_job_id": extraction,
+                "items": [
+                    {
+                        "requirement_id": requirements[0]["id"],
+                        "expected_revision": substantive["revision"],
+                        "disposition": "comply_only",
+                        "reason": "Synthetic procedural classification is still missing.",
+                    }
+                ],
+            },
+        )
+        assert unclassified.status_code == 400, unclassified.text
+        assert unclassified.json()["data"]["error"]["code"] == "unclassified"
+        substantive = await require_action(api, header, substantive, "submit")
+        unclassified_confirmation = await card_action(
+            api, header, substantive, "confirm", reviewed_evidence_ids=[]
+        )
+        assert unclassified_confirmation.status_code == 400, unclassified_confirmation.text
+        assert unclassified_confirmation.json()["data"]["error"]["code"] == "unclassified"
+        substantive = await require_action(
+            api,
+            header,
+            substantive,
+            "withdraw",
+            reason="Synthetic requirement needs a review-domain classification first.",
         )
         classified_response = await api.post(
             f"/cards/{substantive['id']}/classification",
@@ -427,12 +442,10 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
             },
         )
 
-        # The technical reviewer owns both the technical response and the
-        # separate procedural disposition decision.
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
-        _, review_header = await reviewer_header(
-            api, admin_engine, tenants["orgs"][0], UUID(task), "technical"
-        )
+        # The same human reviews the technical response and its separate
+        # procedural disposition decision.
+
+        review_header = headers
         disposition = await api.post(
             f"/tasks/{task}/cards/dispositions",
             headers=header,
@@ -451,7 +464,7 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
         assert disposition.status_code == 200, disposition.text
         [comply_card] = disposition.json()["data"]["cards"]
         assert comply_card["disposition"] == "comply_only"
-        assert comply_card["confirmed_by"] is None
+        assert comply_card["confirmed_at"] is None
 
         for card in (substantive, commitment):
             submitted = await require_action(api, review_header, card, "submit")
@@ -476,10 +489,7 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
             )
         substantive = confirmed if confirmed["id"] == substantive["id"] else substantive
 
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
-        _, review_header = await reviewer_header(
-            api, admin_engine, tenants["orgs"][0], UUID(task), "commercial"
-        )
+        review_header = headers
         commercial = await require_action(api, review_header, commercial, "submit")
         warning_missing = await card_action(
             api,
@@ -506,9 +516,8 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
         assert commercial["state"] == "confirmed"
         assert commercial["evidence"][0]["quote_check"] == "human_page_review"
         assert commercial["evidence"][0]["source_archive"]["status"] == "unconfirmed_source"
-        assert commercial["evidence"][0]["source_archive"]["confirmed_by"] is None
+        assert commercial["evidence"][0]["source_archive"]["confirmed_at"] is None
 
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
         queue_calls = len(app.state.queue.calls)
         extraction_calls = provider.calls
         preview_response = await api.post(
@@ -542,7 +551,7 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
         )
         assert queued_response.status_code == 200, queued_response.text
         queued = queued_response.json()["data"]
-        await app.state.processor(header["X-Org-Id"], queued["job_id"])
+        await app.state.processor(queued["job_id"])
         job = (await api.get(f"/jobs/{queued['job_id']}", headers=header)).json()["data"]
         assert job["status"] == "succeeded"
         assert job["result"]["completion"] == "partial"
@@ -593,7 +602,7 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
 
         from app.models.entities import AuditLog
 
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             logs = (await session.scalars(select(AuditLog))).all()
         details = json.dumps([row.details for row in logs])
         assert "The offered appliance has 64 GB memory" not in details
@@ -637,15 +646,15 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
         )
 
 
-async def test_human_gate_roles_evidence_and_revision_conflicts(tenants, tmp_path, admin_engine):
+async def test_human_gate_evidence_and_revision_conflicts(database, tmp_path, admin_engine):
     """The service rejects every nonhuman path before a confirmation revision is appended."""
     from app.core.errors import ServiceError
     from app.schemas.response_card_contracts import CardAction
     from app.services import response_cards as service
-    from app.services.auth import ROLE_SCOPES, Identity
+    from app.services.auth import HUMAN_SCOPES, Identity
 
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, confirmed=True
         )
@@ -681,11 +690,11 @@ async def test_human_gate_roles_evidence_and_revision_conflicts(tenants, tmp_pat
                 "evidence": [],
             },
         )
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
+
         submitted = await require_action(api, header, commitment, "submit")
 
         # Tokens fail through the public service boundary and cannot smuggle a
-        # confirm capability through the request body or their creator's role.
+        # confirm capability through the request body or their initiating human's authority.
         token_attempt = await card_action(
             api, token_header, submitted, "confirm", reviewed_evidence_ids=[]
         )
@@ -698,24 +707,15 @@ async def test_human_gate_roles_evidence_and_revision_conflicts(tenants, tmp_pat
             reviewed_evidence_ids=[],
         )
         for actor in (
+            Identity(scopes=set(HUMAN_SCOPES), actor_kind="agent"),
             Identity(
-                user_id=tenants["users"][0],
-                org_id=tenants["orgs"][0],
-                scopes=set(ROLE_SCOPES["technical"]),
-                role="technical",
-                actor_kind="agent",
-            ),
-            Identity(
-                user_id=tenants["users"][0],
-                org_id=tenants["orgs"][0],
-                scopes={*ROLE_SCOPES["technical"], "evidence:confirm"},
-                role="technical",
+                scopes={*HUMAN_SCOPES, "evidence:confirm"},
                 token_id=UUID(token_record["id"]),
                 actor_kind="token",
             ),
         ):
             with pytest.raises(ServiceError) as error:
-                async with app.state.db.transaction(tenants["orgs"][0]) as session:
+                async with app.state.db.transaction() as session:
                     await service.card_action(
                         session,
                         actor,
@@ -725,17 +725,8 @@ async def test_human_gate_roles_evidence_and_revision_conflicts(tenants, tmp_pat
                     )
             assert error.value.code == "forbidden"
 
-        # A valid session with the wrong live membership remains unable to make
-        # the decision.  Returning to the assigned role then succeeds once.
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
-        wrong_role = await card_action(api, header, submitted, "confirm")
-        assert wrong_role.status_code == 403
-        assert wrong_role.json()["data"]["error"]["code"] == "forbidden"
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
         confirmed = await require_action(api, header, submitted, "confirm")
-        assert confirmed["state"] == "confirmed" and confirmed["confirmed_by"] == str(
-            tenants["users"][0]
-        )
+        assert confirmed["state"] == "confirmed" and confirmed["confirmed_at"] is not None
 
         # Old revisions never overwrite the current pointer or append history.
         stale_update = await api.put(
@@ -895,14 +886,14 @@ async def test_human_gate_roles_evidence_and_revision_conflicts(tenants, tmp_pat
 
 
 async def test_atomic_disposition_and_reextraction_do_not_mix_requirements(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, provider):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, provider):
+        header = headers
         task, document, extraction, requirements = await create_tender(
             api, app, header, tmp_path, confirmed=True
         )
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
+
         first, second = sorted(requirements[2:4], key=lambda row: row["id"])
         failed = await api.post(
             f"/tasks/{task}/cards/dispositions",
@@ -1015,109 +1006,11 @@ async def test_atomic_disposition_and_reextraction_do_not_mix_requirements(
         assert cross_job.status_code == 404
 
 
-async def test_every_response_route_hides_the_other_organization(tenants, tmp_path):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        task_b, _, job_b, requirements_b = await create_tender(
-            api, app, headers[1], tmp_path, suffix="foreign", confirmed=True
-        )
-        card_b = await create_card(
-            api,
-            headers[1],
-            task_b,
-            job_b,
-            requirements_b[2],
-            {
-                "response_kind": "commitment",
-                "response_text": "Synthetic foreign organization response.",
-                "deviation": "none",
-                "deviation_note": "Synthetic foreign organization explanation.",
-                "evidence": [],
-            },
-        )
-        queued = (
-            await api.post(
-                f"/tasks/{task_b}/drafts",
-                headers=headers[1],
-                json={"extraction_job_id": job_b},
-            )
-        ).json()["data"]
-        await app.state.processor(headers[1]["X-Org-Id"], queued["job_id"])
-        foreign_job = (await api.get(f"/jobs/{queued['job_id']}", headers=headers[1])).json()[
-            "data"
-        ]
-        draft_b = foreign_job["result"]["draft_id"]
-
-        routes = [
-            ("GET", f"/tasks/{task_b}/cards?job={job_b}", None),
-            (
-                "POST",
-                f"/tasks/{task_b}/cards",
-                {
-                    "extraction_job_id": job_b,
-                    "requirement_id": requirements_b[4]["id"],
-                    "content": {
-                        "response_kind": None,
-                        "response_text": None,
-                        "deviation": None,
-                        "deviation_note": None,
-                        "evidence": [],
-                    },
-                },
-            ),
-            ("GET", f"/cards/{card_b['id']}", None),
-            (
-                "PUT",
-                f"/cards/{card_b['id']}",
-                {"expected_revision": 1, "content": card_b["content"]},
-            ),
-            (
-                "POST",
-                f"/cards/{card_b['id']}/classification",
-                {
-                    "expected_revision": 1,
-                    "review_domain": "commercial",
-                    "reason": "Cross-organization request must stay hidden.",
-                },
-            ),
-            (
-                "POST",
-                f"/cards/{card_b['id']}/actions",
-                {"expected_revision": 1, "action": "submit"},
-            ),
-            (
-                "POST",
-                f"/tasks/{task_b}/cards/dispositions",
-                {
-                    "extraction_job_id": job_b,
-                    "items": [
-                        {
-                            "requirement_id": requirements_b[3]["id"],
-                            "expected_revision": None,
-                            "disposition": "comply_only",
-                            "reason": "Cross-organization request must stay hidden.",
-                        }
-                    ],
-                },
-            ),
-            (
-                "POST",
-                f"/tasks/{task_b}/drafts",
-                {"extraction_job_id": job_b},
-            ),
-            ("GET", f"/tasks/{task_b}/drafts?job={job_b}", None),
-            ("GET", f"/drafts/{draft_b}", None),
-        ]
-        for method, path, body in routes:
-            response = await api.request(method, path, headers=headers[0], json=body)
-            assert response.status_code == 404, (method, path, response.text)
-            assert response.json()["data"]["error"]["code"] == "not_found"
-
-
 async def test_selection_replacement_stales_card_and_draft_and_cancel_publishes_nothing(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, confirmed=True
         )
@@ -1154,7 +1047,7 @@ async def test_selection_replacement_stales_card_and_draft_and_cancel_publishes_
         )
         assert classified.status_code == 200, classified.text
         card = classified.json()["data"]
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
+
         card = await require_action(api, header, card, "submit")
         card = await require_action(
             api,
@@ -1170,7 +1063,7 @@ async def test_selection_replacement_stales_card_and_draft_and_cancel_publishes_
                 json={"extraction_job_id": extraction},
             )
         ).json()["data"]
-        await app.state.processor(header["X-Org-Id"], initial_draft["job_id"])
+        await app.state.processor(initial_draft["job_id"])
         initial_job = (await api.get(f"/jobs/{initial_draft['job_id']}", headers=header)).json()[
             "data"
         ]
@@ -1224,7 +1117,7 @@ async def test_selection_replacement_stales_card_and_draft_and_cancel_publishes_
         assert queued["cached"] is False and queued["job_id"] != initial_draft["job_id"]
         cancelled = await api.post(f"/jobs/{queued['job_id']}/cancel", headers=header)
         assert cancelled.status_code == 200
-        await app.state.processor(header["X-Org-Id"], queued["job_id"])
+        await app.state.processor(queued["job_id"])
         status = (await api.get(f"/jobs/{queued['job_id']}", headers=header)).json()["data"]
         assert status["status"] == "cancelled"
         listed = (
@@ -1233,9 +1126,9 @@ async def test_selection_replacement_stales_card_and_draft_and_cancel_publishes_
         assert [row["id"] for row in listed] == [draft_id]
 
 
-async def test_only_a_human_org_admin_can_disable_task_redaction(tenants, tmp_path, admin_engine):
-    async with phase_one_client(tenants, tmp_path) as (api, _, headers, _):
-        header = headers[0]
+async def test_only_a_human_can_disable_task_redaction(database, tmp_path, admin_engine):
+    async with phase_one_client(database, tmp_path) as (api, _, headers, _):
+        header = headers
         task = (
             await api.post("/tasks", headers=header, json={"name": "Synthetic redaction gate"})
         ).json()["data"]
@@ -1263,14 +1156,6 @@ async def test_only_a_human_org_admin_can_disable_task_redaction(tenants, tmp_pa
         )
         assert token_attempt.status_code == 403
 
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
-        role_attempt = await api.put(
-            f"/tasks/{task_id}/model-redaction",
-            headers=header,
-            json={"expected_revision": 1, "model_redaction_enabled": False},
-        )
-        assert role_attempt.status_code == 403
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
         changed = await api.put(
             f"/tasks/{task_id}/model-redaction",
             headers=header,
@@ -1281,7 +1166,6 @@ async def test_only_a_human_org_admin_can_disable_task_redaction(tenants, tmp_pa
             "task_id": task_id,
             "model_redaction_enabled": False,
             "revision": 2,
-            "changed_by": str(tenants["users"][0]),
         }
         conflict = await api.put(
             f"/tasks/{task_id}/model-redaction",
@@ -1291,21 +1175,14 @@ async def test_only_a_human_org_admin_can_disable_task_redaction(tenants, tmp_pa
         assert conflict.status_code == 409
         assert conflict.json()["data"]["error"]["code"] == "revision_conflict"
 
-        foreign = await api.put(
-            f"/tasks/{task_id}/model-redaction",
-            headers=headers[1],
-            json={"expected_revision": 2, "model_redaction_enabled": True},
-        )
-        assert foreign.status_code == 404
 
-
-async def test_draft_worker_rechecks_inputs_membership_and_run_identity(
-    tenants, tmp_path, admin_engine, monkeypatch
+async def test_draft_worker_rechecks_inputs_and_run_identity(
+    database, tmp_path, admin_engine, monkeypatch
 ):
     from app.services import response_cards as card_service
 
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
 
         gap_task, _, gap_extraction, gap_requirements = await create_tender(
             api, app, header, tmp_path, suffix="all-gap", confirmed=True
@@ -1317,7 +1194,7 @@ async def test_draft_worker_rechecks_inputs_membership_and_run_identity(
                 json={"extraction_job_id": gap_extraction},
             )
         ).json()["data"]
-        await app.state.processor(header["X-Org-Id"], all_gap["job_id"])
+        await app.state.processor(all_gap["job_id"])
         gap_status_response = await api.get(f"/jobs/{all_gap['job_id']}", headers=header)
         gap_status = gap_status_response.json()["data"]
         assert gap_status["status"] == "succeeded"
@@ -1355,7 +1232,7 @@ async def test_draft_worker_rechecks_inputs_membership_and_run_identity(
                 "evidence": [],
             },
         )
-        await app.state.processor(header["X-Org-Id"], changed_job["job_id"])
+        await app.state.processor(changed_job["job_id"])
         changed_status = (await api.get(f"/jobs/{changed_job['job_id']}", headers=header)).json()[
             "data"
         ]
@@ -1371,27 +1248,11 @@ async def test_draft_worker_rechecks_inputs_membership_and_run_identity(
             json={
                 "expected_revision": card["revision"],
                 "review_domain": "technical",
-                "reason": "Classify before testing worker membership revalidation.",
+                "reason": "Classify before testing the execution fence.",
             },
         )
         assert classified.status_code == 200, classified.text
         card = classified.json()["data"]
-        revoked_job = (
-            await api.post(
-                f"/tasks/{task}/drafts",
-                headers=header,
-                json={"extraction_job_id": extraction},
-            )
-        ).json()["data"]
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "viewer")
-        await app.state.processor(header["X-Org-Id"], revoked_job["job_id"])
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
-        revoked_status = (await api.get(f"/jobs/{revoked_job['job_id']}", headers=header)).json()[
-            "data"
-        ]
-        assert revoked_status["status"] == "failed"
-        assert revoked_status["error"]["code"] == "forbidden"
-
         revised = await api.put(
             f"/cards/{card['id']}",
             headers=header,
@@ -1414,9 +1275,7 @@ async def test_draft_worker_rechecks_inputs_membership_and_run_identity(
             return await original_task_lock(session, task_id)
 
         monkeypatch.setattr(card_service, "task_lock", pause_before_job_recheck)
-        old_attempt = asyncio.create_task(
-            app.state.processor(header["X-Org-Id"], stale_attempt["job_id"])
-        )
+        old_attempt = asyncio.create_task(app.state.processor(stale_attempt["job_id"]))
         await entered.wait()
         cancelled = await api.post(f"/jobs/{stale_attempt['job_id']}/cancel", headers=header)
         assert cancelled.status_code == 200
@@ -1431,9 +1290,9 @@ async def test_draft_worker_rechecks_inputs_membership_and_run_identity(
         ).json()["items"] == []
 
 
-async def test_all_comply_only_draft_is_complete_with_exit_zero(tenants, tmp_path, admin_engine):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+async def test_all_comply_only_draft_is_complete_with_exit_zero(database, tmp_path, admin_engine):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, suffix="all-comply", confirmed=True
         )
@@ -1463,7 +1322,6 @@ async def test_all_comply_only_draft_is_complete_with_exit_zero(tenants, tmp_pat
         assert classified.status_code == 200, classified.text
         scored = classified.json()["data"]
 
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
         technical_items = []
         for index in (0, 2, 3, 4):
             technical_items.append(
@@ -1482,7 +1340,6 @@ async def test_all_comply_only_draft_is_complete_with_exit_zero(tenants, tmp_pat
         assert technical.status_code == 200, technical.text
         assert len(technical.json()["data"]["cards"]) == 4
 
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
         commercial = await api.post(
             f"/tasks/{task}/cards/dispositions",
             headers=header,
@@ -1500,7 +1357,6 @@ async def test_all_comply_only_draft_is_complete_with_exit_zero(tenants, tmp_pat
         )
         assert commercial.status_code == 200, commercial.text
 
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
         queued = (
             await api.post(
                 f"/tasks/{task}/drafts",
@@ -1508,7 +1364,7 @@ async def test_all_comply_only_draft_is_complete_with_exit_zero(tenants, tmp_pat
                 json={"extraction_job_id": extraction},
             )
         ).json()["data"]
-        await app.state.processor(header["X-Org-Id"], queued["job_id"])
+        await app.state.processor(queued["job_id"])
         status_response = await api.get(f"/jobs/{queued['job_id']}", headers=header)
         status = status_response.json()["data"]
         assert status_response.json()["ok"] is True
@@ -1528,10 +1384,10 @@ async def test_all_comply_only_draft_is_complete_with_exit_zero(tenants, tmp_pat
 
 
 async def test_citation_already_reported_as_a_gap_keeps_a_new_draft_current(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, suffix="known-invalid", confirmed=True
         )
@@ -1541,12 +1397,12 @@ async def test_citation_already_reported_as_a_gap_keeps_a_new_draft_current(
                 text("UPDATE requirements SET quote = replace(quote, ' ', '') WHERE id = :id"),
                 {"id": requirements[0]["id"]},
             )
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
+
         queued = await api.post(
             f"/tasks/{task}/drafts", headers=header, json={"extraction_job_id": extraction}
         )
         assert queued.status_code == 200, queued.text
-        await app.state.processor(header["X-Org-Id"], queued.json()["data"]["job_id"])
+        await app.state.processor(queued.json()["data"]["job_id"])
         [summary] = (
             await api.get(f"/tasks/{task}/drafts", headers=header, params={"job": extraction})
         ).json()["items"]

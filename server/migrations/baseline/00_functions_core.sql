@@ -2196,6 +2196,7 @@ CREATE FUNCTION public.provider_usage_gate() RETURNS trigger
                 SELECT * INTO parent FROM public.jobs WHERE id=NEW.job_id;
                 IF NEW.task_id IS DISTINCT FROM parent.task_id
                     OR (NEW.provider_config_id IS DISTINCT FROM parent.provider_config_id
+                        AND NOT (NEW.provider_config_id IS NULL AND NEW.capability <> 'llm')
                         AND NOT (parent.kind = 'bid_review' AND NEW.provider_config_id IS NULL
                                  AND NEW.provider = 'cloudflare' AND NEW.model = '@cf/cloudflare/clef')) THEN
                     RAISE EXCEPTION 'Usage model or task differs from job' USING ERRCODE='23514';

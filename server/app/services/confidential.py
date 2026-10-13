@@ -1,7 +1,7 @@
 """Confidential fields: models and cards see `{{secret.key}}`, exports fill the value.
 
 Values are encrypted, append-only and never logged, audited, returned by list views
-or sent to a model. Only a human admin or bidder session can set or reveal one.
+or sent to a model. Only an authenticated human can set or reveal one.
 """
 
 from collections.abc import Iterable
@@ -78,7 +78,6 @@ def value_view(
         value_id=row.id if row else None,
         version=row.version if row else None,
         tail=row.tail if row else None,
-        set_by=row.created_by if row else None,
         set_at=row.created_at if row else None,
     ).model_dump(mode="json")
 
@@ -125,8 +124,6 @@ async def create_field(
         fail("confidential_key_exists", "A confidential field already uses this key", 409)
     row = ConfidentialField(
         id=uuid4(),
-        org_id=actor.org_id,
-        created_by=actor.user_id,
         key=body.key,
         label=body.label,
         kind=body.kind,
@@ -200,8 +197,8 @@ async def set_value(
         fail("confidential_field_archived", "The field is archived", 409)
     if field.scope == "task" and body.task_id is None:
         fail("confidential_task_required", "A task-scope field takes a value per task")
-    if field.scope == "org" and body.task_id is not None:
-        fail("confidential_task_not_allowed", "An org-scope field has one value for all tasks")
+    if field.scope == "library" and body.task_id is not None:
+        fail("confidential_task_not_allowed", "The library-scope field has one value for all tasks")
     if body.task_id is not None and await session.get(Task, body.task_id) is None:
         raise not_found()
     owner = body.task_id
@@ -219,8 +216,6 @@ async def set_value(
     ) + 1
     row = ConfidentialValue(
         id=uuid4(),
-        org_id=actor.org_id,
-        created_by=actor.user_id,
         field_id=field.id,
         task_id=owner,
         version=version,
@@ -246,7 +241,7 @@ async def set_value(
 
 @task_authorized("confidential:read", optional=True)
 async def list_values(session: AsyncSession, actor: Identity, task_id: UUID | None) -> list[dict]:
-    """Every active field's state: org fields always, task fields only for a task."""
+    """Every active field's state: library fields always, task fields only for a task."""
     actor.require("confidential:read")
     if task_id is not None:
         actor.require("task:read")
@@ -262,7 +257,7 @@ async def list_values(session: AsyncSession, actor: Identity, task_id: UUID | No
     return [
         value_view(field, await current_value(session, field, task_id), task_id)
         for field in fields
-        if task_id is not None or field.scope == "org"
+        if task_id is not None or field.scope == "library"
     ]
 
 
@@ -361,7 +356,7 @@ def prompt_fields(entries: dict[str, Entry]) -> list[dict]:
 
 
 async def check_references(session: AsyncSession, texts: Iterable[str | None]) -> None:
-    """Refuse a card text that names a field this org does not have or has archived."""
+    """Refuse a card text that names a field this library does not have or has archived."""
     keys = {key for text in texts for key in redaction.secret_keys(text)}
     if not keys:
         return

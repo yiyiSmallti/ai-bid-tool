@@ -27,7 +27,7 @@ def assessment_interface(monkeypatch):
     from app.services import assessment_reads, assessment_rubrics, assessment_scores
 
     calls = []
-    actor = Identity(uuid4(), uuid4(), set(), "viewer")
+    actor = Identity(set())
 
     class Session:
         async def get(self, model, identifier):
@@ -37,7 +37,7 @@ def assessment_interface(monkeypatch):
             return []
 
     async def context():
-        yield Session(), actor
+        yield (Session(), actor)
 
     async def task_access(session, identity, task):
         pass
@@ -112,7 +112,7 @@ def assessment_interface(monkeypatch):
     app.include_router(check_router(context, object(), object(), object(), object()))
     app.include_router(score_router(context, object(), object(), object(), object()))
     app.include_router(console_router(context, object(), object()))
-    return app, calls
+    return (app, calls)
 
 
 async def test_check_console_summary_and_page_use_only_projection_reads(assessment_interface):
@@ -134,7 +134,7 @@ async def test_check_console_summary_and_page_use_only_projection_reads(assessme
 
 async def test_rubric_and_unavailable_score_summaries_remain_valid_data(assessment_interface):
     app, calls = assessment_interface
-    task, parent = uuid4(), uuid4()
+    task, parent = (uuid4(), uuid4())
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -151,7 +151,7 @@ async def test_rubric_and_unavailable_score_summaries_remain_valid_data(assessme
 
 async def test_citation_query_converts_numeric_window_fields(assessment_interface):
     app, calls = assessment_interface
-    task, parent, entry = uuid4(), uuid4(), uuid4()
+    task, parent, entry = (uuid4(), uuid4(), uuid4())
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -175,14 +175,14 @@ async def test_citation_query_converts_numeric_window_fields(assessment_interfac
 @pytest.mark.parametrize(
     "path",
     [
-        "/tasks/00000000-0000-0000-0000-000000000001/assessment-inputs?job=00000000-0000-0000-0000-000000000001",
+        "/tasks/00000000-0000-0000-0000-000000000001/assessment-inputs",
         "/tasks/00000000-0000-0000-0000-000000000001/assessment-citation?parent_kind=check",
-        "/tasks/00000000-0000-0000-0000-000000000001/jobs?kind=check",
-        "/tasks/00000000-0000-0000-0000-000000000001/jobs?kind=score_rubric",
-        "/tasks/00000000-0000-0000-0000-000000000001/jobs?kind=score",
-        "/checks/00000000-0000-0000-0000-000000000001?view=console&part=summary",
-        "/tasks/00000000-0000-0000-0000-000000000001/score-rubrics?view=console",
-        "/tasks/00000000-0000-0000-0000-000000000001/scores?view=console",
+        "/tasks/00000000-0000-0000-0000-000000000001/jobs?kind=check&limit=0",
+        "/tasks/00000000-0000-0000-0000-000000000001/jobs?kind=score_rubric&limit=0",
+        "/tasks/00000000-0000-0000-0000-000000000001/jobs?kind=score&limit=0",
+        "/checks/00000000-0000-0000-0000-000000000001?view=console&part=summary&limit=0",
+        "/tasks/00000000-0000-0000-0000-000000000001/score-rubrics?view=console&limit=0",
+        "/tasks/00000000-0000-0000-0000-000000000001/scores?view=console&limit=0",
         "/tasks/00000000-0000-0000-0000-000000000001/score-rubrics/00000000-0000-0000-0000-000000000001/decisions?view=console",
     ],
 )
@@ -192,12 +192,31 @@ async def test_assessment_reads_reject_missing_parameters_before_database(path, 
     from cryptography.fernet import Fernet
 
     settings = Settings(
+        access_key="synthetic-check-access-key-with-32-characters",
         database_url="postgresql+psycopg://synthetic@localhost/bid_test_unused",
         encryption_key=Fernet.generate_key().decode(),
         token_key=Fernet.generate_key().decode(),
         data_dir="data/work/console-assessments-validation/unused-api-storage",
     )
     app = create_app(settings)
+
+    async def authenticated_context():
+        yield (object(), Identity(set()))
+
+    # Authentication and parent authorization have separate acceptance coverage.
+    # Invalid queries must not reach assessment reads after those gates.
+    pending = list(app.routes)
+    while pending:
+        route = pending.pop()
+        original_router = getattr(route, "original_router", None)
+        if original_router is not None:
+            pending.extend(original_router.routes)
+        dependencies = list(getattr(getattr(route, "dependant", None), "dependencies", []))
+        while dependencies:
+            dependency = dependencies.pop()
+            dependencies.extend(dependency.dependencies)
+            if getattr(dependency.call, "__name__", None) in {"context", "citation_context"}:
+                app.dependency_overrides[dependency.call] = authenticated_context
 
     def never_connect(*args, **kwargs):
         raise AssertionError("Missing request parameters must precede any database access")
@@ -215,7 +234,7 @@ async def test_assessment_reads_reject_missing_parameters_before_database(path, 
 
 async def test_rubric_section_context_accepts_indexed_sources_only(assessment_interface):
     app, calls = assessment_interface
-    task, parent, entry = uuid4(), uuid4(), uuid4()
+    task, parent, entry = (uuid4(), uuid4(), uuid4())
     path = f"/tasks/{task}/assessment-citation?parent_kind=rubric&parent_id={parent}&part=rubric_section&entry_id={entry}"
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -254,12 +273,11 @@ async def test_rubric_section_context_accepts_indexed_sources_only(assessment_in
 async def test_citation_task_access_precedes_query_validation(
     assessment_interface, monkeypatch, suffix
 ):
-    # Nonmembers must not reach either model-level or FastAPI field validation.
     from app.api import org_console
     from app.core.errors import not_found
 
     app, calls = assessment_interface
-    task, parent, entry = uuid4(), uuid4(), uuid4()
+    task, parent, entry = (uuid4(), uuid4(), uuid4())
     checked = []
 
     async def deny_task(session, identity, task_id):

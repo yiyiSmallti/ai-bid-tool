@@ -25,6 +25,7 @@ from app.schemas.export_contracts import (
 )
 from click.core import ParameterSource
 
+from bid_cli.client import credential
 from bid_cli.export_client import download_export
 
 app = typer.Typer()
@@ -90,11 +91,7 @@ def _preview_exit(body: dict, model: type[ExportPreview] | type[ExportBindingPre
 async def _request_preview(path: str, request: dict) -> dict:
     _, client, _ = _helpers()
     runtime = client()
-    saved = runtime.state.load()
-    headers = {
-        "Authorization": f"Bearer {saved['session']}",
-        "X-Org-Id": saved["org_id"],
-    }
+    headers = {"Authorization": f"Bearer {credential()}"}
     try:
         async with runtime.transport() as transport:
             response = await transport.request(

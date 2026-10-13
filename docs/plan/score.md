@@ -21,7 +21,7 @@ Existing `Requirement.condition` is a free `dict`, without a rubric contract. Th
 
 ### Rubric candidate input
 
-`RubricInput` pins `org_id`, `task_id`, `extraction_job_id`, `document_id`, and `input_hash`. The service verifies extraction Job success and that Job, Document, and Requirement belong to the same org (organization/tenant; 单位), task, and document. Selection includes every `Category.scoring` Requirement under that Job; callers cannot select a subset and still request a “complete rubric.”
+`RubricInput` pins `task_id`, `extraction_job_id`, `document_id`, and `input_hash`. The service verifies extraction Job success and that Job, Document, and Requirement belong to the same task and document. Selection includes every `Category.scoring` Requirement under that Job; callers cannot select a subset and still request a “complete rubric.”
 
 Generation uses two ordered stages. Stage 1 receives the whole fixed scoring table in one request, without splitting. Admission enforces `BID_RUBRIC_MAX_REQUEST_BYTES` against the entire serialized HTTP request body. If it exceeds the limit, preview reports the capacity blocker and submission is refused before any Provider call. Stage 1 proposes only section keys, titles and order, section aggregation, section bounds/caps/weights/inclusion, review domains (职责), and the overall aggregation rule/bounds. It sees every scoring Requirement. Each proposed section and the overall rule must carry verified citations; stage 1 does not propose item order, and is not required to cite every Requirement. The service validates this structure and all citations against the complete Requirement/ref allowlist before admitting stage 2. An invalid or failed stage 1 fails the job and makes no item-generation calls.
 
@@ -33,12 +33,12 @@ The write-free preview upper bound covers both stages, including the entire fixe
 
 `ScoreRequest` adds only `rubric_id` to shared `AssessmentRequest`. The snapshot must pin:
 
-- The specified current `DraftRun`'s `org_id`, `task_id`, `draft_id`, `extraction_job_id`, `document_id`, and `draft_input_hash`. DraftRun and confirmed rubric must pin the same extraction job/document.
+- The specified current `DraftRun`'s `task_id`, `draft_id`, `extraction_job_id`, `document_id`, and `draft_input_hash`. DraftRun and confirmed rubric must pin the same extraction job/document.
 - Partition metadata for every `ResponseItem`: `response`, `comply_only`, or `gap`, plus requirement, source, gap (缺口) reason, disposition, and pinned revision bindings. The scoring item's own row is `anchor_response_item`; its partition is `anchor_partition`.
 - Every `response` row in the same DraftRun as candidate support, sending only its pinned, confirmed `response_text` and `deviation_note`. Never read current Card pointers, unconfirmed/pending/rejected Card text, or substitute later Card changes. This lets a scoring item cite real support from other confirmed technical/commercial responses (响应), rather than assuming support has the scoring Requirement's ID.
 - Only necessary metadata and tender-side text for `comply_only`/`gap`, without generating or borrowing card text. Per-item context includes these partitions only for the item's own Requirement. Confirmed `mapped` coverage binds items with that same `requirement_id`, as enforced by [`score_normalization.completeness`](../../server/app/services/score_normalization.py); it does not expand the scope to other Requirements. `duplicate`/`excluded` coverage does not add gap context. A gap anchor does not prove the entire draft lacks materials; assessment is possible only when verbatim text in other confirmed responses genuinely supports it. `comply_only` has no bid-side text and cannot independently earn points; without any confirmed bid-side citation, it is always unassessable.
 - Confirmed rubric set/section/item versions, coverage decisions, bounds, weights, and aggregation rules.
-- `assessment_date`, Provider/platform model catalog revisions, reasoning, prompt/schema/scoring rule versions, and redaction setting/rule revisions.
+- `assessment_date`, local Provider configuration revisions, reasoning, prompt/schema/scoring rule versions, and redaction setting/rule revisions.
 
 The first version reads no released/review DOCX, export runs, Gotenberg PDF, template text, or page images. Export fills actual confidential values into human-only downloads; agents/models cannot download them. Scoring released files would breach both human and confidentiality gates. A future need requires a separate “human-session-only released-export review” contract with explicit authorization, outbound, file-citation, fee, and audit decisions, never implicit expansion of this command's input.
 
@@ -66,7 +66,7 @@ Each scoring Requirement needs one `RubricRequirementCoverageView`:
 Rubric items save normalized rule text, section, order, assessment mode, score bounds, optional weight, review domain (职责), source, and content fingerprint. Sections save their ordered verified `sources` list, their own bounds, weight, cap, overall inclusion, review domain, and aggregation method: `sum`, `weighted_sum`, `capped_sum`, `formula`, or `non_additive`. Before set confirmation the service checks deterministically:
 
 - All scoring Requirements have non-pending coverage decisions; item/section keys, order, and fingerprints have no unresolved duplicates; every section citation and item citation still binds the same pinned Requirement and Source, with its verified quotation inside the pinned span.
-- Each section/item has `review_domain` and confirmation from that domain's reviewer; rejected items cannot remain in the set. bidder handles commercial items; technical handles technical items. Classification does not reuse existing Card-only endpoints: this contract adds section/item classify requests, executable only by admin human sessions, with nonempty reason and expected revision/hash. Classification grants no cross-domain confirmation authority to admins. Confirmation requests accept no `review_domain`; authorization uses stored classification, never caller-supplied replacement domains.
+- Each section/item has `review_domain` and explicit human confirmation; rejected items cannot remain in the set. Commercial and technical domains describe the rule's subject and grant no separate authority. Section/item classification uses dedicated requests with a nonempty reason and expected revision/hash. The installation human performs classification and confirmation. Confirmation requests accept no `review_domain` and require stored classification.
 - Every declared bound satisfies `0 <= minimum <= maximum`; weights are valid; item→section and section→overall inclusion has no cycles, duplicates, or dangling references.
 - Section totals/caps/weights and section→overall aggregation are explicit, with mechanically verifiable bounds/totals consistent. Genuine tender ambiguity can be explicitly confirmed as `ambiguous`, without inventing numeric rules; such items are always unassessable during scoring.
 
@@ -75,19 +75,15 @@ rewrite Source. Section revision `sources` contains only `{requirement_id, quote
 previously verified section citations or full original Sources in pinned coverage. Humans may keep,
 remove or select these verified citations, retaining at least one; the service resolves and copies
 Source rather than accepting Source JSON from the caller. Removing the first citation does not
-rebind or rewrite the remaining citations. Item revisions retain their single `requirement_id`. The service creates a new candidate version/new IDs, retaining `prior_rubric_id` and revision reason; old versions/decisions remain intact. New versions repeat classification, coverage, item, and set confirmation. Revision input accepts no `review_domain`; all new section/item domains reset to null and require admin reclassification, preventing inherited/self-assigned domains from bypassing gates. Decision, classification, coverage, and revision history are append-only and paginated through history GET.
+rebind or rewrite the remaining citations. Item revisions retain their single `requirement_id`. The service creates a new candidate version/new IDs, retaining `prior_rubric_id` and revision reason; old versions/decisions remain intact. New versions repeat classification, coverage, item, and set confirmation. Revision input accepts no `review_domain`; all new section/item domains reset to null and require human reclassification and confirmation. Decision, classification, coverage, and revision history are append-only and paginated through history GET.
 
-Replacement input uses the same finite decimal and range types as candidate storage. Both unchanged
-entries and entries edited within the reviewer's domain may retain the normalization errors in the
-[mapping table](#first-version-aggregation-algorithms); a revision saves a candidate, not a confirmation.
-This permits incremental repair when several domains have errors. Required keys, field types, enums,
-unique keys, snapshot references and the verified-source selection rules remain validation gates.
-Other domains' declarations, Requirement bindings, citations and section membership must match the
-stored prior candidate, without repairing or validating them as confirmed rules first. Stored JSON
-range declarations and text must remain exact; numeric columns compare decimal values. The technical reviewer must
-also preserve the stored overall rule. The service recomputes normalization for every new version
-and on reads, without inheriting obsolete errors from the prior version. The dev deadlock motivating
-this rule is recorded in the [revision changelog](../changelog.md#2026-10-06-rubric-revision-across-domains-with-normalization-errors).
+Replacement input uses the same finite decimal and range types as candidate storage. Entries may
+retain the normalization errors in the [mapping table](#first-version-aggregation-algorithms);
+a revision saves a candidate, not a confirmation. The installation human may repair the complete
+snapshot across domains, including the overall rule. Required keys, field types, enums, unique keys,
+snapshot references and verified-source selection rules remain validation gates. The service
+recomputes normalization for every new version and on reads, without inheriting obsolete errors
+from the prior version.
 
 Section and item reads, including console pages, expose additive `normalization_errors` lists for
 their local invariants from `score_normalization.subject_errors`. These codes identify the entry to
@@ -166,7 +162,7 @@ Provider requests use shared `OutboundContext`: each local ref in `texts` is uni
 
 Models return only `ModelEvidenceRef`. The service resolves refs against the current batch's sent-ref allowlist and verifies quotes verbatim in both sent text and pinned originals. Persistence uses shared `VerifiedCitation`. The initial score profile accepts only `TenderCitation` and `DraftCitation` bound to confirmed ResponseItem in the current DraftRun. Though shared types include `EvidenceCitation`, this version rejects it because evidence text is absent from outbound scoring input. Model-generated UUIDs, URLs, paths, selection/revision numbers, or unknown refs cannot create bindings; invalid refs record only sanitized summaries without echoing arbitrary model strings.
 
-The rubric Provider receives only redacted tender-text refs. Each score Provider item must explicitly receive `tender_ref`, confirmed `rule_ref`, and candidate `draft_refs` from all confirmed responses in that DraftRun. `rule_ref` is human-normalized reasoning text and cannot generate `TenderCitation`; real tender quotations come only from `tender_ref`. Before publishing assessed results, services separately validate tender/rule/draft refs and require nonempty model tender and draft citations. Rubric/historical-report reads re-resolve every Source, DraftRun, ResponseItem, and Card revision parent under current org/task scope. Unauthorized/missing objects uniformly return 404; invalid dependencies make reports stale and block new scoring. Saved Source JSON cannot bypass current read permissions. Original-source verification reads only the referenced chunk/block, never scanning the full document or producing new Requirements.
+The rubric Provider receives only redacted tender-text refs. Each score Provider item must explicitly receive `tender_ref`, confirmed `rule_ref`, and candidate `draft_refs` from all confirmed responses in that DraftRun. `rule_ref` is human-normalized reasoning text and cannot generate `TenderCitation`; real tender quotations come only from `tender_ref`. Before publishing assessed results, services separately validate tender/rule/draft refs and require nonempty model tender and draft citations. Rubric/historical-report reads re-resolve every Source, DraftRun, ResponseItem, and Card revision parent under current task scope. Unauthorized/missing objects uniformly return 404; invalid dependencies make reports stale and block new scoring. Saved Source JSON cannot bypass current read permissions. Original-source verification reads only the referenced chunk/block, never scanning the full document or producing new Requirements.
 
 `ScoreProviderItem.context_only_refs` binds the non-citable context needed by that item:
 metadata and tender-side text for the confirmed response candidates, plus the scoped
@@ -185,7 +181,7 @@ single-source behavior; review revision/hash conflicts on an otherwise accessibl
 input retain their 409 responses. Historical score-report freshness follows the
 separate stale-report rules above.
 
-Actual confidential values never enter score snapshots, prompts, Provider errors, Job results, UsageRecord, audit, or reports. Disabling redaction remains an existing human org-admin, revision-checked, audited task setting, but B10 is stricter than drafting: rubric/score dry-run returns `admission_blocker=redaction_required` when disabled; submission rejects it and request parameters cannot override it. Settings revision changes stop later calls and require fresh preview/submit. Allowing org-owned/local models with disabled redaction requires separate approval.
+Actual confidential values never enter score snapshots, prompts, Provider errors, Job results, UsageRecord, audit, or reports. Disabling redaction remains an existing human, revision-checked, audited task setting, but B10 is stricter than drafting: rubric/score dry-run returns `admission_blocker=redaction_required` when disabled; submission rejects it and request parameters cannot override it. Settings revision changes stop later calls and require fresh preview/submit. Rubric and score calls require redaction even for local models.
 
 ## Providers, jobs and usage
 
@@ -227,14 +223,14 @@ The Provider failure code survives into the Job error or retained rubric/report 
 
 Rubric/score Job kinds are respectively `score_rubric` and `score`. Both require non-null `task_id`/`document_id`; score's document comes from the real Document pinned by DraftRun's extraction Job, never a placeholder. Execution reuses `JobExecution.activate/owned_job/admit/_complete_once`: attempts hold lease/run_id and revalidate all pinned inputs before publication. Old runs cannot publish after takeover, expiry, cancellation, or settings changes.
 
-`resolve_llm` may select org-owned configuration or platform defaults; snapshots pin `provider_config_id`, `provider_source`, and provider identity, never only the platform catalog.
-Every actual call uses VendorCall/call ceiling and writes `UsageRecord` under `(org_id, job_id, run_id, call_id)`.
+`resolve_llm` may select local provider configuration; snapshots pin `provider_config_id`, `provider_source`, and provider identity, including its immutable revision.
+Every actual call uses VendorCall/call ceiling and writes `UsageRecord` under `(job_id, run_id, call_id)`.
 Cancellation, rejected citations, invalid model content, or partial reports never erase incurred usage.
 
-`--dry-run` performs snapshots/authorization for the same scope without business/audit/Job writes or Provider calls, returning first-pass cost bounds for both rubric stages or the score run, model catalog, and redaction summaries.
+`--dry-run` performs snapshots/authorization for the same scope without business/audit/Job writes or Provider calls, returning first-pass cost bounds for both rubric stages or the score run, local model configuration, and redaction summaries.
 Submission requires the preview's `expected_input_hash`.
 
-Cache keys include at least org/task/document/extraction/draft/rubric IDs and pinned versions, input hash, assessment date, Provider/model catalog revisions, reasoning, and prompt/schema/rule/redaction versions. Identical keys can return cached Jobs; `retry=true` retries only pinned input, never selecting “latest” DraftRun/rubric.
+Cache keys include at least task/document/extraction/draft/rubric IDs and pinned versions, input hash, assessment date, Provider/local model configuration revisions, reasoning, and prompt/schema/rule/redaction versions. Identical keys can return cached Jobs; `retry=true` retries only pinned input, never selecting “latest” DraftRun/rubric.
 
 ## HTTP, CLI, and Result
 
@@ -266,7 +262,7 @@ Stage B registers these scoring entry points:
 | `GET /tasks/{task_id}/scores?cursor=…&limit=…` | `bid score list --task UUID [--cursor CURSOR] [--limit N] --json` | `AssessmentListData` / `ScoreRunView[]` |
 | `GET /tasks/{task_id}/scores/{report_id}` | `bid score show --task UUID --report UUID --json` | `ScoreReportData` / `[]` |
 
-Actual path prefixes follow existing API routers; this fixes relative resource structure. Pagination limit defaults to 50, range 1–200; cursors bind org, task, resource kind, and ordering. Path `task_id` must match extraction/draft/rubric/report task or uniformly return 404. Long-running submissions return Jobs immediately by default; `--wait` reuses existing wait/status queries.
+Actual path prefixes follow existing API routers; this fixes relative resource structure. Pagination limit defaults to 50, range 1–200; cursors bind principal, task, resource kind, and ordering. Path `task_id` must match extraction/draft/rubric/report task or uniformly return 404. Long-running submissions return Jobs immediately by default; `--wait` reuses existing wait/status queries.
 
 All success/failure/`--json` output uses the seven-key Result from `contracts.CONTRACT_VERSION`: `ok`, `command`, `data`, `items`, `warnings`, `cost`, `duration_ms`.
 `bid schema` publishes implemented rubric/scoring commands and their updated models.
@@ -288,18 +284,13 @@ The seven-key Result envelope and item-source contract stay unchanged.
 | 4 | Permanent permission, provider configuration or resource-limit failure; correct the named blocker before retrying |
 | 5 | Valid rubric/report retained but rubric has unresolved requirements, or scoring has failed batches, unassessable items, nonaggregatable sections, or therefore no complete total |
 
-Asynchronous acceptance itself returns 0. `job wait`/`score show` consistently return 5 for partial reports, unassessable items, or missing complete totals, without another switch. Cross-org/unauthorized resources remain uniform 404; errors never echo original/outbound text, raw model output, or vendor error bodies.
+Asynchronous acceptance itself returns 0. `job wait`/`score show` consistently return 5 for partial reports, unassessable items, or missing complete totals, without another switch. Unrelated-task/unauthorized resources remain uniform 404; errors never echo original/outbound text, raw model output, or vendor error bodies.
 
 ## Permissions and human gates
 
-Permissions use approved `score:read`, `score:run`, `score:rubric:generate`, and `score:rubric:review` mappings; execution uses only the first two:
+Permissions use `score:read`, `score:run`, `score:rubric:generate` and `score:rubric:review`. Read/run/generate may be explicitly delegated to tokens or agents. Every operation checks live credential scopes and actual task/material relationships. Rubric review requires a human session with no token; token/agent/worker review is rejected by both services and SQL gates.
 
-- `score:read` is grantable to the four existing org roles and may enter the token allowlist, still intersected with Membership/task-read permissions.
-- `score:run`/`score:rubric:generate` are granted to admin/bidder/technical, matching `check:run`. Only admins issue tokens, within their own permissions. These scopes may explicitly enter the token allowlist for external-agent previews/advisory submissions, never human decisions.
-- `score:rubric:review` belongs only to logged-in human sessions, not token `SCOPES`. DB CHECK/triggers and services both reject token/agent/worker actors. technical confirms/revises technical content only; bidder commercial content only. In complete replacement snapshots, other domains' content must remain verbatim identical to the prior version. bidder confirms the entire set. admin performs section/item classify only, with no default revision/cross-domain confirmation rights. history follows `score:read`.
-- Score reports cannot automatically confirm cards, modify DraftRun, write exports, fill confidential values, or publish final scores. Internal/external agents/tokens cannot turn advisory output into human decisions.
-
-Routes validate session/token scopes and valid Membership before setting `app.current_org`. Workers carry submission org and read only within that RLS context; BYPASSRLS roles are forbidden.
+The installation human classifies, confirms or rejects either commercial or technical content, decides coverage, confirms/reopens sets and submits full replacements. Domains classify content; they do not grant permissions. Replacements create new candidates and reset classification and confirmation. Score reports never confirm cards, modify drafts, export bids or fill confidential values.
 
 ## Tables and migration outline
 
@@ -307,25 +298,23 @@ Business tables also land by stage. Names may be adjusted during implementation 
 
 | Table | Purpose and pinned fields |
 | --- | --- |
-| `score_rubric_sets` | task/extraction job/document, version, input hash, rule/prompt/schema versions, overall rules, status, confirmer/time |
+| `score_rubric_sets` | task/extraction job/document, version, input hash, rule/prompt/schema versions, overall rules, status, confirmation time |
 | `score_rubric_sections` | rubric/key/order, ordered verified sources (each Requirement, original Source, quote), aggregation, bounds, weight, overall inclusion, status/revision |
 | `score_rubric_items` | rubric/section/requirement/source, fingerprint, rules, mode, bounds, weight, domain, status/revision |
 | `score_rubric_coverage` | mapped/duplicate/excluded/pending per scoring Requirement, canonical binding/revision |
 | `score_rubric_coverage_items` | Normalized composite FK relations from mapped coverage to one or more rubric items, never pretending JSON item IDs enforce constraints |
 | `score_rubric_decisions` | Append-only human section/item/set decisions, reason hash, revision, session actor/time |
 | `score_rubric_coverage_decisions` | Append-only human coverage mapped/duplicate/excluded/reopen decisions |
-| `score_rubric_classifications` | Append-only admin human section/item review-domain classifications |
+| `score_rubric_classifications` | Append-only human section/item review-domain classifications |
 | `score_rubric_revision_events` | Append-only link between new candidate/prior rubric, reason, and human actor |
 
 The option A amendment stores the section list in `score_rubric_sections.sources` JSONB.
 Legacy NULL lists expand from the existing `requirement_id`/`source` pair on reads; no historical
 row is rewritten. New sections write a nonempty list, with the legacy columns mirroring its first
-entry. The existing table's FORCE RLS, org/task composite keys, runtime grants and append-only
+entry. The baseline's task composite keys, runtime grants and append-only
 trigger apply to the new column. Database insertion/publication and confirmation gates independently
 resolve every list entry against the same rubric's pinned scoring Requirements and original Sources;
-JSON IDs alone are not treated as relational constraints. Migration
-[`0046_score_section_sources.py`](../../server/migrations/versions/0046_score_section_sources.py)
-retains history on downgrade and requires forward repair.
+JSON IDs alone are not treated as relational constraints. The [baseline rubric functions](../../server/migrations/baseline/00_functions_rubric.sql) enforce these source gates.
 
 These rubric tables belong to stage A. Report tables belong to stage B:
 
@@ -336,19 +325,13 @@ These rubric tables belong to stage A. Report tables belong to stage B:
 | `score_report_item_responses` | Normalized composite FK relations from assessed items to one or more confirmed ResponseItems actually supporting scores |
 | `score_item_citations` | Structured report-item bindings to verified tender/draft citations |
 
-Each table has `org_id UUID NOT NULL`, `task_id UUID NOT NULL`, and both `ENABLE ROW LEVEL SECURITY`/`FORCE ROW LEVEL SECURITY` in the same migration. Policies accept only the exact org in `current_setting('app.current_org', true)`. Each table has `(org_id,id)` and necessary `(org_id,task_id,id)` unique keys. Public coverage views contain id/org/task/rubric/revision; item IDs are authorized aggregates from `score_rubric_coverage_items`. Every Task, Document, Job, Requirement, DraftRun, ResponseItem, rubric/report/decision/citation relation uses composite FKs containing `org_id`; task-scoped chains also contain `task_id`, letting the DB reject cross-org/cross-task joins. Required business fields are NOT NULL; nullable fields are only unavailable scores/bounds/confirmation actor-time/optional reasons, with paired CHECK constraints.
-
-Migrations also require status/numeric/actor-kind CHECK; unique rubric versions, section keys, item keys/fingerprints, coverage Requirements, and report+rubric items; DB gates requiring all confirmed items/sections for confirmed sets; append-only decision/classification/revision/citation permissions; existing org-deletion policy.
-SQL/aggregate views must use security-invoker/current org scope, never owner-based RLS bypass.
-APIs may instead assemble Pydantic aggregate views after authorized queries.
-
-Migrations and their implementation changes must include end-to-end acceptance for orgs A/B, missing org context, cross-task composite FKs, and normal runtime roles unable to bypass FORCE RLS. Every new table, public/aggregate view, and route verifies A cannot read/write B. Implement migration/models first, then service/provider/job, API/CLI/schema, and finally console; no stage may temporarily store candidates/reports without RLS.
+The immutable [single-user baseline](../../server/migrations/versions/0001_single_user_baseline.py) owns table definitions, task/parent composite foreign keys, runtime grants and actor/publication triggers. Rows contain task and actual parent IDs without organization/user fields. Confirmation stores its timestamp; review events retain actor kind, token/session/agent attribution where applicable, reason hash and revision. Task/parent binding, numeric/status checks, complete coverage and append-only history remain mandatory.
 
 ## Audit
 
-Fixed successful events are `score_rubric.submitted/completed/cancelled/revised/classified/decided` and `score.submitted/completed/cancelled`. Fixed failure events are `score_rubric.failed`, `score_rubric.decision_denied`, and `score.failed`. Persistent audit defaults to authenticated actions with resolved org that entered business boundaries. Pre-auth, uniform cross-org 404, and refusals lacking safe object bindings use existing security logs only. Metadata contains only org/task/object, actor kind/id, revision, input/reason hashes, stable error code, and usage IDs, never outbound text, confidential values, raw model output, or vendor error bodies.
+Fixed successful events are `score_rubric.submitted/completed/cancelled/revised/classified/decided` and `score.submitted/completed/cancelled`. Fixed failure events are `score_rubric.failed`, `score_rubric.decision_denied`, and `score.failed`. Persistent audit defaults to authenticated actions that entered business boundaries. Pre-auth, uniform unrelated-task 404, and refusals lacking safe object bindings use existing security logs only. Metadata contains only task/object, actor kind/id, revision, input/reason hashes, stable error code, and usage IDs, never outbound text, confidential values, raw model output, or vendor error bodies.
 
-Dry-run is strictly write-free and creates no AuditLog. Cached hits return existing Jobs/reports without new submitted/completed/usage audits. Pre-auth/cross-org 404 stay in security logs, not persistent AuditLog; these event/metadata boundaries are settled.
+Dry-run is strictly write-free and creates no AuditLog. Cached hits return existing Jobs/reports without new submitted/completed/usage audits. Pre-auth/unrelated-task 404 stay in security logs, not persistent AuditLog; these event/metadata boundaries are settled.
 
 ## Evaluation basis
 
@@ -361,14 +344,14 @@ Repository rules require end-to-end acceptance only, without model-class unit te
 Stage B covers reports, ScoreProvider, aggregation, and the remaining items.
 Stage A completion cannot substitute for stage B scoring acceptance.
 
-1. Two orgs, missing org context, cross-task/document/draft/rubric FKs, FORCE RLS; reject invalid token scopes/Membership, mismatched domains, and agent confirmation attempts. 404 must not enumerate another org's objects.
-2. Rubric reads all scoring Requirements only from the selected extraction Job, never condition/Chunk traversal/full text. Source verification reads only the referenced chunk/block. Reproduce coverage, explicit deduplication, revision/new version, admin classification, item/set confirmation, history, weights/bounds, and section/overall total gates.
+1. Cross-task/document/draft/rubric foreign keys reject unrelated parents. Tokens, agents and workers cannot perform human review; live credential scope and expiry checks remain mandatory.
+2. Rubric reads all scoring Requirements only from the selected extraction Job, never condition/Chunk traversal/full text. Source verification reads only the referenced chunk/block. Reproduce coverage, explicit deduplication, revision/new version, human classification, item/set confirmation, history, weights/bounds, and section/overall total gates.
 3. Score reads all confirmed response candidates plus comply-only (须遵守)/gap metadata only from the specified current DraftRun. Cross-Requirement support verifies verbatim and enters `response_item_ids`; tender-only citations never establish assessed results. Unconfirmed/later Cards, released DOCX, templates, and actual confidential values never appear in fake Provider requests. Disabled redaction blocks preview/submission without Job/Provider calls.
 4. Test decimal weights, caps, ranges, and ROUND_HALF_UP for sum/weighted_sum/capped_sum. formula/non_additive never executes but permits complete rule confirmation.
 Cover ambiguity, price/external comparisons, thin commitments, negative deviation (负偏离), below-maximum scores without deduction reasons, out-of-bound scores, unknown/ambiguous/redacted citations, duplicate/missing Provider items.
 6. HTTP/remote/local CLI seven-key Result, schema, 0/2/3/4/5, all route task bindings, pagination, cache/retry; historical partial report show always returns 5. End-to-end output includes sanitized JSON rubric/report artifacts verifying sources, confirmed revisions, usage IDs, unassessable/missing-total reasons, in test temporary directories rather than `docs/`.
 
-Implementation runs affected ruff, pyright, migration, PostgreSQL/RLS, API/CLI, and worker end-to-end gates. Verify successful/business-failure events, write-free dry-run, and no duplicate cached audits. No real Provider, no released-file reading, and no layout review must remain in report limitations; “score complete” cannot mean final bid evaluation.
+Implementation runs affected ruff, pyright, migration, PostgreSQL, API/CLI, and worker end-to-end gates. Verify successful/business-failure events, write-free dry-run, and no duplicate cached audits. No real Provider, no released-file reading, and no layout review must remain in report limitations; “score complete” cannot mean final bid evaluation.
 
 Implementation confidentiality-representation limits are in [scoring Pitfalls](../notes/score.md#pitfalls). When pinned sources/section keys cannot safely be represented as placeholders, never rewrite confirmed bindings to bypass confidentiality.
 
@@ -381,7 +364,7 @@ These adopt the originally recommended defaults.
 | Section citation cardinality | Owner-approved option A: a section carries one or more separately verified citations across pinned scoring Requirements; items remain single-Requirement; one joined quote stays invalid | A section aggregation can depend on several scoring items. The dev `price` section cited the benchmark-price rule and price formula separately and failed `invalid_section_citation`; see the [failure and amendment record](../changelog.md#2026-10-05-multiple-verified-sources-per-rubric-section) |
 | Platform default scoring Provider | Follow [B09 decisions](check.md#decisions); no independent B10 selection | check/score share Chinese long-document, structured output, citation, and data-policy evaluation, avoiding contradictory defaults for one capability |
 | Rubric generation structure | Replace single-request section/item generation with two stages: validate sections and overall rule from the full table, then generate item details in bounded batches against the fixed section list | The real-model run exceeded reliable structured-output capacity for a whole-table response; earlier independent batches lacked the table-wide aggregation context. The [changelog](../changelog.md#2026-10-05-two-stage-score-rubric-generation) records the run evidence. A small global structure response followed by bounded item responses addresses both failures |
-| Persistent failure-audit extension | Persist only the fixed authenticated business-failure events here; pre-auth/cross-org 404 remain security logs | Prevent enumeration and excessive audit noise |
+| Persistent failure-audit extension | Persist only the fixed authenticated business-failure events here; pre-auth/unrelated-task 404 remain security logs | Prevent enumeration and excessive audit noise |
 | Resource usage | Score/rubric calls use shared per-call resource admission under [ADR 0011](../adr/0011-remove-billing.md); rubric preflight includes both stages | Keep estimates, input scope and call bounds consistent with each admitted request |
 | Price/subjective scoring | All unassessable initially | Missing verifiable external input makes guessing falsely precise; bidding price strategy remains outside scoring scope. |
 | Released-export scoring | Do not expand this command; use a separate human-only contract if needed | Released files contain real confidential values and require export download permission; agent `score:run` cannot become a download channel |

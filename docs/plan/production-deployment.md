@@ -1,21 +1,19 @@
 ---
 kind: plan
-status: approved; environment decisions pending
+status: superseded by ADR 0012
 ---
 
 # Production deployment plan
 
-This plan defines the first production environment and its release gates.
-The owner
-approved it with the recommended defaults; environment decisions, separate deployment
-authorization and recorded acceptance are still required before execution or go-live.
-Actual release identifiers, configuration hashes
-and results belong in a restricted release record outside `docs/`.
-
-The approved default is a Linux application host with separately operated PostgreSQL
-and private S3-compatible storage, plus a dedicated Linux sandbox execution node when
-browser capture is enabled. Start with a new production database and only synthetic
-acceptance orgs (organizations/tenants); do not copy development business data.
+This hosted-deployment proposal is superseded by
+[ADR 0012](../adr/0012-single-user-installation.md). Its hosted topology and
+multi-person acceptance requirements below are retained as historical planning,
+not instructions for a single-user installation. Restoring hosted operation
+requires a new decision. Local operation follows the
+[development guide](../guides/development.md); desktop packaging, bundled runtimes
+and signing remain outside [the single-user cutover](single-user.md#out-of-scope).
+The baseline and runtime pointers below identify current source locations without
+authorizing this former deployment model.
 
 ## Repository basis and release prerequisites
 
@@ -163,24 +161,20 @@ revocation must not be undone by serving an older env-reading release.
 
 ## Database provisioning and recovery
 
-Provision a private PostgreSQL database with UTF-8 encoding and pgvector availability
-matching the [Compose database image](../../deploy/docker-compose.yml). Verify extension
-availability separately; [the initial migration](../../server/migrations/versions/0001_tenant_foundation.py)
-establishes tenant tables/RLS and does not install pgvector or deliver vector retrieval.
-Use direct session-capable connections for migrations and the queue; qualify any
-connection pooler against transaction org context, advisory locks and queue behavior.
+For the current installation, database provisioning follows
+[the development guide](../guides/development.md#provision-a-development-database).
+[The single-user baseline revision](../../server/migrations/versions/0001_single_user_baseline.py)
+replaces the former tenant foundation. Migration and queue connections need session
+semantics; qualify any pooler against actor context, advisory locks and queue behavior.
 Keep production durability enabled. CI's disposable-database settings that disable
 `fsync`, `synchronous_commit` and `full_page_writes` must never be copied to production.
 
-Use the approved [database role/function matrix](platform-credentials.md#database-roles-and-functions)
-as the authority for grants and forbidden access; the rationale belongs to
-[ADR 0006](../adr/0006-platform-credentials.md). The deployment operator must compare
-the provisioned roles to that matrix and run
-[`Database.verify_role`](../../server/app/core/db.py) and
-[credential connection verification](../../server/app/core/credential_db.py) through
-the actual service identities. Check the tenant login is `bid_app`, not an owner,
-superuser or BYPASSRLS role. Keep both function owners, `bid_platform_fn` and
-`bid_platform_credentials_fn`, without login credentials or runtime role memberships.
+The current role boundary is defined by [ADR 0012](../adr/0012-single-user-installation.md):
+migration owner and runtime `bid_app`. The former dedicated platform/credential
+connection checks are removed. API and worker use
+[`Database.verify_role`](../../server/app/core/db.py), which rejects superuser,
+BYPASSRLS and application-table ownership. The stage table below records the
+superseded hosted proposal and must not be used to provision single-user roles.
 
 | Execution stage | Connection delivery | Deployment verification |
 | --- | --- | --- |
@@ -456,7 +450,7 @@ inspection. Existing controls remain defined in the linked contracts.
   task membership/archival/review-domain enforcement, platform password plus TOTP,
   and trusted-proxy authentication limits. API tokens must fail to obtain human-only
   confirmation/export or `token:create`; inspect
-  [token constraints](../../server/migrations/versions/0051_token_creation_scope.py)
+  [`api_tokens.token_forbidden_creation_scope`](../../server/migrations/baseline/10_tables.sql)
   and [Task access](../../server/app/services/task_access.py). Track any
   remaining token-management interface limitations through roadmap F05.
 - [ ] **RLS and credential functions:** complete the database gate as `bid_app`, with
@@ -509,8 +503,8 @@ Use the [known-defects register](roadmap.md#known-defects) to resolve or restric
 
 [sandbox_proxy_acceptance.py](../../scripts/sandbox_proxy_acceptance.py) exercises
 synthetic broker attacks but does not establish kernel egress policy.
-[sandbox_two_org_acceptance.py](../../scripts/sandbox_two_org_acceptance.py) kills and
-restarts a worker and is development-only.
+The former two-org driver was removed by ADR 0012. Current sandbox lifecycle and
+fault requirements are in [sandbox acceptance](sandbox.md#end-to-end-acceptance-after-approval).
 [sandbox_colima_acceptance.py](../../scripts/sandbox_colima_acceptance.py) targets a
 prepared Colima environment; reproduce its relevant gates on the selected Linux node.
 None should be run unreviewed against an active production instance.

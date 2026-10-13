@@ -13,8 +13,7 @@ scan checked the complete delivered document.
 Run `bid check run --task TASK --draft DRAFT --as-of YYYY-MM-DD --dry-run
 --json`, inspect the fixed input hash and limitations, then submit the same
 request with `--expected-input-hash HASH`. Add `--wait` to return the terminal
-report. `bid check list` and `bid check show` read reports; a responsible bidder
-or technical reviewer uses `bid check decide` and `bid check history` to append
+report. `bid check list` and `bid check show` read reports; the installation human uses `bid check decide` and `bid check history` to append
 and inspect a dismiss or reopen decision.
 
 The default mode is `rules`.
@@ -35,8 +34,7 @@ only verbatim confirmed response fields and confirmed material can enter it.
 Submission must return the preview hash, and the worker recomputes the input and
 authorization before each model admission and publication. Combined input identity
 also fixes the provider configuration, reasoning level and prompt/schema/
-adapter versions. Tenant configuration takes precedence over the platform catalog;
-a worker never substitutes an environment model or a different catalog revision.
+adapter versions. The local provider configuration is pinned; a worker cannot substitute a different revision.
 
 The local rules publish one coverage row per requirement. They report a starred
 or substantive gap, every confirmed negative deviation, and a gap caused by an
@@ -95,18 +93,15 @@ deviation also cites the fixed response item's deviation note; confirmed textual
 evidence may be cited when relevant. Word sources never receive invented page
 numbers. Findings and citations are immutable. Human dismiss and reopen actions
 append a revision with a non-empty reason and compare both the finding revision
-and report input hash. Commercial findings belong to bidders and technical
-findings to technical reviewers. Admin sessions, API tokens and workers cannot
-make these decisions.
+and report input hash. Commercial and technical domains classify findings. The installation human can decide either domain; API tokens, agents and workers cannot make these decisions.
 
-The check is a durable tenant-scoped job. Identical inputs share its cache key;
+The check is a durable task-bound job. Identical inputs share its cache key;
 cancelled or failed work needs explicit retry, and a live lease cannot be taken
 over. Publication is fenced by the current run ID, lease and input hash. Reports
 remain readable after their inputs become stale, with a warning, but stale
-findings cannot receive new decisions. All check tables use forced PostgreSQL
-RLS and organization-bound composite references.
+findings cannot receive new decisions. Check rows retain task-bound composite relationships and publication/human decision gates.
 
-[Citation publication gates](../../server/migrations/versions/0039_fast_citation_locate.py) verify each distinct live source-text/quote pair once at deferred check or score publication, preserve exact-span and normalization-boundary checks, and reject child rows appended after early completion.
+[Citation publication gates](../../server/migrations/baseline/00_functions_bid.sql) verify each distinct live source-text/quote pair once at deferred check or score publication, preserve exact-span and normalization-boundary checks, and reject child rows appended after early completion.
 
 ## Pitfalls
 
@@ -148,14 +143,7 @@ RLS and organization-bound composite references.
 - [checking.py](../../server/app/providers/checking.py) implements the structured
   check capability; [check_semantic.py](../../server/app/services/check_semantic.py)
   owns outbound preparation, estimates and local acceptance.
-- [0032_check.py](../../server/migrations/versions/0032_check.py) creates the RLS,
-  immutable-history and worker/human decision gates;
-  [0033_check_semantic.py](../../server/migrations/versions/0033_check_semantic.py)
-  extends the existing tables and gates for semantic outcomes and item citations.
-  [0036_check_semantic_scope.py](../../server/migrations/versions/0036_check_semantic_scope.py)
-  limits new combined semantic coverage to response rows while preserving all
-  prior publication gates. The rule version participates in input identity, so
-  older pending jobs require a new preview instead of adopting a new scope.
+- [Single-user baseline](../../server/migrations/versions/0001_single_user_baseline.py) defines immutable history, task references and worker/human gates; [bid functions](../../server/migrations/baseline/00_functions_bid.sql) retain deferred citation and publication checks.
 - [test_check.py](../../server/tests/test_check.py),
   [test_check_storage.py](../../server/tests/test_check_storage.py),
   [test_check_api.py](../../server/tests/test_check_api.py) and

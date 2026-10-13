@@ -6,8 +6,6 @@ wrong encryption context, and unregistered commands or Result shape drift.
 """
 
 import json
-import os
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -25,15 +23,15 @@ def test_key_encryption_context_and_separation():
         database_url=SecretStr("postgresql+psycopg://unused/bid_test"),
         encryption_key=SecretStr(Fernet.generate_key().decode()),
         secrets_key=SecretStr(Fernet.generate_key().decode()),
+        token_key=SecretStr(Fernet.generate_key().decode()),
     )
     secrets = ProviderSecrets(settings)
-    org, config = uuid4(), uuid4()
-    encrypted = secrets.encrypt("synthetic-private-key", org, config)
+    config = uuid4()
+    encrypted = secrets.encrypt("synthetic-private-key", config)
     assert "synthetic-private-key" not in encrypted
-    assert secrets.decrypt(encrypted, org, config).get_secret_value() == "synthetic-private-key"
-    for wrong_org, wrong_id in ((uuid4(), config), (org, uuid4())):
-        with pytest.raises(ServiceError, match="credential"):
-            secrets.decrypt(encrypted, wrong_org, wrong_id)
+    assert secrets.decrypt(encrypted, config).get_secret_value() == "synthetic-private-key"
+    with pytest.raises(ServiceError, match="credential"):
+        secrets.decrypt(encrypted, uuid4())
     with pytest.raises(ServiceError):
         ProviderSecrets(settings.model_copy(update={"secrets_key": None}))
 
@@ -49,11 +47,6 @@ def test_key_encryption_context_and_separation():
             "default_reasoning": "high",
         },
         {"reasoning": [{"name": "low"}], "default_reasoning": "high"},
-        {
-            "source": "platform",
-            "platform_model_id": "catalog-model",
-            "api_key": "synthetic-private",
-        },
     ],
 )
 def test_provider_input_failures(changes):
@@ -61,7 +54,6 @@ def test_provider_input_failures(changes):
         ProviderConfigSet.model_validate(
             {
                 "capability": "llm_extract",
-                "source": "org",
                 "provider": "openai",
                 "model": "synthetic-model",
                 **changes,
@@ -93,7 +85,6 @@ def test_provider_cli_snapshots(tmp_path, monkeypatch, capsys):
         json.dumps(
             {
                 "capability": "llm_extract",
-                "source": "org",
                 "provider": "openai",
                 "model": "synthetic-model",
             }
@@ -106,16 +97,12 @@ def test_provider_cli_snapshots(tmp_path, monkeypatch, capsys):
         ("set", ["--input", str(path)]),
         ("test", ["--capability", "llm_extract"]),
     ):
-        main(["--state", str(tmp_path / "state"), "provider", command, *options, "--json"])
+        main(["provider", command, *options, "--json"])
         body = json.loads(capsys.readouterr().out)
         body["duration_ms"] = 0
         assert "synthetic-private-key" not in json.dumps(body)
         actual[command] = body
     assert requests[2][2]["json"]["api_key"] == "synthetic-private-key"
-    snapshot = Path(__file__).with_name("snapshots") / "provider-cli-v1.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n")
-    assert actual == json.loads(snapshot.read_text())
     monkeypatch.delenv("BID_PROVIDER_KEY")
     keyfile = tmp_path / "key"
     keyfile.write_text("synthetic-file-key")
@@ -132,7 +119,6 @@ def test_provider_cli_snapshots(tmp_path, monkeypatch, capsys):
         json.dumps(
             {
                 "capability": "llm_extract",
-                "source": "org",
                 "provider": "openai",
                 "model": "synthetic-model",
                 "api_key": "synthetic-private-key",

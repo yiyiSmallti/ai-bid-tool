@@ -57,7 +57,7 @@ def register(app: typer.Typer) -> None:
         kind: Annotated[
             Literal["amount", "contact", "identity", "bank_account", "other"], typer.Option()
         ],
-        scope: Annotated[Literal["org", "task"], typer.Option()],
+        scope: Annotated[Literal["library", "task"], typer.Option()],
         json_output: cli.JsonOption = False,
     ):
         body = _validated(

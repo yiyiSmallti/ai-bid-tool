@@ -35,6 +35,8 @@ from app.schemas.screenshot_contracts import (
 from app.services.evidence_sources import check_png
 from pydantic import ValidationError
 
+from bid_cli.client import credential
+
 MAX_IMAGE_BYTES = 40 * 1024 * 1024
 MAX_RECEIPT_BYTES = 4 * 1024 * 1024
 
@@ -190,11 +192,7 @@ def _signed_path(value: Any, expected_path: str) -> dict[str, list[str]]:
 async def _stream_png(path: str, query: dict[str, list[str]], descriptor: PNGDescriptor) -> bytes:
     from bid_cli import main as cli
 
-    saved = cli.client().state.load()
-    headers = {
-        "Authorization": f"Bearer {saved['session']}",
-        "X-Org-Id": saved["org_id"],
-    }
+    headers = {"Authorization": f"Bearer {credential()}"}
     content = bytearray()
     try:
         async with cli.client().transport() as transport:
@@ -235,16 +233,11 @@ async def _stream_png(path: str, query: dict[str, list[str]], descriptor: PNGDes
 async def _read_certificate_preview(source_id: UUID) -> bytes:
     from bid_cli import main as cli
 
-    saved = cli.client().state.load()
     path = f"/evidence-sources/{source_id}/preview/download"
     link = await cli.client().request("GET", path + "-link")
     try:
         rows = link["items"]
-        if (
-            len(rows) != 1
-            or rows[0].get("id") != str(source_id)
-            or rows[0].get("org_id") != saved["org_id"]
-        ):
+        if len(rows) != 1 or rows[0].get("id") != str(source_id):
             raise ValueError
         archive = EvidenceSourceArchive.model_validate(rows[0])
     except (KeyError, TypeError, ValueError, ValidationError):
@@ -263,18 +256,17 @@ async def _read_certificate_preview(source_id: UUID) -> bytes:
 async def _read_prototype_source(prototype_run_id: UUID) -> bytes:
     from bid_cli import main as cli
 
-    saved = cli.client().state.load()
     shown = await cli.client().request("GET", f"/prototype-runs/{prototype_run_id}")
     try:
         data = shown["data"]
-        if data["id"] != str(prototype_run_id) or data["org_id"] != saved["org_id"]:
+        if data["id"] != str(prototype_run_id):
             raise ValueError
         expected = str(data["source_image_sha256"])
     except (KeyError, TypeError, ValueError):
         raise ServiceError(
             "invalid_server_response", "Server returned invalid prototype metadata", 502, 4
         ) from None
-    headers = {"Authorization": f"Bearer {saved['session']}", "X-Org-Id": saved["org_id"]}
+    headers = {"Authorization": f"Bearer {credential()}"}
     content = bytearray()
     try:
         async with cli.client().transport() as transport:

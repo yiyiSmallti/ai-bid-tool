@@ -81,6 +81,7 @@ async def test_two_stage_section_citations_bind_each_pinned_requirement(tmp_path
             tmp_path,
             vendor,
             database_url="postgresql+psycopg://unused/unused",
+            access_key="synthetic-rubric-access-key-with-32-characters",
             encryption_key=Fernet.generate_key().decode(),
             token_key=Fernet.generate_key().decode(),
         )

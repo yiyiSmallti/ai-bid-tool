@@ -1,14 +1,14 @@
 """API/processor export acceptance gates, with synthetic, repeatable artifacts.
 
 Failure modes enumerated before implementation:
-- A token, agent, worker, admin, technical or viewer must never prepare/release/download.
-- Cross-org and unknown IDs must be indistinguishable on every export route/job.
+- A token, agent or worker must never prepare/release/download.
+- Unknown IDs must remain inaccessible on every export route/job.
 - Gaps block final_section; review_copy exposes only source/gap metadata and is partial.
 - Invalid citations, stale cards/selections and unconfirmed evidence block both modes.
 - Missing/duplicate acknowledgments and input/candidate hash conflicts cannot publish.
 - Worker completion produces only a candidate; cancellation/old attempts cannot publish.
 - DOCX bytes must reproduce, stay encrypted, retain editable text and exact page PNGs.
-- Changed selections/reviews or membership revoke already issued download signatures.
+- Changed selections/reviews revoke already issued download signatures.
 - Dry run and export make no provider calls or usage rows; duplicate release audits once.
 """
 
@@ -24,7 +24,6 @@ import pytest
 from app.models.entities import AuditLog, Job, UsageRecord
 from docx import Document
 from sqlalchemy import func, select
-from task_fixtures import reviewer_header
 from test_response_cards import (
     CERTIFICATE_PAGE,
     create_card,
@@ -32,7 +31,6 @@ from test_response_cards import (
     phase_one_client,
     require_action,
     select_real_materials,
-    set_role,
 )
 
 SECTIONS = ("substantive", "commercial", "technical", "comply_only", "gaps", "evidence_appendix")
@@ -114,7 +112,7 @@ async def draft(api, app, header, task, extraction):
     )
     assert submitted.status_code == 200, submitted.text
     job = submitted.json()["data"]["job_id"]
-    await app.state.processor(header["X-Org-Id"], job)
+    await app.state.processor(job)
     result = await api.get(f"/jobs/{job}", headers=header)
     terminal = result.json()
     assert terminal["data"]["status"] == "succeeded", result.text
@@ -142,35 +140,25 @@ async def prepared(api, app, header, task, body):
     )
     assert submitted.status_code == 200, submitted.text
     run = submitted.json()["data"]
-    await app.state.processor(header["X-Org-Id"], run["render_job_id"])
+    await app.state.processor(run["render_job_id"])
     ready = await api.get(f"/export-runs/{run['id']}", headers=header)
     assert ready.status_code == 200, ready.text
-    assert ready.json()["data"]["state"] == "awaiting_release", ready.text
+    status = await api.get(f"/jobs/{run['render_job_id']}", headers=header)
+    assert ready.json()["data"]["state"] == "awaiting_release", status.text
     assert ready.json()["data"]["export_id"] is None
     return ready.json()["data"]
 
 
 @pytest.mark.parametrize("with_page", [False, True])
-async def test_review_export_real_chain_and_every_route_isolated(
-    tenants, tmp_path, admin_engine, with_page
+async def test_review_export_real_chain_and_every_route_gated(
+    database, tmp_path, admin_engine, with_page
 ):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, provider):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, provider):
+        header = headers
         task, _, extraction, requirements = await create_tender(
             api, app, header, tmp_path, confirmed=True
         )
         selected, binding = await setup_template(api, header, task)
-        foreign_binding = await api.post(
-            "/export-template-bindings",
-            headers=headers[1],
-            json={
-                "template_revision_id": binding["template_revision_id"],
-                "expected_template_sha256": binding["template_sha256"],
-                "sections": binding["sections"],
-                "dry_run": True,
-            },
-        )
-        assert foreign_binding.status_code == 404
         confirmed = None
         expected_png = None
         if with_page:
@@ -195,7 +183,6 @@ async def test_review_export_real_chain_and_every_route_isolated(
                     ],
                 },
             )
-            set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
             submitted = await require_action(api, header, card, "submit")
             confirmed = await require_action(
                 api,
@@ -207,8 +194,6 @@ async def test_review_export_real_chain_and_every_route_isolated(
                 reason="Synthetic acceptance review.",
             )
             expected_png = source["preview"]["sha256"]
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
-        set_role(admin_engine, tenants["orgs"][1], tenants["users"][1], "bidder")
         draft_id = await draft(api, app, header, task, extraction)
         body = {
             "draft_id": draft_id,
@@ -263,38 +248,7 @@ async def test_review_export_real_chain_and_every_route_isolated(
             ]
             assert media == ([expected_png] if with_page else [])
         assert provider.calls == calls
-        checks = [
-            ("GET", f"/export-runs/{run['id']}", None),
-            (
-                "POST",
-                f"/export-runs/{run['id']}/release",
-                {
-                    "expected_input_hash": run["input_hash"],
-                    "expected_candidate_sha256": run["candidate_sha256"],
-                },
-            ),
-            ("GET", f"/tasks/{task}/exports", None),
-            ("GET", f"/exports/{export['id']}", None),
-            ("GET", f"/exports/{export['id']}/download-link", None),
-            ("GET", link.json()["data"]["url"], None),
-            ("GET", f"/jobs/{run['render_job_id']}", None),
-            ("POST", f"/jobs/{run['render_job_id']}/cancel", None),
-            (
-                "GET",
-                f"/export-template-bindings?template_revision_id={binding['template_revision_id']}",
-                None,
-            ),
-            ("POST", f"/tasks/{task}/export-runs", {**body, "dry_run": True}),
-        ]
-        for method, path, request in checks:
-            response = await api.request(
-                method,
-                path,
-                headers=headers[1],
-                **({"json": request} if request is not None else {}),
-            )
-            assert response.status_code == 404, (method, path.split("?")[0], response.text)
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             assert (
                 await session.scalar(
                     select(func.count())
@@ -335,45 +289,26 @@ async def test_review_export_real_chain_and_every_route_isolated(
             assert (
                 confirmed["requirement_id"] in history.json()["data"]["invalidated_requirement_ids"]
             )
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
-        for method, path, request in checks[:6]:
-            response = await api.request(
-                method, path, headers=header, **({"json": request} if request is not None else {})
-            )
-            # Export-specific RLS hides files/runs from nonbidders; an explicit
-            # visible task is resolved before denying its export action.
-            expected_status = 403 if path.startswith("/tasks/") else 404
-            assert response.status_code == expected_status, (method, path, response.text)
 
 
-async def test_export_role_and_unknown_resource_boundaries(tenants, tmp_path, admin_engine):
-    async with phase_one_client(tenants, tmp_path) as (api, _, headers, _):
+async def test_export_unknown_resource_boundaries(database, tmp_path, admin_engine):
+    async with phase_one_client(database, tmp_path) as (api, _, headers, _):
         unknown = str(uuid4())
-        for role in ("admin", "technical", "viewer"):
-            set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], role)
-            for path in (
-                f"/export-runs/{unknown}",
-                f"/exports/{unknown}",
-                f"/exports/{unknown}/download-link",
-                f"/tasks/{unknown}/exports",
-            ):
-                assert (await api.get(path, headers=headers[0])).status_code == 404
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
         for path in (
             f"/export-runs/{unknown}",
             f"/exports/{unknown}",
             f"/exports/{unknown}/download-link",
             f"/tasks/{unknown}/exports",
         ):
-            assert (await api.get(path, headers=headers[0])).status_code == 404
+            assert (await api.get(path, headers=headers)).status_code == 404
 
 
 async def complete_inputs(
-    api, app, header, tenants, admin_engine, tmp_path, *, texts=None, profile_wording=None
+    api, app, header, database, admin_engine, tmp_path, *, texts=None, profile_wording=None
 ):
     """Create three confirmed tables plus an independent comply-only decision.
     `texts` replaces the response text of the cards for those requirement indexes;
-    `profile_wording` makes requirement 2 cite a selected org profile declaration
+    `profile_wording` makes requirement 2 cite a selected company profile declaration
     instead of the certificate page."""
     task, _, extraction, requirements = await create_tender(
         api, app, header, tmp_path, confirmed=True
@@ -441,43 +376,33 @@ async def complete_inputs(
             assert response.status_code == 200, response.text
             card = response.json()["data"]
         reviewed[index] = card
-    for role, indices in (("technical", (0, 2, 4)), ("bidder", (1,))):
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], role)
-        _, review_header = await reviewer_header(
+    for index in (0, 1, 2, 4):
+        submitted = await require_action(api, header, reviewed[index], "submit")
+        reviewed[index] = await require_action(
             api,
-            admin_engine,
-            tenants["orgs"][0],
-            UUID(task),
-            "technical" if role == "technical" else "commercial",
+            header,
+            submitted,
+            "confirm",
+            reviewed_evidence_ids=[e["id"] for e in submitted["evidence"]],
+            reviewed_warning_codes=submitted["warning_codes"],
+            reason="Synthetic review of proof obligations.",
         )
-        for index in indices:
-            submitted = await require_action(api, review_header, reviewed[index], "submit")
-            reviewed[index] = await require_action(
-                api,
-                review_header,
-                submitted,
-                "confirm",
-                reviewed_evidence_ids=[e["id"] for e in submitted["evidence"]],
-                reviewed_warning_codes=submitted["warning_codes"],
-                reason="Synthetic review of proof obligations.",
-            )
-        if role == "technical":
-            disposition = await api.post(
-                f"/tasks/{task}/cards/dispositions",
-                headers=header,
-                json={
-                    "extraction_job_id": extraction,
-                    "items": [
-                        {
-                            "requirement_id": requirements[3]["id"],
-                            "expected_revision": None,
-                            "disposition": "comply_only",
-                            "reason": "The complaint procedure requires compliance only.",
-                        }
-                    ],
-                },
-            )
-            assert disposition.status_code == 200, disposition.text
+    disposition = await api.post(
+        f"/tasks/{task}/cards/dispositions",
+        headers=header,
+        json={
+            "extraction_job_id": extraction,
+            "items": [
+                {
+                    "requirement_id": requirements[3]["id"],
+                    "expected_revision": None,
+                    "disposition": "comply_only",
+                    "reason": "The complaint procedure requires compliance only.",
+                }
+            ],
+        },
+    )
+    assert disposition.status_code == 200, disposition.text
     draft_id = await draft(api, app, header, task, extraction)
     body = {
         "draft_id": draft_id,
@@ -485,21 +410,21 @@ async def complete_inputs(
         "binding_id": binding["id"],
         "mode": "final_section",
     }
-    return task, body, reviewed, page
+    return (task, body, reviewed, page)
 
 
 async def test_final_export_verbatim_negative_ack_hash_gates_and_immutable_download(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
     from app.models.exports import Export
-    from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
+    from app.services.auth import HUMAN_SCOPES, Identity, set_actor_context
 
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, provider):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, provider):
+        header = headers
         task, body, _, page = await complete_inputs(
-            api, app, header, tenants, admin_engine, tmp_path
+            api, app, header, database, admin_engine, tmp_path
         )
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             before = await session.scalar(select(func.count()).select_from(AuditLog))
         preview = await api.post(
             f"/tasks/{task}/export-runs", headers=header, json={**body, "dry_run": True}
@@ -511,9 +436,9 @@ async def test_final_export_verbatim_negative_ack_hash_gates_and_immutable_downl
         assert (
             fixed["comply_only_count"] == 1
             and fixed["negative_count"] == 1
-            and fixed["attachment_pages"] == 1
+            and (fixed["attachment_pages"] == 1)
         )
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             assert await session.scalar(select(func.count()).select_from(AuditLog)) == before
         missing_ack = await api.post(
             f"/tasks/{task}/export-runs",
@@ -556,15 +481,10 @@ async def test_final_export_verbatim_negative_ack_hash_gates_and_immutable_downl
                 for n in package.namelist()
                 if n.startswith("word/media/")
             ] == [page["preview"]["sha256"]]
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
-            await set_actor_context(
-                session,
-                Identity(
-                    tenants["users"][0], tenants["orgs"][0], set(ROLE_SCOPES["bidder"]), "bidder"
-                ),
-            )
+        async with app.state.db.transaction() as session:
+            await set_actor_context(session, Identity(set(HUMAN_SCOPES)))
             row = await session.get(Export, UUID(export["id"]))
-            encrypted = app.state.storage.path(row.org_id, row.object_key).read_bytes()
+            encrypted = app.state.storage.path(row.object_key).read_bytes()
             assert encrypted.startswith(b"BIDFILE1\n") and content not in encrypted
             assert (
                 await session.scalar(
@@ -587,31 +507,16 @@ async def test_final_export_verbatim_negative_ack_hash_gates_and_immutable_downl
                 indent=2,
             )
         )
-        # An old signature never bypasses its current authenticated membership.
-        from app.models.entities import Membership
-        from sqlalchemy.orm import Session
-
-        with Session(admin_engine) as session, session.begin():
-            member = session.scalar(
-                select(Membership).where(
-                    Membership.org_id == tenants["orgs"][0],
-                    Membership.user_id == tenants["users"][0],
-                )
-            )
-            member.active = False
-        denied = await api.get(link.json()["data"]["url"], headers=header)
-        assert denied.status_code in (403, 404)
-        assert provider.calls == 1
 
 
-@pytest.mark.parametrize("revoke", ["reopen", "cancel", "role"])
+@pytest.mark.parametrize("revoke", ["reopen", "cancel"])
 async def test_queued_export_rechecks_inputs_attempt_and_authorization(
-    tenants, tmp_path, admin_engine, revoke
+    database, tmp_path, admin_engine, revoke
 ):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         task, body, reviewed, _ = await complete_inputs(
-            api, app, header, tenants, admin_engine, tmp_path
+            api, app, header, database, admin_engine, tmp_path
         )
         preview = (
             await api.post(
@@ -638,10 +543,7 @@ async def test_queued_export_rechecks_inputs_attempt_and_authorization(
         elif revoke == "cancel":
             response = await api.post(f"/jobs/{run['render_job_id']}/cancel", headers=header)
             assert response.status_code == 200, response.text
-        else:
-            set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "viewer")
-        await app.state.processor(header["X-Org-Id"], run["render_job_id"])
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
+        await app.state.processor(run["render_job_id"])
         shown = await api.get(f"/export-runs/{run['id']}", headers=header)
         assert shown.status_code == 200, shown.text
         assert shown.json()["data"]["state"] in ("invalidated", "cancelled", "failed")
@@ -649,11 +551,11 @@ async def test_queued_export_rechecks_inputs_attempt_and_authorization(
         assert (await api.get(f"/tasks/{task}/exports", headers=header)).json()["items"] == []
 
 
-async def test_token_cannot_use_export_or_generic_job_read_cancel(tenants, tmp_path, admin_engine):
+async def test_token_cannot_use_export_or_generic_job_read_cancel(database, tmp_path, admin_engine):
     from datetime import UTC, datetime, timedelta
 
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         token_reply = await api.post(
             "/tokens",
             headers=header,
@@ -673,7 +575,7 @@ async def test_token_cannot_use_export_or_generic_job_read_cancel(tenants, tmp_p
         assert token_reply.status_code == 200, token_reply.text
         token = token_reply.json()["data"]["token"]
         token_headers = {**header, "Authorization": "Bearer " + token}
-        task, body, _, _ = await complete_inputs(api, app, header, tenants, admin_engine, tmp_path)
+        task, body, _, _ = await complete_inputs(api, app, header, database, admin_engine, tmp_path)
         run = await prepared(api, app, header, task, body)
         for method, path, data in [
             ("GET", f"/export-runs/{run['id']}", None),
@@ -690,14 +592,13 @@ async def test_token_cannot_use_export_or_generic_job_read_cancel(tenants, tmp_p
             ),
         ]:
             result = await api.request(
-                method, path, headers=token_headers, **({"json": data} if data is not None else {})
+                method, path, headers=token_headers, **{"json": data} if data is not None else {}
             )
-            expected_status = 404 if path.startswith("/export-runs/") else 403
-            assert result.status_code == expected_status, (method, path, result.text)
+            assert result.status_code == 403, (method, path, result.text)
 
 
 async def test_human_render_worker_keeps_identity_without_human_export_rights(
-    tenants, tmp_path, admin_engine, monkeypatch
+    database, tmp_path, admin_engine, monkeypatch
 ):
     """Candidate rendering must not impersonate a human or trust agent/job JSON grants.
 
@@ -724,18 +625,15 @@ async def test_human_render_worker_keeps_identity_without_human_export_rights(
                 {"agent_principal_id": uuid4()},
                 {"agent_session_id": uuid4()},
                 {"agent_step_id": uuid4()},
-                {"actor_user_id": uuid4()},
                 {"actor_scopes": [scope for scope in job.actor_scopes if scope != "export"]},
             ):
                 with pytest.raises(ServiceError) as rejected:
-                    await worker_access(
-                        session, SimpleNamespace(**(snapshot | changed)), attempt_id
-                    )
+                    await worker_access(session, SimpleNamespace(**snapshot | changed), attempt_id)
                 assert rejected.value.code == "forbidden"
         actor = await worker_access(session, job, attempt_id)
         assert job.actor_kind == "session" and job.actor_token_id is None
         assert actor.actor_kind == "worker" and actor.token_id is None
-        assert actor.principal_id is None and actor.session_id is None and actor.step_id is None
+        assert actor.principal_id is None and actor.session_id is None and (actor.step_id is None)
         with pytest.raises(ServiceError) as denied:
             actor.require("export")
         assert denied.value.code == "forbidden"
@@ -746,9 +644,9 @@ async def test_human_render_worker_keeps_identity_without_human_export_rights(
         return actor
 
     monkeypatch.setattr(exports, "worker_access", check_worker)
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
-        task, body, _, _ = await complete_inputs(api, app, header, tenants, admin_engine, tmp_path)
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
+        task, body, _, _ = await complete_inputs(api, app, header, database, admin_engine, tmp_path)
         run = await prepared(api, app, header, task, body)
         assert checked and run["export_id"] is None
         assert (await api.get(f"/tasks/{task}/exports", headers=header)).json()["items"] == []
@@ -776,13 +674,13 @@ async def test_human_render_worker_keeps_identity_without_human_export_rights(
 
 @pytest.mark.parametrize("limit", ["memory", "deadline", "output"])
 async def test_export_worker_limits_never_publish_a_partial_file(
-    tenants, tmp_path, admin_engine, limit
+    database, tmp_path, admin_engine, limit
 ):
     from app.providers.base import ProviderFailure
 
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
-        task, body, _, _ = await complete_inputs(api, app, header, tenants, admin_engine, tmp_path)
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
+        task, body, _, _ = await complete_inputs(api, app, header, database, admin_engine, tmp_path)
         preview = (
             await api.post(
                 f"/tasks/{task}/export-runs", headers=header, json={**body, "dry_run": True}
@@ -811,9 +709,9 @@ async def test_export_worker_limits_never_publish_a_partial_file(
         for attempt in range(3 if limit == "deadline" else 1):
             if limit == "deadline" and attempt < 2:
                 with pytest.raises(ProviderFailure):
-                    await app.state.processor(header["X-Org-Id"], run["render_job_id"])
+                    await app.state.processor(run["render_job_id"])
             else:
-                await app.state.processor(header["X-Org-Id"], run["render_job_id"])
+                await app.state.processor(run["render_job_id"])
         status = await api.get(f"/jobs/{run['render_job_id']}", headers=header)
         assert status.json()["data"]["status"] == "failed", status.text
         assert status.json()["data"]["error"]["code"] in {
@@ -826,7 +724,7 @@ async def test_export_worker_limits_never_publish_a_partial_file(
         assert (
             shown["state"] == "failed"
             and shown["candidate_sha256"] is None
-            and shown["export_id"] is None
+            and (shown["export_id"] is None)
         )
 
 
@@ -841,19 +739,17 @@ LEGACY_COLUMNS = (
 )
 
 
-async def test_starter_template_provenance_and_outdated_binding(tenants, tmp_path, admin_engine):
+async def test_starter_template_provenance_and_outdated_binding(database, tmp_path, admin_engine):
     import re
 
     from app.models.exports import ExportTemplateBinding
     from app.services.export_template_sample import binding_sections, build
 
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         task, body, _, page = await complete_inputs(
-            api, app, header, tenants, admin_engine, tmp_path
+            api, app, header, database, admin_engine, tmp_path
         )
-        # The built-in starter template uploads, binds and exports as it is.
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
         uploaded = await api.post(
             "/resources/templates",
             headers=header,
@@ -885,15 +781,10 @@ async def test_starter_template_provenance_and_outdated_binding(tenants, tmp_pat
             await api.post("/export-template-bindings", headers=header, json=request)
         ).json()["data"]
         assert binding["current"] is True
+        from app.services.auth import HUMAN_SCOPES, Identity, set_actor_context
 
-        # A binding of the earlier seven-column layout lists as outdated and cannot export.
-        from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
-
-        org, user = tenants["orgs"][0], tenants["users"][0]
-        async with app.state.db.transaction(org) as session:
-            await set_actor_context(
-                session, Identity(user, org, set(ROLE_SCOPES["admin"]), "admin")
-            )
+        async with app.state.db.transaction() as session:
+            await set_actor_context(session, Identity(set(HUMAN_SCOPES)))
             row = await session.get(ExportTemplateBinding, UUID(binding["id"]))
             assert row is not None
             legacy_columns = [
@@ -902,7 +793,6 @@ async def test_starter_template_provenance_and_outdated_binding(tenants, tmp_pat
             ]
             session.add(
                 ExportTemplateBinding(
-                    org_id=row.org_id,
                     template_revision_id=row.template_revision_id,
                     template_sha256=row.template_sha256,
                     binding_hash="e" * 64,
@@ -912,7 +802,6 @@ async def test_starter_template_provenance_and_outdated_binding(tenants, tmp_pat
                     ],
                     static_content_hash=row.static_content_hash,
                     adapter_version=row.adapter_version,
-                    reviewed_by=row.reviewed_by,
                     reviewed_at=row.reviewed_at,
                 )
             )
@@ -925,7 +814,6 @@ async def test_starter_template_provenance_and_outdated_binding(tenants, tmp_pat
         ).json()["items"]
         assert sorted(item["current"] for item in listed) == [False, True]
         outdated = next(item for item in listed if not item["current"])
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
         stale = {**body, "task_template_id": selected["id"], "binding_id": outdated["id"]}
         refused = await api.post(
             f"/tasks/{task}/export-runs", headers=header, json={**stale, "dry_run": True}
@@ -933,8 +821,7 @@ async def test_starter_template_provenance_and_outdated_binding(tenants, tmp_pat
         assert refused.status_code == 400, refused.text
         assert refused.json()["data"]["error"]["code"] == "export_blocked"
         codes = {issue["code"] for issue in refused.json()["data"]["issues"]}
-        assert "export_binding_outdated" in codes and not refused.json()["data"]["ready"]
-
+        assert "export_binding_outdated" in codes and (not refused.json()["data"]["ready"])
         current = {**body, "task_template_id": selected["id"], "binding_id": binding["id"]}
         run = await prepared(api, app, header, task, current)
         released = await api.post(
@@ -952,16 +839,10 @@ async def test_starter_template_provenance_and_outdated_binding(tenants, tmp_pat
         provenance = await api.get(f"/exports/{export['id']}/provenance", headers=header)
         assert provenance.status_code == 200, provenance.text
         record = provenance.json()["data"]
-        # Another org's bidder, who may read its own exports, finds nothing here.
-        set_role(admin_engine, tenants["orgs"][1], tenants["users"][1], "bidder")
-        foreign = await api.get(f"/exports/{export['id']}/provenance", headers=headers[1])
-        assert foreign.status_code == 404
-
     document = Document(BytesIO(content))
     section = document.sections[0]
     assert (round(section.page_width.cm, 1), round(section.page_height.cm, 1)) == (21.0, 29.7)
     tables = document.tables
-    # The printed numbering is the provenance numbering, table by table.
     for index, name in enumerate(("substantive", "commercial", "technical")):
         rows = [r for r in record["items"] if r["section"] == name]
         printed = [row.cells[0].text for row in tables[index].rows[1:]]
@@ -980,5 +861,5 @@ async def test_starter_template_provenance_and_outdated_binding(tenants, tmp_pat
         cell.text for table in tables for row in table.rows for cell in row.cells
     )
     assert "（见附件 E001）" in text and "附件 E001" in text
-    assert not re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", text)
-    assert not re.search(r"\b[0-9a-f]{64}\b", text)
+    assert not re.search("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", text)
+    assert not re.search("\\b[0-9a-f]{64}\\b", text)

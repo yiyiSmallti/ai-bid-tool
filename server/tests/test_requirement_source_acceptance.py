@@ -9,7 +9,7 @@ Failure inventory recorded before these acceptance scenarios were implemented:
 * Mixed/stale batches must roll back every decision; competing decisions with the
   same expected revision must yield one success and one conflict.
 * Legacy publication without review metadata must remain visibly unconfirmed and
-  support owner initialization through a bounded, explicit 100-item batch.
+  support human initialization through a bounded, explicit 100-item batch.
 
 Providers are synthetic; parsing, authentication, transactions and DB triggers are real.
 No trigger is disabled, and no fixture inserts a confirmed review. Run artifacts live
@@ -31,7 +31,7 @@ from app.schemas.contracts import (
     LLMResult,
     ProviderUsage,
 )
-from app.services import requirement_confirmation
+from app.services import requirement_seeds
 from app.services.extraction import location_of
 from docx import Document
 from fakes import source_for
@@ -78,8 +78,8 @@ async def preview(api, header, task, body):
     )
 
 
-async def review_counts(app, org, task):
-    async with app.state.db.transaction(org) as session:
+async def review_counts(app, task):
+    async with app.state.db.transaction() as session:
         return {
             table: await session.scalar(
                 text(f"SELECT count(*) FROM {table} WHERE task_id=:task"), {"task": UUID(task)}
@@ -128,10 +128,10 @@ def word_bytes(paragraphs):
     ],
 )
 async def test_manual_source_rejections_are_write_free(
-    tenants, tmp_path, admin_engine, failure, status, code
+    database, tmp_path, admin_engine, failure, status, code
 ):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, provider):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, provider):
+        header = headers
         task, _, _, requirements = await create_tender(api, app, header, tmp_path)
         initial = await review(api, header, requirements[0]["id"])
         body = manual_input(initial["requirement"]["content"])
@@ -145,10 +145,6 @@ async def test_manual_source_rejections_are_write_free(
         elif failure in {"ambiguous", "unverified_ocr"}:
             # Seed a parser-maintenance condition with every DB trigger still active.
             with admin_engine.begin() as connection:
-                connection.execute(
-                    text("SELECT set_config('app.current_org',:org,true)"),
-                    {"org": header["X-Org-Id"]},
-                )
                 if failure == "ambiguous":
                     connection.execute(
                         text("UPDATE chunks SET text=text || :extra WHERE id=:id"),
@@ -165,7 +161,7 @@ async def test_manual_source_rejections_are_write_free(
             source["quote"] = "x" * 20_001
         else:
             body["content"]["condition"] = {"description": "x" * (256 * 1024)}
-        before = await review_counts(app, tenants["orgs"][0], task)
+        before = await review_counts(app, task)
         provider_calls = provider.calls
         response = await preview(api, header, task, body)
         assert response.status_code == status, response.text
@@ -179,14 +175,14 @@ async def test_manual_source_rejections_are_write_free(
         assert direct_save.status_code == status, direct_save.text
         if code:
             assert direct_save.json()["data"]["error"]["code"] == code, direct_save.text
-        assert await review_counts(app, tenants["orgs"][0], task) == before
+        assert await review_counts(app, task) == before
         assert provider.calls == provider_calls
         record(failure, status=response.status_code, expected_code=code, unchanged_counts=before)
 
 
-async def test_manual_word_location_and_document_binding(tenants, tmp_path):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+async def test_manual_word_location_and_document_binding(database, tmp_path):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         task, _, _, requirements = await create_tender(api, app, header, tmp_path)
         initial = await review(api, header, requirements[0]["id"])
         document, _, chunks = await upload_parse(
@@ -241,10 +237,10 @@ def provider_result(provider, items, rejected=()):
 
 
 async def test_all_rejected_recovery_preserves_receipt_cost_and_explicit_scope(
-    tenants, tmp_path, monkeypatch
+    database, tmp_path, monkeypatch
 ):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, provider):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, provider):
+        header = headers
         created = await api.post(
             "/tasks", headers=header, json={"name": "Synthetic rejected recovery"}
         )
@@ -277,7 +273,7 @@ async def test_all_rejected_recovery_preserves_receipt_cost_and_explicit_scope(
         submitted = await api.post(f"/documents/{document}/extract", headers=header, json={})
         assert submitted.status_code == 200, submitted.text
         failed_job = submitted.json()["data"]["job_id"]
-        await app.state.processor(header["X-Org-Id"], failed_job)
+        await app.state.processor(failed_job)
         failed = await api.get(f"/jobs/{failed_job}", headers=header)
         assert failed.status_code == 200, failed.text
         original = failed.json()["data"]
@@ -321,7 +317,7 @@ async def test_all_rejected_recovery_preserves_receipt_cost_and_explicit_scope(
             "quote": "Other document clause.",
         }
         assert (await preview(api, header, task, cross_document)).status_code == 404
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             before_usage = (
                 await session.execute(
                     text(
@@ -354,7 +350,7 @@ async def test_all_rejected_recovery_preserves_receipt_cost_and_explicit_scope(
         assert saved["requirement"]["state"] == "unconfirmed"
         assert saved["scope"]["extraction_job_id"] != failed_job
         assert provider.calls == calls and len(app.state.queue.calls) == queue_calls
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             assert (
                 await session.scalar(
                     text("SELECT to_jsonb(j) FROM jobs j WHERE id=:job"), {"job": UUID(failed_job)}
@@ -413,9 +409,9 @@ def batch_body(views, revision, **changes):
     }
 
 
-async def test_owner_mixed_and_stale_batches_are_atomic(tenants, tmp_path):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+async def test_human_mixed_and_stale_batches_are_atomic(database, tmp_path):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         task, _, job, requirements = await create_tender(api, app, header, tmp_path)
         other_task, _, _, other = await create_tender(api, app, header, tmp_path, suffix="other")
         first, second, foreign = await asyncio.gather(
@@ -424,13 +420,13 @@ async def test_owner_mixed_and_stale_batches_are_atomic(tenants, tmp_path):
             review(api, header, other[0]["id"]),
         )
         route = f"/v4/tasks/{task}/extractions/{job}/requirement-confirmations"
-        before = await review_counts(app, tenants["orgs"][0], task)
+        before = await review_counts(app, task)
         wrong_parent = batch_body(
             [first["requirement"], foreign["requirement"]], first["scope"]["revision"]
         )
         response = await api.post(route, headers=header, json=wrong_parent)
         assert response.status_code == 404, response.text
-        assert await review_counts(app, tenants["orgs"][0], task) == before
+        assert await review_counts(app, task) == before
         stale = batch_body(
             [first["requirement"], second["requirement"]], first["scope"]["revision"]
         )
@@ -440,7 +436,7 @@ async def test_owner_mixed_and_stale_batches_are_atomic(tenants, tmp_path):
         stale["items"][-1]["expected_review_hash"] = "0" * 64
         response = await api.post(route, headers=header, json=stale)
         assert response.status_code == 409, response.text
-        assert await review_counts(app, tenants["orgs"][0], task) == before
+        assert await review_counts(app, task) == before
         for rid in (requirements[0]["id"], requirements[1]["id"]):
             assert (await review(api, header, rid))["requirement"]["state"] == "unconfirmed"
         good = batch_body([first["requirement"], second["requirement"]], first["scope"]["revision"])
@@ -457,9 +453,9 @@ async def test_owner_mixed_and_stale_batches_are_atomic(tenants, tmp_path):
         )
 
 
-async def test_concurrent_same_revision_has_one_committed_decision(tenants, tmp_path):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+async def test_concurrent_same_revision_has_one_committed_decision(database, tmp_path):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         task, _, _, requirements = await create_tender(api, app, header, tmp_path)
         rid = requirements[0]["id"]
         initial = await review(api, header, rid)
@@ -476,7 +472,7 @@ async def test_concurrent_same_revision_has_one_committed_decision(tenants, tmp_
         history = await api.get(f"/v4/requirements/{rid}/review-history", headers=header)
         assert history.status_code == 200, history.text
         assert [item["action"] for item in history.json()["items"]] == ["seed", "confirm"]
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             assert (
                 await session.scalar(
                     text("SELECT count(*) FROM requirement_review_requests WHERE task_id=:task"),
@@ -492,11 +488,11 @@ async def test_concurrent_same_revision_has_one_committed_decision(tenants, tmp_
         )
 
 
-async def test_legacy_missing_metadata_owner_seed_and_hundred_item_bound(
-    tenants, tmp_path, monkeypatch
+async def test_legacy_missing_metadata_human_seed_and_hundred_item_bound(
+    database, tmp_path, monkeypatch
 ):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, provider):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, provider):
+        header = headers
         response = await api.post("/tasks", headers=header, json={"name": "Synthetic legacy scope"})
         assert response.status_code == 200, response.text
         task = response.json()["data"]["id"]
@@ -529,14 +525,14 @@ async def test_legacy_missing_metadata_owner_seed_and_hundred_item_bound(
 
         async def legacy_publication(*args, **kwargs):
             # Emulate a pre-B02 publisher only: all real Requirement inserts and
-            # triggers remain active. Lazy initialization uses the real service.
+            # triggers remain active. The first human decision seeds metadata.
             return None
 
         with monkeypatch.context() as legacy:
             legacy.setattr(provider, "_extract", extract_every_paragraph)
-            legacy.setattr(requirement_confirmation, "seed_reviews", legacy_publication)
+            legacy.setattr(requirement_seeds, "seed_reviews", legacy_publication)
             job = await run_document_job(api, app, header, document, "extract")
-        before = await review_counts(app, tenants["orgs"][0], task)
+        before = await review_counts(app, task)
         assert before["requirements"] == 100 and before["requirement_reviews"] == 0
         listing = await api.get(
             f"/v4/tasks/{task}/extractions/{job}/requirement-reviews",
@@ -547,19 +543,22 @@ async def test_legacy_missing_metadata_owner_seed_and_hundred_item_bound(
         data = listing.json()
         assert len(data["items"]) == 100
         assert {row["state"] for row in data["items"]} == {"legacy_unconfirmed"}
+        # GET projects virtual legacy reviews without writing metadata. A
+        # rejected oversized decision must preserve that same read-only state.
+        assert await review_counts(app, task) == before
         route = f"/v4/tasks/{task}/extractions/{job}/requirement-confirmations"
         body = batch_body(data["items"], data["data"]["scope"]["revision"])
         oversized = copy.deepcopy(body)
         oversized["items"].append({**oversized["items"][0], "requirement_id": str(uuid4())})
         rejected = await api.post(route, headers=header, json=oversized)
         assert rejected.status_code == 422, rejected.text
-        assert await review_counts(app, tenants["orgs"][0], task) == before
+        assert await review_counts(app, task) == before
         approved = await api.post(route, headers=header, json=body)
         assert approved.status_code == 200, approved.text
         assert approved.json()["data"]["changed"] == 100
         assert len(approved.json()["items"]) == 100
         assert {item["current_state"] for item in approved.json()["items"]} == {"confirmed"}
-        counts = await review_counts(app, tenants["orgs"][0], task)
+        counts = await review_counts(app, task)
         assert counts == {
             "requirements": 100,
             "requirement_reviews": 100,
@@ -567,5 +566,5 @@ async def test_legacy_missing_metadata_owner_seed_and_hundred_item_bound(
             "requirement_review_requests": 1,
         }
         record(
-            "legacy-owner-batch", selected=100, oversize_status=422, confirmed=100, counts=counts
+            "legacy-human-batch", selected=100, oversize_status=422, confirmed=100, counts=counts
         )

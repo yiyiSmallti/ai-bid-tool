@@ -79,7 +79,7 @@ class TemplateFile(Contract):
 
 class TemplateRevision(Contract):
     id: UUID
-    org_id: UUID
+
     template_id: UUID
     revision: int = Field(ge=1)
     data: TemplateData
@@ -94,7 +94,7 @@ class TaskTemplateSelection(Contract):
 
 class TaskTemplateSnapshot(Contract):
     id: UUID
-    org_id: UUID
+
     task_id: UUID
     template_revision_id: UUID
     revision: int = Field(ge=1)

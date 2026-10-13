@@ -54,7 +54,6 @@ async def get_run(
         select(ScoreReport)
         .options(defer(ScoreReport.sections))
         .where(
-            ScoreReport.org_id == actor.org_id,
             ScoreReport.task_id == task_id,
             ScoreReport.id == report_id,
         )
@@ -78,7 +77,6 @@ async def summary(
             key: value[key]
             for key in (
                 "id",
-                "org_id",
                 "task_id",
                 "job_id",
                 "created_at",
@@ -157,7 +155,6 @@ async def item_view(session: AsyncSession, row: ScoreReportItem) -> ScoreItemVie
             )
     keys = (
         "id",
-        "org_id",
         "task_id",
         "report_id",
         "rubric_item_id",
@@ -203,7 +200,6 @@ async def page(
     anchors: list[dict[str, Any]] = []
     if query.part == "items":
         conditions: list[Any] = [
-            ScoreReportItem.org_id == actor.org_id,
             ScoreReportItem.report_id == run.id,
             ScoreReportItem.task_id == task_id,
         ]
@@ -384,7 +380,7 @@ async def history(
     actor = await score_run_inputs.access(session, actor, "score:read")
     if await session.get(Task, task_id) is None:
         raise not_found()
-    conditions: list[Any] = [ScoreReport.task_id == task_id, ScoreReport.org_id == actor.org_id]
+    conditions: list[Any] = [ScoreReport.task_id == task_id]
     if query.extraction_job_id:
         extraction = await session.get(Job, query.extraction_job_id)
         if extraction is None or extraction.task_id != task_id or extraction.kind != "extract":

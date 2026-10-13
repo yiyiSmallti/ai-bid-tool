@@ -1,7 +1,6 @@
 """Score rubric CLI snapshots at the public, DB-free transport boundary."""
 
 import json
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID
@@ -29,13 +28,12 @@ from app.schemas.score_contracts import (
     RubricSetView,
 )
 from bid_cli import main as cli
-from bid_cli.client import Client, State
+from bid_cli.client import Client
 from bid_cli.schema import command_schema
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import TypeAdapter
 
-ORG = "00000000-0000-0000-0000-000000000001"
 TASK = "00000000-0000-0000-0000-000000000002"
 EXTRACTION = "00000000-0000-0000-0000-000000000003"
 DOCUMENT = "00000000-0000-0000-0000-000000000004"
@@ -48,7 +46,6 @@ ACTOR = "00000000-0000-0000-0000-000000000009"
 JOB = "00000000-0000-0000-0000-000000000010"
 SHA = "a" * 64
 NOW = "2026-10-04T00:00:00Z"
-
 SOURCE = {
     "document_id": DOCUMENT,
     "chunk_id": DOCUMENT,
@@ -70,7 +67,6 @@ COMPLETENESS = {
 }
 RUBRIC_VIEW = {
     "id": RUBRIC,
-    "org_id": ORG,
     "task_id": TASK,
     "extraction_job_id": EXTRACTION,
     "document_id": DOCUMENT,
@@ -87,13 +83,11 @@ RUBRIC_VIEW = {
     "overall_score_range": {"minimum": "0", "maximum": "10"},
     "overall_cap": None,
     "completeness": COMPLETENESS,
-    "confirmed_by": None,
     "confirmed_at": None,
     "created_at": NOW,
 }
 SECTION_VIEW = {
     "id": SECTION,
-    "org_id": ORG,
     "task_id": TASK,
     "rubric_id": RUBRIC,
     "key": "technical",
@@ -127,12 +121,10 @@ SECTION_VIEW = {
     ],
     "state": "candidate",
     "revision": 1,
-    "confirmed_by": None,
     "confirmed_at": None,
 }
 ITEM_VIEW = {
     "id": ITEM,
-    "org_id": ORG,
     "task_id": TASK,
     "rubric_id": RUBRIC,
     "section_id": SECTION,
@@ -152,12 +144,10 @@ ITEM_VIEW = {
     "review_domain": None,
     "state": "candidate",
     "revision": 1,
-    "confirmed_by": None,
     "confirmed_at": None,
 }
 COVERAGE_VIEW = {
     "id": REQUIREMENT,
-    "org_id": ORG,
     "task_id": TASK,
     "rubric_id": RUBRIC,
     "requirement_id": REQUIREMENT,
@@ -166,7 +156,6 @@ COVERAGE_VIEW = {
     "rubric_item_ids": [],
     "canonical_requirement_id": None,
     "reason": None,
-    "decided_by": None,
     "decided_at": None,
     "revision": 1,
 }
@@ -179,7 +168,6 @@ RUBRIC_REPORT = {
 CLASSIFICATION = {
     "kind": "classification",
     "id": ACTOR,
-    "org_id": ORG,
     "task_id": TASK,
     "rubric_id": RUBRIC,
     "section_id": SECTION,
@@ -187,7 +175,6 @@ CLASSIFICATION = {
     "revision": 2,
     "review_domain": "technical",
     "reason": "This section evaluates technical content.",
-    "decided_by": ACTOR,
     "decided_at": NOW,
     "actor_kind": "session",
 }
@@ -200,7 +187,6 @@ ITEM_CLASSIFICATION = {
 SECTION_DECISION = {
     "kind": "decision",
     "id": ACTOR,
-    "org_id": ORG,
     "task_id": TASK,
     "rubric_id": RUBRIC,
     "section_id": SECTION,
@@ -208,7 +194,6 @@ SECTION_DECISION = {
     "revision": 2,
     "action": "confirm",
     "reason": "The aggregation rule matches the tender text.",
-    "decided_by": ACTOR,
     "decided_at": NOW,
     "actor_kind": "session",
 }
@@ -221,7 +206,6 @@ ITEM_DECISION = {
 COVERAGE_DECISION = {
     "kind": "coverage_decision",
     "id": ACTOR,
-    "org_id": ORG,
     "task_id": TASK,
     "rubric_id": RUBRIC,
     "requirement_id": REQUIREMENT,
@@ -230,21 +214,18 @@ COVERAGE_DECISION = {
     "rubric_item_ids": [ITEM],
     "canonical_requirement_id": None,
     "reason": "The requirement maps to this score item.",
-    "decided_by": ACTOR,
     "decided_at": NOW,
     "actor_kind": "session",
 }
 REVISION = {
     "kind": "revision",
     "id": ACTOR,
-    "org_id": ORG,
     "task_id": TASK,
     "rubric_id": RUBRIC,
     "prior_rubric_id": SECTION,
     "version": 2,
     "input_hash": SHA,
     "reason": "Corrected the item title and bounds.",
-    "revised_by": ACTOR,
     "revised_at": NOW,
     "actor_kind": "session",
 }
@@ -253,8 +234,8 @@ REVISION = {
 class InterfaceClient(Client):
     """Send both CLI mode labels through Client.request and the same ASGI app."""
 
-    def __init__(self, mode: str, server: str, state: State, application: FastAPI):
-        super().__init__(mode, server, state)
+    def __init__(self, mode: str, server: str, application: FastAPI):
+        super().__init__(mode, server)
         self.application = application
 
     @asynccontextmanager
@@ -306,7 +287,6 @@ def score_interface(*, fail_show: bool = False, fail_submit: bool = False) -> Fa
         preview = {
             "dry_run": True,
             "input": {
-                "org_id": ORG,
                 "task_id": TASK,
                 "extraction_job_id": EXTRACTION,
                 "document_id": DOCUMENT,
@@ -328,7 +308,6 @@ def score_interface(*, fail_show: bool = False, fail_submit: bool = False) -> Fa
                     "provider": "synthetic",
                     "model": "synthetic-model",
                     "version": "synthetic-v1",
-                    "platform_model_id": "synthetic-score",
                     "request_sha256": SHA,
                     "input_tokens_upper_bound": 200,
                     "output_tokens_upper_bound": 200,
@@ -339,8 +318,7 @@ def score_interface(*, fail_show: bool = False, fail_submit: bool = False) -> Fa
             "admission_blocker": None,
             "estimated_duration_ms": None,
             "provider_config_id": None,
-            "provider_source": "platform",
-            "platform_model_id": "synthetic-score",
+            "provider_source": "local",
             "model_revision": 1,
             "model": "synthetic-model",
             "reasoning": request.reasoning,
@@ -369,11 +347,8 @@ def score_interface(*, fail_show: bool = False, fail_submit: bool = False) -> Fa
 
     @application.get("/tasks/{task_id}/score-rubrics", name="score_rubric_list")
     async def listing(task_id: UUID, cursor: str | None = None, limit: int = 50):
-        assert str(task_id) == TASK and cursor is None and limit in {20, 50}
-        return _result(
-            data={"task_id": TASK, "total": 1, "next_cursor": None},
-            items=[RUBRIC_VIEW],
-        )
+        assert str(task_id) == TASK and cursor is None and (limit in {20, 50})
+        return _result(data={"task_id": TASK, "total": 1, "next_cursor": None}, items=[RUBRIC_VIEW])
 
     @application.get("/tasks/{task_id}/score-rubrics/{rubric_id}", name="score_rubric_show")
     async def showing(task_id: UUID, rubric_id: UUID):
@@ -383,8 +358,7 @@ def score_interface(*, fail_show: bool = False, fail_submit: bool = False) -> Fa
         return _result(data=RUBRIC_REPORT)
 
     @application.post(
-        "/tasks/{task_id}/score-rubrics/{rubric_id}/revisions",
-        name="score_rubric_revise",
+        "/tasks/{task_id}/score-rubrics/{rubric_id}/revisions", name="score_rubric_revise"
     )
     async def revise(task_id: UUID, rubric_id: UUID, request: RubricReviseRequest):
         assert str(task_id) == TASK and str(rubric_id) == RUBRIC and request.reason
@@ -395,10 +369,7 @@ def score_interface(*, fail_show: bool = False, fail_submit: bool = False) -> Fa
         name="score_rubric_classify",
     )
     async def classify(
-        task_id: UUID,
-        rubric_id: UUID,
-        section_id: UUID,
-        request: RubricClassifyRequest,
+        task_id: UUID, rubric_id: UUID, section_id: UUID, request: RubricClassifyRequest
     ):
         assert request.review_domain == "technical"
         assert (str(task_id), str(rubric_id), str(section_id)) == (TASK, RUBRIC, SECTION)
@@ -409,10 +380,7 @@ def score_interface(*, fail_show: bool = False, fail_submit: bool = False) -> Fa
         name="score_rubric_classify",
     )
     async def classify_item(
-        task_id: UUID,
-        rubric_id: UUID,
-        item_id: UUID,
-        request: RubricClassifyRequest,
+        task_id: UUID, rubric_id: UUID, item_id: UUID, request: RubricClassifyRequest
     ):
         assert request.review_domain == "technical"
         assert (str(task_id), str(rubric_id), str(item_id)) == (TASK, RUBRIC, ITEM)
@@ -423,10 +391,7 @@ def score_interface(*, fail_show: bool = False, fail_submit: bool = False) -> Fa
         name="score_rubric_section_decide",
     )
     async def decide_section(
-        task_id: UUID,
-        rubric_id: UUID,
-        section_id: UUID,
-        request: RubricSectionDecisionRequest,
+        task_id: UUID, rubric_id: UUID, section_id: UUID, request: RubricSectionDecisionRequest
     ):
         assert request.action == "confirm" and str(section_id) == SECTION
         return _result(data=SECTION_DECISION)
@@ -436,10 +401,7 @@ def score_interface(*, fail_show: bool = False, fail_submit: bool = False) -> Fa
         name="score_rubric_item_decide",
     )
     async def decide_item(
-        task_id: UUID,
-        rubric_id: UUID,
-        item_id: UUID,
-        request: RubricItemDecisionRequest,
+        task_id: UUID, rubric_id: UUID, item_id: UUID, request: RubricItemDecisionRequest
     ):
         assert request.action == "confirm" and str(item_id) == ITEM
         return _result(data=ITEM_DECISION)
@@ -449,17 +411,13 @@ def score_interface(*, fail_show: bool = False, fail_submit: bool = False) -> Fa
         name="score_rubric_coverage_decide",
     )
     async def decide_coverage(
-        task_id: UUID,
-        rubric_id: UUID,
-        requirement_id: UUID,
-        request: RubricCoverageDecisionRequest,
+        task_id: UUID, rubric_id: UUID, requirement_id: UUID, request: RubricCoverageDecisionRequest
     ):
         assert request.rubric_item_ids == [UUID(ITEM)] and str(requirement_id) == REQUIREMENT
         return _result(data=COVERAGE_DECISION)
 
     @application.post(
-        "/tasks/{task_id}/score-rubrics/{rubric_id}/decisions",
-        name="score_rubric_decide",
+        "/tasks/{task_id}/score-rubrics/{rubric_id}/decisions", name="score_rubric_decide"
     )
     async def decide_set(task_id: UUID, rubric_id: UUID, request: RubricSetDecisionRequest):
         assert request.action == "confirm"
@@ -477,14 +435,12 @@ def score_interface(*, fail_show: bool = False, fail_submit: bool = False) -> Fa
                 "overall_aggregation_rule_confirmed": True,
                 "complete": True,
             },
-            "confirmed_by": ACTOR,
             "confirmed_at": NOW,
         }
         return _result(data=RubricSetView.model_validate(confirmed).model_dump(mode="json"))
 
     @application.get(
-        "/tasks/{task_id}/score-rubrics/{rubric_id}/history",
-        name="score_rubric_history",
+        "/tasks/{task_id}/score-rubrics/{rubric_id}/history", name="score_rubric_history"
     )
     async def history(task_id: UUID, rubric_id: UUID, cursor: str | None = None, limit: int = 50):
         assert cursor is None and limit in {10, 50}
@@ -505,16 +461,13 @@ def invoke(arguments: list[str], capsys) -> tuple[int, dict]:
     body = json.loads(capsys.readouterr().out)
     body["duration_ms"] = 0
     assert set(body) == {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}
-    return exit_code, body
+    return (exit_code, body)
 
 
 def install_transport(monkeypatch, application: FastAPI) -> None:
-    monkeypatch.setenv("BID_SESSION", "synthetic-interface-session")
-    monkeypatch.setenv("BID_ORG", ORG)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-interface-access-key-at-least-32-chars")
     monkeypatch.setattr(
-        cli,
-        "Client",
-        lambda mode, server, state: InterfaceClient(mode, server, state, application),
+        cli, "Client", lambda mode, server: InterfaceClient(mode, server, application)
     )
 
 
@@ -625,24 +578,8 @@ def test_score_rubric_cli_remote_and_local_snapshots_db_free(monkeypatch, tmp_pa
             "high",
             "--dry-run",
         ],
-        "score rubric list": [
-            "score",
-            "rubric",
-            "list",
-            "--task",
-            TASK,
-            "--limit",
-            "20",
-        ],
-        "score rubric show": [
-            "score",
-            "rubric",
-            "show",
-            "--task",
-            TASK,
-            "--rubric",
-            RUBRIC,
-        ],
+        "score rubric list": ["score", "rubric", "list", "--task", TASK, "--limit", "20"],
+        "score rubric show": ["score", "rubric", "show", "--task", TASK, "--rubric", RUBRIC],
         "score rubric revise": [
             "score",
             "rubric",
@@ -749,10 +686,7 @@ def test_score_rubric_cli_remote_and_local_snapshots_db_free(monkeypatch, tmp_pa
     for mode in ("remote", "local"):
         actual[mode] = {}
         for name, arguments in commands.items():
-            exit_code, body = invoke(
-                ["--mode", mode, "--state", str(tmp_path / f"{mode}.enc"), *arguments],
-                capsys,
-            )
+            exit_code, body = invoke(["--mode", mode, *arguments], capsys)
             assert exit_code == 0
             actual[mode][name] = body
         RubricPreview.model_validate(actual[mode]["score rubric generate"]["data"])
@@ -773,38 +707,24 @@ def test_score_rubric_cli_remote_and_local_snapshots_db_free(monkeypatch, tmp_pa
             TypeAdapter(RubricHistoryItem).validate_python(item)
             for item in actual[mode]["score rubric history"]["items"]
         ]
-    snapshot = Path(__file__).with_name("snapshots") / "score-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(
-            json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    assert actual == json.loads(snapshot.read_text(encoding="utf-8"))
+    artifact = tmp_path / "score-cli.json"
+    artifact.write_text(
+        json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    assert json.loads(artifact.read_text(encoding="utf-8")) == actual
 
 
 def test_score_rubric_cli_exit_codes_and_schema(monkeypatch, tmp_path, capsys):
     application = score_interface()
     install_transport(monkeypatch, application)
-    common = ["--mode", "remote", "--state", str(tmp_path / "remote.enc")]
-
+    common = ["--mode", "remote"]
     code, body = invoke([*common, "score", "rubric", "generate", "--task", TASK], capsys)
     assert code == 2 and body["data"]["error"]["code"] == "invalid_input"
-
     code, body = invoke(
-        [
-            *common,
-            "score",
-            "rubric",
-            "generate",
-            "--task",
-            TASK,
-            "--extraction-job",
-            EXTRACTION,
-        ],
+        [*common, "score", "rubric", "generate", "--task", TASK, "--extraction-job", EXTRACTION],
         capsys,
     )
     assert code == 2 and body["data"]["error"]["code"] == "invalid_input"
-
     classify = write_inputs(tmp_path)["classify"]
     code, body = invoke(
         [
@@ -822,24 +742,12 @@ def test_score_rubric_cli_exit_codes_and_schema(monkeypatch, tmp_path, capsys):
         capsys,
     )
     assert code == 2 and body["data"]["error"]["code"] == "invalid_input"
-
     fatal = score_interface(fail_show=True)
     install_transport(monkeypatch, fatal)
     code, body = invoke(
-        [
-            *common,
-            "score",
-            "rubric",
-            "show",
-            "--task",
-            TASK,
-            "--rubric",
-            RUBRIC,
-        ],
-        capsys,
+        [*common, "score", "rubric", "show", "--task", TASK, "--rubric", RUBRIC], capsys
     )
     assert code == 4 and body["data"]["error"]["code"] == "not_found"
-
     schema = command_schema(cli.app)["commands"]
     names = {name for name in schema if name.startswith("score ")}
     assert names == {
@@ -867,8 +775,6 @@ def test_score_rubric_queue_failure_preserves_job_id(monkeypatch, tmp_path, caps
         [
             "--mode",
             "local",
-            "--state",
-            str(tmp_path / "local.enc"),
             "score",
             "rubric",
             "generate",
@@ -887,12 +793,7 @@ def test_score_rubric_queue_failure_preserves_job_id(monkeypatch, tmp_path, caps
 
 @pytest.mark.parametrize(
     "status,error_exit,expected_exit",
-    [
-        ("failed", 2, 2),
-        ("failed", 3, 3),
-        ("failed", 4, 4),
-        ("cancelled", 2, 4),
-    ],
+    [("failed", 2, 2), ("failed", 3, 3), ("failed", 4, 4), ("cancelled", 2, 4)],
 )
 def test_score_rubric_job_status_uses_terminal_error_exit(
     monkeypatch, capsys, status, error_exit, expected_exit

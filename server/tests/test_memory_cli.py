@@ -3,7 +3,6 @@
 import json
 
 import pytest
-from app.services.auth import ROLE_SCOPES, SCOPES
 from bid_cli import main as cli
 from bid_cli.schema import command_schema
 from typer.testing import CliRunner
@@ -37,19 +36,6 @@ def test_schema_registers_all_memory_contracts():
         assert any(
             "--json" in item["options"] for item in schema["commands"][name]["cli_parameters"]
         )
-
-
-@pytest.mark.parametrize("role", ["admin", "bidder", "technical", "viewer"])
-def test_memory_role_gate(role):
-    scopes = ROLE_SCOPES[role]
-    assert {"memory:read", "memory:retrieve"} <= scopes
-    assert ("memory:write" in scopes) == (role != "viewer")
-    assert ("memory:approve" in scopes) == (role == "admin")
-    assert ("memory:manage" in scopes) == (role == "admin")
-    assert ("memory:eval:review" in scopes) == (role == "admin")
-    assert (
-        not {"memory:approve", "memory:manage", "memory:eval:read", "memory:eval:review"} & SCOPES
-    )
 
 
 @pytest.mark.parametrize(
@@ -104,7 +90,7 @@ def test_memory_json_snapshot(monkeypatch, action, method, path):
             "POST",
             "/memories",
             {
-                "target": {"scope": "org"},
+                "target": {"scope": "library"},
                 "content": {
                     "kind": "rule",
                     "conflict_key": "delivery.source",
@@ -159,11 +145,7 @@ def test_memory_json_snapshot(monkeypatch, action, method, path):
             ["--dry-run"],
             "POST",
             "/memories/retrieve",
-            {
-                "org_id": "00000000-0000-0000-0000-000000000001",
-                "scopes": ["org"],
-                "query": "交货期",
-            },
+            {"scopes": ["library"], "query": "交货期"},
         ),
         (
             "samples review",

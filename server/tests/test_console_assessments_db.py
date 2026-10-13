@@ -1,7 +1,7 @@
-"""Two-org API acceptance for bounded check reads (requires isolated PostgreSQL).
+"""Single-user API acceptance for bounded check reads (requires isolated PostgreSQL).
 
 Saved parents, children, citations, extraction filters and cursors must never
-cross org/task boundaries; reads must create no jobs/audits/usage and invoke no
+cross task/parent boundaries; reads must create no jobs/audits/usage and invoke no
 providers. A partial report remains partial across every projection page.
 """
 
@@ -12,6 +12,14 @@ import pytest
 from app.schemas.console_assessments import AssessmentInputsData, CheckSummaryData, PageData
 from test_check import check_case as check_case
 from test_check import preview_check, process_check, row_counts, submit_check
+from test_score_api import rubric_case as rubric_case
+from test_score_api import rubric_counts
+from test_score_api import rubric_input_case as rubric_input_case
+from test_score_review import base, classify_all, confirm_contents, decision, replacement
+from test_score_review import many_rubric_case as many_rubric_case
+from test_score_run import counts as score_counts
+from test_score_run import finish_score, preview_score, submit_score
+from test_score_run import score_case as score_case
 
 
 async def published(case):
@@ -22,16 +30,16 @@ async def published(case):
 
 
 @pytest.mark.parametrize("part", ["summary", "findings", "coverage", "certificates", "notices"])
-async def test_each_check_projection_is_bounded_and_org_isolated(check_case, tenants, part):
+async def test_each_check_projection_is_bounded_and_read_only(check_case, database, part):
     case = check_case
     report = await published(case)
-    before = await row_counts(case["app"], tenants["orgs"][0])
+    before = await row_counts(case["app"])
     calls = case["provider"].calls
     path = f"/v4/checks/{report}?view=console&part={part}&limit=1"
     response = await case["api"].get(path, headers=case["header"])
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["ok"] is False  # The seeded rules report is partial.
+    assert body["ok"] is False
     if part == "summary":
         summary = CheckSummaryData.model_validate(body["data"])
         assert sum(group.count for group in summary.groups) == summary.finding_count
@@ -40,23 +48,16 @@ async def test_each_check_projection_is_bounded_and_org_isolated(check_case, ten
         page = PageData.model_validate(body["data"])
         assert page.returned == len(body["items"]) <= 1
         assert page.filtered_total >= page.returned
-    denied = await case["api"].get(path, headers=case["headers"][1])
-    missing = await case["api"].get(
-        f"/v4/checks/{uuid4()}?view=console&part={part}", headers=case["headers"][1]
-    )
-    assert denied.status_code == missing.status_code == 404
-    assert denied.json()["data"]["error"] == missing.json()["data"]["error"]
-    assert report not in denied.text
-    assert await row_counts(case["app"], tenants["orgs"][0]) == before
+    assert await row_counts(case["app"]) == before
     assert case["provider"].calls == calls
 
 
-async def test_input_jobs_history_and_citations_hide_foreign_ids(check_case, tenants):
+async def test_input_jobs_history_and_citations_hide_foreign_ids(check_case, database):
     case = check_case
     report = await published(case)
     task = case["task"]
     extraction = case["draft"]["extraction_job_id"]
-    before = await row_counts(case["app"], tenants["orgs"][0])
+    before = await row_counts(case["app"])
     calls = case["provider"].calls
     paths = [
         f"/v4/tasks/{task}/assessment-inputs?job={extraction}",
@@ -66,9 +67,6 @@ async def test_input_jobs_history_and_citations_hide_foreign_ids(check_case, ten
     for path in paths:
         response = await case["api"].get(path, headers=case["header"])
         assert response.status_code == 200, response.text
-        denied = await case["api"].get(path, headers=case["headers"][1])
-        assert denied.status_code == 404, denied.text
-        assert task not in denied.text and extraction not in denied.text
     inputs = (await case["api"].get(paths[0], headers=case["header"])).json()
     data = AssessmentInputsData.model_validate(inputs["data"])
     assert data.current_draft is not None
@@ -84,12 +82,11 @@ async def test_input_jobs_history_and_citations_hide_foreign_ids(check_case, ten
     assert cited.status_code == 200, cited.text
     assert cited.json()["data"]["verified"] is True
     assert len(cited.json()["data"]["window"]["text"]) <= 1
-    assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
     wrong_entry = await case["api"].get(
         path.replace(entry["id"], str(uuid4())), headers=case["header"]
     )
     assert wrong_entry.status_code == 404
-    assert await row_counts(case["app"], tenants["orgs"][0]) == before
+    assert await row_counts(case["app"]) == before
     assert case["provider"].calls == calls
 
 
@@ -126,24 +123,6 @@ async def test_check_keyset_does_not_fetch_full_show_and_cursors_bind_filters(
     assert len(json.dumps(first).encode()) < 2 * 1024 * 1024
 
 
-# These fixtures seed both orgs through the existing real-service acceptance
-# paths. They are deliberately not a SQLite substitute for tenant RLS.
-from test_score_api import rubric_case as rubric_case  # noqa: E402
-from test_score_api import rubric_counts  # noqa: E402
-from test_score_api import rubric_input_case as rubric_input_case  # noqa: E402
-from test_score_review import (  # noqa: E402
-    base,
-    classify_all,
-    confirm_contents,
-    decision,
-    replacement,
-)
-from test_score_review import many_rubric_case as many_rubric_case  # noqa: E402
-from test_score_run import counts as score_counts  # noqa: E402
-from test_score_run import finish_score, preview_score, submit_score  # noqa: E402
-from test_score_run import score_case as score_case  # noqa: E402
-
-
 @pytest.mark.parametrize(
     "part", ["summary", "sections", "items", "coverage", "blockers", "replacement"]
 )
@@ -168,9 +147,6 @@ async def test_each_rubric_projection_and_replacement_isolated(rubric_case, part
     if part not in {"summary", "replacement"}:
         data = PageData.model_validate(result.json()["data"])
         assert len(result.json()["items"]) == data.returned <= 1
-    denied = await case["api"].get(path, headers=case["headers"][1])
-    assert denied.status_code == 404, denied.text
-    assert identifier not in denied.text
     assert await rubric_counts(case) == before
     assert len(case["vendor"].requests) == provider_calls
 
@@ -213,33 +189,6 @@ async def test_rubric_compact_receipts_match_authoritative_review(rubric_case):
     assert replacement_summary.completeness.unconfirmed_items == replacement_summary.item_count
 
 
-@pytest.mark.parametrize("part", ["summary", "sections", "items", "notices"])
-async def test_each_score_projection_preserves_nulls_and_org_isolation(score_case, part):
-    case = score_case
-    preview = await preview_score(case)
-    receipt = (await submit_score(case, preview)).json()["data"]
-    terminal = await finish_score(case, receipt)
-    identifier = terminal["result"]["report_id"]
-    before = await score_counts(case)
-    provider_calls = len(case["score_vendor"].requests)
-    path = f"/v4/tasks/{case['task']}/scores/{identifier}?view=console&part={part}&limit=1"
-    result = await case["api"].get(path, headers=case["header"])
-    assert result.status_code == 200, result.text
-    if part == "summary":
-        from app.schemas.console_assessments import ScoreSummaryData
-
-        summary = ScoreSummaryData.model_validate(result.json()["data"])
-        assert (summary.total_status == "estimated") == (summary.estimated_total is not None)
-    else:
-        data = PageData.model_validate(result.json()["data"])
-        assert data.returned == len(result.json()["items"]) <= 1
-    denied = await case["api"].get(path, headers=case["headers"][1])
-    assert denied.status_code == 404, denied.text
-    assert identifier not in denied.text
-    assert await score_counts(case) == before
-    assert len(case["score_vendor"].requests) == provider_calls
-
-
 async def test_rubric_and_score_source_windows_bind_exact_parent_graph(score_case):
     case = score_case
     rubric = case["rubric"]["rubric"]["id"]
@@ -254,7 +203,6 @@ async def test_rubric_and_score_source_windows_bind_exact_parent_graph(score_cas
         response = await case["api"].get(path, headers=case["header"])
         assert response.status_code == 200, response.text
         assert response.json()["data"]["verified"]
-        assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
     preview = await preview_score(case)
     receipt = (await submit_score(case, preview)).json()["data"]
     terminal = await finish_score(case, receipt)
@@ -268,15 +216,9 @@ async def test_rubric_and_score_source_windows_bind_exact_parent_graph(score_cas
         response = await case["api"].get(path, headers=case["header"])
         assert response.status_code == 200, response.text
         assert response.json()["data"]["kind"] == citation["kind"]
-        assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
-
-    # Historical authorization must still traverse section-only citations when
-    # content freshness already fails; run_view must not convert lost access to stale.
     from sqlalchemy import text
     from test_response_cards import require_action
-    from test_score_review import role
 
-    role(case, "technical")
     await require_action(
         case["api"],
         case["header"],
@@ -284,15 +226,12 @@ async def test_rubric_and_score_source_windows_bind_exact_parent_graph(score_cas
         "reopen",
         reason="Synthetic support review reopened to exercise historical source authorization",
     )
-    role(case, "bidder")
     report_path = f"/v4/tasks/{case['task']}/scores/{report}"
     stale = await case["api"].get(report_path, headers=case["header"])
     assert stale.status_code == 200, stale.text
     assert stale.json()["data"]["report"]["validity"] == "stale"
     section = case["rubric"]["sections"][0]
     sources = [*section["sources"], {**section["sources"][0], "requirement_id": str(uuid4())}]
-    # Only the fixture owner can simulate corrupt historical JSON; normal runtime
-    # updates remain denied by the immutable snapshot trigger.
     with case["admin_engine"].begin() as connection:
         connection.execute(
             text("ALTER TABLE score_rubric_sections DISABLE TRIGGER rubric_immutable")
@@ -341,9 +280,6 @@ async def test_job_and_history_collection_each_kind_fail_closed(score_case, kind
         allowed = await case["api"].get(path, headers=case["header"])
         assert allowed.status_code == 200, allowed.text
         assert len(allowed.json()["items"]) == 1
-        denied = await case["api"].get(path, headers=case["headers"][1])
-        assert denied.status_code == 404, denied.text
-        assert case["task"] not in denied.text
         assert (
             await case["api"].get(
                 path.replace(case["extraction"], str(uuid4())), headers=case["header"]
@@ -352,50 +288,15 @@ async def test_job_and_history_collection_each_kind_fail_closed(score_case, kind
     assert await score_counts(case) == before
 
 
-@pytest.mark.parametrize("operation", ["decisions", "revisions"])
-async def test_compact_mutation_routes_hide_foreign_parent(rubric_case, operation):
-    case = rubric_case
-    report = case["rubric"]
-    body = decision(report, report["rubric"]) if operation == "decisions" else replacement(report)
-    before = await rubric_counts(case)
-    response = await case["api"].post(
-        "/v4" + base(case) + f"/{operation}?view=console", headers=case["headers"][1], json=body
-    )
-    assert response.status_code == 404, response.text
-    assert report["rubric"]["id"] not in response.text
-    missing = await case["api"].post(
-        f"/v4/tasks/{case['task']}/score-rubrics/{uuid4()}/{operation}?view=console",
-        headers=case["headers"][1],
-        json=body,
-    )
-    assert missing.status_code == 404
-    assert missing.json()["data"]["error"] == response.json()["data"]["error"]
-    assert await rubric_counts(case) == before
-
-
-async def test_check_cursor_snapshot_and_principal_change_require_reload(
-    check_case, tenants, admin_engine
-):
-    from task_fixtures import set_role
-
+async def test_check_cursor_snapshot_changes_require_reload(check_case, database, admin_engine):
     case = check_case
-    set_role(
-        admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder", task_ids=[case["task"]]
-    )
     report = await published(case)
     path = f"/v4/checks/{report}?view=console&part=findings&limit=1"
     first = (await case["api"].get(path, headers=case["header"])).json()
     cursor = first["data"]["next_cursor"]
     assert cursor
-    set_role(
-        admin_engine, tenants["orgs"][0], tenants["users"][0], "viewer", task_ids=[case["task"]]
-    )
-    denied_cursor = await case["api"].get(path + "&cursor=" + cursor, headers=case["header"])
-    assert denied_cursor.status_code == 400
-    assert denied_cursor.json()["data"]["error"]["code"] == "invalid_cursor"
-    set_role(
-        admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder", task_ids=[case["task"]]
-    )
+    unchanged_cursor = await case["api"].get(path + "&cursor=" + cursor, headers=case["header"])
+    assert unchanged_cursor.status_code == 200, unchanged_cursor.text
     full = (await case["api"].get(f"/checks/{report}", headers=case["header"])).json()
     finding = next(row for row in full["items"] if row["review_domain"] == "commercial")
     response = await case["api"].post(
@@ -426,19 +327,9 @@ async def test_rubric_blocker_filters_cannot_name_objects_outside_parent(rubric_
     )
     assert response.status_code == 404, response.text
     assert "total" not in response.json()["data"]
-    assert missing not in response.text
-    other_org = await case["api"].get(
-        "/v4" + base(case),
-        params={"view": "console", "part": "blockers", field: missing},
-        headers=case["headers"][1],
-    )
-    assert other_org.status_code == 404
-    assert response.json()["data"]["error"] == other_org.json()["data"]["error"]
 
 
 async def test_section_sources_projection_and_indexed_context_bind_pinned_graph(many_rubric_case):
-    # Fail closed for wrong source index, cross-org parent/entry, rewritten saved
-    # quotes and silently dropped sources; every quoted selection stays explicit.
     case = many_rubric_case
     reviewed = await classify_all(case)
     proposal = replacement(reviewed)
@@ -449,9 +340,7 @@ async def test_section_sources_projection_and_indexed_context_bind_pinned_graph(
     assert len(selected) == 2
     proposal["sections"][0]["sources"] = selected
     revised = await case["api"].post(
-        "/v4" + base(case) + "/revisions?view=console",
-        headers=case["header"],
-        json=proposal,
+        "/v4" + base(case) + "/revisions?view=console", headers=case["header"], json=proposal
     )
     assert revised.status_code == 200, revised.text
     parent = revised.json()["data"]["id"]
@@ -465,14 +354,12 @@ async def test_section_sources_projection_and_indexed_context_bind_pinned_graph(
         dict(requirement_id=row["requirement_id"], quote=row["quote"]) for row in section["sources"]
     ] == selected
     assert "source" not in section and "requirement_id" not in section
-    assert (await case["api"].get(page_path, headers=case["headers"][1])).status_code == 404
     for index, saved in enumerate(selected):
         path = f"/v4/tasks/{case['task']}/assessment-citation?parent_kind=rubric&parent_id={parent}&part=rubric_section&entry_id={section['id']}&origin=sources&citation_index={index}&text=quote"
         response = await case["api"].get(path, headers=case["header"])
         assert response.status_code == 200, response.text
         assert response.json()["data"]["window"]["text"] == saved["quote"]
         assert response.json()["data"]["fix"]["requirement_id"] == saved["requirement_id"]
-        assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
     invalid = await case["api"].get(
         path.replace("citation_index=1", "citation_index=2"), headers=case["header"]
     )

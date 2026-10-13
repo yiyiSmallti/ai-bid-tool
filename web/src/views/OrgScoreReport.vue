@@ -4,7 +4,8 @@ import { useRoute } from "vue-router";
 import AssessmentCitation from "../components/AssessmentCitation.vue";
 import JobPanel from "../components/JobPanel.vue";
 import { assessmentError, enc, queryPath, stateLabels } from "../assessments.js";
-import { formatTime, orgRequest } from "../org.js";
+import { formatTime } from "../org.js";
+import { request } from "../api.js";
 
 const route = useRoute();
 const taskId = computed(() => String(route.params.taskId)), reportId = computed(() => String(route.params.reportId));
@@ -26,7 +27,7 @@ const reviewHref = requirement => queryPath(`/org/tasks/${enc(taskId.value)}/rev
 function rowMatches(row, selectedPart) { return selectedPart === "items" ? row.task_id === taskId.value && row.report_id === reportId.value : selectedPart === "sections" ? typeof row.section_key === "string" : typeof row.code === "string" && typeof row.message === "string"; }
 async function readSummary() {
   const generation = sequence, context = scope(), id = reportId.value;
-  const result = await orgRequest("GET", queryPath(base.value, { view: "console", part: "summary" }));
+  const result = await request("GET", queryPath(base.value, { view: "console", part: "summary" }));
   if (!current(generation, context)) return false;
   if (result.data.report?.id !== id || result.data.report.task_id !== taskId.value) throw { status: 404 };
   summary.value = result.data;
@@ -34,11 +35,11 @@ async function readSummary() {
 }
 async function loadPage(cursor = null, target = 0) {
   if (!summary.value) return;
-  const generation = sequence, context = scope(), query = { ...filters.value }, filterKey = JSON.stringify(query), request = ++pageSerial;
-  const active = () => current(generation, context) && request === pageSerial && filterKey === JSON.stringify(filters.value);
+  const generation = sequence, context = scope(), query = { ...filters.value }, filterKey = JSON.stringify(query), requestSerial = ++pageSerial;
+  const active = () => current(generation, context) && requestSerial === pageSerial && filterKey === JSON.stringify(filters.value);
   pageLoading.value = true; pageError.value = "";
   try {
-    const result = await orgRequest("GET", queryPath(base.value, { view: "console", ...query, limit: 50, cursor }));
+    const result = await request("GET", queryPath(base.value, { view: "console", ...query, limit: 50, cursor }));
     if (!active()) return;
     if (result.data.task_id !== taskId.value || result.data.parent_id !== reportId.value || result.data.part !== query.part || result.data.returned !== result.items.length || !result.items.every(row => rowMatches(row, query.part))) throw { code: "invalid_response" };
     rows.value = result.items; meta.value = result.data; position.value = target;
@@ -57,7 +58,7 @@ function back() { if (position.value) return loadPage(cursors.value[position.val
 async function load() {
   clear(); const generation = sequence, context = scope(); loading.value = true;
   try {
-    const taskResult = await orgRequest("GET", `/tasks/${enc(taskId.value)}`);
+    const taskResult = await request("GET", `/tasks/${enc(taskId.value)}`);
     if (!current(generation, context)) return;
     if (taskResult.data.id !== taskId.value) throw { status: 404 };
     taskName.value = taskResult.data.name;
@@ -69,8 +70,8 @@ function clear() { sequence++; pageSerial++; summary.value = null; taskName.valu
 function resetFilters() { if (!sectionKey.value && !outcome.value && !requirementId.value) return loadPage(); sectionKey.value = ""; outcome.value = ""; requirementId.value = ""; }
 watch(filters, () => { rows.value = []; meta.value = null; cursors.value = [null]; position.value = 0; loadPage(); });
 watch(() => [taskId.value, reportId.value], load, { immediate: true });
-window.addEventListener("bid:org-reset", clear);
-onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", clear); });
+window.addEventListener("bid:session-reset", clear);
+onBeforeUnmount(() => { clear(); window.removeEventListener("bid:session-reset", clear); });
 </script>
 
 <template>
@@ -88,7 +89,7 @@ onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", cle
       <p class="hint">小计与可能范围不代表总分；无法评估的评分项保持未知，不计为零分。</p><p>总分规则：{{ aggregationLabels[summary.overall_aggregation] }} · {{ summary.overall_rule_text }}</p><p v-if="summary.overall_cap != null">总分封顶 {{ summary.overall_cap }}</p><p v-if="!summary.overall_aggregation_assessable">评分规则已核对后，系统仍无法自动合计。</p>
     </section>
     <div class="actions"><RouterLink :to="`/org/tasks/${taskId}/score-rubrics/${summary.rubric_id}`">查看本次评分规则</RouterLink><RouterLink :to="queryPath(`/org/tasks/${taskId}/scores`, { job: summary.report.extraction_job_id, draft: summary.report.draft_id, rubric: summary.rubric_id })">重新预览评分</RouterLink><el-button @click="showJob = !showJob">查看报告作业与实际用量</el-button></div>
-    <JobPanel v-if="showJob" assessment-mode :job-id="summary.report.job_id" :writable="false" />
+    <JobPanel v-if="showJob" assessment-mode :job-id="summary.report.job_id" />
     <el-tabs v-model="part" aria-label="评分报告分区"><el-tab-pane label="分节合计" name="sections" /><el-tab-pane label="逐项评分" name="items" /><el-tab-pane label="提示" name="notices" /></el-tabs>
     <div v-if="part !== 'notices'" class="actions"><el-input v-model="sectionKey" aria-label="按分节筛选" placeholder="分节标识" clearable /><template v-if="part === 'items'"><el-select v-model="outcome" aria-label="评估结果" placeholder="全部评估结果" clearable><el-option value="assessed" label="已评估" /><el-option value="unassessable" label="无法评估" /></el-select><el-input v-model="requirementId" aria-label="按要求筛选" placeholder="要求 ID" clearable /></template><el-button @click="resetFilters">重置筛选</el-button></div>
     <p v-if="meta" role="status" aria-live="polite">匹配 {{ meta.filtered_total }} / 全部 {{ meta.total }} 条；第 {{ position + 1 }} 页，本页 {{ meta.returned }} 条</p><el-alert v-if="pageError" :title="pageError" type="error" :closable="false" show-icon role="alert" /><el-skeleton v-if="pageLoading" :rows="3" animated /><el-empty v-else-if="!rows.length && !pageError" description="当前筛选下没有记录"><el-button @click="resetFilters">重置筛选</el-button></el-empty>

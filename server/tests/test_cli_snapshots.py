@@ -12,9 +12,16 @@ IDENTIFIER = "00000000-0000-0000-0000-000000000001"
 IDENTIFIER_2 = "00000000-0000-0000-0000-000000000002"
 IDENTIFIER_3 = "00000000-0000-0000-0000-000000000003"
 IDENTIFIER_4 = "00000000-0000-0000-0000-000000000004"
+TASK = {
+    "id": IDENTIFIER,
+    "name": "Synthetic task",
+    "tender_number": "SYNTHETIC-001",
+    "deadline": "2027-01-02T03:04:05Z",
+    "model_redaction_enabled": True,
+    "model_redaction_revision": 1,
+}
 PRODUCT = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "product_id": IDENTIFIER,
     "revision": 1,
     "data": {
@@ -28,7 +35,6 @@ PRODUCT = {
 }
 SELECTION = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "product_revision_id": IDENTIFIER,
     "revision": 1,
@@ -37,7 +43,6 @@ SELECTION = {
 }
 FEATURE = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "feature_id": IDENTIFIER,
     "revision": 1,
     "data": {
@@ -49,7 +54,6 @@ FEATURE = {
 }
 FEATURE_SELECTION = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "feature_revision_id": IDENTIFIER,
     "revision": 1,
@@ -60,7 +64,6 @@ FEATURE_WARNINGS = ["Implementation status is a declaration; evidence has not be
 
 CERTIFICATE = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "certificate_id": IDENTIFIER,
     "revision": 1,
     "data": {
@@ -73,7 +76,6 @@ CERTIFICATE = {
 }
 CERTIFICATE_SELECTION = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "certificate_revision_id": IDENTIFIER,
     "revision": 1,
@@ -86,7 +88,6 @@ CERTIFICATE_WARNINGS = [
 
 PROFILE = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "profile_id": IDENTIFIER,
     "revision": 1,
     "data": {
@@ -98,7 +99,6 @@ PROFILE = {
 }
 PROFILE_SELECTION = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "profile_revision_id": IDENTIFIER,
     "revision": 1,
@@ -112,7 +112,6 @@ PROFILE_WARNINGS = [
 
 TEMPLATE = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "template_id": IDENTIFIER,
     "revision": 1,
     "data": {"name": "Synthetic template", "project_types": None, "chapters": None},
@@ -125,7 +124,6 @@ TEMPLATE = {
 }
 TEMPLATE_SELECTION = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "template_revision_id": IDENTIFIER,
     "revision": 1,
@@ -168,7 +166,6 @@ EXPORT_SECTIONS = [
 ]
 EXPORT_BINDING = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "template_revision_id": IDENTIFIER,
     "template_sha256": "b" * 64,
     "binding_hash": "c" * 64,
@@ -176,12 +173,10 @@ EXPORT_BINDING = {
     "adapter_version": "docx-export-v1",
     "sections": EXPORT_SECTIONS,
     "current": True,
-    "reviewed_by": IDENTIFIER,
     "reviewed_at": "2026-10-01T00:00:00Z",
 }
 EXPORT_RUN = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "draft_id": IDENTIFIER,
     "render_job_id": IDENTIFIER_2,
@@ -206,7 +201,6 @@ EXPORT_PROVENANCE = {
     "renderer_profile": "docx-export-v3",
     "input_hash": "a" * 64,
     "manifest_hash": "b" * 64,
-    "released_by": IDENTIFIER,
     "released_at": "2026-10-01T00:00:00Z",
     "items": [
         {
@@ -214,9 +208,7 @@ EXPORT_PROVENANCE = {
             "number": 1,
             "requirement_id": IDENTIFIER,
             "card_revision_id": IDENTIFIER,
-            "confirmed_by": IDENTIFIER,
             "confirmed_at": "2026-10-01T00:00:00Z",
-            "disposition_by": None,
             "disposition_at": None,
             "quote_sha256": "c" * 64,
             "evidence": [
@@ -226,7 +218,6 @@ EXPORT_PROVENANCE = {
                     "material_kind": "user_supplied_pdf_page",
                     "selection_id": IDENTIFIER,
                     "resource_revision_id": IDENTIFIER,
-                    "confirmed_by": IDENTIFIER,
                     "confirmed_at": "2026-10-01T00:00:00Z",
                 }
             ],
@@ -251,7 +242,6 @@ EXPORT_PROVENANCE = {
 }
 EXPORT_VIEW = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "run_id": IDENTIFIER,
     "draft_id": IDENTIFIER,
@@ -264,7 +254,6 @@ EXPORT_VIEW = {
     "input_hash": "e" * 64,
     "manifest_hash": "f" * 64,
     "file": EXPORT_FILE,
-    "released_by": IDENTIFIER,
     "released_at": "2026-10-01T00:00:00Z",
     "issues": [],
     "invalidated_requirement_ids": [],
@@ -303,7 +292,6 @@ async def fake_export_download(self, export_id, output):
 
 SCAN = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "certificate_id": IDENTIFIER,
     "certificate_revision_id": IDENTIFIER,
     "revision": 2,
@@ -343,7 +331,6 @@ async def fake_scan_download(self, revision_id, output):
 
 SOURCE = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "task_certificate_id": IDENTIFIER,
     "certificate_id": IDENTIFIER,
@@ -363,10 +350,8 @@ SOURCE = {
         "height_px": 1,
     },
     "rendered_at": "2026-10-01T00:00:00Z",
-    "created_by": IDENTIFIER,
     "active_selection": True,
     "status": "unconfirmed_source",
-    "confirmed_by": None,
     "eligible_for_draft_export": False,
 }
 SOURCE_WARNINGS = [
@@ -389,7 +374,6 @@ SANDBOX_ARTIFACT = {
 }
 SANDBOX_RUN = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "job_id": IDENTIFIER,
     "purpose": "prototype_offline",
@@ -415,7 +399,6 @@ CLAUSE = {
 }
 EVIDENCE = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "card_id": IDENTIFIER_2,
     "input": {
@@ -429,13 +412,11 @@ EVIDENCE = {
     "material_kind": "declaration",
     "quote_check": "exact_field_match",
     "source_archive": None,
-    "confirmed_by": IDENTIFIER,
     "confirmed_at": "2026-10-01T00:00:00+00:00",
     "active_selection": True,
 }
 CARD = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "extraction_job_id": IDENTIFIER,
     "requirement_id": IDENTIFIER,
@@ -444,7 +425,6 @@ CARD = {
     "state": "draft",
     "review_domain": "technical",
     "disposition": "respond",
-    "disposition_by": IDENTIFIER,
     "disposition_at": "2026-10-01T00:00:00+00:00",
     "suggested_disposition": None,
     "origin": "human",
@@ -460,7 +440,6 @@ CARD = {
         "evidence": [],
     },
     "evidence": [],
-    "confirmed_by": None,
     "confirmed_at": None,
     "reason": None,
     "reviewed_warning_codes": [],
@@ -469,7 +448,6 @@ CARD = {
 }
 DRAFT = {
     "id": IDENTIFIER,
-    "org_id": IDENTIFIER,
     "task_id": IDENTIFIER,
     "extraction_job_id": IDENTIFIER,
     "generation_job_id": IDENTIFIER,
@@ -521,7 +499,6 @@ DRAFT = {
             "card_revision_id": IDENTIFIER_3,
             "tender_clause": CLAUSE,
             "location_label": "Page 1",
-            "disposition_by": IDENTIFIER,
             "disposition_at": "2026-10-01T00:00:00+00:00",
         }
     ],
@@ -603,7 +580,6 @@ CONFIDENTIAL_VALUE = {
     "value_id": IDENTIFIER_2,
     "version": 1,
     "tail": None,
-    "set_by": IDENTIFIER,
     "set_at": "2026-10-01T00:00:00+00:00",
 }
 
@@ -664,9 +640,9 @@ async def fake_request(self, method, path, **kwargs):
     elif path.startswith("/sandbox-runs/"):
         data = SANDBOX_RUN
     elif path == "/tasks" and method == "POST":
-        data = {"id": IDENTIFIER, "name": "Synthetic task"}
+        data = TASK
     elif path == "/tasks":
-        items = [{"id": IDENTIFIER, "name": "Synthetic task"}]
+        items = [TASK]
     elif path == "/export-template-bindings":
         if method == "POST":
             data = EXPORT_BINDING
@@ -689,7 +665,6 @@ async def fake_request(self, method, path, **kwargs):
             "task_id": IDENTIFIER,
             "revision": 2,
             "model_redaction_enabled": False,
-            "changed_by": IDENTIFIER,
         }
     elif path.endswith("/cards/dispositions"):
         data = {"correlation_id": IDENTIFIER, "updated": 1}

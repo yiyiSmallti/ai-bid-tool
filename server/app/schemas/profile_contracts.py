@@ -34,7 +34,7 @@ class OrgProfileUpdate(Contract):
 
 class OrgProfileRevision(Contract):
     id: UUID
-    org_id: UUID
+
     profile_id: UUID
     revision: int = Field(ge=1)
     data: OrgProfileData
@@ -48,7 +48,7 @@ class TaskOrgProfileSelection(Contract):
 
 class TaskOrgProfileSnapshot(Contract):
     id: UUID
-    org_id: UUID
+
     task_id: UUID
     profile_revision_id: UUID
     revision: int = Field(ge=1)

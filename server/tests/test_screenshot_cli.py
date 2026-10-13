@@ -50,6 +50,13 @@ from bid_cli import main as cli
 from bid_cli import screenshots as screenshot_cli
 
 IDENTIFIER = "11111111-1111-4111-8111-111111111111"
+
+
+@pytest.fixture(autouse=True)
+def access_key(monkeypatch):
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-screenshot-cli-access-key")
+
+
 IDENTIFIER_2 = "22222222-2222-4222-8222-222222222222"
 IDENTIFIER_3 = "33333333-3333-4333-8333-333333333333"
 SHA = "a" * 64
@@ -366,19 +373,10 @@ def test_prepare_rejects_unsafe_targets_before_render(tmp_path, monkeypatch, cap
     assert calls == []
 
 
-class FakeState:
-    def __init__(self, org_id: str):
-        self.org_id = org_id
-
-    def load(self):
-        return {"session": "synthetic-session", "org_id": self.org_id}
-
-
 class SignedClient:
-    def __init__(self, link: dict, handler, org_id: str):
+    def __init__(self, link: dict, handler):
         self.link = link
         self.handler = handler
-        self.state = FakeState(org_id)
         self.requests = []
 
     async def request(self, method, path, **kwargs):
@@ -393,11 +391,10 @@ class SignedClient:
             yield client
 
 
-def archive(source_id: UUID, org_id: UUID, content: bytes) -> dict:
+def archive(source_id: UUID, content: bytes) -> dict:
     descriptor = validate_png(content)
     return {
         "id": str(source_id),
-        "org_id": str(org_id),
         "task_id": IDENTIFIER_2,
         "task_certificate_id": IDENTIFIER_2,
         "certificate_id": IDENTIFIER_2,
@@ -416,16 +413,14 @@ def archive(source_id: UUID, org_id: UUID, content: bytes) -> dict:
         "dpi": 150,
         "preview": {"name": "page-1.png", **descriptor},
         "rendered_at": "2026-10-02T00:00:00+00:00",
-        "created_by": IDENTIFIER_3,
         "active_selection": True,
         "status": "unconfirmed_source",
-        "confirmed_by": None,
         "eligible_for_draft_export": False,
     }
 
 
 async def test_certificate_source_reads_only_exact_signed_preview(monkeypatch):
-    source_id, org_id = uuid4(), uuid4()
+    source_id = uuid4()
     content = png()
     path = f"/evidence-sources/{source_id}/preview/download"
     seen = []
@@ -440,37 +435,36 @@ async def test_certificate_source_reads_only_exact_signed_preview(monkeypatch):
         ok=True,
         command="fixture",
         data={"url": path + "?signature=fixed-signature", "expires_in": 300},
-        items=[archive(source_id, org_id, content)],
+        items=[archive(source_id, content)],
     ).model_dump(mode="json")
-    client = SignedClient(link, handler, str(org_id))
+    client = SignedClient(link, handler)
     monkeypatch.setattr(cli, "runtime", client)
-
     assert await screenshot_cli._read_certificate_preview(source_id) == content
     assert len(seen) == 1
 
 
 async def test_certificate_source_rejects_cross_origin_link_before_download(monkeypatch):
-    source_id, org_id = uuid4(), uuid4()
+    source_id = uuid4()
     content = png()
     link = Result(
         ok=True,
         command="fixture",
         data={"url": "https://evil.example.test/private.png?signature=secret"},
-        items=[archive(source_id, org_id, content)],
+        items=[archive(source_id, content)],
     ).model_dump(mode="json")
 
     def forbidden(_request):
         raise AssertionError("unsafe link must not be requested")
 
-    monkeypatch.setattr(cli, "runtime", SignedClient(link, forbidden, str(org_id)))
+    monkeypatch.setattr(cli, "runtime", SignedClient(link, forbidden))
     with pytest.raises(ServiceError) as stopped:
         await screenshot_cli._read_certificate_preview(source_id)
     assert stopped.value.code == "invalid_download_link"
 
 
 async def test_rendition_preview_rejects_hash_mismatch_without_output(tmp_path, monkeypatch):
-    rendition_id, org_id = uuid4(), uuid4()
-    expected, changed = png(value=127), png(value=10)
+    rendition_id = uuid4()
+    expected, changed = (png(value=127), png(value=10))
     descriptor = validate_png(expected)
     path = f"/screenshot-renditions/{rendition_id}/content"
 
@@ -489,12 +483,10 @@ async def test_rendition_preview_rejects_hash_mismatch_without_output(tmp_path, 
             "image": descriptor,
         },
     ).model_dump(mode="json")
-    monkeypatch.setattr(cli, "runtime", SignedClient(link, handler, str(org_id)))
+    monkeypatch.setattr(cli, "runtime", SignedClient(link, handler))
     output = tmp_path / "preview.png"
-
     with pytest.raises(ServiceError) as stopped:
         await screenshot_cli._download_rendition(rendition_id, output)
-
     assert stopped.value.code == "screenshot_integrity"
     assert not output.exists()
 
@@ -869,7 +861,7 @@ def test_analyze_wait_merges_terminal_result(tmp_path, monkeypatch, capsys):
 
 
 async def test_rendition_preview_saves_verified_new_file(tmp_path, monkeypatch):
-    rendition_id, org_id = uuid4(), uuid4()
+    rendition_id = uuid4()
     content = png()
     descriptor = validate_png(content)
     path = f"/screenshot-renditions/{rendition_id}/content"
@@ -888,13 +880,13 @@ async def test_rendition_preview_saves_verified_new_file(tmp_path, monkeypatch):
         assert request.url.path == path
         return httpx.Response(200, content=content, headers={"content-type": "image/png"})
 
-    monkeypatch.setattr(cli, "runtime", SignedClient(link, handler, str(org_id)))
+    monkeypatch.setattr(cli, "runtime", SignedClient(link, handler))
     target = tmp_path / "verified.png"
     result = await screenshot_cli._download_rendition(rendition_id, target)
     assert await asyncio.to_thread(target.read_bytes) == content
     assert result["data"]["image"]["sha256"] == descriptor["sha256"]
     assert "url" not in result["data"]
-    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert stat.S_IMODE(target.stat().st_mode) == 384
 
 
 def test_prepare_rejects_parent_replacement_without_writing_replacement(

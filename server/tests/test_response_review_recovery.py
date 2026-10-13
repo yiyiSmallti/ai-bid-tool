@@ -32,18 +32,15 @@ def artifact(name, **values):
 
 
 async def test_confirmed_response_stales_when_task_certificate_is_replaced(
-    api, headers, tenants, admin_engine, tmp_path
+    api, headers, database, admin_engine, tmp_path
 ):
-    scope = await response_scope(api, headers, tenants, admin_engine)
+    scope = await response_scope(api, headers, admin_engine)
     _, _, certificate, selected, source = await select_real_materials(
-        api,
-        headers[0],
-        str(scope["task_id"]),
-        tmp_path,
+        api, headers, str(scope["task_id"]), tmp_path
     )
     updated = await api.put(
         f"/cards/{scope['card']['id']}",
-        headers=headers[0],
+        headers=headers,
         json={
             "expected_revision": scope["card"]["revision"],
             "content": {
@@ -63,18 +60,18 @@ async def test_confirmed_response_stales_when_task_certificate_is_replaced(
     )
     assert updated.status_code == 200, updated.text
     scope["card"] = updated.json()["data"]
-    await complete(api, headers[0], scope)
+    await complete(api, headers, scope)
     before = dict(scope["card"])
     current = await api.get(
         "/resources/certificates",
-        headers=headers[0],
+        headers=headers,
         params={"certificate_id": certificate["certificate_id"]},
     )
     assert current.status_code == 200, current.text
     current = current.json()["items"][0]
     revised = await api.post(
         f"/resources/certificates/{certificate['certificate_id']}/revisions",
-        headers=headers[0],
+        headers=headers,
         json={
             "expected_revision": current["revision"],
             "data": {**current["data"], "name": "Synthetic replaced certificate"},
@@ -82,24 +79,24 @@ async def test_confirmed_response_stales_when_task_certificate_is_replaced(
     )
     assert revised.status_code == 200, revised.text
     # The library's newer revision alone does not replace the task's pinned input.
-    still_pinned = await refresh_card(api, headers[0], scope)
+    still_pinned = await refresh_card(api, headers, scope)
     assert still_pinned["eligibility"] == "eligible"
     replacement = await api.post(
         f"/tasks/{scope['task_id']}/certificates",
-        headers=headers[0],
+        headers=headers,
         json={"certificate_id": certificate["certificate_id"]},
     )
     assert replacement.status_code == 200, replacement.text
     assert replacement.json()["data"]["replaced_snapshot_id"] == selected["id"]
-    card = await refresh_card(api, headers[0], scope)
+    card = await refresh_card(api, headers, scope)
     assert card["eligibility"] == "stale_material"
     assert card["revision"] == before["revision"]
     assert card["evidence"][0]["active_selection"] is False
     # Historic Evidence confirmation remains true but cannot approve the new material set.
-    assert card["evidence"][0]["confirmed_by"] is not None
+    assert card["evidence"][0]["confirmed_at"] is not None
     preview = await api.post(
         f"/tasks/{scope['task_id']}/drafts",
-        headers=headers[0],
+        headers=headers,
         json={"extraction_job_id": str(scope["job_id"]), "dry_run": True},
     )
     assert preview.status_code == 200, preview.text
@@ -108,14 +105,14 @@ async def test_confirmed_response_stales_when_task_certificate_is_replaced(
 
 
 async def test_citation_provenance_repair_preserves_confirmed_single_domain_response(
-    api, headers, tenants, admin_engine
+    api, headers, database, admin_engine
 ):
-    scope = await response_scope(api, headers, tenants, admin_engine)
-    await complete(api, headers[0], scope)
+    scope = await response_scope(api, headers, admin_engine)
+    await complete(api, headers, scope)
     original_revision = scope["card"]["revision"]
     preview = await api.get(
         f"/tasks/{scope['task_id']}/requirements/repair",
-        headers=headers[0],
+        headers=headers,
         params={"job": str(scope["job_id"])},
     )
     assert preview.status_code == 200, preview.text
@@ -124,7 +121,7 @@ async def test_citation_provenance_repair_preserves_confirmed_single_domain_resp
     assert item["model_quote"] is None and item["quote_changed"] is False
     repaired = await api.post(
         f"/tasks/{scope['task_id']}/requirements/repair",
-        headers=headers[0],
+        headers=headers,
         json={
             "extraction_job_id": str(scope["job_id"]),
             "expected_preview": preview.json()["data"]["preview_hash"],
@@ -135,11 +132,11 @@ async def test_citation_provenance_repair_preserves_confirmed_single_domain_resp
     assert repaired.json()["data"]["changed"] == 1
     with admin_engine.connect() as connection:
         quote, model_quote = connection.execute(
-            text("SELECT quote,model_quote FROM requirements WHERE org_id=:org AND id=:id"),
-            {"org": tenants["orgs"][0], "id": scope["requirement_ids"][0]},
+            text("SELECT quote,model_quote FROM requirements WHERE id=:id"),
+            {"id": scope["requirement_ids"][0]},
         ).one()
     assert quote == model_quote == item["source"]["quote"]
-    card = await refresh_card(api, headers[0], scope)
+    card = await refresh_card(api, headers, scope)
     assert card["revision"] == original_revision and card["state"] == "confirmed"
     assert card["eligibility"] == "eligible"
     artifact("citation-repair", receipt=repaired.json(), card=card)
@@ -147,21 +144,20 @@ async def test_citation_provenance_repair_preserves_confirmed_single_domain_resp
 
 @pytest.mark.parametrize("mutation", ["card_reopen", "requirement_reopen"])
 async def test_released_export_and_cached_preview_enforce_live_response_gate(
-    tenants, admin_engine, tmp_path, mutation
+    database, admin_engine, tmp_path, mutation
 ):
     fake = FakeConverter()
     fake.reply = two_page_pdf()
-    async with preview_client(tenants, tmp_path, "http://converter.test") as (api, app, headers):
+    async with preview_client(database, tmp_path, "http://converter.test") as (api, app, headers):
         app.state.processor.converter_transport = httpx.MockTransport(fake.handler)
-        scope = await response_scope(api, headers, tenants, admin_engine)
-        selected, binding = await setup_template(api, headers[0], str(scope["task_id"]))
-        await complete(api, headers[0], scope)
-        bidder = scope["members"]["commercial"]["headers"]
-        draft = await publish_draft(api, app, bidder, str(scope["task_id"]), str(scope["job_id"]))
+        scope = await response_scope(api, headers, admin_engine)
+        selected, binding = await setup_template(api, headers, str(scope["task_id"]))
+        await complete(api, headers, scope)
+        draft = await publish_draft(api, app, headers, str(scope["task_id"]), str(scope["job_id"]))
         run = await prepared(
             api,
             app,
-            bidder,
+            headers,
             str(scope["task_id"]),
             {
                 "draft_id": draft["draft_id"],
@@ -172,7 +168,7 @@ async def test_released_export_and_cached_preview_enforce_live_response_gate(
         )
         released = await api.post(
             f"/export-runs/{run['id']}/release",
-            headers=bidder,
+            headers=headers,
             json={
                 "expected_input_hash": run["input_hash"],
                 "expected_candidate_sha256": run["candidate_sha256"],
@@ -181,18 +177,18 @@ async def test_released_export_and_cached_preview_enforce_live_response_gate(
         assert released.status_code == 200, released.text
         export = released.json()["data"]
         base = f"/exports/{export['id']}"
-        link = await api.get(base + "/download-link", headers=bidder)
+        link = await api.get(base + "/download-link", headers=headers)
         assert link.status_code == 200, link.text
         signed_url = link.json()["data"]["url"]
-        downloaded = await api.get(signed_url, headers=bidder)
+        downloaded = await api.get(signed_url, headers=headers)
         assert downloaded.status_code == 200
         assert hashlib.sha256(downloaded.content).hexdigest() == export["file"]["sha256"]
-        opened = await api.post(base + "/preview", headers=bidder)
+        opened = await api.post(base + "/preview", headers=headers)
         assert opened.status_code == 200, opened.text
-        await app.state.processor(bidder["X-Org-Id"], opened.json()["data"]["job_id"])
-        assert is_png(await api.get(base + "/preview/pages/1", headers=bidder))
+        await app.state.processor(opened.json()["data"]["job_id"])
+        assert is_png(await api.get(base + "/preview/pages/1", headers=headers))
         assert len(fake.received) == 1
-        await revoke(api, headers[0], scope, mutation)
+        await revoke(api, headers, scope, mutation)
         failures = {}
         for label, method, path in (
             ("old_signed_download", "GET", signed_url),
@@ -200,14 +196,14 @@ async def test_released_export_and_cached_preview_enforce_live_response_gate(
             ("cached_preview_page", "GET", base + "/preview/pages/1"),
             ("preview_reopen", "POST", base + "/preview"),
         ):
-            response = await api.request(method, path, headers=bidder)
+            response = await api.request(method, path, headers=headers)
             assert response.status_code == 409, response.text
             assert response.json()["data"]["error"]["code"] == "export_input_changed"
             failures[label] = response.json()
         # Metadata is auditable history; its stale state cannot expose usable bytes.
-        shown = await api.get(base, headers=bidder)
-        preview = await api.get(base + "/preview", headers=bidder)
-        retired_run = await api.get(f"/export-runs/{run['id']}", headers=bidder)
+        shown = await api.get(base, headers=headers)
+        preview = await api.get(base + "/preview", headers=headers)
+        retired_run = await api.get(f"/export-runs/{run['id']}", headers=headers)
         assert shown.status_code == preview.status_code == retired_run.status_code == 200
         assert shown.json()["data"]["validity"] == "stale"
         assert preview.json()["data"]["status"] == "invalidated"

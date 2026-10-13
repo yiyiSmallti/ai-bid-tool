@@ -1,6 +1,4 @@
-import { ApiError, orgSession } from "./api.js";
-import { orgAccess, orgRequest } from "./org.js";
-import { canEditTask, taskAccessGrant } from "./task-authority.js";
+import { ApiError, request, session } from "./api.js";
 export const templatePath = "/management/resources/templates";
 export const TEMPLATE_BACKSTACK_LIMIT = 50;
 // Retain navigation anchors only; old pages and unbounded cursor history are evicted.
@@ -8,7 +6,7 @@ export function rememberTemplateCursor(stack, cursor) {
   stack.push(cursor);
   if (stack.length > TEMPLATE_BACKSTACK_LIMIT) stack.splice(0, stack.length - TEMPLATE_BACKSTACK_LIMIT);
 }
-export const templateMaintainer = () => orgAccess.role === "admin";
+export const templateMaintainer = () => true;
 export const blankTemplate = () => ({ name: "", project_types: null, chapters: null });
 export const validId = value => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const invalid = message => { throw new ApiError(502, "invalid_response", message); };
@@ -17,22 +15,22 @@ function checkRef(value, id) { if (value?.kind !== "templates" || !validId(value
 function checkLifecycle(value) { if (!value || !["active", "inactive"].includes(value.state) || !Number.isInteger(value.revision) || value.revision < 0 || value.revision === 0 && value.state !== "active") invalid("模板生命周期不符合契约"); }
 function checkActions(actions) { if (!Array.isArray(actions) || actions.length > 16 || actions.some(item => typeof item.action !== "string" || typeof item.allowed !== "boolean" || item.allowed === (item.reason != null))) invalid("模板操作提示不符合契约"); }
 export function checkTemplateRevision(value, id, number) {
-  if (!value || value.org_id !== orgSession.get()?.orgId || !validId(value.id) || !validId(value.template_id) || id && value.template_id !== id || !revision(value.revision) || number && value.revision !== number || !value.data || !validTemplateData(value.data) || !validTemplateFile(value.file)) invalid("模板修订范围不符合契约");
+  if (!value || !validId(value.id) || !validId(value.template_id) || id && value.template_id !== id || !revision(value.revision) || number && value.revision !== number || !value.data || !validTemplateData(value.data) || !validTemplateFile(value.file)) invalid("模板修订范围不符合契约");
   return value;
 }
 export function checkTemplateDetail(value, id, number) {
-  if (value?.org_id !== orgSession.get()?.orgId || value.detail?.kind !== "templates" || !revision(value.current_revision) || value.provenance !== "declared" || !Array.isArray(value.actions)) invalid("模板详情范围不符合契约");
-  if (typeof value.revised_at !== "string" || !Number.isFinite(Date.parse(value.revised_at)) || !/(?:Z|[+-]\d{2}:\d{2})$/.test(value.revised_at) || !(value.revised_by === null || validId(value.revised_by))) invalid("模板精确修订的作者或时间不符合契约");
+  if (!value || value.detail?.kind !== "templates" || !revision(value.current_revision) || value.provenance !== "declared" || !Array.isArray(value.actions)) invalid("模板详情范围不符合契约");
+  if (typeof value.revised_at !== "string" || !Number.isFinite(Date.parse(value.revised_at)) || !/(?:Z|[+-]\d{2}:\d{2})$/.test(value.revised_at)) invalid("模板精确修订的时间不符合契约");
   checkRef(value.ref, id); checkLifecycle(value.lifecycle); checkActions(value.actions); checkTemplateRevision(value.detail.revision, id, number);
   if (value.detail.revision.revision > value.current_revision || new TextEncoder().encode(JSON.stringify(value)).length > 1024 * 1024) invalid("模板详情超过契约边界");
   return value;
 }
 export function checkTemplatePage(result, kind="list", id=null) {
   const {data,items}=result;
-  if (data.org_id !== orgSession.get()?.orgId || !Number.isInteger(data.returned) || data.returned !== items.length || items.length > 100 || typeof data.has_more !== "boolean" || data.has_more !== (data.next_cursor !== null) || data.next_cursor !== null && (typeof data.next_cursor !== "string" || !data.next_cursor || data.next_cursor.length > 2048) || !data.as_of || !Number.isFinite(Date.parse(data.as_of))) invalid("模板分页范围不符合契约");
+  if (!Number.isInteger(data.returned) || data.returned !== items.length || items.length > 100 || typeof data.has_more !== "boolean" || data.has_more !== (data.next_cursor !== null) || data.next_cursor !== null && (typeof data.next_cursor !== "string" || !data.next_cursor || data.next_cursor.length > 2048) || !data.as_of || !Number.isFinite(Date.parse(data.as_of))) invalid("模板分页范围不符合契约");
   if (new TextEncoder().encode(JSON.stringify(result)).length > 256 * 1024) invalid("模板分页结果超过契约边界");
   for (const item of items) {
-    if (item.org_id !== data.org_id || !revision(item.revision)) invalid("模板分页范围不符合契约");
+    if (!revision(item.revision)) invalid("模板分页范围不符合契约");
     checkRef(item.ref,id);
     if (kind === "list") { checkLifecycle(item.lifecycle); checkActions(item.actions); if (!validId(item.revision_id) || item.provenance !== "declared" || !Array.isArray(item.actions)) invalid("模板列表范围不符合契约"); }
     else if (kind === "history" && !validId(item.revision_id)) invalid("模板历史范围不符合契约");
@@ -46,23 +44,11 @@ export function templateReader() {
   function pump() { while (!closed && active<2 && pending.length) { const job=pending.shift(); if(job.controller.signal.aborted){job.reject(new DOMException("读取已取消","AbortError"));continue;} active++;job.execute().then(job.resolve,job.reject).finally(()=>{active--;pump();}); } }
   function read(channel,method,path,body,options={}) {
     channels.get(channel)?.abort();const controller=new AbortController();channels.set(channel,controller);
-    return new Promise((resolve,reject)=>{pending.push({controller,resolve,reject,execute:()=>orgRequest(method,path,body,{...options,signal:controller.signal})});pump();});
+    return new Promise((resolve,reject)=>{pending.push({controller,resolve,reject,execute:()=>request(method,path,body,{...options,signal:controller.signal})});pump();});
   }
   function cancel(channel) { channels.get(channel)?.abort(); }
   function stop(){closed=true;for(const controller of channels.values())controller.abort();for(const job of pending.splice(0))job.reject(new DOMException("读取已取消","AbortError"));}
   return {read,cancel,stop,isStopped:()=>closed};
-}
-// A task grant is separate from library authority and contains only the current actor.
-export async function templateTaskAuthority(reader, taskId) {
-  if (!validId(taskId)) throw new ApiError(400,"invalid_input","任务 ID 无效");
-  const orgId=orgSession.get()?.orgId;
-  const identity=await reader.read("authority","GET","/org/current");
-  if(identity.data.org_id!==orgId || !validId(identity.data.user_id) || !["admin","technical","bidder","viewer"].includes(identity.data.role)) invalid("单位身份范围不符合契约");
-  const response=await reader.read("authority","GET",`/tasks/${taskId}/progress`),workflow=response.data.workflow;
-  if(workflow?.org_id!==orgId || workflow.task_id!==taskId || !["active","archived"].includes(workflow.state)) invalid("任务身份范围不符合契约");
-  const member=taskAccessGrant(response.data.access);
-  orgAccess.role=identity.data.role;orgAccess.userId=identity.data.user_id;
-  return {workflow,member,canPin:canEditTask({workflow,member})&&identity.data.role!=="viewer"};
 }
 export const reasonLabels={obsolete:"已过时",duplicate:"重复资源",unavailable:"无法供应",restored:"恢复使用",other:"其他"};
 
@@ -81,10 +67,10 @@ export function validTemplateData(value) {
 export const blankSections = () => SECTION_ORDER.map((section,index)=>({section,heading_style_id:"",table_style_id:"",columns:index<3?Object.keys(columnLabels).map(key=>({key,width_percent:"25"})):[]}));
 export function validSections(sections) {return Array.isArray(sections)&&sections.length===6&&sections.every((section,index)=>section.section===SECTION_ORDER[index]&&["heading_style_id","table_style_id"].every(key=>typeof section[key]==="string"&&section[key].trim()&&section[key].length<=200)&&Array.isArray(section.columns)&&(index<3?section.columns.length===4&&section.columns.every((col,i)=>col.key===Object.keys(columnLabels)[i]&&Number(col.width_percent)>0&&Number(col.width_percent)<=100)&&Math.abs(section.columns.reduce((sum,col)=>sum+Number(col.width_percent),0)-100)<1e-8:section.columns.length===0));}
 export function checkBinding(value,revisionId,templateHash,id=null){
- if(!value||value.org_id!==orgSession.get()?.orgId||value.template_revision_id!==revisionId||value.template_sha256!==templateHash||!validId(value.id)||id&&value.id!==id||!hashValid(value.binding_hash)||!hashValid(value.static_content_hash)||typeof value.current!=="boolean"||!validId(value.reviewed_by)||!Number.isFinite(Date.parse(value.reviewed_at))||typeof value.adapter_version!=="string"||!Array.isArray(value.sections)||value.sections.length!==6||value.sections.some((section,index)=>section.section!==SECTION_ORDER[index])||value.current&&!validSections(value.sections)||new TextEncoder().encode(JSON.stringify(value)).length>1024*1024)invalid("绑定范围不符合契约");return value;
+ if(!value||value.template_revision_id!==revisionId||value.template_sha256!==templateHash||!validId(value.id)||id&&value.id!==id||!hashValid(value.binding_hash)||!hashValid(value.static_content_hash)||typeof value.current!=="boolean"||!Number.isFinite(Date.parse(value.reviewed_at))||typeof value.adapter_version!=="string"||!Array.isArray(value.sections)||value.sections.length!==6||value.sections.some((section,index)=>section.section!==SECTION_ORDER[index])||value.current&&!validSections(value.sections)||new TextEncoder().encode(JSON.stringify(value)).length>1024*1024)invalid("绑定范围不符合契约");return value;
 }
 export function checkBindingPage(result,revisionId,templateHash){
- const {data,items}=result;if(data.org_id!==orgSession.get()?.orgId||data.returned!==items.length||items.length>100||typeof data.has_more!=="boolean"||data.has_more!==(data.next_cursor!==null)||data.next_cursor!==null&&(typeof data.next_cursor!=="string"||!data.next_cursor||data.next_cursor.length>2048)||!Number.isFinite(Date.parse(data.as_of))||new TextEncoder().encode(JSON.stringify(result)).length>256*1024)invalid("绑定分页范围不符合契约");items.forEach(value=>checkBinding(value,revisionId,templateHash));return result;
+ const {data,items}=result;if(data.returned!==items.length||items.length>100||typeof data.has_more!=="boolean"||data.has_more!==(data.next_cursor!==null)||data.next_cursor!==null&&(typeof data.next_cursor!=="string"||!data.next_cursor||data.next_cursor.length>2048)||!Number.isFinite(Date.parse(data.as_of))||new TextEncoder().encode(JSON.stringify(result)).length>256*1024)invalid("绑定分页范围不符合契约");items.forEach(value=>checkBinding(value,revisionId,templateHash));return result;
 }
 export function checkBindingPreview(value,revisionId,templateHash){
  if(!value||value.dry_run!==true||value.template_revision_id!==revisionId||value.template_sha256!==templateHash||!hashValid(value.static_content_hash)||typeof value.adapter_version!=="string"||!Array.isArray(value.anchors)||value.anchors.length>6||!Array.isArray(value.issues)||value.issues.length>100||new TextEncoder().encode(JSON.stringify(value)).length>1024*1024)invalid("绑定预览范围不符合契约");
@@ -97,7 +83,7 @@ export function templateUpload(data,file,expectedRevision=null){
 }
 
 export async function downloadTemplateOriginal(reader,revisionId,file){
- const context=orgSession.get();
+ const initialToken=session.get();
  const signed=await reader.read("original","GET",`/resources/templates/revisions/${revisionId}/download-link`);
  const url=signed.data.url,prefix=`/resources/templates/revisions/${revisionId}/download?`;
  if(typeof url!=="string"||!url.startsWith(prefix)||url.length>8192)invalid("原件下载范围不符合契约");
@@ -105,6 +91,6 @@ export async function downloadTemplateOriginal(reader,revisionId,file){
  if(blob.type!==file.media_type||blob.size!==file.size_bytes)invalid("原件类型或大小不符合契约");
  const digest=await crypto.subtle.digest("SHA-256",await blob.arrayBuffer());
  if(Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,"0")).join("")!==file.sha256)invalid("原件哈希不符合契约");
- if(reader.isStopped()||context?.orgId!==orgSession.get()?.orgId||context?.session!==orgSession.get()?.session)throw new DOMException("单位会话已改变","AbortError");
+ if(reader.isStopped?.()||initialToken!==session.get())throw new DOMException("会话已改变","AbortError");
  const objectUrl=URL.createObjectURL(blob);const anchor=document.createElement("a");anchor.href=objectUrl;anchor.download=file.name;anchor.click();setTimeout(()=>URL.revokeObjectURL(objectUrl),1000);
 }

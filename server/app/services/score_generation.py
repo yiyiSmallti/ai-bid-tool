@@ -84,7 +84,7 @@ HARD_STOPS = {
 
 
 async def resolve(session: AsyncSession, settings: Settings, job: Job | None = None):
-    """Resolve the tenant/catalog revision; tests replace this exact seam."""
+    """Resolve the local provider revision; tests replace this exact seam."""
 
     return await llm_providers.resolve_llm(session, settings, job=job)
 
@@ -92,7 +92,6 @@ async def resolve(session: AsyncSession, settings: Settings, job: Job | None = N
 def provider_options(llm, *, rubric: bool = False) -> dict:
     configured = getattr(llm, "settings", None)
     return {
-        "org_owned": bool(getattr(llm, "org_owned", False)),
         "request_options_sha256": drafts.digest(configured.request_options())
         if configured
         else None,
@@ -254,7 +253,7 @@ async def prepare(
         "model": model_identity(llm),
         "provider_options": provider_options(llm, rubric=True),
         "reasoning": reasoning,
-        "provider_source": "org" if getattr(llm, "org_owned", False) else "platform",
+        "provider_source": "local",
     }
     fields, library = await secret_library(session, fixed.task.id, settings)
     outbound = build_outbound(fixed.secret, fields, library)
@@ -311,7 +310,6 @@ async def preview_cost(session, fixed, llm, body, settings) -> dict:
 def rubric_input(manifest: dict, input_hash: str) -> dict:
     return RubricInput.model_validate(
         {
-            "org_id": manifest["org_id"],
             "task_id": manifest["task_id"],
             "extraction_job_id": manifest["extraction_job_id"],
             "document_id": manifest["document_id"],
@@ -336,9 +334,7 @@ async def _submit_rubric(
     cache_key = drafts.digest(
         {
             "kind": "score_rubric",
-            "org_id": str(actor.org_id),
             "task_id": str(task_id),
-            "actor_user_id": str(actor.user_id),
             "actor_token_id": str(actor.token_id) if actor.token_id else None,
             "actor_kind": actor.actor_kind,
             "input_hash": fixed.input_hash,
@@ -360,7 +356,6 @@ async def _submit_rubric(
                 {
                     "provider_config_id": getattr(llm, "provider_config_id", None),
                     "provider_source": fixed.manifest["provider_source"],
-                    "platform_model_id": fixed.manifest["model"].get("platform_model_id"),
                     "model_revision": fixed.manifest["model"].get("model_revision"),
                     "model": fixed.manifest["model"]["model"],
                     "reasoning": fixed.manifest["reasoning"],
@@ -412,7 +407,6 @@ async def _submit_rubric(
         assert llm is not None
         job = Job(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task_id,
             document_id=fixed.document.id,
             kind="score_rubric",
@@ -428,7 +422,6 @@ async def _submit_rubric(
                     "encrypted_input": Secrets.for_data(settings).encrypt(
                         json.dumps(safe_input(fixed), ensure_ascii=False)
                     ),
-                    "actor_user_id": str(actor.user_id),
                     "actor_token_id": str(actor.token_id) if actor.token_id else None,
                     "actor_kind": actor.actor_kind,
                     "scopes": sorted(actor.scopes),
@@ -502,12 +495,9 @@ async def submit_rubric(
 def worker(job: Job) -> Identity:
     submission = job.result["submission"]
     return Identity(
-        UUID(submission["actor_user_id"]),
-        job.org_id,
-        set(submission["scopes"]),
-        "viewer",
-        UUID(submission["actor_token_id"]) if submission["actor_token_id"] else None,
-        "worker",
+        scopes=set(submission["scopes"]),
+        token_id=UUID(submission["actor_token_id"]) if submission["actor_token_id"] else None,
+        actor_kind="worker",
     )
 
 
@@ -857,17 +847,11 @@ async def usage_integrity(
             usage.input_tokens,
             usage.output_tokens,
             usage.provider_config_id,
-            usage.platform_model_id,
         )
 
     for usage in usages:
         call_id = usage.call_id
-        if (
-            usage.org_id != job.org_id
-            or usage.task_id != job.task_id
-            or call_id is None
-            or call_id != usage.id
-        ):
+        if usage.task_id != job.task_id or call_id is None or call_id != usage.id:
             cards.fail(
                 f"{kind}_usage_integrity",
                 "Score capability usage call identity is invalid",
@@ -938,7 +922,6 @@ async def publish(
     await session.flush()
     rubric = ScoreRubricSet(
         id=uuid4(),
-        org_id=job.org_id,
         task_id=job.task_id,
         job_id=job.id,
         run_id=job.run_id,
@@ -957,7 +940,6 @@ async def publish(
         overall_score_range=accepted["overall_score_range"],
         overall_cap=accepted["overall_cap"],
         normalization_errors=accepted["normalization_errors"],
-        actor_user_id=actor.user_id,
         actor_token_id=actor.token_id,
         actor_kind="worker",
     )
@@ -967,7 +949,6 @@ async def publish(
     for candidate in accepted["sections"]:
         section = ScoreRubricSection(
             id=uuid4(),
-            org_id=job.org_id,
             task_id=job.task_id,
             rubric_id=rubric.id,
             requirement_id=UUID(candidate["requirement_id"]),
@@ -994,7 +975,6 @@ async def publish(
         session.add(
             ScoreRubricItem(
                 id=uuid4(),
-                org_id=job.org_id,
                 task_id=job.task_id,
                 rubric_id=rubric.id,
                 section_id=section.id,
@@ -1020,7 +1000,6 @@ async def publish(
         session.add(
             ScoreRubricCoverage(
                 id=uuid4(),
-                org_id=job.org_id,
                 task_id=job.task_id,
                 rubric_id=rubric.id,
                 requirement_id=requirement.id,

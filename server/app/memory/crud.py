@@ -1,4 +1,4 @@
-"""Append-only organization memory with explicit human approval."""
+"""Append-only library memory with explicit human approval."""
 
 import hashlib
 from datetime import UTC, datetime
@@ -10,9 +10,9 @@ from app.core.errors import ServiceError, not_found
 from app.memory.access import (
     access,
     digest,
-    human_admin,
+    human,
+    library_target,
     normalize,
-    org_target,
     page_cursor,
     read_cursor,
     writable,
@@ -43,13 +43,12 @@ def expiry(value):
 
 
 def target(memory):
-    return MemoryTarget(scope=memory.scope, user_id=memory.user_id, task_id=memory.task_id)
+    return MemoryTarget(scope=memory.scope, task_id=memory.task_id)
 
 
 def revision_view(memory, revision, source=None):
     return MemoryRevisionView(
         id=revision.id,
-        org_id=revision.org_id,
         memory_id=memory.id,
         revision=revision.revision,
         target=target(memory),
@@ -58,9 +57,7 @@ def revision_view(memory, revision, source=None):
         source=source or MemorySourceView.model_validate(revision.source),
         content_sha256=revision.content_sha256,
         created_at=revision.created_at,
-        created_by=revision.created_by,
         actor_kind=revision.actor_kind,
-        confirmed_by=revision.confirmed_by,
         confirmed_at=revision.confirmed_at,
         decision=revision.decision,
         decision_reason_sha256=revision.decision_reason_sha256,
@@ -73,12 +70,11 @@ def memory_view(memory, revision, source=None, *, as_of=None):
     if (
         state == "active"
         and revision.expires_at is not None
-        and revision.expires_at <= (as_of or datetime.now(UTC))
+        and (revision.expires_at <= (as_of or datetime.now(UTC)))
     ):
         state = "expired"
     return MemoryView(
         id=memory.id,
-        org_id=memory.org_id,
         current=revision_view(memory, revision, source),
         effective_status=state,
         deleted_at=memory.deleted_at,
@@ -86,22 +82,11 @@ def memory_view(memory, revision, source=None, *, as_of=None):
 
 
 async def visible_sources(session, actor, revisions):
-    """Org memory remains shared while inaccessible task provenance stays private."""
-    from app.models.team_workflow import TaskMember, TaskWorkflow
-
+    """Only callers with task read scope see task provenance."""
     task_ids = {UUID(row.source["task_id"]) for row in revisions if row.source.get("task_id")}
     visible = set()
     if task_ids and "task:read" in actor.scopes:
-        query = select(TaskWorkflow.task_id).where(
-            TaskWorkflow.org_id == actor.org_id, TaskWorkflow.task_id.in_(task_ids)
-        )
-        if not (actor.actor_kind == "session" and actor.token_id is None and actor.role == "admin"):
-            query = query.join(
-                TaskMember,
-                (TaskMember.org_id == TaskWorkflow.org_id)
-                & (TaskMember.task_id == TaskWorkflow.task_id),
-            ).where(TaskMember.user_id == actor.user_id, TaskMember.active.is_(True))
-        visible = set(await session.scalars(query))
+        visible = set(await session.scalars(select(Task.id).where(Task.id.in_(task_ids))))
     return {
         row.id: MemorySourceView(origin=row.source["origin"], provenance_redacted=True)
         if row.source.get("task_id") and UUID(row.source["task_id"]) not in visible
@@ -124,9 +109,12 @@ async def result(session, actor, command, memory, revision):
 def audit(session, actor, action, memory, revision, before=None):
     session.add(
         AuditLog(
-            org_id=actor.org_id,
-            actor_user_id=actor.user_id,
+            actor_kind=actor.actor_kind,
             actor_token_id=actor.token_id,
+            agent_principal_id=actor.principal_id,
+            agent_session_id=actor.session_id,
+            agent_step_id=actor.step_id,
+            invocation_id=actor.invocation_id,
             action=f"memory.{action}",
             object_id=memory.id,
             details={
@@ -144,21 +132,19 @@ def audit(session, actor, action, memory, revision, before=None):
 
 async def load(session, actor, identifier, *, lock=False, deleted=False):
     actor = await access(session, actor, "memory:read")
-    query = select(Memory).where(Memory.org_id == actor.org_id, Memory.id == identifier)
+    query = select(Memory).where(Memory.id == identifier)
     if lock:
         query = query.with_for_update()
     memory = await session.scalar(query)
-    if memory is None or (memory.deleted_at is not None and not deleted):
+    if memory is None or (memory.deleted_at is not None and (not deleted)):
         raise not_found()
-    org_target(target(memory))
+    library_target(target(memory))
     revision = await session.scalar(
-        select(MemoryRevision).where(
-            MemoryRevision.org_id == actor.org_id, MemoryRevision.id == memory.current_revision_id
-        )
+        select(MemoryRevision).where(MemoryRevision.id == memory.current_revision_id)
     )
     if revision is None:
         raise not_found()
-    return memory, revision
+    return (memory, revision)
 
 
 async def check_source(session, actor, source):
@@ -167,26 +153,18 @@ async def check_source(session, actor, source):
     from app.services.task_access import access as task_access
 
     await task_access(session, actor, source.task_id)
-    if (
-        await session.scalar(
-            select(Task.id).where(Task.id == source.task_id, Task.org_id == actor.org_id)
-        )
-        is None
-    ):
+    if await session.scalar(select(Task.id).where(Task.id == source.task_id)) is None:
         raise not_found()
     if source.card_id is not None:
         actor.require("card:read")
         card = await session.scalar(
             select(ResponseCard).where(
-                ResponseCard.id == source.card_id,
-                ResponseCard.org_id == actor.org_id,
-                ResponseCard.task_id == source.task_id,
+                ResponseCard.id == source.card_id, ResponseCard.task_id == source.task_id
             )
         )
         revision = await session.scalar(
             select(ResponseCardRevision.id).where(
                 ResponseCardRevision.id == source.card_revision_id,
-                ResponseCardRevision.org_id == actor.org_id,
                 ResponseCardRevision.card_id == source.card_id,
             )
         )
@@ -208,7 +186,6 @@ def new_revision(
     approved = decision == "approve"
     return MemoryRevision(
         id=uuid4(),
-        org_id=actor.org_id,
         memory_id=memory.id,
         revision=memory.revision,
         normalized_text=normalize(content.text),
@@ -217,10 +194,8 @@ def new_revision(
         source=source.model_dump(mode="json"),
         status=status,
         content_sha256=digest(content.model_dump(mode="json")),
-        created_by=actor.user_id,
         actor_kind=actor.actor_kind,
         actor_token_id=actor.token_id,
-        confirmed_by=actor.user_id if approved else None,
         confirmed_at=datetime.now(UTC) if approved else None,
         decision=decision,
         decision_reason_sha256=hashlib.sha256(reason.encode()).hexdigest() if reason else None,
@@ -236,16 +211,14 @@ def new_revision(
 
 async def create_memory(session, actor, body, settings):
     actor = await access(session, actor, "memory:write")
-    org_target(body.target)
+    library_target(body.target)
     expiry(body.expires_at)
     await reject_sensitive(
         session, actor, [body.content.text, body.content.conflict_key, *body.content.tags], settings
     )
     await check_source(session, actor, body.source)
-    source = MemorySourceView(origin="human", **(body.source.model_dump() if body.source else {}))
-    memory = Memory(
-        id=uuid4(), org_id=actor.org_id, scope="org", revision=1, current_revision_id=uuid4()
-    )
+    source = MemorySourceView(origin="human", **body.source.model_dump() if body.source else {})
+    memory = Memory(id=uuid4(), scope="library", revision=1, current_revision_id=uuid4())
     revision = new_revision(memory, actor, body.content, source, expires_at=body.expires_at)
     memory.current_revision_id = revision.id
     session.add(memory)
@@ -257,7 +230,7 @@ async def create_memory(session, actor, body, settings):
 
 
 async def show_memory(session, actor, identifier):
-    return await result(session, actor, "memory show", *(await load(session, actor, identifier)))
+    return await result(session, actor, "memory show", *await load(session, actor, identifier))
 
 
 async def append(
@@ -304,15 +277,11 @@ async def update_memory(session, actor, identifier, body, settings):
     memory, previous = await load(session, actor, identifier, lock=True)
     expected(memory, body.expected_revision)
     actor = await access(session, actor, "memory:write")
-    writable(actor, previous.created_by, previous.actor_token_id, previous.status)
-    if actor.role != "admin" or actor.actor_kind != "session":
+    writable(actor, previous.actor_token_id, previous.status)
+    if actor.actor_kind != "session" or actor.token_id is not None:
         was_active = await session.scalar(
             select(MemoryRevision.id)
-            .where(
-                MemoryRevision.memory_id == memory.id,
-                MemoryRevision.org_id == actor.org_id,
-                MemoryRevision.status == "active",
-            )
+            .where(MemoryRevision.memory_id == memory.id, MemoryRevision.status == "active")
             .limit(1)
         )
         if was_active is not None:
@@ -329,7 +298,7 @@ async def update_memory(session, actor, identifier, body, settings):
 
 async def decide_memory(session, actor, identifier, body, settings):
     actor = await access(session, actor, "memory:approve")
-    human_admin(actor, "memory:approve")
+    human(actor, "memory:approve")
     memory, previous = await load(session, actor, identifier, lock=True)
     expected(memory, body.expected_revision)
     if previous.status != "candidate":
@@ -337,23 +306,15 @@ async def decide_memory(session, actor, identifier, body, settings):
     await reject_sensitive(session, actor, [body.reason], settings)
     if body.action == "approve":
         expiry(previous.expires_at)
-        # Serialize approvals at scope level before checking effective conflicts.
         await session.scalar(
-            select(MemoryScopeEpoch)
-            .where(
-                MemoryScopeEpoch.org_id == actor.org_id,
-                MemoryScopeEpoch.scope == "org",
-                MemoryScopeEpoch.owner_id == actor.org_id,
-            )
-            .with_for_update()
+            select(MemoryScopeEpoch).where(MemoryScopeEpoch.scope == "library").with_for_update()
         )
         rows = (
             await session.execute(
                 select(Memory, MemoryRevision)
                 .join(MemoryRevision, Memory.current_revision_id == MemoryRevision.id)
                 .where(
-                    Memory.org_id == actor.org_id,
-                    Memory.scope == "org",
+                    Memory.scope == "library",
                     Memory.deleted_at.is_(None),
                     Memory.id != memory.id,
                     MemoryRevision.status == "active",
@@ -386,7 +347,7 @@ async def decide_memory(session, actor, identifier, body, settings):
 
 async def manage(session, actor, identifier, body, settings, deleting=False):
     actor = await access(session, actor, "memory:manage")
-    human_admin(actor, "memory:manage")
+    human(actor, "memory:manage")
     memory, previous = await load(session, actor, identifier, lock=True)
     expected(memory, body.expected_revision)
     await reject_sensitive(session, actor, [body.reason], settings)
@@ -417,15 +378,15 @@ async def delete_memory(session, actor, identifier, body, settings):
 
 async def list_memories(session, actor, body, settings):
     actor = await access(session, actor, "memory:read")
-    org_target(body.target)
+    library_target(body.target)
     if body.include_deleted:
-        human_admin(actor, "memory:manage")
+        human(actor, "memory:manage")
     filters = body.model_dump(mode="json", exclude={"cursor", "limit"})
     anchor = read_cursor(settings, actor, filters, body.cursor)
     query = (
         select(Memory, MemoryRevision)
         .join(MemoryRevision, Memory.current_revision_id == MemoryRevision.id)
-        .where(Memory.org_id == actor.org_id, Memory.scope == "org")
+        .where(Memory.scope == "library")
     )
     if not body.include_deleted:
         query = query.where(Memory.deleted_at.is_(None))
@@ -463,12 +424,10 @@ async def list_memories(session, actor, body, settings):
 async def history(session, actor, identifier, settings, *, cursor=None, limit=50):
     memory, _ = await load(session, actor, identifier, deleted=True)
     if memory.deleted_at is not None:
-        human_admin(await access(session, actor, "memory:manage"), "memory:manage")
+        human(await access(session, actor, "memory:manage"), "memory:manage")
     filters = {"history": str(identifier)}
     anchor = read_cursor(settings, actor, filters, cursor)
-    query = select(MemoryRevision).where(
-        MemoryRevision.org_id == actor.org_id, MemoryRevision.memory_id == identifier
-    )
+    query = select(MemoryRevision).where(MemoryRevision.memory_id == identifier)
     if anchor:
         query = query.where(
             or_(
@@ -514,8 +473,7 @@ async def create_system_candidate(
     )
     memory = Memory(
         id=uuid4(),
-        org_id=actor.org_id,
-        scope="org",
+        scope="library",
         revision=1,
         current_revision_id=uuid4(),
         source_feedback_event_id=event.id,

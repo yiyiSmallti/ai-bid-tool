@@ -68,8 +68,8 @@ def safe_result(body: dict, command: str) -> dict:
                 "trust_anchor_limit": "Certificate exceeds the upload limit",
                 "trust_anchor_capacity": "Trust anchor store has reached its retention limit",
                 "not_found": "Trust anchor is not accessible",
-                "forbidden": "Platform operator authorization required",
-                "invalid_session": "Platform login required",
+                "forbidden": "A human session is required",
+                "invalid_session": "Installation access key required",
                 "trust_store_unavailable": "Trust store is unavailable; retry later",
             }
             value.data = {
@@ -104,9 +104,7 @@ def perform(action: str, method: str, path: str, json_output: bool, **kwargs):
     from bid_cli.main import call, emit
 
     command = "platform trust-anchor " + action
-    body = safe_result(
-        call(method, "/platform/trust-anchors" + path, platform=True, **kwargs), command
-    )
+    body = safe_result(call(method, "/platform/trust-anchors" + path, **kwargs), command)
     emit(body, command, json_output, 0 if body["ok"] else body["data"]["error"]["exit_code"])
 
 

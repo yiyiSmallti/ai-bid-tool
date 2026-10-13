@@ -1,10 +1,10 @@
-"""PostgreSQL semantic-publication gates on existing two-tenant fixtures.
+"""PostgreSQL semantic-publication gates on single-user fixtures.
 
 Failure inventory before implementation: forged complete coverage, inconsistent public
 status/outcome/reason, risk without findings, unknown with findings, unsupported
-no-risk/contradiction, dual or absent citation target, cross-report/tenant/task target,
+no-risk/contradiction, dual or absent citation target, cross-report/task target,
 changed source locations, ambiguous/nonexact tender spans, and late/immutable rows.
-Existing test_check_storage retains attempt, parent, RLS and deterministic gates.
+Existing test_check_storage retains attempt, parent and deterministic gates.
 """
 
 from typing import Any
@@ -15,17 +15,10 @@ from app.models.check import CheckFinding, CheckFindingCitation, CheckItem
 from app.models.response_cards import ResponseItem
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
-from test_check_storage import (
-    TABLES,
-    pending_report,
-)
-from test_check_storage import (
-    check_db as check_db,  # noqa: F401
-)
-from test_check_storage import (
-    check_seeded as check_seeded,  # noqa: F401
-)
-from test_rls import seeded as seeded  # noqa: F401
+from test_check_storage import TABLES, pending_report
+from test_check_storage import check_db as check_db
+from test_check_storage import check_seeded as check_seeded
+from test_response_card_db import seeded as seeded
 
 
 async def semantic_report(
@@ -58,9 +51,6 @@ async def semantic_report(
     job.result = {
         "submission": {**job.result["submission"], "input_manifest": report.input_manifest}
     }
-    # pending_report already inserted the rules submission. With no ORM relationship,
-    # one flush can INSERT CheckRun before UPDATE Job; its trigger must see the fixed
-    # combined submission first, just as a real worker sees a previously submitted job.
     await session.flush([job])
     report.summary = {
         "item_count": 1,
@@ -74,7 +64,7 @@ async def semantic_report(
     await session.flush()
     remapped = {}
     item = None
-    original_id = data["checks"][data["orgs"][0]]["run"]
+    original_id = data["checks"]["run"]
     for name in TABLES[1:-1]:
         table = Base.metadata.tables[name]
         old = dict(
@@ -103,7 +93,6 @@ async def semantic_report(
     if finding:
         semantic = CheckFinding(
             id=uuid4(),
-            org_id=report.org_id,
             task_id=report.task_id,
             report_id=report.id,
             check_item_id=item.id,
@@ -121,10 +110,9 @@ async def semantic_report(
     response = await session.get(ResponseItem, item.response_item_id)
     for kind in support:
         values: dict[str, Any] = dict(
-            org_id=report.org_id, task_id=report.task_id, report_id=report.id, kind=kind, **target
+            task_id=report.task_id, report_id=report.id, kind=kind, **target
         )
         if kind == "tender":
-            # Semantic spans need not repeat the complete requirement quote.
             quote = item.source["quote"][:-1]
             values.update(
                 quote=quote,
@@ -144,18 +132,17 @@ async def semantic_report(
             citation_change(values, item, remapped)
         session.add(CheckFindingCitation(**values))
     await session.flush()
-    return report, item
+    return (report, item)
 
 
 @pytest.mark.parametrize("outcome,finding", [("no_risk_found", False), ("risk", True)])
 async def test_semantic_supported_result_persists(check_seeded, check_db, outcome, finding):
-    org = check_seeded["orgs"][0]
-    async with check_db.transaction(org) as session:
+    async with check_db.transaction() as session:
         report, item = await semantic_report(
             session, check_seeded, outcome=outcome, finding=finding
         )
-        report_id, item_id = report.id, item.id
-    async with check_db.transaction(org) as session:
+        report_id, item_id = (report.id, item.id)
+    async with check_db.transaction() as session:
         stored = await session.get(CheckItem, item_id)
         assert stored.semantic_outcome == outcome
         citations = (
@@ -167,30 +154,13 @@ async def test_semantic_supported_result_persists(check_seeded, check_db, outcom
             )
         ).all()
         assert len(citations) == (0 if finding else 2)
-    async with check_db.transaction() as session:
-        assert not (
-            await session.scalars(
-                select(CheckFindingCitation).where(
-                    CheckFindingCitation.report_id == report_id,
-                )
-            )
-        ).all()
-    async with check_db.transaction(check_seeded["orgs"][1]) as session:
-        assert await session.get(CheckItem, item_id) is None
-        assert not (
-            await session.scalars(
-                select(CheckFindingCitation).where(
-                    CheckFindingCitation.report_id == report_id,
-                )
-            )
-        ).all()
 
 
 @pytest.mark.parametrize(
     "outcome,reason", [("unknown", "semantic_unknown"), (None, "quote_not_at_position")]
 )
 async def test_semantic_unknown_and_rejection_are_partial(check_seeded, check_db, outcome, reason):
-    async with check_db.transaction(check_seeded["orgs"][0]) as session:
+    async with check_db.transaction() as session:
         report, _ = await semantic_report(
             session, check_seeded, outcome=outcome, status="unassessed", reason=reason, support=()
         )
@@ -231,7 +201,7 @@ async def test_semantic_unknown_and_rejection_are_partial(check_seeded, check_db
 )
 async def test_semantic_inconsistent_publication_rejected(check_seeded, check_db, options):
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(check_seeded["orgs"][0]) as session:
+        async with check_db.transaction() as session:
             await semantic_report(session, check_seeded, **options)
     assert error.value.orig.sqlstate == "23514"
     assert "Invalid check publication attempt or input" not in str(error.value.orig)
@@ -242,24 +212,25 @@ async def test_semantic_inconsistent_publication_rejected(check_seeded, check_db
     ["both", "neither", "foreign_item", "other_report", "other_task", "wrong_location", "invented"],
 )
 async def test_semantic_citation_target_and_source_gates(check_seeded, check_db, mutation):
+
     def change(values, item, remapped):
         if mutation == "both":
-            values["finding_id"] = remapped[check_seeded["checks"][item.org_id]["finding"]]
+            values["finding_id"] = remapped[check_seeded["checks"]["finding"]]
         elif mutation == "neither":
             values["check_item_id"] = None
         elif mutation == "foreign_item":
-            values["check_item_id"] = check_seeded["checks"][check_seeded["orgs"][1]]["item"]
+            values["check_item_id"] = uuid4()
         elif mutation == "other_report":
-            values["check_item_id"] = check_seeded["checks"][item.org_id]["item"]
+            values["check_item_id"] = check_seeded["checks"]["item"]
         elif mutation == "other_task":
-            values["task_id"] = check_seeded["ids"][check_seeded["orgs"][1]]["task"]
+            values["task_id"] = uuid4()
         elif mutation == "wrong_location" and values["kind"] == "tender":
             values["source"] = {**values["source"], "page": 900}
         elif mutation == "invented":
             values["quote"] = "invented semantic quote"
 
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(check_seeded["orgs"][0]) as session:
+        async with check_db.transaction() as session:
             await semantic_report(session, check_seeded, citation_change=change)
     assert error.value.orig.sqlstate in {"23514", "23503"}
     assert "Invalid check publication attempt or input" not in str(error.value.orig)
@@ -267,7 +238,7 @@ async def test_semantic_citation_target_and_source_gates(check_seeded, check_db,
 
 async def test_semantic_publication_stays_immutable(check_seeded, check_db):
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(check_seeded["orgs"][0]) as session:
+        async with check_db.transaction() as session:
             report, _ = await semantic_report(
                 session,
                 check_seeded,
@@ -276,7 +247,6 @@ async def test_semantic_publication_stays_immutable(check_seeded, check_db):
                 reason="semantic_unknown",
                 support=(),
             )
-            # The immutable report cannot be repaired after insertion either.
             await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
             report.completion = "complete"
     assert error.value.orig.sqlstate == "42501"
@@ -284,7 +254,7 @@ async def test_semantic_publication_stays_immutable(check_seeded, check_db):
 
 async def test_semantic_summary_cannot_hide_unknown(check_seeded, check_db):
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(check_seeded["orgs"][0]) as session:
+        async with check_db.transaction() as session:
             await semantic_report(
                 session,
                 check_seeded,
@@ -308,6 +278,6 @@ async def test_semantic_summary_cannot_hide_unknown(check_seeded, check_db):
 )
 async def test_semantic_prompt_and_redaction_are_fixed(check_seeded, check_db, manifest_change):
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(check_seeded["orgs"][0]) as session:
+        async with check_db.transaction() as session:
             await semantic_report(session, check_seeded, manifest_change=manifest_change)
     assert error.value.orig.sqlstate == "23514"

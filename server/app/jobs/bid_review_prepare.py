@@ -45,9 +45,8 @@ async def staged_put(
     # A put receipt is not proof of business commit. These safe identities allow
     # reconciliation to retain encrypted orphans after ambiguous DB outcomes.
     logger.info(
-        "bid_review.object_staged org_id=%s submission_id=%s preparation_id=%s "
+        "bid_review.object_staged submission_id=%s preparation_id=%s "
         "job_id=%s run_id=%s object_id=%s document_id=%s page=%s sha256=%s",
-        execution.org_id,
         submission_id,
         preparation_id,
         execution.job_id,
@@ -57,7 +56,7 @@ async def staged_put(
         page,
         digest,
     )
-    await storage.put(execution.org_id, key, content)
+    await storage.put(key, content)
 
 
 def changed() -> ServiceError:
@@ -67,7 +66,7 @@ def changed() -> ServiceError:
 
 
 async def snapshot(session, job, settings):
-    """Resolve every parent through org/task/submission, never unrestricted Document rows."""
+    """Resolve every parent through task/submission, never unrestricted Document rows."""
     from app.services.bid_review import build_manifest
 
     try:
@@ -80,7 +79,6 @@ async def snapshot(session, job, settings):
         raise changed() from exc
     root = await session.scalar(
         select(BidSubmission).where(
-            BidSubmission.org_id == job.org_id,
             BidSubmission.task_id == job.task_id,
             BidSubmission.id == submission_id,
             BidSubmission.state == "uploaded",
@@ -88,18 +86,15 @@ async def snapshot(session, job, settings):
     )
     preparation = await session.scalar(
         select(BidPreparation).where(
-            BidPreparation.org_id == job.org_id,
             BidPreparation.task_id == job.task_id,
             BidPreparation.submission_id == submission_id,
             BidPreparation.id == preparation_id,
             BidPreparation.job_id == job.id,
             BidPreparation.input_hash == input_hash,
-            BidPreparation.created_by == job.actor_user_id,
         )
     )
     trust = await session.scalar(
         select(BidPreparationTrust).where(
-            BidPreparationTrust.org_id == job.org_id,
             BidPreparationTrust.task_id == job.task_id,
             BidPreparationTrust.submission_id == submission_id,
             BidPreparationTrust.preparation_id == preparation_id,
@@ -110,7 +105,6 @@ async def snapshot(session, job, settings):
             await session.scalars(
                 select(BidSubmissionDocument)
                 .where(
-                    BidSubmissionDocument.org_id == job.org_id,
                     BidSubmissionDocument.task_id == job.task_id,
                     BidSubmissionDocument.submission_id == submission_id,
                 )
@@ -132,7 +126,6 @@ async def snapshot(session, job, settings):
         raise changed()
     if await session.scalar(
         select(BidPreparationPublication.id).where(
-            BidPreparationPublication.org_id == job.org_id,
             BidPreparationPublication.submission_id == submission_id,
         )
     ):
@@ -211,7 +204,7 @@ async def process(execution: JobExecution, storage, converter) -> None:
 
 
 async def prepare(execution: JobExecution, storage, converter) -> None:
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         actor = await local.worker_access(session, job)
         root, preparation, documents, trust = await snapshot(session, job, execution.settings)
@@ -243,9 +236,7 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
     page_total = 0
     for original in originals:
         await execution.heartbeat()
-        content = await storage.read_bounded(
-            execution.org_id, original["storage_key"], original["size_bytes"]
-        )
+        content = await storage.read_bounded(original["storage_key"], original["size_bytes"])
         if (
             len(content) != original["size_bytes"]
             or hashlib.sha256(content).hexdigest() != original["sha256"]
@@ -275,7 +266,6 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
         validations.append(
             BidPDFValidation(
                 id=validation_id,
-                org_id=execution.org_id,
                 task_id=task_id,
                 submission_id=submission_id,
                 preparation_id=preparation_id,
@@ -283,9 +273,7 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
                 original_sha256=original["sha256"],
                 validator_identity=validation["validator_version"],
                 trust_store_sha256=trust_hash,
-                details_encrypted=local.seal(
-                    execution.settings, execution.org_id, validation_id, validation
-                ),
+                details_encrypted=local.seal(execution.settings, validation_id, validation),
             )
         )
         structure = None
@@ -316,7 +304,7 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
             original["storage_key"]
             if not word
             else (
-                f"org/{execution.org_id}/bid-review/{submission_id}/preparations/{preparation_id}"
+                f"bid-review/{submission_id}/preparations/{preparation_id}"
                 f"/documents/{original['id']}/{rendered_hash}.pdf"
             )
         )
@@ -345,7 +333,7 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
                 height_px=page["height"],
             ).model_dump(mode="json")
             key = (
-                f"org/{execution.org_id}/bid-review/{submission_id}/preparations/{preparation_id}"
+                f"bid-review/{submission_id}/preparations/{preparation_id}"
                 f"/pages/{original['id']}/{number}/{descriptor['sha256']}.png"
             )
             identifier = uuid4()
@@ -368,7 +356,6 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
             prepared_pages.append(
                 BidDocumentPage(
                     id=identifier,
-                    org_id=execution.org_id,
                     task_id=task_id,
                     submission_id=submission_id,
                     preparation_id=preparation_id,
@@ -386,9 +373,7 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
                     text_sha256=hashlib.sha256(native.encode()).hexdigest()
                     if native is not None
                     else None,
-                    text_encrypted=local.seal(
-                        execution.settings, execution.org_id, identifier, native
-                    )
+                    text_encrypted=local.seal(execution.settings, identifier, native)
                     if native is not None
                     else None,
                     price_page=True,
@@ -405,7 +390,6 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
                     candidates.append(
                         BidSigningCandidate(
                             id=candidate_id,
-                            org_id=execution.org_id,
                             task_id=task_id,
                             submission_id=submission_id,
                             preparation_id=preparation_id,
@@ -416,7 +400,7 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
                             candidate_kind="signing_clause",
                             applicability="unknown",
                             details_encrypted=local.seal(
-                                execution.settings, execution.org_id, candidate_id, candidate
+                                execution.settings, candidate_id, candidate
                             ),
                         )
                     )
@@ -432,7 +416,6 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
         for row, page in zip(document_pages, pages, strict=True):
             row.structure_encrypted = local.seal(
                 execution.settings,
-                execution.org_id,
                 row.id,
                 {
                     **page["structure"],
@@ -458,7 +441,6 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
         prepared_documents.append(
             BidPreparedDocument(
                 id=document_id,
-                org_id=execution.org_id,
                 task_id=task_id,
                 submission_id=submission_id,
                 preparation_id=preparation_id,
@@ -471,9 +453,7 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
                 citation_mode="block" if word else "page",
                 parsing_warnings=sorted(warnings),
                 signature_field_count=signatures,
-                structure_encrypted=local.seal(
-                    execution.settings, execution.org_id, document_id, structure
-                )
+                structure_encrypted=local.seal(execution.settings, document_id, structure)
                 if structure is not None
                 else None,
             )
@@ -481,7 +461,7 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
         page_total += len(pages)
     # No inventory rows exist until every file/render has succeeded. Encrypted
     # orphan objects are retained on ambiguous commits; never delete blindly.
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         actor = await local.worker_access(session, job)
         await snapshot(session, job, execution.settings)
@@ -495,7 +475,6 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
         await session.flush()
         publication = BidPreparationPublication(
             id=uuid4(),
-            org_id=execution.org_id,
             task_id=task_id,
             submission_id=submission_id,
             preparation_id=preparation_id,
@@ -503,7 +482,6 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
             run_id=execution.run_id,
             input_hash=input_hash,
             page_count=page_total,
-            published_by=actor.user_id,
         )
         session.add(publication)
         await session.flush()

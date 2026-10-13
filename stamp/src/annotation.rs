@@ -1,7 +1,7 @@
 use super::*;
 use serde_json::{json, Value};
 
-const PROTOCOL: &str = "annotation-render-v1";
+const PROTOCOL: &str = "annotation-render-v2";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -184,7 +184,7 @@ fn validate_source(source: &Value) -> Result<(), RendererError> {
         if certificate {
             "kind archive source_png page_kind source_time_kind source_time original_sha256 selection_id resource_revision_id authorized_content"
         } else {
-            "kind org_id task_id extraction_job_id asset_id parent_rendition_id archive page source_time_kind source_time original_sha256 source_png root_source_png_sha256 selection_id resource_revision_id authorized_content source_crop_mapping source_profile privacy_review_id privacy_lineage_sha256 root_mapping_sha256"
+            "kind task_id extraction_job_id asset_id parent_rendition_id archive page source_time_kind source_time original_sha256 source_png root_source_png_sha256 selection_id resource_revision_id authorized_content source_crop_mapping source_profile privacy_review_id privacy_lineage_sha256 root_mapping_sha256"
         },
     )?;
     descriptor(&source["source_png"], false)?;
@@ -206,16 +206,14 @@ fn validate_source(source: &Value) -> Result<(), RendererError> {
     }
     let archive = &source["archive"];
     if certificate {
-        keys(archive,"id org_id task_id task_certificate_id certificate_id certificate_revision_id certificate_file_id source_kind original page render_profile dpi preview rendered_at created_by active_selection status confirmed_by eligible_for_draft_export")?;
+        keys(archive,"id task_id task_certificate_id certificate_id certificate_revision_id certificate_file_id source_kind original page render_profile dpi preview rendered_at confirmed_at active_selection status eligible_for_draft_export")?;
         for key in [
             "id",
-            "org_id",
             "task_id",
             "task_certificate_id",
             "certificate_id",
             "certificate_revision_id",
             "certificate_file_id",
-            "created_by",
         ] {
             uuid(archive, key)?;
         }
@@ -240,7 +238,7 @@ fn validate_source(source: &Value) -> Result<(), RendererError> {
             || text(archive, "source_kind")? != "user_supplied_certificate_pdf"
             || text(archive, "render_profile")? != "pdf-page-preview-v1"
             || text(archive, "status")? != "unconfirmed_source"
-            || archive["confirmed_by"] != Value::Null
+            || archive["confirmed_at"] != Value::Null
             || archive["eligible_for_draft_export"] != false
             || authorized != bounds
         {
@@ -255,7 +253,6 @@ fn validate_source(source: &Value) -> Result<(), RendererError> {
         keys(archive,"id sandbox_run_id task_resource_id product_revision_id format source_field source_url_sha256 final_url_sha256 final_origin title captured_at content_sha256 archive policy_revision incomplete failed_request_count")?;
         keys(&archive["archive"], "sha256 size_bytes media_type")?;
         for key in [
-            "org_id",
             "task_id",
             "extraction_job_id",
             "asset_id",
@@ -313,12 +310,11 @@ fn validate_source(source: &Value) -> Result<(), RendererError> {
 }
 
 fn validate_approval(value: &Value) -> Result<(), RendererError> {
-    keys(value,"evidence_id card_id card_revision card_revision_id confirmed_by confirmed_at candidate_annotation_id candidate_rendition_id candidate_image_sha256 candidate_plan_sha256 candidate_content_mapping content_pixel_sha256 root_mapping_sha256 reviewed_region requirement decision_kind review_domain co_sign card_content_sha256 evidence_binding_sha256 approval_binding_sha256")?;
+    keys(value,"evidence_id card_id card_revision card_revision_id confirmed_at candidate_annotation_id candidate_rendition_id candidate_image_sha256 candidate_plan_sha256 candidate_content_mapping content_pixel_sha256 root_mapping_sha256 reviewed_region requirement card_content_sha256 evidence_binding_sha256 approval_binding_sha256")?;
     for key in [
         "evidence_id",
         "card_id",
         "card_revision_id",
-        "confirmed_by",
         "candidate_annotation_id",
         "candidate_rendition_id",
     ] {
@@ -360,94 +356,6 @@ fn validate_approval(value: &Value) -> Result<(), RendererError> {
     hash(req, "source_binding_sha256")?;
     if text(req, "state")? != "confirmed" || number(req, "review_revision")? == 0 {
         return Err(RendererError::invalid("requirement approval is incomplete"));
-    }
-    let domain = text(value, "review_domain")?;
-    if !["technical", "commercial"].contains(&domain) {
-        return Err(RendererError::invalid("review domain is invalid"));
-    }
-    let cosign = &value["co_sign"];
-    let single = text(value, "decision_kind")? == "single_domain";
-    if !single && text(value, "decision_kind")? != "cosign" {
-        return Err(RendererError::invalid("approval decision kind is invalid"));
-    }
-    if cosign.is_null() {
-        if !single {
-            return Err(RendererError::invalid("co-sign approval is incomplete"));
-        }
-    } else {
-        keys(cosign,"policy_revision task_rule_revision round_id round_revision purpose required_domains status evidence_sha256 requirement_sha256 citation_sha256 content_sha256 signatures")?;
-        number(cosign, "policy_revision")?;
-        if number(cosign, "task_rule_revision")? == 0 {
-            return Err(RendererError::invalid("task rule revision is invalid"));
-        }
-        let domains = cosign["required_domains"]
-            .as_array()
-            .ok_or_else(|| RendererError::invalid("co-sign domains are invalid"))?;
-        let signatures = cosign["signatures"]
-            .as_array()
-            .ok_or_else(|| RendererError::invalid("co-sign signatures are invalid"))?;
-        if domains.is_empty()
-            || domains.len() > 2
-            || !domains.iter().any(|v| v == domain)
-            || domains
-                .iter()
-                .any(|v| ![json!("technical"), json!("commercial")].contains(v))
-            || (domains.len() == 2 && domains[0] == domains[1])
-            || (single && domains != &vec![json!(domain)])
-        {
-            return Err(RendererError::invalid("co-sign domains are invalid"));
-        }
-        if cosign["round_id"].is_null() {
-            if !single
-                || number(cosign, "round_revision")? != 0
-                || text(cosign, "status")? != "not_required"
-                || !cosign["purpose"].is_null()
-                || !signatures.is_empty()
-            {
-                return Err(RendererError::invalid("historical approval is invalid"));
-            }
-        } else {
-            uuid(cosign, "round_id")?;
-            if number(cosign, "round_revision")? == 0
-                || text(cosign, "status")? != "complete"
-                || text(cosign, "purpose")? != "response"
-                || signatures.len() != domains.len()
-            {
-                return Err(RendererError::invalid("co-sign approval is incomplete"));
-            }
-            for key in [
-                "evidence_sha256",
-                "requirement_sha256",
-                "citation_sha256",
-                "content_sha256",
-            ] {
-                hash(cosign, key)?;
-            }
-            let mut ids = std::collections::BTreeSet::new();
-            let mut signers = std::collections::BTreeSet::new();
-            let mut signed_domains = std::collections::BTreeSet::new();
-            for signature in signatures {
-                keys(
-                    signature,
-                    "id domain signer_user_id request_sha256 reason_sha256",
-                )?;
-                uuid(signature, "id")?;
-                uuid(signature, "signer_user_id")?;
-                hash(signature, "request_sha256")?;
-                if !signature["reason_sha256"].is_null() {
-                    hash(signature, "reason_sha256")?;
-                }
-                if !ids.insert(text(signature, "id")?)
-                    || !signers.insert(text(signature, "signer_user_id")?)
-                    || !signed_domains.insert(text(signature, "domain")?)
-                    || !domains
-                        .iter()
-                        .any(|v| v == text(signature, "domain").unwrap_or(""))
-                {
-                    return Err(RendererError::invalid("co-sign identities are invalid"));
-                }
-            }
-        }
     }
     let mut binding = value.clone();
     binding
@@ -882,7 +790,7 @@ pub(super) fn test_request(content: &[u8], width: u32, height: u32) -> Value {
     let image = json!({"sha256":hex_sha256(content),"size_bytes":content.len(),"width_px":width,"height_px":height,"media_type":"image/png"});
     let mut preview = image.clone();
     preview["name"] = json!("page.png");
-    let source = json!({"kind":"certificate_page","archive":{"id":id,"org_id":id,"task_id":id,"task_certificate_id":id,"certificate_id":id,"certificate_revision_id":id,"certificate_file_id":id,"source_kind":"user_supplied_certificate_pdf","original":{"name":"certificate.pdf","sha256":"a".repeat(64),"size_bytes":100,"media_type":"application/pdf","page_count":1},"page":1,"render_profile":"pdf-page-preview-v1","dpi":150,"preview":preview,"rendered_at":timestamp,"created_by":id,"active_selection":true,"status":"unconfirmed_source","confirmed_by":null,"eligible_for_draft_export":false},"source_png":image,"page_kind":"pdf_page","source_time_kind":"server_page_rendered_at","source_time":timestamp,"original_sha256":"a".repeat(64),"selection_id":id,"resource_revision_id":id,"authorized_content":{"x":0,"y":0,"width":width,"height":height}});
+    let source = json!({"kind":"certificate_page","archive":{"id":id,"task_id":id,"task_certificate_id":id,"certificate_id":id,"certificate_revision_id":id,"certificate_file_id":id,"source_kind":"user_supplied_certificate_pdf","original":{"name":"certificate.pdf","sha256":"a".repeat(64),"size_bytes":100,"media_type":"application/pdf","page_count":1},"page":1,"render_profile":"pdf-page-preview-v1","dpi":150,"preview":preview,"rendered_at":timestamp,"active_selection":true,"status":"unconfirmed_source","confirmed_at":null,"eligible_for_draft_export":false},"source_png":image,"page_kind":"pdf_page","source_time_kind":"server_page_rendered_at","source_time":timestamp,"original_sha256":"a".repeat(64),"selection_id":id,"resource_revision_id":id,"authorized_content":{"x":0,"y":0,"width":width,"height":height}});
     let plan = json!({"crop":null,"boxes":[]});
     let mut value = json!({"protocol":PROTOCOL,"source":source,"plan":plan,"plan_sha256":canonical_sha256(&plan).unwrap(),"renderer":current_identity("annotation-candidate-v1").unwrap(),"content_mode":"source_png","input_content_sha256":hex_sha256(content),"provenance_sha256":"0".repeat(64),"approval":null});
     let request: Request = serde_json::from_value(value.clone()).unwrap();
@@ -896,7 +804,7 @@ pub(super) fn test_request(content: &[u8], width: u32, height: u32) -> Value {
 #[cfg(test)]
 pub(super) fn test_release(mut request: Value, receipt: &Value, content: &[u8]) -> Value {
     let id = "00000000-0000-4000-8000-000000000001";
-    let mut approval = json!({"evidence_id":id,"card_id":id,"card_revision":2,"card_revision_id":id,"confirmed_by":id,"confirmed_at":"2026-10-06T00:00:00Z","candidate_annotation_id":id,"candidate_rendition_id":id,"candidate_image_sha256":receipt["image"]["sha256"],"candidate_plan_sha256":request["plan_sha256"],"candidate_content_mapping":receipt["canvas"]["mapping"],"content_pixel_sha256":receipt["content_pixel_sha256"],"root_mapping_sha256":receipt["root_mapping_sha256"],"reviewed_region":{"x":0,"y":0,"width":1,"height":1},"requirement":{"requirement_id":id,"review_revision":1,"review_hash":"b".repeat(64),"state":"confirmed","source_binding_sha256":"c".repeat(64)},"decision_kind":"single_domain","review_domain":"commercial","co_sign":null,"card_content_sha256":"d".repeat(64),"evidence_binding_sha256":"e".repeat(64)});
+    let mut approval = json!({"evidence_id":id,"card_id":id,"card_revision":2,"card_revision_id":id,"confirmed_at":"2026-10-06T00:00:00Z","candidate_annotation_id":id,"candidate_rendition_id":id,"candidate_image_sha256":receipt["image"]["sha256"],"candidate_plan_sha256":request["plan_sha256"],"candidate_content_mapping":receipt["canvas"]["mapping"],"content_pixel_sha256":receipt["content_pixel_sha256"],"root_mapping_sha256":receipt["root_mapping_sha256"],"reviewed_region":{"x":0,"y":0,"width":1,"height":1},"requirement":{"requirement_id":id,"review_revision":1,"review_hash":"b".repeat(64),"state":"confirmed","source_binding_sha256":"c".repeat(64)},"card_content_sha256":"d".repeat(64),"evidence_binding_sha256":"e".repeat(64)});
     approval["approval_binding_sha256"] = json!(canonical_sha256(&approval).unwrap());
     request["approval"] = approval;
     request["renderer"] =

@@ -39,9 +39,9 @@ def photo(width=60, height=30, orientation=6) -> bytes:
             pixmap.set_pixel(x, y, (255, 0, 0))
     jpeg = pixmap.tobytes("jpg", jpg_quality=95)
     tiff = (
-        b"MM\x00\x2a\x00\x00\x00\x08"
+        b"MM\x00*\x00\x00\x00\x08"
         + struct.pack(">H", 1)
-        + struct.pack(">HHII", 0x0112, 3, 1, orientation << 16)
+        + struct.pack(">HHII", 274, 3, 1, orientation << 16)
         + b"\x00\x00\x00\x00"
     )
     exif = b"Exif\x00\x00" + tiff + MARKER
@@ -82,28 +82,24 @@ async def download(api, headers, revision_id):
 
 
 async def test_images_and_pdfs_compose_one_upright_metadata_free_original(
-    api, headers, application, tenants
+    api, headers, application, database
 ):
-    org_a = tenants["orgs"][0]
-    row, task = await setup(api, headers[0])
+    row, task = await setup(api, headers)
     uploads = [("营业执照正本.jpg", photo()), ("副本.pdf", pdf(2)), ("扫描件.png", png())]
     response = await upload_many(
-        api, headers[0], row, uploads, parts=[{"rotation": 0}, {"rotation": 0}, {"rotation": 90}]
+        api, headers, row, uploads, parts=[{"rotation": 0}, {"rotation": 0}, {"rotation": 90}]
     )
     assert response.status_code == 200, response.text
     scan = response.json()["data"]
     assert scan["file"]["page_count"] == 4 and scan["file"]["name"] == DATA["name"] + ".pdf"
-    assert [(p["ordinal"], p["page_start"], p["page_count"], p["media_type"]) for p in scan["parts"]] == [
-        (1, 1, 1, "image/jpeg"),
-        (2, 2, 2, "application/pdf"),
-        (3, 4, 1, "image/png"),
-    ]  # fmt: skip
-    original = await download(api, headers[0], scan["certificate_revision_id"])
+    assert [
+        (p["ordinal"], p["page_start"], p["page_count"], p["media_type"]) for p in scan["parts"]
+    ] == [(1, 1, 1, "image/jpeg"), (2, 2, 2, "application/pdf"), (3, 4, 1, "image/png")]
+    original = await download(api, headers, scan["certificate_revision_id"])
     assert hashlib.sha256(original).hexdigest() == scan["file"]["sha256"]
     assert MARKER not in original and b"Exif" not in original
     with pymupdf.open(stream=original, filetype="pdf") as composed:
         first = composed[0]
-        # EXIF orientation 6 turns the 60x30 photo upright: portrait, red on top.
         assert first.rect.height > first.rect.width and first.rotation == 0
         top = first.get_pixmap(clip=pymupdf.Rect(0, 0, first.rect.width, 20)).pixel(5, 5)
         assert top[0] > 200 and top[1] < 80
@@ -111,32 +107,27 @@ async def test_images_and_pdfs_compose_one_upright_metadata_free_original(
         assert composed[3].rotation == 90
     listed = await api.get(
         "/resources/certificates/files",
-        headers=headers[0],
+        headers=headers,
         params={"certificate_id": row["certificate_id"]},
     )
     assert [p["name"] for p in listed.json()["items"][0]["parts"]] == [n for n, _ in uploads]
-
-    # Each uploaded file is kept unchanged, encrypted, beside the composed original.
-    async with application.state.db.transaction(org_a) as session:
+    async with application.state.db.transaction() as session:
         stored = (
             await session.scalars(select(CertificateFilePart).order_by(CertificateFilePart.ordinal))
         ).all()
         for part, (_, content) in zip(stored, uploads, strict=True):
-            assert await application.state.storage.read(org_a, part.storage_key) == content
-    # The image page archives as evidence like any PDF page; its preview has no EXIF.
-    chosen = (await select_version(api, headers[0], row, task, revision=2)).json()["data"]
-    archived = await add(api, headers[0], task, chosen["id"], page=1)
+            assert await application.state.storage.read(part.storage_key) == content
+    chosen = (await select_version(api, headers, row, task, revision=2)).json()["data"]
+    archived = await add(api, headers, task, chosen["id"], page=1)
     assert archived.status_code == 200, archived.text
     preview_link = await api.get(
         f"/evidence-sources/{archived.json()['data']['source']['id']}/preview/download-link",
-        headers=headers[0],
+        headers=headers,
     )
-    preview = (await api.get(preview_link.json()["data"]["url"], headers=headers[0])).content
+    preview = (await api.get(preview_link.json()["data"]["url"], headers=headers)).content
     assert preview.startswith(b"\x89PNG") and MARKER not in preview
-
-    # A committed original never gains a part; parts stay in their org.
     with pytest.raises(DBAPIError) as error:
-        async with application.state.db.transaction(org_a) as session:
+        async with application.state.db.transaction() as session:
             source = stored[0]
             session.add(
                 CertificateFilePart(
@@ -149,18 +140,7 @@ async def test_images_and_pdfs_compose_one_upright_metadata_free_original(
                     storage_key=source.storage_key.rsplit("/", 1)[0] + f"/4-{source.sha256}",
                 )
             )
-    assert error.value.orig.sqlstate == "23514"  # pyright: ignore[reportAttributeAccessIssue]
-    async with application.state.db.transaction(tenants["orgs"][1]) as session:
-        assert (await session.scalars(select(CertificateFilePart))).all() == []
-    async with application.state.db.transaction() as session:
-        assert (await session.scalars(select(CertificateFilePart))).all() == []
-    other = await api.get(
-        "/resources/certificates/files",
-        headers=headers[1],
-        params={"revision_id": scan["certificate_revision_id"]},
-    )
-    assert other.status_code == 404
-
+    assert error.value.orig.sqlstate == "23514"
     artifact = Path("data/work/certificate-images")
     await asyncio.to_thread(artifact.mkdir, parents=True, exist_ok=True)
     (artifact / "synthetic-composed.pdf").write_bytes(original)
@@ -170,16 +150,16 @@ async def test_images_and_pdfs_compose_one_upright_metadata_free_original(
 
 
 async def test_single_pdf_is_still_stored_unchanged(api, headers):
-    row, _ = await setup(api, headers[0])
+    row, _ = await setup(api, headers)
     content = pdf(1)
-    scan = (await upload_many(api, headers[0], row, [("license.pdf", content)])).json()["data"]
+    scan = (await upload_many(api, headers, row, [("license.pdf", content)])).json()["data"]
     assert scan["parts"] == []
-    assert await download(api, headers[0], scan["certificate_revision_id"]) == content
+    assert await download(api, headers, scan["certificate_revision_id"]) == content
 
 
 @pytest.mark.parametrize("case", ["bomb", "gif", "disguised", "too_many", "options"])
 async def test_refused_uploads_store_nothing(case, api, headers, application, monkeypatch):
-    row, _ = await setup(api, headers[0])
+    row, _ = await setup(api, headers)
     calls = []
 
     async def forbidden(*args):
@@ -190,7 +170,7 @@ async def test_refused_uploads_store_nothing(case, api, headers, application, mo
     parts = None
     if case == "bomb":
         small = bytearray(png())
-        small[16:24] = struct.pack(">II", 100_000, 100_000)  # 10 gigapixels, header only
+        small[16:24] = struct.pack(">II", 100000, 100000)
         files = [("bomb.png", bytes(small))]
     elif case == "gif":
         files = [("logo.gif", b"GIF89a" + b"\x00" * 20)]
@@ -199,8 +179,8 @@ async def test_refused_uploads_store_nothing(case, api, headers, application, mo
     elif case == "too_many":
         files = [(f"page-{n}.png", png()) for n in range(21)]
     else:
-        files, parts = [("a.png", png()), ("b.png", png())], [{"rotation": 90}]
-    response = await upload_many(api, headers[0], row, files, parts=parts)
+        files, parts = ([("a.png", png()), ("b.png", png())], [{"rotation": 90}])
+    response = await upload_many(api, headers, row, files, parts=parts)
     expected = 422 if case == "options" else 400
     assert response.status_code == expected, response.text
     assert not calls

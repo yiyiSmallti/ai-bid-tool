@@ -4,7 +4,7 @@ Failures covered: a forbidden command/extra argument; insufficient scope; change
 registry; forged task, extraction, card, draft or job parent; another running job;
 ambiguous retry; cache ownership/cost duplication; raw file/shell/HTTP capability;
 memory retrieval in A01; and lost principal/session/step identity in workers.
-These database-free checks complement the real workflow and RLS acceptance tests.
+These database-free checks complement the real workflow and database-gate acceptance tests.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -33,14 +33,9 @@ from pydantic import TypeAdapter, ValidationError
 
 
 def context():
-    org, user, principal_id, session_id, task, document, extraction, step_id = (
-        uuid4() for _ in range(8)
-    )
+    principal_id, session_id, task, document, extraction, step_id = (uuid4() for _ in range(6))
     actor = Identity(
-        user,
-        org,
-        {"task:read", "card:read", "card:generate", "draft:read", "draft:run", "job:read"},
-        "bidder",
+        scopes={"task:read", "card:read", "card:generate", "draft:read", "draft:run", "job:read"},
         actor_kind="agent",
         principal_id=principal_id,
         session_id=session_id,
@@ -49,17 +44,12 @@ def context():
     )
     principal = AgentPrincipalView(
         id=principal_id,
-        org_id=org,
-        user_id=user,
-        membership_id=uuid4(),
         scopes=sorted(actor.scopes),
         authority_expires_at=datetime.now(UTC) + timedelta(hours=1),
         created_at=datetime.now(UTC),
     )
     state = SimpleNamespace(
         id=session_id,
-        org_id=org,
-        owner_user_id=user,
         principal_id=principal_id,
         task_id=task,
         document_id=document,
@@ -68,7 +58,6 @@ def context():
     )
     step = SimpleNamespace(
         id=step_id,
-        org_id=org,
         session_id=session_id,
         task_id=task,
         document_id=document,
@@ -141,7 +130,6 @@ async def test_cross_task_parent_is_not_found(kind):
     actor, _, state, step = context()
     rid = uuid4()
     row = SimpleNamespace(
-        org_id=state.org_id,
         task_id=uuid4(),
         document_id=state.document_id,
         extraction_job_id=state.extraction_job_id,
@@ -198,7 +186,6 @@ async def test_retry_requires_unique_owned_terminal_job_and_settled_calls(
     _, _, state, _ = context()
     job = SimpleNamespace(
         id=uuid4(),
-        org_id=state.org_id,
         task_id=state.task_id,
         document_id=state.document_id,
         status=status,
@@ -223,7 +210,6 @@ async def test_running_cache_is_never_taken_over():
         id=uuid4(),
         task_id=state.task_id,
         document_id=state.document_id,
-        org_id=state.org_id,
         status="running",
     )
     session = SimpleNamespace(
@@ -241,7 +227,6 @@ async def test_completed_cache_is_not_owned():
         id=uuid4(),
         task_id=state.task_id,
         document_id=state.document_id,
-        org_id=state.org_id,
         status="succeeded",
     )
     added = []
@@ -260,7 +245,6 @@ def test_no_memory_context_is_explicit():
 def test_worker_identity_retains_agent_origin():
     actor, _, state, step = context()
     submitted = {
-        "actor_user_id": str(actor.user_id),
         "actor_token_id": None,
         "scopes": sorted(actor.scopes),
         "agent_principal_id": str(actor.principal_id),
@@ -268,9 +252,7 @@ def test_worker_identity_retains_agent_origin():
         "agent_step_id": str(step.id),
         "invocation_id": str(actor.invocation_id),
     }
-    worker = card_generation.worker(
-        SimpleNamespace(org_id=actor.org_id, result={"submission": submitted})
-    )
+    worker = card_generation.worker(SimpleNamespace(result={"submission": submitted}))
     assert worker.actor_kind == "worker" and worker.principal_id == actor.principal_id
     assert worker.session_id == state.id and worker.step_id == step.id
     assert worker.invocation_id == actor.invocation_id

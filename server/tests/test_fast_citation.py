@@ -4,10 +4,9 @@ Failure inventory before implementation: exact spelling shortcuts lose normalize
 ambiguity; units split combining/Hangul sequences or compatibility expansions;
 boundaries use normalized offsets; empty/null inputs accidentally match; repeated
 verification makes large publications quadratic; deferred commit is omitted from
-timing; report rows are fast but incomplete or leak into another tenant.
+timing; report rows are fast but incomplete or lose task binding.
 """
 
-import ast
 import json
 import unicodedata
 from contextlib import contextmanager
@@ -28,50 +27,31 @@ from app.models.entities import Chunk, Document, Job, Requirement, Task
 from app.models.response_cards import DraftRun, ResponseItem
 from app.models.score import ScoreItemCitation, ScoreReport
 from app.services import check, check_rules, drafts, requirement_consumption
-from app.services.auth import ROLE_SCOPES, Identity
+from app.services.auth import HUMAN_SCOPES, Identity
 from app.services.check_inputs import RULE_VERSION, SCHEMA_VERSION, CheckSnapshot
 from app.services.extraction import SEGMENT_SEPARATORS, locate_quote, normalize
 from sqlalchemy import event, func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
-from task_fixtures import confirm_requirements_async
+from task_fixtures import actor_context, confirm_requirements_async
 from test_check import publish_draft
 from test_check_semantic_storage import semantic_report
 from test_check_storage import TABLES
-from test_check_storage import check_db as check_db  # noqa: F401
-from test_check_storage import check_seeded as check_seeded  # noqa: F401
-from test_rls import seeded as seeded  # noqa: F401
-from test_score_api import rubric_case as rubric_case  # noqa: F401
-from test_score_api import rubric_input_case as rubric_input_case  # noqa: F401
+from test_check_storage import check_db as check_db
+from test_check_storage import check_seeded as check_seeded
+from test_response_card_db import seeded as seeded
+from test_score_api import rubric_case as rubric_case
+from test_score_api import rubric_input_case as rubric_input_case
 from test_score_report_storage import TABLES as SCORE_TABLES
 from test_score_report_storage import pending_score
-from test_score_report_storage import score_storage_case as score_storage_case  # noqa: F401
+from test_score_report_storage import score_storage_case as score_storage_case
 from test_score_run import finish_score, preview_score, submit_score
-from test_score_run import score_case as score_case  # noqa: F401
+from test_score_run import score_case as score_case
 
 SERVER = Path(__file__).resolve().parents[1]
 REQUIREMENT_COUNT = 1500
 CHUNK_CHARACTERS = 6000
 PUBLISH_LIMIT_SECONDS = 60
-
-
-def legacy_locator_sql() -> str:
-    """Read the original implementation without executing its migration."""
-    migration = SERVER / "migrations/versions/0019_citation_boundaries.py"
-    tree = ast.parse(migration.read_text())
-    template = next(
-        node.value
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Constant)
-        and isinstance(node.value, str)
-        and "CREATE FUNCTION response_locate_quote(" in node.value
-    )
-    combining = "".join(chr(code) for code in range(0x110000) if unicodedata.combining(chr(code)))
-    return template.replace("__COMBINING__", combining.replace("'", "''")).replace(
-        "CREATE FUNCTION response_locate_quote(",
-        "CREATE FUNCTION public.response_locate_quote_0019_test(",
-        1,
-    )
 
 
 def citation_corpus() -> list[tuple[str | None, str | None]]:
@@ -97,12 +77,12 @@ def citation_corpus() -> list[tuple[str | None, str | None]]:
         ("㍍", "メートル"),
         ("㍍", "メート"),
         ("㍍;メートル", "メートル"),
-        ("e\u0301;e", "e"),
-        ("e\u0301", "é"),
-        ("q\u0307\u0323", "q\u0323\u0307"),
-        ("\u1100\u1161\u11a8", "각"),
-        ("\u1100\u1161\u11a8;각", "각"),
-        ("\u1100\u1161\u11a8", "가"),
+        ("é;e", "e"),
+        ("é", "é"),
+        ("q̣̇", "q̣̇"),
+        ("각", "각"),
+        ("각;각", "각"),
+        ("각", "가"),
         ("①;1", "1"),
         ("甲内存≥１６ＧＢ；内存≥16GB", "内存≥16GB"),
         ("内存≥１６ＧＢ；甲内存≥16GB", "内存≥16GB"),
@@ -116,19 +96,19 @@ def citation_corpus() -> list[tuple[str | None, str | None]]:
         (" \n甲 \n乙\t ", "甲乙"),
         (" \n甲 \n乙\t ", " \n甲 \n乙\t "),
     ]
-    tokens = ("内存：≥16 GB", "ＡＢＣ１２３", "e\u0301", "\u1100\u1161\u11a8", "ﬃ", "㍍")
+    tokens = ("内存：≥16 GB", "ＡＢＣ１２３", "é", "각", "ﬃ", "㍍")
     separators = sorted(SEGMENT_SEPARATORS) + [
         "\t",
         "\n",
         "\r",
-        "\v",
-        "\f",
+        "\x0b",
+        "\x0c",
         "\x1c",
         "\x1d",
         "\x1e",
         "\x1f",
-        "\u0085",
-        "\u00a0",
+        "\x85",
+        "\xa0",
         "\u1680",
         "\u2000",
         "\u2001",
@@ -162,7 +142,6 @@ def citation_corpus() -> list[tuple[str | None, str | None]]:
         )
         for separator in separators:
             cases.append(("前" + token + "后" + separator + token + separator + "末", needle))
-    # A normalized duplicate must defeat an apparently unique exact occurrence.
     for index in range(48):
         ordinary = f"参数{index:03d}:16GB"
         width = ordinary.translate(str.maketrans("0123456789:GB", "０１２３４５６７８９：ＧＢ"))
@@ -178,12 +157,9 @@ def citation_corpus() -> list[tuple[str | None, str | None]]:
                 (prefix + "；" + token + "；" + suffix + "；" + token, normalize(token)),
             ]
         )
-    # Some CCC=0 compatibility characters decompose into leading combining
-    # marks. Whole-string NFKC can reorder across units that the old locator
-    # deliberately kept separate; exact-spelling shortcuts must preserve that.
-    for exceptional in ("\u0f73", "\u0f75", "\u0f81", "\uff9e", "\uff9f"):
+    for exceptional in ("ཱི", "ཱུ", "ཱྀ", "ﾞ", "ﾟ"):
         for base in ("a", "e", "q"):
-            for accent in ("\u0301", "\u0323"):
+            for accent in ("́", "̣"):
                 token = base + exceptional + accent
                 cases.extend(
                     [
@@ -194,7 +170,7 @@ def citation_corpus() -> list[tuple[str | None, str | None]]:
                         ("前；" + token + "；末", token),
                     ]
                 )
-    for token in ("ｶﾞ", "ﾊﾟ", "ｶﾞ\u0301", "ﾊﾟ\u0323"):
+    for token in ("ｶﾞ", "ﾊﾟ", "ｶﾞ́", "ﾊﾟ̣"):
         cases.extend(
             [
                 (token, token),
@@ -204,16 +180,11 @@ def citation_corpus() -> list[tuple[str | None, str | None]]:
             ]
         )
     very_long = "背景说明" * 8192 + "；唯一引用：≥１６ＧＢ；" + "附录备注" * 2048
-    cases.extend(
-        [
-            (very_long, "唯一引用：≥１６ＧＢ"),
-            (very_long, "唯一引用:≥16GB"),
-        ]
-    )
+    cases.extend([(very_long, "唯一引用：≥１６ＧＢ"), (very_long, "唯一引用:≥16GB")])
     return cases
 
 
-def test_fast_locator_matches_original_sql_and_python(admin_engine, tmp_path):
+def test_fast_locator_matches_python(admin_engine, tmp_path):
     corpus = citation_corpus()
     payload = [
         {"index": index, "source": source, "quote": quote}
@@ -222,17 +193,11 @@ def test_fast_locator_matches_original_sql_and_python(admin_engine, tmp_path):
     with admin_engine.connect() as connection:
         transaction = connection.begin()
         try:
-            # PostgreSQL DDL is transactional: the legacy oracle never survives this test.
-            connection.execute(text(legacy_locator_sql()))
             rows = (
                 connection.execute(
-                    text("""
-                    SELECT c.index, public.response_locate_quote_0019_test(c.source,c.quote) AS old,
-                      public.response_locate_quote(c.source,c.quote) AS new
-                    FROM jsonb_to_recordset(CAST(:corpus AS jsonb))
-                      AS c(index integer,source text,quote text)
-                    ORDER BY c.index
-                """),
+                    text(
+                        "\n                    SELECT c.index, \n                      public.response_locate_quote(c.source,c.quote) AS new\n                    FROM jsonb_to_recordset(CAST(:corpus AS jsonb))\n                      AS c(index integer,source text,quote text)\n                    ORDER BY c.index\n                "
+                    ),
                     {"corpus": json.dumps(payload, ensure_ascii=False)},
                 )
                 .mappings()
@@ -246,9 +211,7 @@ def test_fast_locator_matches_original_sql_and_python(admin_engine, tmp_path):
         expected = (
             locate_quote(source, quote)[0] if source is not None and quote is not None else None
         )
-        results.append(
-            {**payload[row["index"]], "old": row["old"], "new": row["new"], "python": expected}
-        )
+        results.append({**payload[row["index"]], "new": row["new"], "python": expected})
     artifact = tmp_path / "fast-citation-parity.json"
     artifact.write_text(
         json.dumps(
@@ -259,53 +222,42 @@ def test_fast_locator_matches_original_sql_and_python(admin_engine, tmp_path):
     )
     assert len(results) == len(corpus)
     for row in results:
-        assert row["new"] == row["old"] == row["python"], row
+        assert row["new"] == row["python"], row
 
 
 def scale_source(index: int) -> tuple[str, str]:
     quote = f"第{index:04d}项：内存≥１６ＧＢ"
     prefix = "背景说明" * 750 + "；" + quote + "；"
     source = prefix + ("附录备注" * 1500)[: CHUNK_CHARACTERS - len(prefix)]
-    return source, quote
+    return (source, quote)
 
 
-async def worker_context(session, user, *, kind="worker"):
+async def worker_context(session, *, kind="worker"):
     from task_fixtures import actor_context_async
 
-    org = await session.scalar(
-        text("SELECT nullif(current_setting('app.current_org', true), '')::uuid")
-    )
-    assert org is not None
-    await actor_context_async(session, org, user, kind=kind)
+    await actor_context_async(session, kind=kind)
 
 
 async def prepare_scale_input(db, actor, settings):
     """Prepare a valid persisted draft without disabling any production gate."""
-    async with db.transaction(actor.org_id) as session:
-        await worker_context(session, actor.user_id, kind="session")
-        task = Task(
-            id=uuid4(),
-            org_id=actor.org_id,
-            created_by=actor.user_id,
-            name="Synthetic citation publication scale",
-        )
+    async with db.transaction() as session:
+        await worker_context(session, kind="session")
+        task = Task(id=uuid4(), name="Synthetic citation publication scale")
         from task_fixtures import seed_task_async
 
         await seed_task_async(session, task)
         document = Document(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task.id,
             name="synthetic-scale.pdf",
             sha256="a" * 64,
-            storage_key=f"org/{actor.org_id}/synthetic-scale.pdf",
+            storage_key="synthetic-scale.pdf",
             media_type="application/pdf",
         )
         session.add(document)
         await session.flush()
         extraction = Job(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task.id,
             document_id=document.id,
             kind="extract",
@@ -314,7 +266,6 @@ async def prepare_scale_input(db, actor, settings):
         )
         generation = Job(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task.id,
             document_id=document.id,
             kind="draft",
@@ -327,15 +278,12 @@ async def prepare_scale_input(db, actor, settings):
         requirements = []
         for index in range(REQUIREMENT_COUNT):
             if index % 3 == 2:
-                # Shared source pairs exercise dedup without reducing the workload
-                # to one short page; the other 1000 requirements have distinct pages.
                 quote = requirements[-1].quote
-                chunk_id, page = requirements[-1].chunk_id, requirements[-1].page
+                chunk_id, page = (requirements[-1].chunk_id, requirements[-1].page)
             else:
                 source, quote = scale_source(index)
                 chunk = Chunk(
                     id=uuid4(),
-                    org_id=actor.org_id,
                     task_id=task.id,
                     document_id=document.id,
                     page=index + 1,
@@ -343,10 +291,9 @@ async def prepare_scale_input(db, actor, settings):
                     text=source,
                 )
                 session.add(chunk)
-                chunk_id, page = chunk.id, chunk.page
+                chunk_id, page = (chunk.id, chunk.page)
             requirement = Requirement(
                 id=uuid4(),
-                org_id=actor.org_id,
                 task_id=task.id,
                 document_id=document.id,
                 chunk_id=chunk_id,
@@ -363,7 +310,7 @@ async def prepare_scale_input(db, actor, settings):
         await session.flush()
         session.add_all(requirements)
         await session.flush()
-        await confirm_requirements_async(session, actor.org_id, task.id, settings=settings)
+        await confirm_requirements_async(session, task.id, settings=settings)
         reviews = await requirement_consumption.effective(session, requirements)
         review_fields = {
             str(row.id): requirement_consumption.fields(reviews[row.id]) for row in requirements
@@ -381,21 +328,19 @@ async def prepare_scale_input(db, actor, settings):
         }
         draft = DraftRun(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task.id,
             extraction_job_id=extraction.id,
             generation_job_id=generation.id,
             generation_run_id=generation.run_id,
             input_hash=drafts.digest(draft_manifest),
             input_manifest=draft_manifest,
-            actor_user_id=actor.user_id,
             actor_kind="session",
             completion="partial",
             summary={"gap_requirements": REQUIREMENT_COUNT},
         )
         session.add(draft)
         await session.flush()
-        items, fixed_items = [], []
+        items, fixed_items = ([], [])
         for requirement in requirements:
             source = {
                 "document_id": str(document.id),
@@ -406,7 +351,6 @@ async def prepare_scale_input(db, actor, settings):
             }
             response = ResponseItem(
                 id=uuid4(),
-                org_id=actor.org_id,
                 draft_id=draft.id,
                 requirement_id=requirement.id,
                 category=requirement.category,
@@ -453,7 +397,6 @@ async def prepare_scale_input(db, actor, settings):
         await session.flush()
     secret = {"items": items, "certificates": []}
     manifest = {
-        "org_id": str(actor.org_id),
         "task_id": str(task.id),
         "draft_id": str(draft.id),
         "extraction_job_id": str(extraction.id),
@@ -481,10 +424,9 @@ async def prepare_scale_input(db, actor, settings):
         limitations=["Synthetic citation performance fixture"],
     )
     encrypted = Secrets.for_data(settings).encrypt(json.dumps(secret, ensure_ascii=False))
-    async with db.transaction(actor.org_id) as session:
+    async with db.transaction() as session:
         job = Job(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task.id,
             document_id=document.id,
             kind="check",
@@ -502,18 +444,12 @@ async def prepare_scale_input(db, actor, settings):
         )
         session.add(job)
         await session.flush()
-    return fixed, job
+    return (fixed, job)
 
 
-async def test_large_check_publish_includes_deferred_commit(tenants, tmp_path):
+async def test_large_check_publish_includes_deferred_commit(database, tmp_path):
     settings = Settings(data_dir=tmp_path)
-    actor = Identity(
-        user_id=tenants["users"][0],
-        org_id=tenants["orgs"][0],
-        scopes=set(ROLE_SCOPES["admin"]),
-        role="admin",
-        actor_kind="worker",
-    )
+    actor = Identity(scopes=set(HUMAN_SCOPES), actor_kind="worker")
     db = Database(settings)
     try:
         await db.verify_role()
@@ -522,14 +458,14 @@ async def test_large_check_publish_includes_deferred_commit(tenants, tmp_path):
         evaluated = check_rules.evaluate(fixed.secret, str(fixed.draft.id))
         preparation_seconds = perf_counter() - prepared_at
         started = perf_counter()
-        async with db.transaction(actor.org_id) as session:
-            await worker_context(session, actor.user_id)
+        async with db.transaction() as session:
+            await worker_context(session)
             result = await check.publish(session, actor, job, fixed, evaluated, settings)
             flushed_seconds = perf_counter() - started
         elapsed = perf_counter() - started
         report_id = UUID(result["report_id"])
         counts = {}
-        async with db.transaction(actor.org_id) as session:
+        async with db.transaction() as session:
             stored = await session.get(CheckRun, report_id)
             assert stored is not None
             assert stored.summary == {
@@ -541,24 +477,13 @@ async def test_large_check_publish_includes_deferred_commit(tenants, tmp_path):
                 counts[model.__tablename__] = await session.scalar(
                     select(func.count()).select_from(model).where(model.report_id == report_id)
                 )
+        async with db.transaction() as session:
             assert (
                 await session.scalar(
-                    text("SELECT check_current_inputs(:org,:report)"),
-                    {"org": actor.org_id, "report": report_id},
+                    text("SELECT check_current_inputs(:report)"), {"report": report_id}
                 )
                 is True
             )
-        for org in (None, tenants["orgs"][1]):
-            async with db.transaction(org) as session:
-                assert await session.get(CheckRun, report_id) is None
-                assert (
-                    await session.scalar(
-                        select(func.count())
-                        .select_from(CheckFindingCitation)
-                        .where(CheckFindingCitation.report_id == report_id)
-                    )
-                    == 0
-                )
         measurement = {
             "requirements": REQUIREMENT_COUNT,
             "distinct_source_quote_pairs": REQUIREMENT_COUNT * 2 // 3,
@@ -596,7 +521,7 @@ async def test_large_check_publish_includes_deferred_commit(tenants, tmp_path):
 @pytest.mark.parametrize("mutation", ["source_missing", "source_ambiguous", "requirement_quote"])
 async def test_check_deferred_gate_rejects_changed_citation(check_seeded, check_db, mutation):
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(check_seeded["orgs"][0]) as session:
+        async with check_db.transaction() as session:
             report, item = await semantic_report(session, check_seeded)
             requirement = await session.get(Requirement, item.requirement_id)
             assert requirement is not None
@@ -609,15 +534,13 @@ async def test_check_deferred_gate_rejects_changed_citation(check_seeded, check_
             else:
                 requirement.quote = "Synthetic"
             await session.flush()
-            # A final COMMIT must observe the changed live source, even if all
-            # coverage and citation children already passed their insert gates.
             assert report.id is not None
     assert error.value.orig.sqlstate == "23514"
 
 
 async def test_check_closed_after_early_deferred_validation(check_seeded, check_db):
     with pytest.raises(DBAPIError) as error:
-        async with check_db.transaction(check_seeded["orgs"][0]) as session:
+        async with check_db.transaction() as session:
             report, item = await semantic_report(session, check_seeded)
             await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
             await session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
@@ -666,37 +589,20 @@ def counted_locator(admin_engine, data):
             )
             connection.execute(text("GRANT SELECT, INSERT ON citation_locator_calls TO bid_app"))
             connection.execute(
-                text("""
-                CREATE OR REPLACE FUNCTION public.response_locate_quote(source_text text, quote text)
-                RETURNS text LANGUAGE plpgsql VOLATILE STRICT PARALLEL UNSAFE
-                SET search_path=pg_catalog AS $$
-                BEGIN
-                  INSERT INTO pg_temp.citation_locator_calls VALUES(source_text,quote);
-                  RETURN public.response_locate_quote_counter_original(source_text,quote);
-                END $$
-            """)
+                text(
+                    "\n                CREATE OR REPLACE FUNCTION public.response_locate_quote(source_text text, quote text)\n                RETURNS text LANGUAGE plpgsql VOLATILE STRICT PARALLEL UNSAFE\n                SET search_path=pg_catalog AS $$\n                BEGIN\n                  INSERT INTO pg_temp.citation_locator_calls VALUES(source_text,quote);\n                  RETURN public.response_locate_quote_counter_original(source_text,quote);\n                END $$\n            "
+                )
             )
             connection.execute(text("SET LOCAL ROLE bid_app"))
-            connection.execute(
-                text(
-                    "SELECT set_config('app.current_org',:org,true),set_config('app.actor_user_id',:user,true),set_config('app.actor_kind','worker',true),set_config('app.actor_token_id','',true)"
-                ),
-                {"org": str(data["orgs"][0]), "user": str(data["users"][0])},
-            )
             yield connection
         finally:
             transaction.rollback()
 
 
 def test_requirement_batch_locates_distinct_actual_pairs_once(check_seeded, admin_engine, tmp_path):
-    org = check_seeded["orgs"][0]
-    with admin_engine.connect() as connection:
-        foreign = connection.scalar(
-            select(Requirement.id).where(Requirement.org_id == check_seeded["orgs"][1])
-        )
-    assert foreign is not None
+    foreign = uuid4()
     with counted_locator(admin_engine, check_seeded) as connection, Session(connection) as session:
-        original = session.scalar(select(Requirement).where(Requirement.org_id == org))
+        original = session.get(Requirement, check_seeded["ids"]["requirement"])
         assert original is not None
         values = {
             column.name: getattr(original, column.name) for column in Requirement.__table__.columns
@@ -724,9 +630,9 @@ def test_requirement_batch_locates_distinct_actual_pairs_once(check_seeded, admi
         rows = (
             connection.execute(
                 text(
-                    "SELECT requirement_id,is_valid FROM public.response_requirement_citations_valid(:org,CAST(:requirements AS uuid[]))"
+                    "SELECT requirement_id,is_valid FROM public.response_requirement_citations_valid(CAST(:requirements AS uuid[]))"
                 ),
-                {"org": org, "requirements": requested},
+                {"requirements": requested},
             )
             .mappings()
             .all()
@@ -740,9 +646,9 @@ def test_requirement_batch_locates_distinct_actual_pairs_once(check_seeded, admi
         denied = (
             connection.execute(
                 text(
-                    "SELECT requirement_id,is_valid FROM public.response_requirement_citations_valid(:org,CAST(:requirements AS uuid[]))"
+                    "SELECT requirement_id,is_valid FROM public.response_requirement_citations_valid(CAST(:requirements AS uuid[]))"
                 ),
-                {"org": org, "requirements": [uuid4(), foreign]},
+                {"requirements": [uuid4(), foreign]},
             )
             .mappings()
             .all()
@@ -762,101 +668,15 @@ def test_requirement_batch_locates_distinct_actual_pairs_once(check_seeded, admi
         )
 
 
-@pytest.mark.parametrize("mutation", ["source_missing", "source_ambiguous", "requirement_quote"])
-def test_cosign_snapshot_rejects_citation_change_before_invalidation(
-    check_seeded, admin_engine, tmp_path, mutation
-):
-    org = check_seeded["orgs"][0]
-    with admin_engine.connect() as connection:
-        transaction = connection.begin()
-        try:
-            connection.execute(
-                text("SELECT set_config('app.current_org',:org,true)"), {"org": str(org)}
-            )
-            requirement, chunk, review_round = connection.execute(
-                text("""
-                SELECT q.id,q.chunk_id,r.id FROM requirements q
-                JOIN requirement_workflows w ON (w.org_id,w.requirement_id)=(q.org_id,q.id)
-                JOIN card_review_rounds r ON (r.org_id,r.id)=(w.org_id,w.current_round_id)
-                WHERE q.org_id=:org
-                """),
-                {"org": org},
-            ).one()
-            assert connection.scalar(
-                text("SELECT team_cosign_round_valid(:org,:round)"),
-                {"org": org, "round": review_round},
-            )
-            connection.execute(
-                text("""
-                CREATE TEMP TABLE citation_round_probe(
-                  org_id uuid,round_id uuid,is_valid boolean,invalidation_count bigint
-                ) ON COMMIT DROP
-                """)
-            )
-            connection.execute(
-                text("INSERT INTO citation_round_probe(org_id,round_id) VALUES(:org,:round)"),
-                {"org": org, "round": review_round},
-            )
-            connection.execute(
-                text("""
-                CREATE FUNCTION pg_temp.probe_citation_round() RETURNS trigger
-                LANGUAGE plpgsql SET search_path=pg_catalog AS $$
-                BEGIN
-                  UPDATE pg_temp.citation_round_probe probe SET
-                    is_valid=public.team_cosign_round_valid(probe.org_id,probe.round_id),
-                    invalidation_count=(SELECT count(*) FROM public.card_review_invalidations inv
-                      WHERE inv.org_id=probe.org_id AND inv.round_id=probe.round_id);
-                  RETURN NULL;
-                END $$
-                """)
-            )
-            table = "requirements" if mutation == "requirement_quote" else "chunks"
-            # Alphabetical trigger order observes the changed row before the
-            # production invalidation trigger, which remains enabled throughout.
-            connection.execute(
-                text(
-                    f"CREATE TRIGGER aaa_citation_round_probe AFTER UPDATE ON public.{table} "
-                    "FOR EACH ROW EXECUTE FUNCTION pg_temp.probe_citation_round()"
-                )
-            )
-            statement = {
-                "source_missing": "UPDATE chunks SET text='Synthetic changed source' WHERE id=:id",
-                "source_ambiguous": "UPDATE chunks SET text=text||'；'||text WHERE id=:id",
-                "requirement_quote": "UPDATE requirements SET quote='Synthetic changed quote' WHERE id=:id",
-            }[mutation]
-            connection.execute(
-                text(statement), {"id": requirement if mutation == "requirement_quote" else chunk}
-            )
-            valid, invalidations = connection.execute(
-                text("SELECT is_valid,invalidation_count FROM citation_round_probe")
-            ).one()
-            assert valid is False and invalidations == 0
-            (tmp_path / f"cosign-citation-snapshot-{mutation}.json").write_text(
-                json.dumps(
-                    {
-                        "mutation": mutation,
-                        "round_valid_before_invalidation": valid,
-                        "materialized_invalidations_before_probe": invalidations,
-                        "production_triggers_enabled": True,
-                        "probe_rolled_back": True,
-                    },
-                    indent=2,
-                )
-            )
-        finally:
-            transaction.rollback()
-
-
 def test_check_publish_locates_requirement_once_across_all_gates(
     check_seeded, admin_engine, tmp_path
 ):
-    org = check_seeded["orgs"][0]
     with counted_locator(admin_engine, check_seeded) as connection, Session(connection) as session:
-        original = session.get(CheckRun, check_seeded["checks"][org]["run"])
+        actor_context(session, kind="worker")
+        original = session.get(CheckRun, check_seeded["checks"]["run"])
         assert original is not None
         job = Job(
             id=uuid4(),
-            org_id=org,
             task_id=original.task_id,
             document_id=original.document_id,
             kind="check",
@@ -900,8 +720,6 @@ def test_check_publish_locates_requirement_once_across_all_gates(
             child.update(id=new_id, report_id=report.id)
             session.execute(table.insert().values(child))
             counts[name] = 1
-        # Execute the exact deferred publication boundary within the rollback
-        # transaction so the instrumentation never escapes into another test.
         connection.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
         calls = connection.scalar(text("SELECT count(*) FROM citation_locator_calls"))
         (tmp_path / "check-publication-call-count.json").write_text(
@@ -922,20 +740,19 @@ async def test_score_publish_locates_shared_draft_and_rubric_pairs_once(
     score_storage_case, admin_engine, tmp_path
 ):
     case = score_storage_case
-    org = case["tenants"]["orgs"][0]
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         original = await pending_score(session, case)
         original_id = original.id
     with (
-        counted_locator(admin_engine, case["tenants"]) as connection,
+        counted_locator(admin_engine, case["database"]) as connection,
         Session(connection) as session,
     ):
+        actor_context(session, kind="worker")
         original = session.get(ScoreReport, original_id)
         assert original is not None
         expected = set()
         requirements = session.scalars(
             select(Requirement).where(
-                Requirement.org_id == org,
                 Requirement.task_id == original.task_id,
                 Requirement.job_id == original.extraction_job_id,
             )
@@ -946,7 +763,6 @@ async def test_score_publish_locates_shared_draft_and_rubric_pairs_once(
             expected.add((chunk.text, requirement.quote))
         job = Job(
             id=uuid4(),
-            org_id=org,
             task_id=original.task_id,
             document_id=original.document_id,
             kind="score",
@@ -970,7 +786,7 @@ async def test_score_publish_locates_shared_draft_and_rubric_pairs_once(
         report = ScoreReport(**{**values, "id": uuid4(), "job_id": job.id, "run_id": job.run_id})
         session.add(report)
         session.flush()
-        remapped, counts = {}, {}
+        remapped, counts = ({}, {})
         for name in SCORE_TABLES[1:]:
             table = Base.metadata.tables[name]
             children = (
@@ -1010,7 +826,7 @@ async def test_score_publish_locates_shared_draft_and_rubric_pairs_once(
 async def test_score_closed_after_early_deferred_validation(score_storage_case):
     case = score_storage_case
     with pytest.raises(DBAPIError) as error:
-        async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        async with case["app"].state.db.transaction() as session:
             report = await pending_score(session, case)
             await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
             await session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
@@ -1034,7 +850,7 @@ async def test_score_closed_after_early_deferred_validation(score_storage_case):
 async def test_score_deferred_gate_rejects_changed_rubric_citation(score_storage_case, mutation):
     case = score_storage_case
     with pytest.raises(DBAPIError) as error:
-        async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        async with case["app"].state.db.transaction() as session:
             await pending_score(session, case)
             requirement = await session.get(
                 Requirement, UUID(case["confirmed"]["items"][0]["requirement_id"])
@@ -1112,27 +928,23 @@ async def test_score_worker_keeps_admission_validation_and_defers_final_duplicat
 
 async def test_score_preserves_explicit_invalid_citation_gap_outside_rubric(score_storage_case):
     case = score_storage_case
-    org = case["tenants"]["orgs"][0]
     requirement_id = UUID(case["requirements"][3]["id"])
     rubric_requirements = {UUID(item["requirement_id"]) for item in case["confirmed"]["items"]}
     assert requirement_id not in rubric_requirements
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         requirement = await session.get(Requirement, requirement_id)
         assert requirement is not None
         chunk = await session.get(Chunk, requirement.chunk_id)
         assert chunk is not None
         review = (await requirement_consumption.effective(session, [requirement]))[requirement_id]
         assert review.confirmed
-        # This fixture starts with a human-accepted source. Changing its quote
-        # invalidates that acceptance and creates a fresh, explicitly invalid
-        # non-scoring gap without changing the fixed scoring rubric.
         requirement.quote = "Synthetic non-scoring quotation absent from parsed text"
         assert requirement.quote not in chunk.text
         await session.flush()
         assert (
             await session.scalar(
-                text("SELECT response_citation_valid(:org,:requirement)"),
-                {"org": org, "requirement": requirement_id},
+                text("SELECT response_citation_valid(:requirement)"),
+                {"requirement": requirement_id},
             )
             is False
         )
@@ -1141,18 +953,16 @@ async def test_score_preserves_explicit_invalid_citation_gap_outside_rubric(scor
     )
     changed_case = {**case, "draft_id": UUID(assembled["draft_id"])}
     assert changed_case["draft_id"] != case["draft_id"]
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         gap = await session.scalar(
             select(ResponseItem).where(
                 ResponseItem.draft_id == changed_case["draft_id"],
                 ResponseItem.requirement_id == requirement_id,
             )
         )
-        assert gap is not None and gap.kind == "gap" and gap.card_id is None
+        assert gap is not None and gap.kind == "gap" and (gap.card_id is None)
         assert gap.gap_reasons == ["requirement_invalidated", "missing_card", "invalid_citation"]
-        # The confirmed rubric remains strict; only the explicitly recorded,
-        # unrelated draft gap may remain unassessable without blocking the report.
         report = await pending_score(session, changed_case)
         report_id = report.id
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         assert await session.get(ScoreReport, report_id) is not None

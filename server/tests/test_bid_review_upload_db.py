@@ -167,8 +167,8 @@ async def submit(api, header, task_id, submission_id, receipt, **changes):
     )
 
 
-async def counts(application, org_id):
-    async with application.state.db.transaction(org_id) as session:
+async def counts(application):
+    async with application.state.db.transaction() as session:
         return {
             model.__tablename__: await session.scalar(select(func.count()).select_from(model))
             for model in TABLES
@@ -182,23 +182,25 @@ def originals():
     ]
 
 
-async def run(application, org_id, job_id):
-    await application.state.processor(str(org_id), str(job_id))
+async def run(application, job_id):
+    await application.state.processor(str(job_id))
 
 
-async def test_upload_prepare_inventory_and_encryption(api, headers, tenants, application, caplog):
-    task_id, files = await task(api, headers[0]), originals()
-    before = await counts(application, tenants["orgs"][0])
-    objects_before = list((application.state.storage.root / "org").rglob("*"))
-    dry = result(await upload(api, headers[0], task_id, files, metadata(files, dry_run=True)))
+async def test_upload_prepare_inventory_and_encryption(api, headers, application, caplog):
+    task_id, files = await task(api, headers), originals()
+    before = await counts(application)
+    objects_before = {path for path in application.state.storage.root.rglob("*") if path.is_file()}
+    dry = result(await upload(api, headers, task_id, files, metadata(files, dry_run=True)))
     assert dry["limits"]["files"] == 20 and len(dry["files"]) == 2
-    assert await counts(application, tenants["orgs"][0]) == before
-    assert list((application.state.storage.root / "org").rglob("*")) == objects_before
+    assert await counts(application) == before
+    assert {
+        path for path in application.state.storage.root.rglob("*") if path.is_file()
+    } == objects_before
     body = metadata(files)
-    uploaded = result(await upload(api, headers[0], task_id, files, body))
-    assert result(await upload(api, headers[0], task_id, files, body)) == uploaded
-    before = await counts(application, tenants["orgs"][0])
-    receipt = result(await preview(api, headers[0], task_id, uploaded["id"]))
+    uploaded = result(await upload(api, headers, task_id, files, body))
+    assert result(await upload(api, headers, task_id, files, body)) == uploaded
+    before = await counts(application)
+    receipt = result(await preview(api, headers, task_id, uploaded["id"]))
     assert receipt["local_only"] is True and receipt["preflight"]["planned_calls"] == 0
     assert (
         receipt["preflight"]["maximum_calls"] == 0
@@ -208,43 +210,41 @@ async def test_upload_prepare_inventory_and_encryption(api, headers, tenants, ap
         datetime.fromisoformat(receipt["expires_at"])
         - datetime.fromisoformat(receipt["preflight"]["as_of"])
     ).total_seconds() == 900
-    assert await counts(application, tenants["orgs"][0]) == before
+    assert await counts(application) == before
     request_id = str(uuid4())
     accepted = result(
-        await submit(api, headers[0], task_id, uploaded["id"], receipt, request_id=request_id)
+        await submit(api, headers, task_id, uploaded["id"], receipt, request_id=request_id)
     )
     replay = result(
-        await submit(api, headers[0], task_id, uploaded["id"], receipt, request_id=request_id)
+        await submit(api, headers, task_id, uploaded["id"], receipt, request_id=request_id)
     )
     assert replay["job_id"] == accepted["job_id"] and replay["cached"]
     error(
         await submit(
-            api, headers[0], task_id, uploaded["id"], receipt, request_id=request_id, retry=True
+            api, headers, task_id, uploaded["id"], receipt, request_id=request_id, retry=True
         ),
         "idempotency_conflict",
         409,
     )
     assert len(application.state.queue.calls) == 1
-    await run(application, tenants["orgs"][0], accepted["job_id"])
-    detail = result(await api.get(f"/v4/bid-submissions/{uploaded['id']}", headers=headers[0]))
+    await run(application, accepted["job_id"])
+    detail = result(await api.get(f"/v4/bid-submissions/{uploaded['id']}", headers=headers))
     assert detail["preparation"]["status"] == "succeeded"
     assert detail["submission"]["state"] == "prepared"
     assert sum(row["page_count"] for row in detail["inventory"]) == 4
     assert sum(row["text_pages"] for row in detail["inventory"]) == 2
     assert sum(row["image_pages"] for row in detail["inventory"]) == 2
     assert sum(row["signature_fields"] for row in detail["inventory"]) == 1
-    job = result(await api.get(f"/v4/jobs/{accepted['job_id']}", headers=headers[0]))
+    job = result(await api.get(f"/v4/jobs/{accepted['job_id']}", headers=headers))
     assert "submission" not in job.get("result", {})
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(Document)) == 0
         assert await session.scalar(select(func.count()).select_from(UsageRecord)) == 0
         docs = list((await session.scalars(select(BidSubmissionDocument))).all())
         pages = list((await session.scalars(select(BidDocumentPage))).all())
         for document in docs:
             assert "private" not in document.upload_name_encrypted
-            stored = application.state.storage.path(
-                document.org_id, document.storage_key
-            ).read_bytes()
+            stored = application.state.storage.path(document.storage_key).read_bytes()
             assert not stored.startswith(b"%PDF-") and SENTINEL.encode() not in stored
         assert any(page.page_kind == "image" and page.text_status == "native" for page in pages)
         assert all(SENTINEL not in (page.text_encrypted or "") for page in pages)
@@ -275,8 +275,8 @@ async def test_upload_prepare_inventory_and_encryption(api, headers, tenants, ap
         "external-docx",
     ],
 )
-async def test_rejections_store_nothing(variant, api, headers, tenants, application):
-    task_id, files = await task(api, headers[0]), originals()
+async def test_rejections_store_nothing(variant, api, headers, application):
+    task_id, files = await task(api, headers), originals()
     if variant in {"doc", "docm", "extension"}:
         files[1] = ("private." + (variant if variant != "extension" else "txt"), PDF, files[1][2])
     elif variant == "mime":
@@ -321,58 +321,49 @@ async def test_rejections_store_nothing(variant, api, headers, tenants, applicat
         body["files"][1]["media_type"] = PDF
     elif variant == "missing-role":
         body["files"][1].update(role="tender", kind="tender")
-    before = await counts(application, tenants["orgs"][0])
-    stored = list((application.state.storage.root / "org").rglob("*"))
-    error(await upload(api, headers[0], task_id, files, body))
-    assert await counts(application, tenants["orgs"][0]) == before
-    assert list((application.state.storage.root / "org").rglob("*")) == stored
+    before = await counts(application)
+    stored = {path for path in application.state.storage.root.rglob("*") if path.is_file()}
+    error(await upload(api, headers, task_id, files, body))
+    assert await counts(application) == before
+    assert {path for path in application.state.storage.root.rglob("*") if path.is_file()} == stored
 
 
-async def test_deployment_aggregate_limit_and_replay_conflict(api, headers, tenants, application):
-    task_id, files = await task(api, headers[0]), originals()
+async def test_deployment_aggregate_limit_and_replay_conflict(api, headers, application):
+    task_id, files = await task(api, headers), originals()
     body = metadata(files)
-    result(await upload(api, headers[0], task_id, files, body))
+    result(await upload(api, headers, task_id, files, body))
     changed = [
         ("different-private.pdf", media, content) if index == 0 else (name, media, content)
         for index, (name, media, content) in enumerate(files)
     ]
-    error(await upload(api, headers[0], task_id, changed, body), "idempotency_conflict", 409)
+    error(await upload(api, headers, task_id, changed, body), "idempotency_conflict", 409)
     application.state.processor.settings.max_upload_bytes = (
         max(len(content) for _, _, content in files) + 1
     )
-    before = await counts(application, tenants["orgs"][0])
-    error(await upload(api, headers[0], task_id, files), "bid_upload_limit", 413)
-    assert await counts(application, tenants["orgs"][0]) == before
+    before = await counts(application)
+    error(await upload(api, headers, task_id, files), "bid_upload_limit", 413)
+    assert await counts(application) == before
 
 
-async def test_two_org_task_token_and_generic_original_gates(api, headers, tenants, application):
-    task_a, task_b = await task(api, headers[0]), await task(api, headers[1])
-    a = result(await upload(api, headers[0], task_a, originals()))
-    b = result(await upload(api, headers[1], task_b, originals()))
-    error(await api.get(f"/v4/bid-submissions/{b['id']}", headers=headers[0]), status=404)
-    error(await api.get(f"/v4/tasks/{task_b}/bid-submissions", headers=headers[0]), status=404)
-    error(await upload(api, headers[0], task_b, originals()), status=404)
-    error(await preview(api, headers[0], task_a, b["id"]), status=404)
-    other_task = await task(api, headers[0])
-    error(await preview(api, headers[0], other_task, a["id"]), status=404)
+async def test_task_token_and_generic_original_gates(api, headers, application):
+    task_a = await task(api, headers)
+    a = result(await upload(api, headers, task_a, originals()))
+    other_task = await task(api, headers)
+    error(await preview(api, headers, other_task, a["id"]), status=404)
     issue = {
         "name": "Synthetic metadata token",
         "expires_at": "2030-01-01T00:00:00Z",
         "scopes": ["task:read", "bid-review:read", "job:read"],
     }
-    issued = result(await api.post("/v4/tokens", headers=headers[0], json=issue))
-    token_header = {**headers[0], "Authorization": "Bearer " + issued["token"]}
+    issued = result(await api.post("/v4/tokens", headers=headers, json=issue))
+    token_header = {**headers, "Authorization": "Bearer " + issued["token"]}
     result(await api.get(f"/v4/bid-submissions/{a['id']}", headers=token_header))
-    for header, org_id, task_id, submission in (
-        (headers[0], tenants["orgs"][0], task_a, a),
-        (headers[1], tenants["orgs"][1], task_b, b),
-    ):
-        receipt = result(await preview(api, header, task_id, submission["id"]))
-        accepted = result(await submit(api, header, task_id, submission["id"], receipt))
-        await run(application, org_id, accepted["job_id"])
-        async with application.state.db.transaction(org_id) as session:
-            for model in TABLES[:6]:
-                assert await session.scalar(select(func.count()).select_from(model)) > 0
+    receipt = result(await preview(api, headers, task_a, a["id"]))
+    accepted = result(await submit(api, headers, task_a, a["id"], receipt))
+    await run(application, accepted["job_id"])
+    async with application.state.db.transaction() as session:
+        for model in TABLES[:6]:
+            assert await session.scalar(select(func.count()).select_from(model)) > 0
     result(await api.get(f"/v4/bid-submissions/{a['id']}", headers=token_header))
     error(await upload(api, token_header, task_a, originals()), status=403)
     error(await preview(api, token_header, task_a, a["id"]), status=403)
@@ -380,7 +371,7 @@ async def test_two_org_task_token_and_generic_original_gates(api, headers, tenan
         error(
             await api.post(
                 "/v4/tokens",
-                headers=headers[0],
+                headers=headers,
                 json={**issue, "scopes": ["bid-review:read", scope]},
             ),
             status=403,
@@ -392,71 +383,56 @@ async def test_two_org_task_token_and_generic_original_gates(api, headers, tenan
                     f"/v4/documents/{identifier}{suffix}", headers=token_header
                 )
                 assert response.status_code in {403, 404}
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
-        for model in TABLES[:6]:
-            assert (
-                await session.scalar(
-                    select(func.count())
-                    .select_from(model)
-                    .where(model.org_id == tenants["orgs"][1])
-                )
-                == 0
-            )
-    async with application.state.db.transaction() as session:
-        for model in TABLES[:6]:
-            assert await session.scalar(select(func.count()).select_from(model)) == 0
 
 
 async def test_receipt_expiry_mismatch_and_pagination(api, headers, application):
-    task_id = await task(api, headers[0])
-    a = result(await upload(api, headers[0], task_id, originals()))
-    b = result(await upload(api, headers[0], task_id, originals()))
-    receipt = result(await preview(api, headers[0], task_id, a["id"]))
+    task_id = await task(api, headers)
+    a = result(await upload(api, headers, task_id, originals()))
+    b = result(await upload(api, headers, task_id, originals()))
+    receipt = result(await preview(api, headers, task_id, a["id"]))
     signer = TokenSigner.for_tokens(application.state.processor.settings)
     payload = signer.open(receipt["preflight_token"])
     expired = signer.issue(
         payload, 0, expires_at=int((datetime.now(UTC) - timedelta(seconds=1)).timestamp())
     )
     error(
-        await submit(api, headers[0], task_id, a["id"], receipt, preflight_token=expired),
+        await submit(api, headers, task_id, a["id"], receipt, preflight_token=expired),
         "bid_preflight_expired",
     )
     error(
-        await submit(api, headers[0], task_id, a["id"], receipt, expected_input_hash="0" * 64),
+        await submit(api, headers, task_id, a["id"], receipt, expected_input_hash="0" * 64),
         "bid_input_changed",
     )
-    payload["actor_user_id"] = str(uuid4())
+    payload["actor_kind"] = "token"
     mismatched = signer.issue(payload, 900)
     error(
-        await submit(api, headers[0], task_id, a["id"], receipt, preflight_token=mismatched),
+        await submit(api, headers, task_id, a["id"], receipt, preflight_token=mismatched),
         "bid_preflight_mismatch",
     )
-    error(await submit(api, headers[0], task_id, b["id"], receipt), "bid_input_changed")
-    page = await api.get(f"/v4/tasks/{task_id}/bid-submissions?limit=1", headers=headers[0])
+    error(await submit(api, headers, task_id, b["id"], receipt), "bid_input_changed")
+    page = await api.get(f"/v4/tasks/{task_id}/bid-submissions?limit=1", headers=headers)
     assert result(page)["total"] == 2
     cursor = page.json()["data"]["next_cursor"]
     next_page = await api.get(
         f"/v4/tasks/{task_id}/bid-submissions",
-        headers=headers[0],
+        headers=headers,
         params={"limit": 1, "cursor": cursor},
     )
     assert result(next_page)["next_cursor"] is None
     assert next_page.json()["items"][0]["id"] != page.json()["items"][0]["id"]
     error(
-        await api.get(f"/v4/tasks/{task_id}/bid-submissions?limit=101", headers=headers[0]),
+        await api.get(f"/v4/tasks/{task_id}/bid-submissions?limit=101", headers=headers),
         status=422,
     )
     for prefix in ("", "/v4", "/v5"):
-        current = await api.get(f"{prefix}/tasks/{task_id}/bid-submissions", headers=headers[0])
+        current = await api.get(f"{prefix}/tasks/{task_id}/bid-submissions", headers=headers)
         assert result(current)["total"] == 2
         assert current.headers["X-Bid-Contract-Version"] == "5.0"
         assert {row["id"] for row in current.json()["items"]} == {a["id"], b["id"]}
 
 
 @pytest.mark.parametrize("conversion_fails", [False, True])
-async def test_docx_conversion_atomic_inventory(
-    conversion_fails, api, headers, tenants, application
-):
+async def test_docx_conversion_atomic_inventory(conversion_fails, api, headers, application):
     settings = application.state.processor.settings
     settings.converter_url = "http://converter.invalid"
     settings.review_office_profile = "synthetic-converter-fonts-v1"
@@ -469,14 +445,14 @@ async def test_docx_conversion_atomic_inventory(
         )
 
     application.state.processor.converter_transport = httpx.MockTransport(convert)
-    task_id = await task(api, headers[0])
+    task_id = await task(api, headers)
     files = [("tender.pdf", PDF, pdf_bytes()), ("bid.docx", DOCX, docx_bytes())]
-    root = result(await upload(api, headers[0], task_id, files))
-    receipt = result(await preview(api, headers[0], task_id, root["id"]))
+    root = result(await upload(api, headers, task_id, files))
+    receipt = result(await preview(api, headers, task_id, root["id"]))
     assert calls == []
-    accepted = result(await submit(api, headers[0], task_id, root["id"], receipt))
-    await run(application, tenants["orgs"][0], accepted["job_id"])
-    detail = result(await api.get(f"/v4/bid-submissions/{root['id']}", headers=headers[0]))
+    accepted = result(await submit(api, headers, task_id, root["id"], receipt))
+    await run(application, accepted["job_id"])
+    detail = result(await api.get(f"/v4/bid-submissions/{root['id']}", headers=headers))
     assert len(calls) == 1
     if conversion_fails:
         assert detail["preparation"]["status"] == "failed" and detail["inventory"] == []
@@ -490,19 +466,17 @@ async def test_docx_conversion_atomic_inventory(
         )
         assert word["citation_mode"] == "block" and word["sha256"] != word["rendered_pdf_sha256"]
         assert "docx_page_map_unknown" in word["parsing_warnings"]
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         for model in (BidPreparedDocument, BidDocumentPage, BidPreparationPublication):
             count = await session.scalar(select(func.count()).select_from(model))
             assert (count == 0) == conversion_fails
 
 
-async def test_cancel_mid_preparation_no_publication(
-    api, headers, tenants, application, monkeypatch
-):
-    task_id = await task(api, headers[0])
-    root = result(await upload(api, headers[0], task_id, originals()))
-    receipt = result(await preview(api, headers[0], task_id, root["id"]))
-    accepted = result(await submit(api, headers[0], task_id, root["id"], receipt))
+async def test_cancel_mid_preparation_no_publication(api, headers, application, monkeypatch):
+    task_id = await task(api, headers)
+    root = result(await upload(api, headers, task_id, originals()))
+    receipt = result(await preview(api, headers, task_id, root["id"]))
+    accepted = result(await submit(api, headers, task_id, root["id"], receipt))
     original, reached, release = bid_preparation.pdf_pages, asyncio.Event(), asyncio.Event()
 
     async def paused(*args, **kwargs):
@@ -512,25 +486,25 @@ async def test_cancel_mid_preparation_no_publication(
             yield page
 
     monkeypatch.setattr(bid_preparation, "pdf_pages", paused)
-    worker = asyncio.create_task(run(application, tenants["orgs"][0], accepted["job_id"]))
+    worker = asyncio.create_task(run(application, accepted["job_id"]))
     try:
         await asyncio.wait_for(reached.wait(), 30)
-        result(await api.post(f"/v4/jobs/{accepted['job_id']}/cancel", headers=headers[0]))
+        result(await api.post(f"/v4/jobs/{accepted['job_id']}/cancel", headers=headers))
     finally:
         release.set()
         await worker
-    detail = result(await api.get(f"/v4/bid-submissions/{root['id']}", headers=headers[0]))
+    detail = result(await api.get(f"/v4/bid-submissions/{root['id']}", headers=headers))
     assert detail["preparation"]["status"] == "cancelled" and detail["inventory"] == []
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(BidDocumentPage)) == 0
 
 
-async def test_submitted_versions_immutable(api, headers, tenants, application):
-    task_id = await task(api, headers[0])
-    root = result(await upload(api, headers[0], task_id, originals()))
-    receipt = result(await preview(api, headers[0], task_id, root["id"]))
-    accepted = result(await submit(api, headers[0], task_id, root["id"], receipt))
-    await run(application, tenants["orgs"][0], accepted["job_id"])
+async def test_submitted_versions_immutable(api, headers, application):
+    task_id = await task(api, headers)
+    root = result(await upload(api, headers, task_id, originals()))
+    receipt = result(await preview(api, headers, task_id, root["id"]))
+    accepted = result(await submit(api, headers, task_id, root["id"], receipt))
+    await run(application, accepted["job_id"])
     for table, field in (
         ("bid_submissions", "revision=revision+1"),
         ("bid_submission_documents", "size_bytes=size_bytes+1"),
@@ -539,60 +513,27 @@ async def test_submitted_versions_immutable(api, headers, tenants, application):
         ("bid_preparation_publications", "page_count=page_count+1"),
     ):
         with pytest.raises(DBAPIError):
-            async with application.state.db.transaction(tenants["orgs"][0]) as session:
+            async with application.state.db.transaction() as session:
                 await session.execute(text(f"UPDATE {table} SET {field}"))
         with pytest.raises(DBAPIError):
-            async with application.state.db.transaction(tenants["orgs"][0]) as session:
+            async with application.state.db.transaction() as session:
                 await session.execute(text(f"DELETE FROM {table}"))
-    result(await api.get(f"/v4/bid-submissions/{root['id']}", headers=headers[0]))
+    result(await api.get(f"/v4/bid-submissions/{root['id']}", headers=headers))
 
 
-async def test_composite_parent_and_database_token_constraints(api, headers, tenants, application):
+async def test_composite_parent_and_database_token_constraints(api, headers, application):
     from app.models.entities import ApiToken
-    from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
+    from app.services.auth import HUMAN_SCOPES, Identity, set_actor_context
 
-    tasks = [await task(api, header) for header in headers]
-    prepared = []
-    for header, task_id, org_id in zip(headers, tasks, tenants["orgs"], strict=True):
-        root = result(await upload(api, header, task_id, originals()))
-        receipt = result(await preview(api, header, task_id, root["id"]))
-        accepted = result(await submit(api, header, task_id, root["id"], receipt))
-        await run(application, org_id, accepted["job_id"])
-        prepared.append(root)
-    actor = Identity(tenants["users"][0], tenants["orgs"][0], set(ROLE_SCOPES["admin"]), "admin")
-    # Copy B values through B's own tenant transaction, then attempt to bind those
-    # real parents under A. Every A insert has a legitimate authenticated actor.
-    foreign = {}
-    async with application.state.db.transaction(tenants["orgs"][1]) as session:
-        for model in TABLES[:6]:
-            row = await session.scalar(select(model).limit(1))
-            assert row is not None
-            foreign[model] = {
-                column.name: getattr(row, column.name) for column in model.__table__.columns
-            }
-    for model, source in foreign.items():
-        values = {**source, "id": uuid4(), "org_id": tenants["orgs"][0]}
-        for name in ("created_by", "published_by"):
-            if name in values:
-                values[name] = actor.user_id
-        if model is BidSubmission:
-            values.update(revision=1000, request_id=uuid4())
-        for name in ("storage_key", "rendered_pdf_storage_key"):
-            if name in values:
-                values[name] = values[name].replace(
-                    f"org/{tenants['orgs'][1]}/", f"org/{actor.org_id}/", 1
-                )
-        with pytest.raises(DBAPIError) as rejected:
-            async with application.state.db.transaction(actor.org_id) as session:
-                await set_actor_context(session, actor)
-                await session.execute(model.__table__.insert().values(**values))
-        assert rejected.value.orig.sqlstate == "23503", (
-            model.__tablename__,
-            rejected.value.orig.sqlstate,
-        )
-    # A legitimate same-org task is still not the source document's task.
-    other_task = UUID(await task(api, headers[0]))
-    async with application.state.db.transaction(actor.org_id) as session:
+    task_id = await task(api, headers)
+    root = result(await upload(api, headers, task_id, originals()))
+    receipt = result(await preview(api, headers, task_id, root["id"]))
+    accepted = result(await submit(api, headers, task_id, root["id"], receipt))
+    await run(application, accepted["job_id"])
+    actor = Identity(scopes=set(HUMAN_SCOPES))
+    # A real document cannot bind to a different task in this installation.
+    other_task = UUID(await task(api, headers))
+    async with application.state.db.transaction() as session:
         row = await session.scalar(select(BidPreparedDocument).limit(1))
         values = {
             column.name: getattr(row, column.name)
@@ -600,18 +541,16 @@ async def test_composite_parent_and_database_token_constraints(api, headers, ten
         }
     values.update(id=uuid4(), task_id=other_task)
     with pytest.raises(DBAPIError) as rejected:
-        async with application.state.db.transaction(actor.org_id) as session:
+        async with application.state.db.transaction() as session:
             await set_actor_context(session, actor)
             await session.execute(BidPreparedDocument.__table__.insert().values(**values))
     assert rejected.value.orig.sqlstate == "23503"
     with pytest.raises(DBAPIError) as rejected:
-        async with application.state.db.transaction(actor.org_id) as session:
+        async with application.state.db.transaction() as session:
             await set_actor_context(session, actor)
             session.add(
                 ApiToken(
                     id=uuid4(),
-                    org_id=actor.org_id,
-                    user_id=actor.user_id,
                     name="Synthetic forbidden grant",
                     digest="f" * 64,
                     scopes=["bid-review:read", "bid-review:prepare"],
@@ -623,50 +562,46 @@ async def test_composite_parent_and_database_token_constraints(api, headers, ten
     assert rejected.value.orig.diag.constraint_name == "token_forbidden_bid_review_scopes"
 
 
-async def test_storage_failure_keeps_inventory_unpublished(
-    api, headers, tenants, application, monkeypatch
-):
-    task_id = await task(api, headers[0])
-    root = result(await upload(api, headers[0], task_id, originals()))
-    receipt = result(await preview(api, headers[0], task_id, root["id"]))
-    accepted = result(await submit(api, headers[0], task_id, root["id"], receipt))
+async def test_storage_failure_keeps_inventory_unpublished(api, headers, application, monkeypatch):
+    task_id = await task(api, headers)
+    root = result(await upload(api, headers, task_id, originals()))
+    receipt = result(await preview(api, headers, task_id, root["id"]))
+    accepted = result(await submit(api, headers, task_id, root["id"], receipt))
     original_put, written = application.state.storage.put, 0
 
-    async def fail_second_page(org_id, key, content):
+    async def fail_second_page(key, content):
         nonlocal written
         if "/pages/" in key:
             written += 1
             if written == 2:
                 raise ServiceError("synthetic_storage_refusal", "Synthetic storage refusal", 500, 4)
-        await original_put(org_id, key, content)
+        await original_put(key, content)
 
     monkeypatch.setattr(application.state.storage, "put", fail_second_page)
-    await run(application, tenants["orgs"][0], accepted["job_id"])
-    detail = result(await api.get(f"/v4/bid-submissions/{root['id']}", headers=headers[0]))
+    await run(application, accepted["job_id"])
+    detail = result(await api.get(f"/v4/bid-submissions/{root['id']}", headers=headers))
     assert written == 2
     assert detail["preparation"]["status"] == "failed" and detail["inventory"] == []
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         for model in (BidPreparedDocument, BidDocumentPage, BidPreparationPublication):
             assert await session.scalar(select(func.count()).select_from(model)) == 0
 
 
-async def test_combined_thousand_page_limit_has_no_partial_publication(
-    api, headers, tenants, application
-):
+async def test_combined_thousand_page_limit_has_no_partial_publication(api, headers, application):
     with pymupdf.open() as pdf:
         for _ in range(1000):
             pdf.new_page(width=20, height=20)
         thousand = pdf.tobytes()
-    task_id = await task(api, headers[0])
+    task_id = await task(api, headers)
     files = [("tender.pdf", PDF, pdf_bytes()), ("thousand-pages.pdf", PDF, thousand)]
-    root = result(await upload(api, headers[0], task_id, files))
-    receipt = result(await preview(api, headers[0], task_id, root["id"]))
-    accepted = result(await submit(api, headers[0], task_id, root["id"], receipt))
+    root = result(await upload(api, headers, task_id, files))
+    receipt = result(await preview(api, headers, task_id, root["id"]))
+    accepted = result(await submit(api, headers, task_id, root["id"], receipt))
     # The first document renders once; the second exceeds the remaining 999-page
     # bound before any of its pages are rendered. Each original alone is valid.
-    await run(application, tenants["orgs"][0], accepted["job_id"])
-    detail = result(await api.get(f"/v4/bid-submissions/{root['id']}", headers=headers[0]))
+    await run(application, accepted["job_id"])
+    detail = result(await api.get(f"/v4/bid-submissions/{root['id']}", headers=headers))
     assert detail["preparation"]["status"] == "failed" and detail["inventory"] == []
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         for model in (BidPreparedDocument, BidDocumentPage, BidPreparationPublication):
             assert await session.scalar(select(func.count()).select_from(model)) == 0

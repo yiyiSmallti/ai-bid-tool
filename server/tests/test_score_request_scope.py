@@ -30,14 +30,14 @@ from test_score_execution_provider import adapter, fixed_secret
 
 
 def identifier(namespace: int, index: int) -> str:
-    return str(UUID(int=namespace * 100_000 + index + 1))
+    return str(UUID(int=namespace * 100000 + index + 1))
 
 
 def large_draft() -> dict:
     secret = fixed_secret()
     anchor = secret["items"][0]
     rubric = secret["rubric"]["items"][0]
-    rows, items = [], []
+    rows, items = ([], [])
     for index in range(1546):
         quote = f"Criterion {index + 1}: memory 64 GB earns 5 points."
         rows.append(
@@ -77,7 +77,7 @@ def build_request(secret):
     outbound = score_semantic.build_outbound(secret, [], [])
     request = score_semantic.provider_request(outbound)
     assert request is not None
-    return outbound, request
+    return (outbound, request)
 
 
 def item_context(index):
@@ -99,7 +99,7 @@ def expected_refs(request):
 def test_large_draft_scopes_gaps_and_keeps_all_confirmed_response_candidates(tmp_path):
     secret = large_draft()
     outbound, request = build_request(secret)
-    provider = adapter(tmp_path, [], [], batch_chars=64_000)
+    provider = adapter(tmp_path, [], [], batch_chars=64000)
     assert len(secret["rubric"]["items"]) == len(request.items) == 86
     assert sum(row["partition"] == "response" for row in secret["items"]) == 16
     assert sum(row["partition"] == "gap" for row in secret["items"]) == 1530
@@ -112,7 +112,7 @@ def test_large_draft_scopes_gaps_and_keeps_all_confirmed_response_candidates(tmp
         assert set(item.draft_refs) == draft_refs
         assert set(item.context_only_refs) == all_response_context() | item_context(index)
         single = provider._request_for(request, [index])
-        assert len(single.model_dump_json()) < 16_000
+        assert len(single.model_dump_json()) < 16000
         assert {text.ref for text in single.context.texts} == expected_refs(single)
     assert set(request.context_only_refs) == {
         ref for item in request.items for ref in item.context_only_refs
@@ -122,7 +122,7 @@ def test_large_draft_scopes_gaps_and_keeps_all_confirmed_response_candidates(tmp
     assert "d1546.tender" not in {text.ref for text in request.context.texts}
     groups = provider._groups(request)
     assert 1 < len(groups) < len(request.items)
-    assert all(len(group.model_dump_json()) <= 64_000 for group in groups)
+    assert all(len(group.model_dump_json()) <= 64000 for group in groups)
     assert sum(len(group.items) for group in groups) == 86
     assert outbound["preflight"] == {}
 
@@ -154,7 +154,6 @@ def test_coverage_preserves_own_mapped_context_and_excludes_unrelated_gaps(tmp_p
     )
     single = adapter(tmp_path, [], [])._request_for(request, [1])
     assert not item_context(1500) & {text.ref for text in single.context.texts}
-    # An invalid foreign coverage binding must not widen this local request.
     secret["rubric"]["coverage"].append(
         {
             "requirement_id": identifier(1, 1500),
@@ -184,7 +183,7 @@ def test_adapter_rejects_context_refs_outside_exact_item_union(tmp_path, mutatio
 
 async def test_oversized_confirmed_bid_text_is_blocked_without_truncation_or_calls(tmp_path):
     secret = large_draft()
-    large_text = "Beginning of confirmed text. " + "正文" * 40_000 + " End of confirmed text."
+    large_text = "Beginning of confirmed text. " + "正文" * 40000 + " End of confirmed text."
     secret["items"][15]["response_text"] = large_text
     _, request = build_request(secret)
     assert (
@@ -192,7 +191,7 @@ async def test_oversized_confirmed_bid_text_is_blocked_without_truncation_or_cal
         == large_text
     )
     sent = []
-    provider = adapter(tmp_path, [], sent, batch_chars=64_000)
+    provider = adapter(tmp_path, [], sent, batch_chars=64000)
     accounting = Accounting()
     token = current_accounting.set(accounting)
     try:
@@ -214,7 +213,7 @@ async def test_preview_estimates_actual_scoring_groups_without_database_or_calls
 
     class NoDatabase:
         async def scalar(self, statement):
-            pytest.fail("Org-owned scoring preview must not query PostgreSQL")
+            pytest.fail("Local scoring preview must not query PostgreSQL")
 
     preview = await score_execution.preview_cost(
         NoDatabase(), fixed, llm, SimpleNamespace(), llm.settings
@@ -281,14 +280,14 @@ async def execute(provider, request):
         result = await provider.score(request)
     finally:
         current_accounting.reset(token)
-    return result, accounting
+    return (result, accounting)
 
 
 async def test_large_http_batches_accept_cross_requirement_citations_and_write_artifact(tmp_path):
     secret = large_draft()
     outbound, request = build_request(secret)
     sent = []
-    provider = adapter(tmp_path, [], [], batch_chars=64_000)
+    provider = adapter(tmp_path, [], [], batch_chars=64000)
     expected_groups = provider._groups(request)
 
     def respond(http_request):
@@ -341,7 +340,7 @@ async def test_truncated_model_output_splits_context_per_item_before_acceptance(
     secret["rubric"]["items"] = secret["rubric"]["items"][16:18]
     outbound, request = build_request(secret)
     sent = []
-    provider = adapter(tmp_path, [], [], batch_chars=64_000)
+    provider = adapter(tmp_path, [], [], batch_chars=64000)
 
     def respond(http_request):
         payload = json.loads(json.loads(http_request.content)["messages"][1]["content"])

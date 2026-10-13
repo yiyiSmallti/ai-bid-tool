@@ -7,7 +7,6 @@ import sys
 
 import httpx
 import pytest
-from conftest import PASSWORD
 
 
 @pytest.fixture(scope="session")
@@ -37,12 +36,12 @@ async def execute_cli(arguments: list[str], environment: dict) -> tuple[int, dic
 
 
 async def test_real_background_worker_and_both_cli_modes(
-    tenants, real_queue_schema, tmp_path, pdf_bytes, docx_bytes
+    database, real_queue_schema, tmp_path, pdf_bytes, docx_bytes
 ):
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
-    environment = {**os.environ, "BID_DATA_DIR": str(tmp_path / "files"), "BID_PASSWORD": PASSWORD}
+    environment = {**os.environ, "BID_DATA_DIR": str(tmp_path / "files")}
     pdf = tmp_path / "fixture.pdf"
     pdf.write_bytes(pdf_bytes)
     worker_log, api_log = (tmp_path / "worker.log").open("w"), (tmp_path / "api.log").open("w")
@@ -88,24 +87,7 @@ async def test_real_background_worker_and_both_cli_modes(
                 mode,
                 "--server",
                 f"http://127.0.0.1:{port}",
-                "--state",
-                str(tmp_path / f"{mode}.enc"),
             ]
-            status, logged = await execute_cli(
-                [
-                    *base,
-                    "login",
-                    "--email",
-                    "a@example.test",
-                    "--org",
-                    str(tenants["orgs"][0]),
-                    "--json",
-                ],
-                environment,
-            )
-            assert (
-                status == 0 and logged["data"]["authenticated"] and "session" not in logged["data"]
-            )
             status, task = await execute_cli(
                 [
                     *base,
@@ -767,7 +749,7 @@ async def test_real_background_worker_and_both_cli_modes(
             source = archived["data"]["source"]
             assert (
                 source["certificate_revision_id"] == scan_revision
-                and source["confirmed_by"] is None
+                and source["confirmed_at"] is None
                 and source["eligible_for_draft_export"] is False
             )
             status, repeated = await execute_cli(source_add, environment)
@@ -881,18 +863,17 @@ async def test_real_background_worker_and_both_cli_modes(
 
 
 async def test_unexpected_server_error_is_a_result_in_both_modes(
-    tenants, real_queue_schema, tmp_path, monkeypatch, capsys
+    database, real_queue_schema, tmp_path, monkeypatch, capsys
 ):
-    import app.api.account as account
     import app.api.main as api_main
+    import app.services.documents as account
     from bid_cli.main import main
 
-    async def failing_login(*args, **kwargs):
+    async def failing_task(*args, **kwargs):
         raise RuntimeError("synthetic internal detail")
 
-    monkeypatch.setattr(account, "login", failing_login)
+    monkeypatch.setattr(account, "create_task", failing_task)
     monkeypatch.setenv("BID_DATA_DIR", str(tmp_path / "files"))
-    monkeypatch.setenv("BID_PASSWORD", PASSWORD)
     application = api_main.create_app()
     async with (
         application.router.lifespan_context(application),
@@ -902,12 +883,9 @@ async def test_unexpected_server_error_is_a_result_in_both_modes(
         ) as http,
     ):
         response = await http.post(
-            "/auth/login",
-            json={
-                "email": "a@example.test",
-                "password": PASSWORD,
-                "org_id": str(tenants["orgs"][0]),
-            },
+            "/tasks",
+            headers={"Authorization": "Bearer " + os.environ["BID_ACCESS_KEY"]},
+            json={"name": "Synthetic error test"},
         )
     remote = response.json()
     assert response.status_code == 500 and "synthetic internal detail" not in response.text
@@ -918,13 +896,12 @@ async def test_unexpected_server_error_is_a_result_in_both_modes(
         "exit_code": 4,
     }
 
-    arguments = ["--mode", "local", "--state", str(tmp_path / "local.enc"), "login"]
-    arguments += ["--email", "a@example.test", "--org", str(tenants["orgs"][0]), "--json"]
+    arguments = ["--mode", "local", "task", "create", "--name", "Synthetic error test", "--json"]
     with pytest.raises(SystemExit) as exit_info:
         await asyncio.to_thread(main, arguments)
     captured = capsys.readouterr()
     local = json.loads(captured.out)
     assert exit_info.value.code == 4 and "Traceback" not in captured.err
     assert "synthetic internal detail" not in captured.out + captured.err
-    assert local["ok"] is False and local["command"] == "login"
+    assert local["ok"] is False and local["command"] == "task create"
     assert local["data"]["error"] == remote["data"]["error"]

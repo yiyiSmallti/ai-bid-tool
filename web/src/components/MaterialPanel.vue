@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { confirmAction, display, downloadOriginal, errorText, orgAccess, orgRequest, simulatedSelections } from "../org.js";
-import { useProvidedTaskAuthority, canEditTask } from "../task-authority.js";
+import { request } from "../api.js";
+import { confirmAction, display, downloadOriginal, errorText, simulatedSelections } from "../org.js";
 import PageViewer from "./PageViewer.vue";
 const props = defineProps({ taskId: String, editable: Boolean });
 const emit = defineEmits(["add", "changed"]);
@@ -18,20 +18,18 @@ const sourceImage = ref(null), previewName = ref(""), previewBusy = ref(false);
 const libraryKind = ref("product"), library = ref([]), libraryChoice = ref(""), lot = ref("");
 const certificate = ref(""), page = ref(1), open = ref([]), viewing = ref(null), viewerOpen = ref(false), marks = ref(new Set());
 function view(file) { viewing.value = file; viewerOpen.value = true; }
-const loadCertificatePage = (pageNumber, zoom) => orgRequest("GET", `/resources/certificates/revisions/${viewing.value.certificate_revision_id}/file/pages/${pageNumber}/preview?zoom=${zoom}`, undefined, { binary: true });
+const loadCertificatePage = (pageNumber, zoom) => request("GET", `/resources/certificates/revisions/${viewing.value.certificate_revision_id}/file/pages/${pageNumber}/preview?zoom=${zoom}`, undefined, { binary: true });
 let previewEpoch = 0;
 const selection = computed(() => selections.value.find(s => s.id === chosen.value));
 const allowedFields = computed(() => selection.value ? kinds[selection.value.kind].fields.filter(key => typeof selection.value.data[key] === "string") : []);
-const authority = useProvidedTaskAuthority();
-const writable = computed(() => canEditTask(authority.value) && orgAccess.role && orgAccess.role !== "viewer");
 async function load() {
   busy.value = true; error.value = ""; loaded.value = false;
   try {
     const requests = Object.entries(kinds).map(async ([kind, info]) => {
-      const result = await orgRequest("GET", `/tasks/${props.taskId}/${info.path}?history=true`);
+      const result = await request("GET", `/tasks/${props.taskId}/${info.path}?history=true`);
       return result.items.map(item => ({ ...item, kind, active: result.data.active_snapshot_ids.includes(item.id), validity: result.data.validity_by_revision?.[item.certificate_revision_id] }));
     });
-    const values = await Promise.all([...requests, orgRequest("GET", `/tasks/${props.taskId}/evidence-sources?history=true`), orgRequest("GET", `/tasks/${props.taskId}/certificate-files`)]);
+    const values = await Promise.all([...requests, request("GET", `/tasks/${props.taskId}/evidence-sources?history=true`), request("GET", `/tasks/${props.taskId}/certificate-files`)]);
     selections.value = values.slice(0, 4).flat(); sources.value = values[4].items; files.value = values[5].items; loaded.value = true;
     marks.value = await simulatedSelections(props.taskId);
   } catch (exc) { error.value = errorText(exc); } finally { busy.value = false; }
@@ -45,8 +43,8 @@ function addPage() { if (sources.value.some(s => s.id === pageSource.value && s.
 async function preview(source) {
   const epoch = ++previewEpoch; sourceImage.value = null; previewBusy.value = true;
   try {
-    const link = await orgRequest("GET", `/evidence-sources/${source.id}/preview/download-link`);
-    const blob = await orgRequest("GET", link.data.url, undefined, { binary: true });
+    const link = await request("GET", `/evidence-sources/${source.id}/preview/download-link`);
+    const blob = await request("GET", link.data.url, undefined, { binary: true });
     const signature = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
     if (blob.type !== "image/png" || signature.join(",") !== "137,80,78,71,13,10,26,10") throw new Error("预览不是有效的 PNG");
     const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("预览读取失败")); reader.readAsDataURL(blob); });
@@ -58,33 +56,33 @@ function closePreview() { previewEpoch++; sourceImage.value = null; previewName.
 async function original(file) { try { await downloadOriginal(`/resources/certificates/revisions/${file.certificate_revision_id}/file/download-link`, file.file.name); } catch (exc) { error.value = errorText(exc); } }
 async function loadLibrary() {
   library.value = []; libraryChoice.value = "";
-  try { library.value = (await orgRequest("GET", `/resources/${kinds[libraryKind.value].path}`)).items; }
+  try { library.value = (await request("GET", `/resources/${kinds[libraryKind.value].path}`)).items; }
   catch (exc) { error.value = errorText(exc); }
 }
 async function pin() {
   const entry = library.value.find(item => item.id === libraryChoice.value); if (!entry) return;
   if (!(await confirmAction("固定此资源版本到任务？同一资源和分包的旧选择将被替换，依赖它的响应可能失效，需要重新审阅。", "固定资源版本", "确定", true))) return;
   busy.value = true;
-  try { const info = kinds[libraryKind.value]; await orgRequest("POST", `/tasks/${props.taskId}/${info.path}`, { [info.id]: entry[info.id], revision: entry.revision, lot: lot.value || null }); emit("changed"); await load(); }
+  try { const info = kinds[libraryKind.value]; await request("POST", `/tasks/${props.taskId}/${info.path}`, { [info.id]: entry[info.id], revision: entry.revision, lot: lot.value || null }); emit("changed"); await load(); }
   catch (exc) { error.value = errorText(exc); } finally { busy.value = false; }
 }
 async function archivePage() {
   busy.value = true;
-  try { await orgRequest("POST", `/tasks/${props.taskId}/evidence-sources`, { task_certificate_id: certificate.value, page: Number(page.value) }); emit("changed"); await load(); }
+  try { await request("POST", `/tasks/${props.taskId}/evidence-sources`, { task_certificate_id: certificate.value, page: Number(page.value) }); emit("changed"); await load(); }
   catch (exc) { error.value = errorText(exc); } finally { busy.value = false; }
 }
-window.addEventListener("bid:org-reset", closePreview);
-onBeforeUnmount(() => { closePreview(); window.removeEventListener("bid:org-reset", closePreview); });
+window.addEventListener("bid:session-reset", closePreview);
+onBeforeUnmount(() => { closePreview(); window.removeEventListener("bid:session-reset", closePreview); });
 onMounted(load);
 </script>
 <template>
   <section aria-label="固定材料" class="materials">
     <h4>任务固定材料</h4>
-    <p class="hint">资源字段是声明；产品 URL 不是网页取证，功能状态与业绩文字不是交付或合同证明。缺少材料时，请联系单位管理员在资源库补充产品、证书或单位资料，再在这里固定到任务。</p>
+    <p class="hint">资源字段是声明；产品 URL 不是网页取证，功能状态与业绩文字不是交付或合同证明。缺少材料时，请先在资源库补充产品、证书或单位资料，再在这里固定到任务。</p>
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
     <p v-if="!loaded" class="hint">材料正在读取或读取失败，不能视为空集合。</p>
     <el-collapse v-model="open">
-      <el-collapse-item v-if="writable" name="library" title="从资源库固定版本 / 显式替换">
+      <el-collapse-item name="library" title="从资源库固定版本 / 显式替换">
         <el-form label-position="top" @submit.prevent>
           <div class="grid">
             <el-form-item label="资源种类"><el-select v-model="libraryKind" @change="library = []; libraryChoice = ''"><el-option v-for="(info, kind) in kinds" :key="kind" :value="kind" :label="info.label" /></el-select></el-form-item>
@@ -112,7 +110,7 @@ onMounted(load);
       </el-collapse-item>
       <el-collapse-item name="pages" :title="`证书原件与页来源（${files.length} 份证书 · ${sources.length} 个页来源）`">
         <ul class="plain-list"><li v-for="file in files" :key="file.id"><span>{{ file.data.name }} · 固定修订 {{ file.revision }} · {{ file.file?.name ?? "没有原件" }}</span><span v-if="file.file" class="file-actions"><el-button size="small" link type="primary" @click="view(file)">在线预览</el-button><el-button size="small" link type="primary" @click="original(file)">下载证书 PDF</el-button></span></li></ul>
-        <el-form v-if="writable" label-position="top" @submit.prevent="archivePage">
+        <el-form label-position="top" @submit.prevent="archivePage">
           <div class="grid">
             <el-form-item label="固定证书"><el-select v-model="certificate" placeholder="请选择"><el-option v-for="file in files.filter(f => f.file)" :key="file.id" :value="file.id" :label="`${file.data.name}（${file.file.page_count} 页）`" /></el-select></el-form-item>
             <el-form-item label="真实页码"><el-input-number v-model="page" :min="1" :max="files.find(f => f.id === certificate)?.file?.page_count ?? 200" controls-position="right" /></el-form-item>

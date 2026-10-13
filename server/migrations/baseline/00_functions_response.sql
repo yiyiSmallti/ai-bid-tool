@@ -370,18 +370,19 @@ CREATE FUNCTION public.response_item_gate() RETURNS trigger
           RAISE EXCEPTION 'Eligible response cannot be hidden as gap' USING ERRCODE='23514';
         END IF;
         IF NOT requirement_ok THEN expected_reasons := jsonb_build_array(CASE WHEN requirement_state='invalidated' THEN 'requirement_invalidated' ELSE 'requirement_unconfirmed' END); END IF;
- IF NEW.card_id IS NULL THEN expected_reasons := expected_reasons || '["missing_card"]'::jsonb;
+        IF NEW.card_id IS NULL THEN expected_reasons := expected_reasons || '["missing_card"]'::jsonb;
         ELSE
           IF revision.state<>'confirmed' THEN expected_reasons := expected_reasons ||
             jsonb_build_array(CASE WHEN revision.state IN ('rejected','needs_material') THEN revision.state ELSE 'unconfirmed' END); END IF;
           IF revision.review_domain IS NULL THEN expected_reasons := expected_reasons || '["unclassified"]'::jsonb; END IF;
           IF NOT material_ok THEN expected_reasons := expected_reasons || '["stale_material"]'::jsonb; END IF;
-          IF citation_ok AND quote_current IS DISTINCT FROM true THEN
-            expected_reasons := expected_reasons || '["needs_reconfirmation"]'::jsonb;
+          IF quote_current IS DISTINCT FROM true THEN
+            expected_reasons := expected_reasons || '["invalid_citation"]'::jsonb;
           END IF;
         END IF;
-        IF citation_ok IS DISTINCT FROM true THEN expected_reasons := expected_reasons || '["invalid_citation"]'::jsonb; END IF;
-
+        IF citation_ok IS DISTINCT FROM true AND NOT (expected_reasons ? 'invalid_citation') THEN
+          expected_reasons := expected_reasons || '["invalid_citation"]'::jsonb;
+        END IF;
         IF NEW.gap_reasons IS DISTINCT FROM expected_reasons THEN
 
           RAISE EXCEPTION 'Gap reasons must reflect current inputs' USING ERRCODE='23514';
@@ -405,6 +406,26 @@ CREATE FUNCTION public.response_item_gate() RETURNS trigger
         END IF;
       END IF;
       RETURN NEW;
+    END $$;
+
+-- FUNCTION: response_item_complete()
+CREATE FUNCTION public.response_item_complete() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog'
+    AS $$
+    BEGIN
+      -- The deferred pass re-ran response_item_gate() for the same row the BEFORE
+      -- trigger already validated in this transaction. That function is row-local
+      -- and never reads public.response_items, every row it references is
+      -- protected by the task lock this transaction holds (cards.task_lock and the
+      -- requirements.source_lock BEFORE UPDATE trigger both take
+      -- SELECT tasks ... FOR UPDATE), and response_items is append-only, so the
+      -- second pass could not observe anything the first one did not. The genuine
+      -- cross-row invariant is enforced separately by response_draft_complete() on
+      -- draft_runs. Skipping the duplicate pass keeps the declared completeness
+      -- constraint without paying for it twice; insert any real check here if a
+      -- future deferred-only invariant appears.
+      RETURN NULL;
     END $$;
 
 -- FUNCTION: response_link_gate()

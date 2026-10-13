@@ -21,8 +21,6 @@ from app.core.security import Secrets, TokenSigner
 from app.models.confidential import ConfidentialField as Field
 from app.models.confidential import ConfidentialFieldSearchToken as SearchToken
 from app.models.confidential import ConfidentialValue as Value
-from app.models.entities import Task
-from app.models.team_workflow import TaskMember, TaskWorkflow
 from app.schemas.confidential_contracts import (
     ConfidentialFieldView,
     ConfidentialValueSet,
@@ -71,47 +69,11 @@ async def reader(session: AsyncSession, actor: Identity) -> Identity:
 
 
 async def read_owner(session: AsyncSession, actor: Identity, task_id: UUID | None) -> dict:
-    """Read-only task visibility, matching task_access.access's read ceiling.
-
-    The caller has refreshed org/identity authority. One joined read keeps task
-    pages bounded; writes still use access() and its task-first row locks.
-    """
-    if task_id is None:
-        actor.require("confidential:read")
-        return {}
-    row = (
-        await session.execute(
-            select(TaskWorkflow, TaskMember)
-            .select_from(Task)
-            .join(
-                TaskWorkflow,
-                (TaskWorkflow.org_id == Task.org_id) & (TaskWorkflow.task_id == Task.id),
-            )
-            .outerjoin(
-                TaskMember,
-                (TaskMember.org_id == Task.org_id)
-                & (TaskMember.task_id == Task.id)
-                & (TaskMember.user_id == actor.user_id)
-                & TaskMember.active.is_(True),
-            )
-            .where(Task.org_id == actor.org_id, Task.id == task_id)
-            .execution_options(populate_existing=True)
-        )
-    ).first()
-    recovery = actor.actor_kind == "session" and actor.token_id is None and actor.role == "admin"
-    if row is None or (row[1] is None and not recovery):
-        raise not_found()
-    actor.require("task:read")
     actor.require("confidential:read")
-    workflow, member = row
-    return {
-        "task_id": str(task_id),
-        "workflow_revision": workflow.revision,
-        "workflow_state": workflow.state,
-        "member_revision": member.revision if member else None,
-        "member_role": member.role if member else None,
-        "review_domains": sorted(member.review_domains) if member else [],
-    }
+    if task_id is None:
+        return {}
+    await access(session, actor, task_id, scope="confidential:read")
+    return {"task_id": str(task_id)}
 
 
 def filters(body: ConfidentialQuery, owner: dict) -> dict:
@@ -127,7 +89,6 @@ def filters(body: ConfidentialQuery, owner: dict) -> dict:
 def cursor_binding(actor, purpose, parent, normalized):
     return {
         "kind": "management_confidential_cursor",
-        "org": str(actor.org_id),
         "authority": authority(actor),
         "purpose": purpose,
         "parent": str(parent or ""),
@@ -214,7 +175,6 @@ def build_page(session, actor, purpose, parent, normalized, items, anchors, more
             else None
         )
         data = PageData(
-            org_id=actor.org_id,
             as_of=as_of,
             returned=retained,
             next_cursor=continuation,
@@ -231,9 +191,7 @@ def build_page(session, actor, purpose, parent, normalized, items, anchors, more
         retained -= 1
     if items:
         too_large()
-    return Page(
-        data=PageData(org_id=actor.org_id, as_of=as_of, returned=0, has_more=False), items=[]
-    )
+    return Page(data=PageData(as_of=as_of, returned=0, has_more=False), items=[])
 
 
 def prefix_bounds(lexeme, prefix: str):
@@ -260,7 +218,7 @@ def prefix_candidates(actor: Identity, tokens: list[str]):
     seed = aliased(SearchToken, name="prefix_seed")
     first_rows = (
         select(seed.token, seed.field_id)
-        .where(seed.org_id == actor.org_id, *prefix_bounds(seed.token, tokens[0]))
+        .where(*prefix_bounds(seed.token, tokens[0]))
         .order_by(seed.token, seed.field_id)
         .limit(PREFIX_BATCH_SIZE)
         .subquery("first_tokens")
@@ -270,7 +228,6 @@ def prefix_candidates(actor: Identity, tokens: list[str]):
     next_rows = (
         select(seek.token, seek.field_id)
         .where(
-            seek.org_id == actor.org_id,
             *prefix_bounds(seek.token, tokens[0]),
             tuple_(seek.token, seek.field_id)
             > tuple_(
@@ -291,7 +248,7 @@ def prefix_candidates(actor: Identity, tokens: list[str]):
     )
     # A materialization fence alone does not constrain its inner scan. Traverse
     # the prefix B-tree in bounded, ordered windows instead of an unordered
-    # DISTINCT over the tenant. Continue to exhaustion: this is not a search cap.
+    # DISTINCT over all tokens. Continue to exhaustion: this is not a search cap.
     candidates = (
         select(func.unnest(batches.c.field_ids).label("field_id"))
         .distinct()
@@ -304,7 +261,6 @@ def prefix_candidates(actor: Identity, tokens: list[str]):
         statement = statement.where(
             select(other.field_id)
             .where(
-                other.org_id == actor.org_id,
                 other.field_id == candidates.c.field_id,
                 *prefix_bounds(other.token, token),
             )
@@ -321,13 +277,13 @@ def prefix_candidates(actor: Identity, tokens: list[str]):
 
 
 def fields_statement(actor: Identity, body: ConfidentialQuery, anchor=None, *, values=False):
-    statement = select(Field).where(Field.org_id == actor.org_id)
+    statement = select(Field)
     if body.field_id is not None:
         statement = statement.where(Field.id == body.field_id)
     if not body.archived:
         statement = statement.where(Field.archived.is_(False))
     if values and body.task_id is None:
-        statement = statement.where(Field.scope == "org")
+        statement = statement.where(Field.scope == "library")
     if anchor:
         statement = statement.where(tuple_(Field.key, Field.id) > tuple_(*anchor))
     projected = Field
@@ -335,9 +291,8 @@ def fields_statement(actor: Identity, body: ConfidentialQuery, anchor=None, *, v
         tokens = search_tokens(body.q)
         if tokens:
             candidates = prefix_candidates(actor, tokens)
-            # @@ is not leakproof: under FORCE RLS it cannot drive the GIN
-            # scan. Use leakproof scalar token ranges to choose candidates,
-            # then keep @@ only as the original semantic check on point reads.
+            # Token ranges bound candidate enumeration; retain @@ as the
+            # full-text semantic check on each candidate point read.
             # OFFSET 0 prevents flattening this parameterized lookup back into
             # an all-fields join/scan. All filters still precede the page LIMIT.
             point = (
@@ -365,12 +320,10 @@ def fields_statement(actor: Identity, body: ConfidentialQuery, anchor=None, *, v
 def safe_columns():
     return [
         Value.id.label("value_id"),
-        Value.org_id.label("value_org_id"),
         Value.field_id.label("value_field_id"),
         Value.task_id.label("value_task_id"),
         Value.version,
         Value.tail,
-        Value.created_by.label("set_by"),
         Value.created_at.label("set_at"),
     ]
 
@@ -380,13 +333,12 @@ def values_statement(actor: Identity, body: ConfidentialQuery, anchor=None):
     # owner index, so task context never scans values belonging to other tasks.
     page_fields = aliased(Field, fields_statement(actor, body, anchor, values=True).subquery())
     branches = []
-    for scope, task_id in (("org", None), ("task", body.task_id)):
+    for scope, task_id in (("library", None), ("task", body.task_id)):
         if scope == "task" and task_id is None:
             continue
         branches.append(
             select(*safe_columns())
             .where(
-                Value.org_id == actor.org_id,
                 Value.field_id == page_fields.id,
                 page_fields.scope == scope,
                 Value.task_id.is_(None) if task_id is None else Value.task_id == task_id,
@@ -404,19 +356,11 @@ def values_statement(actor: Identity, body: ConfidentialQuery, anchor=None):
     )
 
 
-def check_field(actor: Identity, field: Field):
-    if field.org_id != actor.org_id:
-        fail("management_integrity_error", "Confidential field identity is invalid", 409, 4)
-
-
 def value_view(actor, field, record, task_id):
-    check_field(actor, field)
     owner = task_id if field.scope == "task" else None
     value_id = record["value_id"]
     if value_id is not None and (
-        record["value_org_id"] != actor.org_id
-        or record["value_field_id"] != field.id
-        or record["value_task_id"] != owner
+        (record["value_field_id"] != field.id) or (record["value_task_id"] != owner)
     ):
         fail("management_integrity_error", "Confidential value identity is invalid", 409, 4)
     return ConfidentialValueView(
@@ -431,7 +375,6 @@ def value_view(actor, field, record, task_id):
         value_id=value_id,
         version=record["version"],
         tail=record["tail"],
-        set_by=record["set_by"],
         set_at=record["set_at"],
     )
 
@@ -447,7 +390,6 @@ async def fields(
         rows = (await session.scalars(fields_statement(actor, body, anchor))).all()
         items = []
         for field in rows[: body.limit]:
-            check_field(actor, field)
             items.append(ConfidentialFieldView.model_validate(confidential.field_view(field)))
         return build_page(
             session,
@@ -488,10 +430,8 @@ async def values(
 
 
 def history_statement(actor: Identity, field_id: UUID, body: ConfidentialHistoryQuery, anchor=None):
-    relation = (
-        (Value.org_id == actor.org_id)
-        & (Value.field_id == field_id)
-        & (Value.task_id.is_(None) if body.task_id is None else Value.task_id == body.task_id)
+    relation = (Value.field_id == field_id) & (
+        Value.task_id.is_(None) if body.task_id is None else Value.task_id == body.task_id
     )
     if anchor:
         relation &= tuple_(Value.version, Value.id) < tuple_(*anchor)
@@ -506,7 +446,7 @@ def history_statement(actor: Identity, field_id: UUID, body: ConfidentialHistory
     return (
         select(Field, *revisions.c)
         .outerjoin(revisions, true())
-        .where(Field.org_id == actor.org_id, Field.id == field_id)
+        .where(Field.id == field_id)
         .order_by(revisions.c.version.desc(), revisions.c.value_id.desc())
         .execution_options(populate_existing=True)
     )
@@ -515,8 +455,8 @@ def history_statement(actor: Identity, field_id: UUID, body: ConfidentialHistory
 def check_owner(field: Field, task_id: UUID | None):
     if field.scope == "task" and task_id is None:
         fail("confidential_task_required", "A task-scope field takes a value per task")
-    if field.scope == "org" and task_id is not None:
-        fail("confidential_task_not_allowed", "An org-scope field has one value for all tasks")
+    if field.scope == "library" and task_id is not None:
+        fail("confidential_task_not_allowed", "The library-scope field has one value for all tasks")
 
 
 async def history(
@@ -530,7 +470,6 @@ async def history(
         if not rows:
             raise not_found()
         field = rows[0][0]
-        check_field(actor, field)
         check_owner(field, body.task_id)
         records = [row for row in rows if row._mapping["value_id"] is not None]
         items = [
@@ -566,7 +505,6 @@ async def set_value(
     actor.require("confidential:write")
     confidential.human(actor)
     field = await confidential.require_field(session, field_id, lock=True)
-    check_field(actor, field)
     check_owner(field, body.task_id)
     if field.archived:
         fail("confidential_field_archived", "The field is archived", 409)
@@ -575,7 +513,6 @@ async def set_value(
     current = await session.scalar(
         select(Value.id)
         .where(
-            Value.org_id == actor.org_id,
             Value.field_id == field_id,
             Value.task_id.is_(None) if body.task_id is None else Value.task_id == body.task_id,
         )

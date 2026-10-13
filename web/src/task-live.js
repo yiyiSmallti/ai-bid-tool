@@ -1,6 +1,5 @@
 import { onUnmounted, ref } from "vue";
-import { ApiError, orgEventStream, orgSession } from "./api.js";
-import { orgRequest } from "./org.js";
+import { ApiError, eventStream, request } from "./api.js";
 
 // Events invalidate projections; only an authenticated snapshot supplies business state.
 export function useTaskLive(taskId, snapshot, denied) {
@@ -42,7 +41,7 @@ export function useTaskLive(taskId, snapshot, denied) {
     failures = 0;
     if (event.type === "heartbeat") { if (typeof event.cursor === "string") cursor = event.cursor; return; }
     if (event.type === "reset_required") { snapshotReady = false; cursor = null; await refresh(); return; }
-    if (event.org_id !== orgSession.get()?.orgId || event.task_id !== taskId || typeof event.event_id !== "string" || typeof event.cursor !== "string") throw new ApiError(502, "invalid_event_stream", "进度事件范围不符合契约");
+    if (event.task_id !== taskId || typeof event.event_id !== "string" || typeof event.cursor !== "string") throw new ApiError(502, "invalid_event_stream", "进度事件范围不符合契约");
     cursor = event.cursor;
     if (seen.has(event.event_id)) return;
     seen.add(event.event_id); if (seen.size > 2000) seen.delete(seen.values().next().value);
@@ -69,7 +68,7 @@ export function useTaskLive(taskId, snapshot, denied) {
       if (polling) {
         status.value = "轮询更新";
         const params = new URLSearchParams({ limit: "100", wait_seconds: "0" }); if (cursor) params.set("cursor", cursor);
-        const result = await orgRequest("GET", `/tasks/${taskId}/events/poll?${params}`, undefined, { signal: controller.signal });
+        const result = await request("GET", `/tasks/${taskId}/events/poll?${params}`, undefined, { signal: controller.signal });
         if (run !== generation || stopped) return;
         if (result.data.reset_required) {
           snapshotReady = false; cursor = null;
@@ -86,7 +85,7 @@ export function useTaskLive(taskId, snapshot, denied) {
         failures = 3; scheduleConnect(result.data.has_more ? 1000 : 5000);
       } else {
         status.value = "实时更新";
-        await orgEventStream(`/tasks/${taskId}/events`, cursor, controller.signal, receive);
+        await eventStream(`/tasks/${taskId}/events`, cursor, controller.signal, receive);
         if (run === generation && !stopped) retry(snapshotReady ? undefined : lastSnapshotError);
       }
     } catch (exc) {
@@ -98,8 +97,8 @@ export function useTaskLive(taskId, snapshot, denied) {
   }
   async function start() { stop(); stopped = false; failures = 0; polling = false; const run = generation; const fresh = await refresh(); if (!stopped && run === generation) { validityTimer = setInterval(refresh, 25000); if (fresh) connect(); else retry(lastSnapshotError); } }
   function visibility() { if (stopped) return; const run = generation; clearTimeout(timer); controller?.abort(); if (document.hidden) status.value = "后台已暂停"; else { refresh().then(fresh => { if (!stopped && run === generation) { if (fresh) connect(); else retry(lastSnapshotError); } }); } }
-  const reset = () => revoke(new ApiError(401, "session_changed", "单位会话已改变，请重新打开任务"));
-  document.addEventListener("visibilitychange", visibility); window.addEventListener("bid:org-reset", reset);
-  onUnmounted(() => { stop(); document.removeEventListener("visibilitychange", visibility); window.removeEventListener("bid:org-reset", reset); });
+  const reset = () => revoke(new ApiError(401, "session_changed", "会话已改变，请重新打开任务"));
+  document.addEventListener("visibilitychange", visibility); window.addEventListener("bid:session-reset", reset);
+  onUnmounted(() => { stop(); document.removeEventListener("visibilitychange", visibility); window.removeEventListener("bid:session-reset", reset); });
   return { status, start, stop, refresh };
 }

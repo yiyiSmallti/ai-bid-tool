@@ -1,15 +1,13 @@
 """CLI → HTTP contract acceptance for independent image privacy clearance."""
 
 import json
-import os
-from pathlib import Path
 
 from app.schemas import bid_review_presence as models
 from app.schemas.contracts import Result
 from bid_cli import main as cli
 from bid_cli.schema import command_schema
 from fastapi import FastAPI, Request
-from test_bid_review_cli import ID, SHA, SUBMISSION, InterfaceClient, invoke
+from test_bid_review_cli import ID, SHA, SUBMISSION, InterfaceClient, assert_cli_contracts, invoke
 
 
 def test_presence_http_transport_snapshots(monkeypatch, tmp_path, capsys):
@@ -39,7 +37,7 @@ def test_presence_http_transport_snapshots(monkeypatch, tmp_path, capsys):
 
     @application.api_route("/v4/bid-submissions/{submission_id}/{action}", methods=["GET", "POST"])
     async def endpoint(request: Request, submission_id: str, action: str):
-        assert request.headers["x-org-id"] == ID and submission_id == SUBMISSION
+        assert submission_id == SUBMISSION
         if action == "presence-preview":
             assert request.method == "GET"
             command, data = "review presence preview", preview
@@ -62,10 +60,9 @@ def test_presence_http_transport_snapshots(monkeypatch, tmp_path, capsys):
         received.append(action)
         return Result(ok=True, command=command, data=data.model_dump(mode="json"))
 
-    monkeypatch.setenv("BID_SESSION", "synthetic-presence-session")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-access-key-synthetic-presence-session")
     monkeypatch.setattr(
-        cli, "Client", lambda mode, server, saved: InterfaceClient(mode, server, saved, application)
+        cli, "Client", lambda mode, server: InterfaceClient(mode, server, application)
     )
     request = tmp_path / "presence.json"
     request.write_text(
@@ -111,7 +108,15 @@ def test_presence_http_transport_snapshots(monkeypatch, tmp_path, capsys):
             assert "Reviewed exact" not in json.dumps(value)
             actual[f"{mode}: {name}"] = value
     assert len(received) == 6
-    snapshot = Path(__file__).with_name("snapshots") / "bid-review-presence-cli-v4.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(json.dumps(actual, sort_keys=True, indent=2) + "\n")
-    assert actual == json.loads(snapshot.read_text())
+    assert_cli_contracts(actual)
+    for mode in ("local", "remote"):
+        for name in ("preview", "prepare"):
+            result = models.PresencePreview.model_validate(
+                actual[f"{mode}: review presence {name}"]["data"]
+            )
+            assert str(result.submission_id) == SUBMISSION and result.manifest_sha256 == SHA
+            assert result.images[0].sha256 == SHA and result.images[0].source_sha256 == "b" * 64
+        grant = models.PresenceAuthorizationView.model_validate(
+            actual[f"{mode}: review presence authorize"]["data"]
+        )
+        assert grant.manifest_sha256 == SHA and [str(item) for item in grant.image_ids] == [ID]

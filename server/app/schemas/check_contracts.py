@@ -49,7 +49,6 @@ class AssessmentRequest(Contract):
 
 
 class AssessmentInput(Contract):
-    org_id: UUID
     task_id: UUID
     draft_id: UUID
     extraction_job_id: UUID
@@ -69,8 +68,7 @@ class AssessmentPreview[InputT: Contract](Contract):
     admission_blocker: str | None = None
     estimated_duration_ms: int | None = Field(default=None, ge=0)
     provider_config_id: UUID | None = None
-    provider_source: Literal["org", "platform"] | None = None
-    platform_model_id: str | None = None
+    provider_source: Literal["local"] | None = None
     model_revision: int | None = Field(default=None, ge=1)
     model: str | None = None
     reasoning: str | None = None
@@ -200,7 +198,6 @@ class RuleObservation(Contract):
 
 class CheckItemView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     report_id: UUID
     requirement_id: UUID
@@ -218,7 +215,6 @@ class CheckItemView(Contract):
 
 class CheckCertificateView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     report_id: UUID
     task_certificate_id: UUID
@@ -230,7 +226,6 @@ class CheckCertificateView(Contract):
 
 class FindingCitationView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     report_id: UUID
     finding_id: UUID
@@ -239,7 +234,6 @@ class FindingCitationView(Contract):
 
 class FindingView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     report_id: UUID
     check_item_id: UUID
@@ -266,7 +260,6 @@ class FindingDecisionRequest(Contract):
 
 class FindingDecisionView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     report_id: UUID
     finding_id: UUID
@@ -274,7 +267,6 @@ class FindingDecisionView(Contract):
     action: Literal["dismiss", "reopen"]
     reason: NonBlank
     reason_sha256: Sha256
-    decided_by: UUID
     decided_at: AwareDatetime
     actor_kind: Literal["session"] = "session"
 
@@ -286,7 +278,6 @@ class FindingDecisionData(Contract):
 
 class CheckRunView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     job_id: UUID
     run_id: UUID

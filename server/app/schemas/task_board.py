@@ -11,9 +11,6 @@ from pydantic import AwareDatetime, Field, StringConstraints, model_validator
 from app.schemas.contracts import Category, Contract
 from app.schemas.response_card_contracts import CardState, ReviewDomain
 
-type TaskRole = Literal["owner", "contributor", "reviewer", "observer"]
-type MemberRole = Literal["contributor", "reviewer", "observer"]
-type TaskWorkflowState = Literal["active", "archived"]
 type BoardBucket = Literal[
     "gap", "draft_card", "pending_review", "needs_material", "confirmed", "comply_only"
 ]
@@ -25,17 +22,14 @@ type BoardBlocker = Literal[
     "unclassified",
     "invalid_citation",
     "stale_material",
-    "needs_reconfirmation",
     "unconfirmed",
     "rejected",
     "needs_material",
-    "task_archived",
     "unconfirmed_evidence",
     "expired_certificate",
     "certificate_inactive",
     "prototype_undecided",
     "prototype_replacement_pending",
-    "missing_reviewer",
     "job_failed",
     "job_call_limit_exceeded",
 ]
@@ -64,10 +58,9 @@ type CardEligibility = Literal[
     "unclassified",
     "stale_material",
     "invalid_citation",
-    "needs_reconfirmation",
 ]
 type JobState = Literal["queued", "running", "succeeded", "failed", "cancelled"]
-type WorkflowAction = Literal[
+type ActivityAction = Literal[
     "card_changed",
     "job_changed",
 ]
@@ -75,33 +68,11 @@ type Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 type Revision = Annotated[int, Field(strict=True, ge=1)]
 type Cursor = Annotated[str, Field(min_length=1, max_length=1024)]
 type Reason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
-type Domains = Annotated[list[ReviewDomain], Field(max_length=2)]
 
 
 def _unique(values: list, field: str) -> None:
     if len(values) != len(set(values)):
         raise ValueError(f"{field} cannot contain duplicates")
-
-
-class TaskWorkflowView(Contract):
-    org_id: UUID
-    task_id: UUID
-    owner_user_id: UUID
-    state: TaskWorkflowState
-    revision: Revision
-    access_epoch: Revision
-    last_event_cursor: Cursor
-    archived_at: AwareDatetime | None = None
-    archived_by_user_id: UUID | None = None
-
-    @model_validator(mode="after")
-    def archive_metadata(self):
-        archived = self.state == "archived"
-        if archived != (self.archived_at is not None) or archived != (
-            self.archived_by_user_id is not None
-        ):
-            raise ValueError("archive actor and time accompany only archived state")
-        return self
 
 
 class BoardQuery(Contract):
@@ -124,14 +95,6 @@ class BoardActionTarget(Contract):
 class BoardActionView(Contract):
     code: BoardNextAction
     target: BoardActionTarget
-    eligible_user_ids: list[UUID] = Field(max_length=100)
-    eligible_domains: Domains = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def unique_eligibility(self):
-        _unique(self.eligible_user_ids, "eligible_user_ids")
-        _unique(self.eligible_domains, "eligible_domains")
-        return self
 
 
 class BoardRowFlags(Contract):
@@ -223,27 +186,12 @@ class TaskProgressQuery(Contract):
     limit: int = Field(default=20, strict=True, ge=1, le=20)
 
 
-class TaskActorAccess(Contract):
-    role: TaskRole
-    review_domains: Domains
-
-
 class TaskProgressData(Contract):
-    access: TaskActorAccess | None
-
-    org_id: UUID
     task_id: UUID
-    workflow: TaskWorkflowView
     event_cursor: Cursor
     as_of: AwareDatetime
     next_cursor: Cursor | None
     returned: int = Field(strict=True, ge=0, le=20)
-
-    @model_validator(mode="after")
-    def same_task(self):
-        if (self.org_id, self.task_id) != (self.workflow.org_id, self.workflow.task_id):
-            raise ValueError("progress and workflow must belong to one task")
-        return self
 
 
 class TaskProgressView(TaskProgressData):
@@ -259,8 +207,7 @@ class TaskProgressView(TaskProgressData):
 
 class BoardActivityView(Contract):
     id: UUID
-    actor_user_id: UUID | None
-    action: WorkflowAction
+    action: ActivityAction
     requirement_id: UUID | None = None
     card_id: UUID | None = None
     job_id: UUID | None = None
@@ -268,10 +215,8 @@ class BoardActivityView(Contract):
 
 
 class BoardData(Contract):
-    org_id: UUID
     task_id: UUID
     extraction_job_id: UUID
-    workflow: TaskWorkflowView
     counts: BoardCounts
     matching: int = Field(strict=True, ge=0)
     returned: int = Field(strict=True, ge=0, le=100)
@@ -284,8 +229,6 @@ class BoardData(Contract):
 
     @model_validator(mode="after")
     def pinned_task(self):
-        if (self.org_id, self.task_id) != (self.workflow.org_id, self.workflow.task_id):
-            raise ValueError("board workflow must belong to the requested task")
         if not self.returned <= self.matching <= self.counts.total:
             raise ValueError("returned <= matching <= total must hold")
         if not 0 < (self.refresh_by - self.as_of).total_seconds() <= 30:
@@ -334,21 +277,12 @@ class JobProgressChanged(Contract):
     progress: JobProgress | None
 
 
-class TaskAccessChanged(Contract):
-    type: Literal["access_changed"] = "access_changed"
-    state: TaskWorkflowState
-    access_epoch: Revision
-
-
-type TaskEventPayload = Annotated[
-    BoardChanged | JobProgressChanged | TaskAccessChanged, Field(discriminator="type")
-]
+type TaskEventPayload = Annotated[BoardChanged | JobProgressChanged, Field(discriminator="type")]
 
 
 class TaskEventHeadView(Contract):
     """Internal independent head; never expose sequence or serialize it in public Result."""
 
-    org_id: UUID
     task_id: UUID
     sequence: int = Field(strict=True, ge=0)
     retained_floor: int = Field(strict=True, ge=0)
@@ -362,7 +296,6 @@ class TaskEventHeadView(Contract):
 
 class TaskEventView(Contract):
     event_id: UUID
-    org_id: UUID
     task_id: UUID
     cursor: Cursor
     payload: TaskEventPayload
@@ -379,7 +312,6 @@ class StoredTaskEvent(Contract):
     """Persist facts only; replay creates a cursor for the subscriber's visibility."""
 
     event_id: UUID
-    org_id: UUID
     task_id: UUID
     sequence: Revision
     payload: TaskEventPayload
@@ -410,7 +342,6 @@ class EventReplayQuery(Contract):
 
 
 class EventReplayData(Contract):
-    org_id: UUID
     task_id: UUID
     next_cursor: Cursor | None
     head_cursor: Cursor
@@ -427,9 +358,7 @@ class EventReplayView(EventReplayData):
     def ordered_task_events(self):
         _unique([event.event_id for event in self.events], "event IDs")
         _unique([event.cursor for event in self.events], "event cursors")
-        if any(
-            (event.org_id, event.task_id) != (self.org_id, self.task_id) for event in self.events
-        ):
+        if any(event.task_id != self.task_id for event in self.events):
             raise ValueError("replay contains events from exactly one task")
         if self.reset_required is not None and (self.events or self.has_more):
             raise ValueError("expired replay returns only a reset control")
@@ -442,7 +371,6 @@ class PageQuery(Contract):
 
 
 class PageData(Contract):
-    org_id: UUID
     task_id: UUID
     next_cursor: Cursor | None
     returned: int = Field(strict=True, ge=0, le=100)

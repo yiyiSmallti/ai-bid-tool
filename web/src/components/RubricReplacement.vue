@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { assessmentError, domainLabels, enc, queryPath } from "../assessments.js";
-import { confirmAction, orgAccess, orgRequest } from "../org.js";
+import { assessmentError, enc, queryPath } from "../assessments.js";
+import { request } from "../api.js";
+import { confirmAction } from "../org.js";
 import AssessmentCitation from "./AssessmentCitation.vue";
 const props = defineProps({ taskId: String, rubricId: String, summary: Object });
 const emit = defineEmits(['dirty', 'saved', 'close']);
@@ -11,11 +12,8 @@ const base = computed(() => `/tasks/${enc(props.taskId)}/score-rubrics/${enc(pro
 const sectionFields = ['key','title','order','aggregation','aggregation_rule_text','score_range','weight','cap','included_in_overall_total','ambiguity_reason'];
 const itemFields = ['requirement_id','key','title','rule_text','order','assessment_mode','score_range','weight','ambiguity_reason'];
 const overallFields = ['overall_aggregation','overall_rule_text','overall_score_range','overall_cap'];
-// Candidate declarations can violate normalization rules. Copy their values
-// verbatim so a reviewer can repair one domain without altering another domain.
 const pick = (row, fields) => Object.fromEntries(fields.map(key => [key, row[key] ?? null]));
 const clone = (value) => JSON.parse(JSON.stringify(value));
-const ownDomain = computed(() => ({ bidder: 'commercial', technical: 'technical' })[orgAccess.role]);
 const current = computed(() => form.value?.[active.value]?.[index.value]);
 const currentSource = computed(() => graph.value?.coverage.find(row => row.requirement_id === current.value?.requirement_id)?.source);
 const entries = computed(() => form.value?.[active.value] ?? []);
@@ -23,14 +21,7 @@ const dirty = computed(() => !!form.value && JSON.stringify(form.value) !== JSON
 watch(dirty, value => emit('dirty', value));
 watch(active, () => index.value = 0);
 watch([active, index], () => sourceRequirement.value = '');
-const editable = computed(() => {
-  const row = current.value; if (!row || !ownDomain.value) return false;
-  if (active.value === 'coverage') return orgAccess.role === 'bidder' || graph.value.items.filter(i => i.requirement_id === row.requirement_id).every(i => i.review_domain === ownDomain.value);
-  const original = graph.value?.[active.value].find(item => item.id === (row.source_section_id ?? row.source_item_id));
-  return !original || original.review_domain === ownDomain.value;
-});
 const originalEntry = computed(() => { const row = current.value; return graph.value?.[active.value]?.find(item => item.id === (row?.source_section_id ?? row?.source_item_id)); });
-const originalDomain = computed(() => originalEntry.value?.review_domain);
 const normalizationErrors = computed(() => originalEntry.value?.normalization_errors ?? []);
 const changes = computed(() => {
   if (!form.value || !baseline.value) return [];
@@ -48,15 +39,15 @@ const bytes = computed(() => form.value ? new TextEncoder().encode(JSON.stringif
 const aggregationOptions = { sum: '加总', weighted_sum: '加权合计', capped_sum: '封顶合计', formula: '公式（无法自动合计）', non_additive: '非加总规则' };
 const modeOptions = { model_assessable: '可由模型评估', ambiguous: '歧义', price_comparison: '价格比较', external_comparison: '外部比较', manual_only: '仅人工评估', unsupported_formula: '不支持的公式' };
 async function load() {
-  const request = ++generation; loading.value = true; error.value = ''; validSnapshot.value = false;
+  const token = ++generation; loading.value = true; error.value = ''; validSnapshot.value = false;
   try {
-    const header = (await orgRequest('GET', queryPath(base.value, { view: 'console', part: 'summary' }))).data;
+    const header = (await request('GET', queryPath(base.value, { view: 'console', part: 'summary' }))).data;
     const loaded = {}, snapshots = new Set();
     for (const part of ['sections','items','coverage']) {
       const list = [], seenCursors = new Set(); let cursor = null, expectedTotal = null;
       do {
-        const result = await orgRequest('GET', queryPath(base.value, { view: 'console', part, limit: 100, cursor }));
-        if (request !== generation) return;
+        const result = await request('GET', queryPath(base.value, { view: 'console', part, limit: 100, cursor }));
+        if (token !== generation) return;
         if (result.data.parent_revision !== header.revision || result.data.validity !== 'current' || result.data.parent_id !== props.rubricId || result.data.task_id !== props.taskId || result.data.returned !== result.items.length) throw { code: 'assessment_view_changed' };
         if (expectedTotal !== null && expectedTotal !== result.data.total) throw { code: 'assessment_view_changed' };
         snapshots.add(result.data.snapshot); expectedTotal = result.data.total; list.push(...result.items); cursor = result.data.next_cursor;
@@ -65,15 +56,15 @@ async function load() {
       if (list.length !== expectedTotal || new Set(list.map(r => r.id)).size !== list.length) throw { code: 'assessment_view_changed' };
       loaded[part] = list;
     }
-    const latest = (await orgRequest('GET', queryPath(base.value, { view: 'console', part: 'summary' }))).data;
+    const latest = (await request('GET', queryPath(base.value, { view: 'console', part: 'summary' }))).data;
     if (snapshots.size !== 1 || latest.revision !== header.revision || latest.input_hash !== header.input_hash || latest.validity !== 'current' || latest.state === 'superseded') throw { code: 'assessment_view_changed' };
-    if (request !== generation) return;
+    if (token !== generation) return;
     graph.value = loaded;
     const sectionKeys = new Map(loaded.sections.map(row => [row.id, row.key])), itemKeys = new Map(loaded.items.map(row => [row.id, row.key]));
     const replacement = { expected_revision: header.revision, expected_input_hash: header.input_hash, ...pick(header, overallFields), reason: '', sections: loaded.sections.map(row => ({ source_section_id: row.id, sources: row.sources.map(entry => ({ requirement_id: entry.requirement_id, quote: entry.quote })), ...pick(row, sectionFields) })), items: loaded.items.map(row => ({ source_item_id: row.id, section_key: sectionKeys.get(row.section_id), ...pick(row, itemFields) })), coverage: loaded.coverage.map(row => ({ requirement_id: row.requirement_id, disposition: row.disposition, rubric_item_keys: row.rubric_item_ids.map(id => itemKeys.get(id)), canonical_requirement_id: row.canonical_requirement_id, reason: row.reason })) };
     baseline.value = clone(replacement); form.value = clone(replacement); validSnapshot.value = true;
-  } catch (exc) { if (exc.name !== 'AbortError' && request === generation) error.value = assessmentError(exc); }
-  finally { if (request === generation) loading.value = false; }
+  } catch (exc) { if (exc.name !== 'AbortError' && token === generation) error.value = assessmentError(exc); }
+  finally { if (token === generation) loading.value = false; }
 }
 function changeAggregation(target, prefix = '') {
   if (target[`${prefix}aggregation`] !== 'capped_sum') target[`${prefix}cap`] = null;
@@ -81,15 +72,15 @@ function changeAggregation(target, prefix = '') {
 }
 function toggleRange(row, field = 'score_range') { row[field] = row[field] ? null : { minimum: '0', maximum: '0' }; }
 function add() {
-  if (!ownDomain.value || !graph.value.coverage.length) return;
+  if (!graph.value.coverage.length) return;
   const requirementId = graph.value.coverage[0].requirement_id;
   if (active.value === 'sections') form.value.sections.push({ source_section_id: null, sources: [{ requirement_id: requirementId, quote: graph.value.coverage[0].source.quote }], key: '', title: '', order: form.value.sections.length + 1, aggregation: 'sum', aggregation_rule_text: null, score_range: null, weight: null, cap: null, included_in_overall_total: true, ambiguity_reason: null });
   else if (active.value === 'items') form.value.items.push({ source_item_id: null, requirement_id: requirementId, section_key: form.value.sections[0]?.key ?? '', key: '', title: '', rule_text: '', order: form.value.items.length + 1, assessment_mode: 'model_assessable', score_range: { minimum: '0', maximum: '0' }, weight: null, ambiguity_reason: null });
   index.value = entries.value.length - 1;
 }
 function remove() {
-  if (!editable.value || active.value === 'coverage') return;
-  if (active.value === 'sections' && form.value.items.some(i => i.section_key === current.value.key)) { error.value = '此分节仍有关联条目，请先调整当前职责的条目；其他职责内容必须保留。'; return; }
+  if (!current.value || active.value === 'coverage') return;
+  if (active.value === 'sections' && form.value.items.some(i => i.section_key === current.value.key)) { error.value = '此分节仍有关联条目，请先调整条目所属分节。'; return; }
   entries.value.splice(index.value, 1); index.value = Math.max(0, index.value - 1);
 }
 function sourceTarget(entry) {
@@ -101,13 +92,13 @@ function sourceTarget(entry) {
   return coverage ? { part: 'coverage', entryId: coverage.id, origin: 'source', citationIndex: 0 } : null;
 }
 function addSource() {
-  if (!editable.value || active.value !== 'sections') return;
+  if (!current.value || active.value !== 'sections') return;
   const entry = graph.value.coverage.find(row => row.requirement_id === sourceRequirement.value);
   if (entry && !current.value.sources.some(saved => saved.requirement_id === entry.requirement_id && saved.quote === entry.source.quote)) current.value.sources.push({ requirement_id: entry.requirement_id, quote: entry.source.quote });
   sourceRequirement.value = '';
 }
 function removeSource(sourceIndex) {
-  if (editable.value && current.value.sources.length > 1) current.value.sources.splice(sourceIndex, 1);
+  if (current.value.sources.length > 1) current.value.sources.splice(sourceIndex, 1);
 }
 function coverageChanged(row) { if (row.disposition !== 'mapped') row.rubric_item_keys = []; if (row.disposition !== 'duplicate') row.canonical_requirement_id = null; }
 async function save() {
@@ -119,15 +110,15 @@ async function save() {
   for (const kind of ['sections', 'items']) if (form.value[kind].some(r => !r.key.trim() || !r.title.trim()) || new Set(form.value[kind].map(r => r.key)).size !== form.value[kind].length) { error.value = '分节和条目键必须唯一，标题不能为空'; return; }
   saving.value = true; error.value = '';
   try {
-    const latest = (await orgRequest('GET', queryPath(base.value, { view: 'console', part: 'summary' }))).data;
+    const latest = (await request('GET', queryPath(base.value, { view: 'console', part: 'summary' }))).data;
     if (latest.revision !== form.value.expected_revision || latest.input_hash !== form.value.expected_input_hash) { validSnapshot.value = false; throw { code: 'revision_conflict' }; }
-    const result = await orgRequest('POST', `${base.value}/revisions?view=console`, form.value); emit('dirty', false); emit('saved', result.data);
+    const result = await request('POST', `${base.value}/revisions?view=console`, form.value); emit('dirty', false); emit('saved', result.data);
   } catch (exc) { if (exc.name !== 'AbortError') { error.value = assessmentError(exc); if (['revision_conflict','assessment_view_changed','rubric_superseded'].includes(exc.code)) validSnapshot.value = false; } } finally { saving.value = false; }
 }
 async function close() { if (!dirty.value || await confirmAction('未保存的完整修订将被丢弃。', '关闭修订', '丢弃修订')) emit('close'); }
 async function reload() { if (!dirty.value || await confirmAction('将重新读取完整快照并丢弃当前未保存修改。', '重新载入完整规则', '重新载入')) await load(); }
 function clear() { generation++; form.value = null; baseline.value = null; graph.value = null; sourceRequirement.value = '';  emit('dirty', false); }
-window.addEventListener('bid:org-reset', clear); onBeforeUnmount(() => { clear(); window.removeEventListener('bid:org-reset', clear); });
+window.addEventListener('bid:session-reset', clear); onBeforeUnmount(() => { clear(); window.removeEventListener('bid:session-reset', clear); });
 load();
 </script>
 <template>
@@ -139,10 +130,10 @@ load();
       <el-alert v-if="!validSnapshot" title="快照已变化或读取未完成，保存已禁用；当前修改保留供核对" type="warning" :closable="false" />
       <el-tabs v-model="active" aria-label="完整修订分区"><el-tab-pane label="修订分节" name="sections" /><el-tab-pane label="修订条目" name="items" /><el-tab-pane label="修订覆盖提议" name="coverage" /><el-tab-pane label="修订总分规则" name="overall" /></el-tabs>
       <template v-if="active !== 'overall'">
-        <div class="actions"><el-button :disabled="index === 0" @click="index--">上一条修订</el-button><span>{{ index + 1 }} / {{ entries.length }}</span><el-button :disabled="index >= entries.length - 1" @click="index++">下一条修订</el-button><el-button v-if="active !== 'coverage'" @click="add">{{ active === 'sections' ? '新增分节' : '新增条目' }}</el-button><el-button v-if="active !== 'coverage'" :disabled="!editable" @click="remove">移除当前项</el-button></div>
-        <template v-if="current"><p v-if="!editable">此内容属于{{ domainLabels[originalDomain ?? 'unclassified'] }}，必须完整保留。</p><div v-if="normalizationErrors.length" data-testid="replacement-normalization-errors"><p>已载入版本的规范化问题（保存后由服务器重新核验）：</p><ul><li v-for="code in normalizationErrors" :key="code"><code>{{ code }}</code></li></ul><p>可修订当前职责内容；其他职责的问题保留待其负责人修订。规范化问题解决并完成审核后才能确认整套规则。</p></div><blockquote v-if="active !== 'sections'" class="quote">{{ currentSource?.quote }}</blockquote>
-          <el-form label-position="top" :disabled="!editable">
-            <template v-if="active === 'sections'"><p>分节可引用多段已固定的评分要求原文，至少保留一段。</p><article v-for="(entry, sourceIndex) in current.sources" :key="`${entry.requirement_id}-${sourceIndex}`"><p>评分要求 {{ entry.requirement_id }}</p><blockquote class="quote">{{ entry.quote }}</blockquote><AssessmentCitation v-if="sourceTarget(entry)" :task-id="taskId" parent-kind="rubric" :parent-id="rubricId" v-bind="sourceTarget(entry)" /><el-button :disabled="!editable || current.sources.length === 1" @click="removeSource(sourceIndex)">移除此原文</el-button></article><el-form-item label="添加固定分节原文"><el-select v-model="sourceRequirement" aria-label="添加固定分节原文"><el-option v-for="entry in graph.coverage" :key="entry.requirement_id" :value="entry.requirement_id" :label="entry.source.quote" /></el-select><el-button :disabled="!sourceRequirement" @click="addSource">添加此原文</el-button></el-form-item></template>
+        <div class="actions"><el-button :disabled="index === 0" @click="index--">上一条修订</el-button><span>{{ index + 1 }} / {{ entries.length }}</span><el-button :disabled="index >= entries.length - 1" @click="index++">下一条修订</el-button><el-button v-if="active !== 'coverage'" @click="add">{{ active === 'sections' ? '新增分节' : '新增条目' }}</el-button><el-button v-if="active !== 'coverage'" :disabled="!current" @click="remove">移除当前项</el-button></div>
+        <template v-if="current"><div v-if="normalizationErrors.length" data-testid="replacement-normalization-errors"><p>已载入版本的规范化问题（保存后由服务器重新核验）：</p><ul><li v-for="code in normalizationErrors" :key="code"><code>{{ code }}</code></li></ul><p>规范化问题解决并完成审核后才能确认整套规则。</p></div><blockquote v-if="active !== 'sections'" class="quote">{{ currentSource?.quote }}</blockquote>
+          <el-form label-position="top">
+            <template v-if="active === 'sections'"><p>分节可引用多段已固定的评分要求原文，至少保留一段。</p><article v-for="(entry, sourceIndex) in current.sources" :key="`${entry.requirement_id}-${sourceIndex}`"><p>评分要求 {{ entry.requirement_id }}</p><blockquote class="quote">{{ entry.quote }}</blockquote><AssessmentCitation v-if="sourceTarget(entry)" :task-id="taskId" parent-kind="rubric" :parent-id="rubricId" v-bind="sourceTarget(entry)" /><el-button :disabled="current.sources.length === 1" @click="removeSource(sourceIndex)">移除此原文</el-button></article><el-form-item label="添加固定分节原文"><el-select v-model="sourceRequirement" aria-label="添加固定分节原文"><el-option v-for="entry in graph.coverage" :key="entry.requirement_id" :value="entry.requirement_id" :label="entry.source.quote" /></el-select><el-button :disabled="!sourceRequirement" @click="addSource">添加此原文</el-button></el-form-item></template>
             <el-form-item v-else label="固定评分要求"><el-select v-model="current.requirement_id" aria-label="固定评分要求" :disabled="!!current.source_item_id || active === 'coverage'"><el-option v-for="entry in graph.coverage" :key="entry.requirement_id" :value="entry.requirement_id" :label="entry.source.quote" /></el-select></el-form-item>
             <template v-if="active !== 'coverage'">
               <el-form-item label="稳定键"><el-input v-model="current.key" aria-label="稳定键" :disabled="!!(current.source_section_id || current.source_item_id)" /></el-form-item><el-form-item label="标题"><el-input v-model="current.title" aria-label="标题" /></el-form-item><el-form-item label="顺序"><el-input-number v-model="current.order" :min="1" :precision="0" aria-label="顺序" /></el-form-item>
@@ -155,7 +146,7 @@ load();
           </el-form>
         </template>
       </template>
-      <el-form v-else label-position="top" :disabled="orgAccess.role !== 'bidder'"><p v-if="orgAccess.role !== 'bidder'">只有商务负责人（投标专员）可修改总分规则，当前内容将完整保留。</p><el-form-item label="总分合计规则"><el-select v-model="form.overall_aggregation" aria-label="总分合计规则" @change="changeAggregation(form, 'overall_')"><el-option v-for="(label,value) in aggregationOptions" :key="value" :value="value" :label="label" /></el-select></el-form-item><el-form-item label="总分规则原文"><el-input v-model="form.overall_rule_text" type="textarea" aria-label="总分规则原文" /></el-form-item><el-form-item v-if="form.overall_aggregation === 'capped_sum'" label="总分封顶"><el-input v-model="form.overall_cap" aria-label="总分封顶" inputmode="decimal" /></el-form-item><el-button @click="toggleRange(form, 'overall_score_range')">{{ form.overall_score_range ? '取消总分范围' : '设置总分范围' }}</el-button><div v-if="form.overall_score_range" class="actions"><el-input v-model="form.overall_score_range.minimum" aria-label="总分最低值" /><el-input v-model="form.overall_score_range.maximum" aria-label="总分最高值" /></div></el-form>
+      <el-form v-else label-position="top"><el-form-item label="总分合计规则"><el-select v-model="form.overall_aggregation" aria-label="总分合计规则" @change="changeAggregation(form, 'overall_')"><el-option v-for="(label,value) in aggregationOptions" :key="value" :value="value" :label="label" /></el-select></el-form-item><el-form-item label="总分规则原文"><el-input v-model="form.overall_rule_text" type="textarea" aria-label="总分规则原文" /></el-form-item><el-form-item v-if="form.overall_aggregation === 'capped_sum'" label="总分封顶"><el-input v-model="form.overall_cap" aria-label="总分封顶" inputmode="decimal" /></el-form-item><el-button @click="toggleRange(form, 'overall_score_range')">{{ form.overall_score_range ? '取消总分范围' : '设置总分范围' }}</el-button><div v-if="form.overall_score_range" class="actions"><el-input v-model="form.overall_score_range.minimum" aria-label="总分最低值" /><el-input v-model="form.overall_score_range.maximum" aria-label="总分最高值" /></div></el-form>
       <details><summary>比较新增、移除和修改（{{ changes.length }} 项）</summary><ul><li v-for="change in changes" :key="`${change.part}-${change.key}`">{{ change.action }} · {{ change.key }} · {{ change.fields }}</li></ul></details>
       <el-form-item label="完整修订理由" required><el-input v-model="form.reason" type="textarea" aria-label="完整修订理由" /></el-form-item><el-alert v-if="bytes > 524288" title="完整修订内容超出当前编辑上限" type="error" :closable="false" role="alert" />
     </template>

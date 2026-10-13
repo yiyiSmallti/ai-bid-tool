@@ -1,9 +1,9 @@
 """B05 end-to-end failure inventory, fixed before service implementation.
 
-A read-only preview must never create state or paid usage. Wrong org/task/card,
-source hash, revision, or replay payload must not mutate a card. Only active human
-owner/contributors prepare/attach; complete B02 and domain/co-sign approval alone
-admits a release. Source/pin/review/authority changes fence publication and reads.
+A read-only preview must never create state or paid usage. Wrong task/card,
+source hash, revision, or replay payload must not mutate a card. Only a human
+installation session prepares or attaches; current B02 and exact human confirmation
+admit a release. Source/pin/review/token changes fence publication and reads.
 Cancelled, expired, corrupt, or oversized work publishes no material. Retried fixed
 inputs yield the same bytes. Neither legacy screenshot routes nor exports can strip
 or bypass the fixed status footer. Artifacts contain synthetic IDs/hashes only.
@@ -24,7 +24,6 @@ from test_response_cards import (
     phase_one_client,
     require_action,
     select_real_materials,
-    set_role,
 )
 
 ARTIFACT = Path(__file__).resolve().parents[2] / "data/work/annotation-acceptance"
@@ -82,50 +81,50 @@ async def preview_submit(api, auth, task, target):
 
 @pytest.mark.parametrize("real_renderer", [False, True])
 async def test_annotation_candidate_human_review_release_and_invalidation(
-    tenants, tmp_path, admin_engine, monkeypatch, real_renderer
+    database, tmp_path, admin_engine, monkeypatch, real_renderer
 ):
     from annotation_test_renderer import configure_renderer
 
     configure_renderer(monkeypatch, real=real_renderer)
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
         original_transaction = app.state.db.transaction
 
         @asynccontextmanager
-        async def non_utc_transaction(org_id=None):
+        async def non_utc_transaction():
             # A new DB read must not change the pin created from the confirming
             # session's UTC datetime, even when the connection returns local time.
-            async with original_transaction(org_id) as session:
+            async with original_transaction() as session:
                 await session.execute(
                     text("SELECT set_config('TimeZone', 'America/Los_Angeles', true)")
                 )
                 yield session
 
         monkeypatch.setattr(app.state.db, "transaction", non_utc_transaction)
-        task, card, source, _, target = await seed_annotation(api, app, headers[0], tmp_path)
-        preview, body, receipt = await preview_submit(api, headers[0], task, target)
+        task, card, source, _, target = await seed_annotation(api, app, headers, tmp_path)
+        preview, body, receipt = await preview_submit(api, headers, task, target)
         assert preview["preflight"]["planned_calls"] == 0
         assert preview["preflight"]["admission_blocker"] is None
-        duplicate = await api.post(f"/v4/tasks/{task}/annotations", headers=headers[0], json=body)
+        duplicate = await api.post(f"/v4/tasks/{task}/annotations", headers=headers, json=body)
         assert duplicate.json()["data"]["job_id"] == receipt["job_id"]
         assert duplicate.json()["data"]["duplicate"]
         changed = await api.post(
             f"/v4/tasks/{task}/annotations",
-            headers=headers[0],
+            headers=headers,
             json={**body, "reviewed_source_png_sha256": "0" * 64},
         )
         assert changed.status_code == 409
-        await app.state.processor(str(tenants["orgs"][0]), receipt["job_id"])
-        status = await api.get(f"/v4/jobs/{receipt['job_id']}", headers=headers[0])
+        await app.state.processor(receipt["job_id"])
+        status = await api.get(f"/v4/jobs/{receipt['job_id']}", headers=headers)
         assert status.json()["data"]["status"] == "succeeded", status.text
         ident = status.json()["data"]["result"]["annotation_id"]
-        shown = await api.get(f"/v4/annotations/{ident}", headers=headers[0])
+        shown = await api.get(f"/v4/annotations/{ident}", headers=headers)
         candidate = shown.json()["data"]["candidate"]
-        assert candidate["status"] == "unconfirmed_material" and candidate["confirmed_by"] is None
+        assert candidate["status"] == "unconfirmed_material" and candidate["confirmed_at"] is None
         assert not candidate["eligible_for_draft_export"]
-        unchanged = (await api.get(f"/cards/{card['id']}", headers=headers[0])).json()["data"]
+        unchanged = (await api.get(f"/cards/{card['id']}", headers=headers)).json()["data"]
         assert unchanged["revision"] == card["revision"] and not unchanged["evidence"]
-        linked = await api.get(f"/v4/annotations/{ident}/preview", headers=headers[0])
-        png = await api.get(linked.json()["data"]["url"], headers=headers[0])
+        linked = await api.get(f"/v4/annotations/{ident}/preview", headers=headers)
+        png = await api.get(linked.json()["data"]["url"], headers=headers)
         assert hashlib.sha256(png.content).hexdigest() == candidate["rendering"]["image"]["sha256"]
         attachment = {
             "kind": "image_region",
@@ -138,15 +137,15 @@ async def test_annotation_candidate_human_review_release_and_invalidation(
         }
         updated = await api.put(
             f"/cards/{card['id']}",
-            headers=headers[0],
+            headers=headers,
             json={
                 "expected_revision": card["revision"],
                 "content": {**card["content"], "evidence": [attachment]},
             },
         )
         assert updated.status_code == 200, updated.text
-        card = await require_action(api, headers[0], updated.json()["data"], "submit")
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
+        card = await require_action(api, headers, updated.json()["data"], "submit")
+
         action = {
             "expected_revision": card["revision"],
             "action": "confirm",
@@ -154,17 +153,17 @@ async def test_annotation_candidate_human_review_release_and_invalidation(
             "reviewed_warning_codes": card["warning_codes"],
             "reason": "Inspected every source pixel and warning.",
         }
-        blocked = await api.post(f"/cards/{card['id']}/actions", headers=headers[0], json=action)
+        blocked = await api.post(f"/cards/{card['id']}/actions", headers=headers, json=action)
         assert blocked.status_code == 409
         from test_requirement_confirmation import decision, post_decision, review
 
-        current = await review(api, headers[0], card["requirement_id"])
-        confirmed = await post_decision(api, headers[0], card["requirement_id"], decision(current))
+        current = await review(api, headers, card["requirement_id"])
+        confirmed = await post_decision(api, headers, card["requirement_id"], decision(current))
         assert confirmed.status_code == 200, confirmed.text
-        accepted = await api.post(f"/cards/{card['id']}/actions", headers=headers[0], json=action)
+        accepted = await api.post(f"/cards/{card['id']}/actions", headers=headers, json=action)
         assert accepted.status_code == 200, accepted.text
         approved_card = accepted.json()["data"]
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             release_job = await session.scalar(
                 select(Job).where(Job.task_id == UUID(task), Job.kind == "annotation_release")
             )
@@ -172,10 +171,10 @@ async def test_annotation_candidate_human_review_release_and_invalidation(
             release_job_id = str(release_job.id)
             submitted_approval = release_job.result["submission"]["approval"]
             assert submitted_approval["confirmed_at"].endswith("Z")
-        await app.state.processor(str(tenants["orgs"][0]), release_job_id)
-        release_status = await api.get(f"/v4/jobs/{release_job_id}", headers=headers[0])
+        await app.state.processor(release_job_id)
+        release_status = await api.get(f"/v4/jobs/{release_job_id}", headers=headers)
         assert release_status.json()["data"]["status"] == "succeeded", release_status.text
-        releases = await api.get(f"/v4/annotations/{ident}/releases", headers=headers[0])
+        releases = await api.get(f"/v4/annotations/{ident}/releases", headers=headers)
         release = releases.json()["items"][0]
         assert release["releasable"] and release["decision_validity"] == "current"
         assert release["approval"] == submitted_approval
@@ -189,48 +188,18 @@ async def test_annotation_candidate_human_review_release_and_invalidation(
             == candidate["rendering"]["image"]["sha256"]
         )
         release_link = await api.get(
-            f"/v4/annotation-releases/{release['id']}/preview", headers=headers[0]
+            f"/v4/annotation-releases/{release['id']}/preview", headers=headers
         )
         assert release_link.status_code == 200, release_link.text
-        released_png = await api.get(release_link.json()["data"]["url"], headers=headers[0])
+        released_png = await api.get(release_link.json()["data"]["url"], headers=headers)
         assert (
             hashlib.sha256(released_png.content).hexdigest()
             == release["rendering"]["image"]["sha256"]
         )
-        release_retry = {
-            "evidence_id": release["approval"]["evidence_id"],
-            "card_id": card["id"],
-            "expected_card_revision": approved_card["revision"],
-            "expected_approval_binding_hash": release["approval"]["approval_binding_sha256"],
-            "request_id": str(uuid4()),
-            "job_id": release_job_id,
-            "retry": True,
-        }
-        for method, path, payload in (
-            ("GET", f"/v4/tasks/{task}/annotations", None),
-            ("POST", f"/v4/tasks/{task}/annotations", {"dry_run": True, "input": target}),
-            ("POST", f"/v4/tasks/{task}/annotations", body),
-            ("GET", f"/v4/annotations/{ident}", None),
-            ("GET", f"/v4/annotations/{ident}/preview", None),
-            ("GET", linked.json()["data"]["url"], None),
-            ("GET", f"/v4/annotations/{ident}/releases", None),
-            ("POST", f"/v4/annotations/{ident}/releases", release_retry),
-            ("GET", release_link.json()["data"]["url"], None),
-            (
-                "GET",
-                f"/v4/tasks/{task}/jobs?kind=annotation_release&annotation_id={ident}&limit=20",
-                None,
-            ),
-            ("GET", f"/v4/annotation-releases/{release['id']}/preview", None),
-            ("GET", f"/v4/jobs/{receipt['job_id']}", None),
-            ("POST", f"/v4/jobs/{release_job_id}/cancel", None),
-        ):
-            denied = await api.request(method, path, headers=headers[1], json=payload)
-            assert denied.status_code == 404, (path, denied.text)
         for parent in (candidate, release):
             legacy = await api.post(
                 f"/screenshots/{parent['asset_id']}/renditions",
-                headers=headers[0],
+                headers=headers,
                 json={
                     "parent_rendition_id": parent["rendition_id"],
                     "expected_image_sha256": parent["rendering"]["image"]["sha256"],
@@ -247,22 +216,20 @@ async def test_annotation_candidate_human_review_release_and_invalidation(
             flipped = "B" if signature[middle] == "A" else "A"
             tampered = await api.get(
                 f"{base}signature={signature[:middle]}{flipped}{signature[middle + 1 :]}",
-                headers=headers[0],
+                headers=headers,
             )
             assert tampered.status_code == 404
         reopened = await require_action(
-            api, headers[0], approved_card, "reopen", reason="Review again."
+            api, headers, approved_card, "reopen", reason="Review again."
         )
         assert reopened["state"] != "confirmed"
-        stale = await api.get(
-            f"/v4/annotation-releases/{release['id']}/preview", headers=headers[0]
-        )
+        stale = await api.get(f"/v4/annotation-releases/{release['id']}/preview", headers=headers)
         assert stale.status_code == 409
         bypass = await api.post(
-            f"/screenshot-renditions/{release['rendition_id']}/preview-link", headers=headers[0]
+            f"/screenshot-renditions/{release['rendition_id']}/preview-link", headers=headers
         )
         assert bypass.status_code == 409
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             for model in (VendorCall, UsageRecord):
                 assert (
                     await session.scalar(

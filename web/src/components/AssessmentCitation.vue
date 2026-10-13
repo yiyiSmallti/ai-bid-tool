@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { assessmentError, enc, queryPath } from "../assessments.js";
-import { locationLabel, orgRequest } from "../org.js";
+import { request } from "../api.js";
+import { locationLabel } from "../org.js";
 import DocumentPreview from "./DocumentPreview.vue";
 const props = defineProps({ taskId: String, parentKind: String, parentId: String, part: String, entryId: String, origin: { type: String, default: "source" }, citationIndex: { type: Number, default: 0 } });
 const opened = ref(false), context = ref(null), error = ref(""), busy = ref(false);
@@ -12,18 +13,18 @@ const segments = computed(() => {
   return end > start ? [{ text: text.slice(0, start) }, { text: text.slice(start, end), mark: true }, { text: text.slice(end) }] : [{ text }];
 });
 async function load(offset = 0) {
-  controller?.abort(); controller = new AbortController(); const request = ++serial; busy.value = true; error.value = "";
+  controller?.abort(); controller = new AbortController(); const token = ++serial; busy.value = true; error.value = "";
   try {
-    const result = await orgRequest("GET", queryPath(`/tasks/${enc(props.taskId)}/assessment-citation`, { parent_kind: props.parentKind, parent_id: props.parentId, part: props.part, entry_id: props.entryId, origin: props.origin, citation_index: props.citationIndex, offset, limit: 4000 }), undefined, { signal: controller.signal });
-    if (request === serial) context.value = result.data;
-  } catch (exc) { if (request === serial && exc.name !== "AbortError") error.value = assessmentError(exc); }
-  finally { if (request === serial) busy.value = false; }
+    const result = await request("GET", queryPath(`/tasks/${enc(props.taskId)}/assessment-citation`, { parent_kind: props.parentKind, parent_id: props.parentId, part: props.part, entry_id: props.entryId, origin: props.origin, citation_index: props.citationIndex, offset, limit: 4000 }), undefined, { signal: controller.signal });
+    if (token === serial) context.value = result.data;
+  } catch (exc) { if (token === serial && exc.name !== "AbortError") error.value = assessmentError(exc); }
+  finally { if (token === serial) busy.value = false; }
 }
 function clear() { serial++; controller?.abort(); opened.value = false; context.value = null; error.value = ""; }
 watch(opened, (value) => { if (value) load(); else { serial++; controller?.abort(); context.value = null; } });
 watch(() => [props.taskId, props.parentKind, props.parentId, props.part, props.entryId, props.origin, props.citationIndex], clear);
-window.addEventListener("bid:org-reset", clear);
-onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", clear); });
+window.addEventListener("bid:session-reset", clear);
+onBeforeUnmount(() => { clear(); window.removeEventListener("bid:session-reset", clear); });
 </script>
 <template>
   <el-button link type="primary" @click="opened = true">查看引用原文</el-button>

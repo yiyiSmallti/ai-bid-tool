@@ -34,8 +34,6 @@ def test_schema_tracks_actual_commands():
 @pytest.mark.parametrize(
     "args,command",
     [
-        (["login"], "login"),
-        (["org", "use"], "org use"),
         (["task", "create"], "task create"),
         (["task", "redaction", "set"], "task redaction set"),
         (["card", "list"], "card list"),
@@ -139,7 +137,7 @@ def test_metadata_cli_rejects_input_before_transport(case, tmp_path, capsys, mon
     }[case]
     source.write_text(content)
     with pytest.raises(SystemExit) as error:
-        main(["--state", "task", "resource", "product", "add", "--input", str(source), "--json"])
+        main(["resource", "product", "add", "--input", str(source), "--json"])
     body = json.loads(capsys.readouterr().out)
     assert error.value.code == 2 and body["command"] == "resource product add"
     assert body["ok"] is False and "private-secret-value" not in json.dumps(body)

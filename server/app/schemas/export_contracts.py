@@ -130,7 +130,6 @@ class ExportBindingCreate(Contract):
 
 class ExportBindingView(Contract):
     id: UUID
-    org_id: UUID
     template_revision_id: UUID
     template_sha256: Sha256
     binding_hash: Sha256
@@ -141,7 +140,6 @@ class ExportBindingView(Contract):
     )
     # False for a binding of the earlier seven-column layout; it can no longer export.
     current: StrictBool
-    reviewed_by: UUID
     reviewed_at: datetime
 
     @field_validator("adapter_version")
@@ -233,7 +231,7 @@ class ExportConfidentialField(Contract):
 
     key: str = Field(min_length=2, max_length=48)
     label: str = Field(min_length=1, max_length=100)
-    scope: Literal["org", "task"]
+    scope: Literal["library", "task"]
     field_id: UUID
     status: Literal["filled", "missing"]
     value_id: UUID | None
@@ -280,7 +278,6 @@ class ExportPreview(Contract):
 
 class ExportRunView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     draft_id: UUID
     render_job_id: UUID
@@ -346,7 +343,6 @@ class ExportFile(Contract):
 
 class ExportView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     run_id: UUID
     draft_id: UUID
@@ -359,7 +355,6 @@ class ExportView(Contract):
     input_hash: Sha256
     manifest_hash: Sha256
     file: ExportFile
-    released_by: UUID
     released_at: datetime
     issues: list[ExportIssue]
     invalidated_requirement_ids: list[UUID]
@@ -442,7 +437,6 @@ class ProvenanceEvidence(Contract):
     material_kind: str = Field(min_length=1, max_length=100)
     selection_id: UUID | None
     resource_revision_id: UUID | None
-    confirmed_by: UUID
     confirmed_at: datetime
 
 
@@ -453,9 +447,7 @@ class ProvenanceItem(Contract):
     number: int = Field(ge=1)
     requirement_id: UUID
     card_revision_id: UUID | None
-    confirmed_by: UUID | None
     confirmed_at: datetime | None
-    disposition_by: UUID | None
     disposition_at: datetime | None
     quote_sha256: Sha256 | None
     evidence: list[ProvenanceEvidence]
@@ -491,7 +483,6 @@ class ExportProvenance(Contract):
     renderer_profile: str = Field(min_length=1)
     input_hash: Sha256
     manifest_hash: Sha256
-    released_by: UUID
     released_at: datetime
     items: list[ProvenanceItem]
     attachments: list[ProvenanceAttachment]

@@ -1,12 +1,12 @@
 """Slice-one acceptance failures recorded before implementation.
 
-Failure inventory: cross-org/task access and foreign encrypted cursors; removed
-members and revoked/expired identities during streams; token access to human
+Failure inventory: wrong-task encrypted cursors;
+revoked/expired identities during streams; token access to human
 export jobs; malformed/future/pruned cursors; snapshot/event race and changed
 filters/head/day; rollback versus committed durable ordering; hidden-event
 checkpoint leaks; content/raw sequence in frames; >5000 requirements; >1MiB
 Result; slow snapshots; unknown/falsified job percentages; duplicate frames;
-stream/org caps and bounded queues; successful empty extraction; archived writes.
+stream caps and bounded queues; successful empty extraction.
 The PostgreSQL integration cases require an explicitly supplied running runtime;
 this suite must never start or stop database services.
 """
@@ -30,8 +30,8 @@ from pydantic import SecretStr
 
 @pytest.fixture
 def transport(monkeypatch):
-    org, task, user = uuid4(), uuid4(), uuid4()
-    actor = Identity(user, org, {"task:read", "card:read", "job:read"}, "bidder")
+    task = uuid4()
+    actor = Identity(scopes={"task:read", "card:read", "job:read"})
     lifecycle = []
 
     class Connection:
@@ -92,8 +92,8 @@ def transport(monkeypatch):
         async def execute(self, statement, *args):
             lifecycle.append("sql")
 
-    async def authenticate(session, bearer, org_id, crypto):
-        if bearer != "synthetic-session" or org_id != org:
+    async def authenticate(session, bearer, crypto, settings):
+        if bearer != "synthetic-session":
             raise ServiceError("invalid_session", "Invalid credentials", 401, 4)
         lifecycle.append("authenticated")
         return actor
@@ -106,7 +106,6 @@ def transport(monkeypatch):
             raise ServiceError("not_found", "Resource not found", 404, 4)
         lifecycle.append("replay")
         return EventReplayView(
-            org_id=org,
             task_id=task,
             head_cursor="opaque-encrypted-head",
             next_cursor=None,
@@ -144,7 +143,7 @@ def transport(monkeypatch):
     app.include_router(
         board_api.create_router(None, SimpleNamespace(engine=Engine()), None, None, settings)
     )
-    headers = {"Authorization": "Bearer synthetic-session", "X-Org-Id": str(org)}
+    headers = {"Authorization": "Bearer synthetic-session"}
     return app, task, headers, lifecycle
 
 

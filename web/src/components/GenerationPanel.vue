@@ -1,14 +1,14 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
-import { confirmAction, display, errorText, orgRequest, warningText } from "../org.js";
+import { request } from "../api.js";
+import { confirmAction, display, errorText, warningText } from "../org.js";
 import JobPanel from "./JobPanel.vue";
 
 const props = defineProps({
   task: { type: Object, required: true },
   job: { type: Object, required: true },
   requirementIds: { type: Array, default: null },
-  role: { type: String, default: "viewer" },
   // A task material picker can advance this value to invalidate an open preview.
   materialRevision: { type: [String, Number], default: null },
 });
@@ -34,8 +34,6 @@ const extractionSucceeded = computed(() => props.job?.status === "succeeded");
 const explicitIdsValid = computed(
   () => props.requirementIds == null || props.requirementIds.length > 0,
 );
-const canOperate = computed(() => ["admin", "bidder", "technical"].includes(props.role));
-const canChangeRedaction = computed(() => props.role === "admin");
 const taskRedaction = computed(() => redactionOverride.value ?? props.task);
 const redactionEnabled = computed(() => taskRedaction.value?.model_redaction_enabled !== false);
 const redactionRevision = computed(() => taskRedaction.value?.model_redaction_revision ?? null);
@@ -61,7 +59,15 @@ const redactionLabels = {
 
 const blockerLabels = { provider_unavailable: "模型服务不可用", context_limit_exceeded: "输入超过模型上下文上限" };
 
-
+const canRun = computed(
+  () =>
+    !!preview.value &&
+    !previewIsStale.value &&
+    !preview.value.admission_blocker &&
+    (preview.value.selected_requirements?.length ?? 0) > 0 &&
+    authorized.value &&
+    !running.value,
+);
 
 function invalidatePreview() {
   preview.value = null;
@@ -102,11 +108,11 @@ async function loadReasoningLevels() {
   reasoning.value = "";
   error.value = "";
   invalidatePreview();
-  if (!documentId.value || !extractionSucceeded.value || !canOperate.value) return;
+  if (!documentId.value || !extractionSucceeded.value) return;
 
   loadingLevels.value = true;
   try {
-    const result = await orgRequest("POST", `/documents/${documentId.value}/extract`, {
+    const result = await request("POST", `/documents/${documentId.value}/extract`, {
       dry_run: true,
     });
     levels.value = result.data?.reasoning_levels ?? [];
@@ -119,7 +125,7 @@ async function loadReasoningLevels() {
 }
 
 watch(
-  () => [documentId.value, extractionJobId.value, props.job?.status, props.role],
+  () => [documentId.value, extractionJobId.value, props.job?.status],
   loadReasoningLevels,
   { immediate: true },
 );
@@ -145,7 +151,7 @@ async function runPreview() {
     };
     if (props.requirementIds != null) body.requirement_ids = [...props.requirementIds];
     if (reasoning.value) body.reasoning = reasoning.value;
-    const result = await orgRequest(
+    const result = await request(
       "POST",
       `/tasks/${props.task.id}/cards/generations`,
       body,
@@ -174,7 +180,7 @@ async function runGeneration() {
     };
     if (props.requirementIds != null) body.requirement_ids = [...props.requirementIds];
     if (reasoning.value) body.reasoning = reasoning.value;
-    const result = await orgRequest("POST", `/tasks/${props.task.id}/cards/generations`, body);
+    const result = await request("POST", `/tasks/${props.task.id}/cards/generations`, body);
     runJobId.value = result.data.job_id;
     invalidatePreview();
   } catch (exc) {
@@ -195,12 +201,12 @@ function generationFinished(job) {
 }
 
 async function toggleRedaction() {
-  if (!canChangeRedaction.value || changingRedaction.value) return;
+  if (changingRedaction.value) return;
   error.value = "";
   if (redactionEnabled.value && !(await confirmAction("关闭遮挡后，所选报价、联系人、身份和银行信息可能原文外发。确认关闭？", "关闭外发遮挡", "确定", true))) return;
   changingRedaction.value = true;
   try {
-    const result = await orgRequest("PUT", `/tasks/${props.task.id}/model-redaction`, {
+    const result = await request("PUT", `/tasks/${props.task.id}/model-redaction`, {
       expected_revision: redactionRevision.value,
       model_redaction_enabled: !redactionEnabled.value,
     });
@@ -257,22 +263,20 @@ defineExpose({ invalidate: invalidatePreview });
         <strong>{{ redactionEnabled ? "敏感信息按服务端规则遮挡" : "未遮挡文本会发送给已配置的模型服务商" }}</strong>
         <p v-if="!redactionEnabled" class="error">报价与金额、联系人与电话、身份信息和银行账号可能以原文外发。</p>
       </div>
-      <el-button v-if="canChangeRedaction" :type="redactionEnabled ? 'default' : 'primary'" :loading="changingRedaction" :disabled="redactionRevision == null" @click="toggleRedaction">
+      <el-button :type="redactionEnabled ? 'default' : 'primary'" :loading="changingRedaction" :disabled="redactionRevision == null" @click="toggleRedaction">
         {{ redactionEnabled ? "关闭遮挡" : "开启遮挡" }}
       </el-button>
-      <span v-else class="hint">只有单位管理员可以修改遮挡设置。</span>
     </div>
 
     <el-form label-position="top" class="controls" @submit.prevent="runPreview">
       <el-form-item label="官方推理档位">
-        <el-select v-model="reasoning" :disabled="loadingLevels || !levels.length || !canOperate" :placeholder="levels.length ? '请选择' : '此模型未提供可选推理档位'">
+        <el-select v-model="reasoning" :disabled="loadingLevels || !levels.length" :placeholder="levels.length ? '请选择' : '此模型未提供可选推理档位'">
           <el-option v-for="level in levels" :key="level.name" :value="level.name" :label="`${level.label || level.name}${level.default ? '（默认）' : ''}`" />
         </el-select>
       </el-form-item>
-      <el-button type="primary" native-type="submit" :loading="previewing" :disabled="loadingLevels || !canOperate || !extractionSucceeded || !explicitIdsValid">预检外发范围与配置</el-button>
+      <el-button type="primary" native-type="submit" :loading="previewing" :disabled="loadingLevels || !extractionSucceeded || !explicitIdsValid">预检外发范围与配置</el-button>
     </el-form>
 
-    <p v-if="!canOperate" class="notice">当前角色只能查看起草信息，不能预检或运行模型起草。</p>
     <p v-if="!extractionSucceeded" class="error">请选择已成功的抽取记录。</p>
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" />
 
@@ -286,7 +290,7 @@ defineExpose({ invalidate: invalidatePreview });
 
       <div class="stat-grid">
         <div class="stat"><span class="label">目标 / 跳过</span><strong>{{ preview.selected_requirements?.length ?? 0 }} / {{ skippedEntries.length }}</strong></div>
-        <div class="stat"><span class="label">模型</span><strong>{{ display(preview.model) }}</strong><small class="hint">目录 {{ display(preview.platform_model_id) }} · 修订 {{ display(preview.model_revision) }}</small></div>
+        <div class="stat"><span class="label">模型</span><strong>{{ display(preview.model) }}</strong><small class="hint">修订 {{ display(preview.model_revision) }}</small></div>
         <div class="stat"><span class="label">推理档位</span><strong>{{ display(preview.reasoning) }}</strong></div>
         <div class="stat"><span class="label">估算 tokens</span><strong>{{ display(preview.preflight?.estimate?.llm_tokens) }}</strong></div>
       </div>
@@ -330,7 +334,7 @@ defineExpose({ invalidate: invalidatePreview });
       </div>
     </div>
 
-    <JobPanel v-if="runJobId" :job-id="runJobId" :writable="canOperate" @finished="generationFinished" />
+    <JobPanel v-if="runJobId" :job-id="runJobId" @finished="generationFinished" />
   </section>
 </template>
 

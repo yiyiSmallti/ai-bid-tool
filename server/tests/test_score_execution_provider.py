@@ -129,7 +129,8 @@ def wire() -> dict:
     }
 
 
-def adapter(tmp_path, replies: list[dict], sent: list[dict], *, batch_chars=100_000):
+def adapter(tmp_path, replies: list[dict], sent: list[dict], *, batch_chars=100000):
+
     def transport(request: httpx.Request) -> httpx.Response:
         sent.append(json.loads(request.content))
         return httpx.Response(
@@ -149,6 +150,7 @@ def adapter(tmp_path, replies: list[dict], sent: list[dict], *, batch_chars=100_
     llm = OpenAICompatibleExtractor(
         Settings(
             data_dir=tmp_path,
+            access_key="synthetic-check-access-key-with-32-characters",
             database_url="postgresql+psycopg://unused/unused",
             encryption_key=Fernet.generate_key().decode(),
             token_key=Fernet.generate_key().decode(),
@@ -161,7 +163,6 @@ def adapter(tmp_path, replies: list[dict], sent: list[dict], *, batch_chars=100_
             llm_max_output_tokens=4096,
         ),
         httpx.MockTransport(transport),
-        org_owned=True,
     )
     return HTTPScoreProvider(llm)
 
@@ -175,14 +176,12 @@ async def test_http_score_provider_sends_fixed_refs_and_accounts_call(tmp_path):
         result = await provider.score(provider_request())
     finally:
         current_accounting.reset(token)
-
     assert result.failure is None
     assert [batch.requested_rubric_item_ids for batch in result.batches] == [[RUBRIC_1, RUBRIC_2]]
     assert result.batches[0].sent_refs == [text.ref for text in provider_request().context.texts]
     assert len(result.usages) == 1
     assert result.usages[0] == accounting.completed[0][1]
     assert accounting.planned == [1]
-    assert accounting.platform_billed == [False]
     payload = json.loads(sent[0]["messages"][1]["content"])
     assert payload == provider_request().model_dump(mode="json")
     assert sent[0]["response_format"]["json_schema"]["strict"] is True
@@ -200,7 +199,6 @@ async def test_score_provider_rejects_unaccounted_or_unbound_requests(tmp_path):
         await provider.score(provider_request())
     assert unaccounted.value.code == "score_accounting_required"
     assert sent == []
-
     invalid = provider_request().model_copy(deep=True)
     invalid.context.texts.append(OutboundText(ref="unbound", text="must not be sent"))
     accounting = Accounting()
@@ -218,10 +216,7 @@ async def test_score_provider_rejects_unaccounted_or_unbound_requests(tmp_path):
 
 
 async def test_http_score_provider_batches_complete_items_and_accounts_each_call(tmp_path):
-    replies = [
-        {"items": [wire()["items"][0]]},
-        {"items": [wire()["items"][1]]},
-    ]
+    replies = [{"items": [wire()["items"][0]]}, {"items": [wire()["items"][1]]}]
     sent: list[dict] = []
     provider = adapter(tmp_path, replies, sent, batch_chars=1000)
     accounting = Accounting()
@@ -230,12 +225,8 @@ async def test_http_score_provider_batches_complete_items_and_accounts_each_call
         result = await provider.score(provider_request())
     finally:
         current_accounting.reset(token)
-
     assert result.failure is None
-    assert [batch.requested_rubric_item_ids for batch in result.batches] == [
-        [RUBRIC_1],
-        [RUBRIC_2],
-    ]
+    assert [batch.requested_rubric_item_ids for batch in result.batches] == [[RUBRIC_1], [RUBRIC_2]]
     assert accounting.planned == [2]
     assert len(accounting.completed) == len(result.usages) == len(sent) == 2
     for payload in sent:
@@ -262,7 +253,6 @@ async def test_concurrent_admission_error_drains_an_already_admitted_call(tmp_pa
         async def admit(self, quote):
             self.attempts += 1
             self.plans.append(quote)
-            self.platform_billed.append(quote.platform_model_id is not None)
             if self.attempts == 1:
                 return uuid4()
             await transport_entered.wait()
@@ -295,6 +285,7 @@ async def test_concurrent_admission_error_drains_an_already_admitted_call(tmp_pa
     llm = OpenAICompatibleExtractor(
         Settings(
             data_dir=tmp_path,
+            access_key="synthetic-check-access-key-with-32-characters",
             database_url="postgresql+psycopg://unused/unused",
             encryption_key=Fernet.generate_key().decode(),
             token_key=Fernet.generate_key().decode(),
@@ -307,7 +298,6 @@ async def test_concurrent_admission_error_drains_an_already_admitted_call(tmp_pa
             llm_max_output_tokens=4096,
         ),
         httpx.MockTransport(transport),
-        org_owned=True,
     )
     provider = HTTPScoreProvider(llm)
     accounting = GatedAccounting()
@@ -438,7 +428,7 @@ async def execute_boundary(tmp_path, secret: dict, reply: dict, *, fields=(), li
     finally:
         current_accounting.reset(token)
     evaluated = score_semantic.accept_batches(secret, outbound, result, list(library))
-    return evaluated, outbound, result, sent
+    return (evaluated, outbound, result, sent)
 
 
 async def test_outbound_http_accepts_cross_response_support_and_aggregates(tmp_path):
@@ -447,14 +437,10 @@ async def test_outbound_http_accepts_cross_response_support_and_aggregates(tmp_p
         {"ref": "d2.response_text", "quote": "three years support"}
     ]
     evaluated, outbound, result, sent = await execute_boundary(tmp_path, fixed_secret(), candidate)
-
     assert result.failure is None
     assert evaluated[0]["outcome"] == "assessed"
     assert evaluated[0]["response_item_ids"] == [RESPONSE_2]
-    assert {citation["kind"] for citation in evaluated[0]["citations"]} == {
-        "tender",
-        "draft",
-    }
+    assert {citation["kind"] for citation in evaluated[0]["citations"]} == {"tender", "draft"}
     assert str(DRAFT) not in json.dumps(outbound["context"])
     assert str(RESPONSE_1) not in json.dumps(outbound["context"])
     assert "condition" not in json.dumps(sent)
@@ -468,7 +454,6 @@ async def test_outbound_http_accepts_cross_response_support_and_aggregates(tmp_p
     assert set(payload["context_only_refs"]) <= {
         text["ref"] for text in payload["context"]["texts"]
     }
-
     sections, summary = score_semantic.aggregate(
         fixed_secret()["rubric"], evaluated, provider_complete=True
     )
@@ -561,19 +546,14 @@ async def test_untrusted_score_output_becomes_unassessable(tmp_path, attack, rea
         first["reason"] = "Contact Synthetic Secret for the score."
     elif attack == "unknown_reason_placeholder":
         first["reason"] = "Use {{secret.unknown}} for the score."
-
     library = (
         [redaction.library_value("contact", "contact", "Synthetic Secret")]
         if attack == "sensitive_reason"
         else []
     )
     evaluated, _, _, _ = await execute_boundary(
-        tmp_path,
-        secret,
-        candidate,
-        library=[entry for entry in library if entry is not None],
+        tmp_path, secret, candidate, library=[entry for entry in library if entry is not None]
     )
-
     assert evaluated[0]["outcome"] == "unassessable"
     assert evaluated[0]["reason_code"] == reason
     assert evaluated[0]["estimated_score"] is None
@@ -592,7 +572,6 @@ async def test_explicit_commitment_rule_and_negative_deduction_remain_assessable
     ]
     evaluated, _, _, _ = await execute_boundary(tmp_path, commitment, commitment_wire)
     assert evaluated[0]["outcome"] == "assessed"
-
     negative = fixed_secret()
     negative["items"][0]["deviation"] = "negative"
     negative_wire = wire()
@@ -616,20 +595,13 @@ async def test_explicit_commitment_rule_and_negative_deduction_remain_assessable
         ),
         ("external_comparison", "Rank all bidders.", "We rank first.", "external_comparison"),
         ("unsupported_formula", "Use formula X.", "Formula input is 1.", "unsupported_formula"),
-        (
-            "ambiguous",
-            "The rule is ambiguous.",
-            "We comply.",
-            "ambiguous",
-        ),
+        ("ambiguous", "The rule is ambiguous.", "We comply.", "ambiguous"),
     ],
 )
 def test_preflight_prohibited_modes(mode, rule, response, reason):
     secret = fixed_secret(mode=mode, response=response)
     secret["rubric"]["items"][0]["rule_text"] = rule
-
     outbound = score_semantic.build_outbound(secret, [], [])
-
     assert outbound["preflight"][str(RUBRIC_1)]["reason_code"] == reason
     request = score_semantic.provider_request(outbound)
     assert request is not None
@@ -643,20 +615,14 @@ async def test_thin_anchor_can_use_substantive_cross_response_but_not_a_thin_cit
     candidate["items"][0]["draft_citations"] = [
         {"ref": "d1.response_text", "quote": "fully comply"}
     ]
-
     evaluated, _, _, _ = await execute_boundary(tmp_path, secret, candidate)
-
     assert evaluated[0]["outcome"] == "unassessable"
     assert evaluated[0]["reason_code"] == "thin_promise_unassessable"
     assert evaluated[0]["strengthening_actions"]
 
 
 @pytest.mark.parametrize(
-    "setup,reason",
-    [
-        ("manual_only", "manual_only"),
-        ("missing_bounds", "missing_score_bounds"),
-    ],
+    "setup,reason", [("manual_only", "manual_only"), ("missing_bounds", "missing_score_bounds")]
 )
 async def test_preflight_item_and_assessable_item_share_full_http_acceptance(
     tmp_path, setup, reason
@@ -670,9 +636,7 @@ async def test_preflight_item_and_assessable_item_share_full_http_acceptance(
     else:
         secret["rubric"]["items"][0]["score_range"] = None
     candidate = {"items": [wire()["items"][1]]}
-
     evaluated, _, result, sent = await execute_boundary(tmp_path, secret, candidate)
-
     assert len(sent) == len(result.batches) == 1
     assert evaluated[0]["outcome"] == "unassessable"
     assert evaluated[0]["reason_code"] == reason
@@ -686,12 +650,9 @@ def test_no_confirmed_draft_support_completes_preflight_without_http():
         item["response_text"] = None
         item["deviation_note"] = None
     outbound = score_semantic.build_outbound(secret, [], [])
-
     assert score_semantic.provider_request(outbound) is None
     evaluated = score_semantic.accept_batches(
-        secret,
-        outbound,
-        ScoreProviderResult(batches=[], usages=[]),
+        secret, outbound, ScoreProviderResult(batches=[], usages=[])
     )
     assert {row["reason_code"] for row in evaluated} == {"no_confirmed_draft_support"}
     assert all(row["outcome"] == "unassessable" for row in evaluated)
@@ -706,7 +667,6 @@ def test_redacted_input_and_incomplete_provider_never_gain_a_numeric_estimate():
         [entry for entry in library if entry is not None],
     )
     assert outbound["preflight"][str(RUBRIC_1)]["reason_code"] == "redacted_input_unassessable"
-
     evaluated = score_semantic.accept_batches(
         secret,
         outbound,
@@ -747,19 +707,15 @@ def test_decimal_aggregation_rounds_only_published_values_and_propagates_unavail
             "estimated_score": Decimal("0.00000001"),
         },
     ]
-
     sections, summary = score_semantic.aggregate(rubric, rows, provider_complete=True)
-
     assert sections[0]["estimated_score"] == Decimal("0.00000001")
     assert summary["estimated_total"] == Decimal("0.00000001")
-
     rubric["items"][0]["weight"] = "0.20000000"
     rubric["items"][1]["weight"] = "0.70000000"
     sections, summary = score_semantic.aggregate(rubric, rows, provider_complete=True)
     assert sections[0]["status"] == "unavailable"
     assert sections[0]["estimated_score"] is None
     assert summary["total_status"] == "unavailable"
-
     rubric["sections"][0] |= {
         "aggregation": "formula",
         "aggregation_assessable": False,

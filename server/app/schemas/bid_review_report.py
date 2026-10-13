@@ -78,7 +78,6 @@ class BidReportRenderPreview(Contract):
 
 class BidReviewReportArtifact(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     report_id: UUID
     snapshot_id: UUID

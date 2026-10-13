@@ -9,7 +9,7 @@ from app.core.errors import ServiceError
 from app.schemas.contracts import Result
 from app.services.certificate_files import validate_file
 from app.services.evidence_sources import render_page
-from bid_cli.client import Client, State, new_output_path, save_download
+from bid_cli.client import Client, new_output_path, save_download
 from bid_cli.main import main
 
 IDENTIFIER = "00000000-0000-0000-0000-000000000001"
@@ -19,11 +19,6 @@ IDENTIFIER = "00000000-0000-0000-0000-000000000001"
 def contract_version(request):
     """Version metadata endpoints while preserving signed raw download paths."""
     return request.param
-
-
-class SyntheticState(State):
-    def load(self):
-        return {"session": "synthetic-only-session", "org_id": IDENTIFIER}
 
 
 def download_client(
@@ -37,10 +32,12 @@ def download_client(
     transport_error=None,
     contract_version="5.0",
 ):
+    import os
+
+    os.environ["BID_ACCESS_KEY"] = "synthetic-installation-key-at-least-thirty-two-chars"
     client = Client(
         "remote",
         "https://synthetic.example.test",
-        SyntheticState(tmp_path / "unused.enc"),
         contract_version=contract_version,
     )
     prefix = "/v4" if contract_version == "5.0" else ""
@@ -62,7 +59,6 @@ def download_client(
     EvidenceSourcePreview.model_validate(descriptor)
     archive = {
         "id": IDENTIFIER,
-        "org_id": "foreign" if wrong_scope else IDENTIFIER,
         "task_id": IDENTIFIER,
         "task_certificate_id": IDENTIFIER,
         "certificate_id": IDENTIFIER,
@@ -81,18 +77,20 @@ def download_client(
         "dpi": 150,
         "preview": descriptor,
         "rendered_at": "2026-10-01T00:00:00Z",
-        "created_by": IDENTIFIER,
         "active_selection": True,
         "status": "unconfirmed_source",
-        "confirmed_by": None,
         "eligible_for_draft_export": False,
     }
+    if wrong_scope:
+        archive["id"] = "00000000-0000-0000-0000-000000000002"
     calls = []
 
     def handler(request):
         calls.append(request.url)
-        assert request.headers["Authorization"] == "Bearer synthetic-only-session"
-        assert request.headers["X-Org-Id"] == IDENTIFIER
+        assert (
+            request.headers["Authorization"]
+            == "Bearer synthetic-installation-key-at-least-thirty-two-chars"
+        )
         if request.url.path == prefix + path + "-link":
             return httpx.Response(
                 200,
@@ -206,10 +204,12 @@ async def test_source_download_network_and_partial_connection_errors_are_retryab
 async def test_source_metadata_transport_errors_share_cli_contract(
     contract_version, tmp_path, transport_error
 ):
+    import os
+
+    os.environ["BID_ACCESS_KEY"] = "synthetic-installation-key-at-least-thirty-two-chars"
     client = Client(
         "remote",
         "https://synthetic.example.test",
-        SyntheticState(tmp_path / "unused.enc"),
         contract_version=contract_version,
     )
 
@@ -274,7 +274,7 @@ def test_source_cli_invalid_input_before_network(failure, monkeypatch, tmp_path,
         metadata.write_bytes(b"\xff")
     else:
         if failure == "extra":
-            data["org_id"] = IDENTIFIER
+            data["unexpected"] = IDENTIFIER
         metadata.write_text(json.dumps(data))
         if failure == "invalid_page":
             data["page"] = 0

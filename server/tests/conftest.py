@@ -357,7 +357,12 @@ async def credential_app(settings, *, llm: HTTPExtractor, queue):
         session.add(config)
         await session.flush()
     configured = configured_llm(clean_settings, config, llm.transport)
-    llm.settings = configured.settings
+    llm.settings = configured.settings.model_copy(
+        update={
+            "llm_effort": llm.settings.llm_effort,
+            "llm_request_options": llm.settings.llm_request_options,
+        }
+    )
     llm.provider_config_id = config.id
     llm.model_revision = config.revision
     llm.version = configured.version

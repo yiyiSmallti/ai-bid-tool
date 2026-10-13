@@ -54,18 +54,16 @@ async def run_access(session, actor, task_id, *, write=True, lock=True):
         scope="bid-review:run" if write else "bid-review:read",
         write=write,
         lock=lock,
-        require_member=write,
     )
 
 
 def worker(job):
     return Identity(
-        job.actor_user_id,
-        job.org_id,
-        set(job.actor_scopes),
-        "viewer",
-        job.actor_token_id,
-        "worker",
+        scopes=set(job.actor_scopes),
+        token_id=job.actor_token_id,
+        actor_kind="worker",
+        principal_id=job.agent_principal_id,
+        session_id=job.agent_session_id,
         job_id=job.id,
         run_id=job.run_id,
     )
@@ -90,7 +88,7 @@ class Snapshot:
     uncovered: list[str]
 
 
-async def snapshot(session, actor, task_id, body, settings):
+async def snapshot(session, actor, task_id, body, settings, db):
     root = await bids.required(session, body.submission_id, task_id)
     blockers, uncovered = [], []
     llm, binding = None, None
@@ -101,7 +99,6 @@ async def snapshot(session, actor, task_id, body, settings):
     except (ServiceError, ProviderFailure) as error:
         blockers.append(error.code)
     manifest = {
-        "org_id": str(actor.org_id),
         "task_id": str(task_id),
         "submission_id": str(root.id),
         "submission_revision": root.revision,
@@ -313,7 +310,7 @@ async def snapshot(session, actor, task_id, body, settings):
     if body.clef_enabled:
         from app.services import bid_review_presence, platform_clef
 
-        resolved = await platform_clef.resolve(session, settings)
+        resolved = await platform_clef.resolve(session, settings, db)
         clef_config = resolved.config
         clef["blockers"] = list(resolved.blockers)
         if clef_config is not None:
@@ -372,9 +369,7 @@ async def snapshot(session, actor, task_id, body, settings):
 def receipt_binding(actor, task_id, body, input_hash):
     return {
         "purpose": "bid_review",
-        "org_id": str(actor.org_id),
         "task_id": str(task_id),
-        "actor_user_id": str(actor.user_id),
         "actor_token_id": str(actor.token_id) if actor.token_id else None,
         "actor_kind": actor.actor_kind,
         "request_id": str(body.request_id),
@@ -382,9 +377,9 @@ def receipt_binding(actor, task_id, body, input_hash):
     }
 
 
-async def submit(session, actor, task_id, body, queue, settings):
+async def submit(session, actor, task_id, body, queue, settings, db):
     await run_access(session, actor, task_id, lock=not body.dry_run)
-    fixed = await snapshot(session, actor, task_id, body, settings)
+    fixed = await snapshot(session, actor, task_id, body, settings, db)
     blockers = list(fixed.blockers)
     quotes = []
     if isinstance(fixed.llm, HTTPExtractor):
@@ -453,7 +448,6 @@ async def submit(session, actor, task_id, body, queue, settings):
     prior = await session.scalar(
         select(AuditLog).where(
             AuditLog.action == "bid_review.submit",
-            AuditLog.actor_user_id == actor.user_id,
             AuditLog.details["request_id"].astext == str(body.request_id),
         )
     )
@@ -463,10 +457,7 @@ async def submit(session, actor, task_id, body, queue, settings):
         {
             "kind": "bid_review",
             "input_hash": fixed.input_hash,
-            "actor": {
-                key: binding[key]
-                for key in ("org_id", "task_id", "actor_user_id", "actor_token_id", "actor_kind")
-            },
+            "actor": {key: binding[key] for key in ("task_id", "actor_token_id", "actor_kind")},
         }
     )
     job = await session.scalar(select(Job).where(Job.cache_key == cache).with_for_update())
@@ -492,14 +483,12 @@ async def submit(session, actor, task_id, body, queue, settings):
         identifier = uuid4()
         job = Job(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task_id,
             document_id=None,
             bid_submission_document_id=UUID(fixed.manifest["tender_document_ids"][0]),
             kind="bid_review",
             cache_key=cache,
             status="queued",
-            actor_user_id=actor.user_id,
             actor_token_id=actor.token_id,
             actor_kind=actor.actor_kind,
             actor_scopes=sorted(actor.scopes),
@@ -523,7 +512,6 @@ async def submit(session, actor, task_id, body, queue, settings):
         session.add(
             BidReviewRun(
                 id=identifier,
-                org_id=actor.org_id,
                 task_id=task_id,
                 submission_id=body.submission_id,
                 preparation_id=UUID(fixed.manifest["preparation_id"]),
@@ -531,7 +519,6 @@ async def submit(session, actor, task_id, body, queue, settings):
                 authorization_id=UUID(fixed.manifest["outbound_authorization_id"]),
                 job_id=job.id,
                 request_id=body.request_id,
-                created_by=actor.user_id,
                 input_hash=fixed.input_hash,
                 payload_hash=payload_hash,
                 manifest=fixed.manifest,
@@ -567,7 +554,7 @@ async def job_access(session, actor, job, *, cancel=False):
     if row is None:
         raise not_found()
     await run_access(session, actor, row.task_id, write=cancel, lock=cancel)
-    if cancel and (job.actor_user_id != actor.user_id or job.actor_token_id != actor.token_id):
+    if cancel and (job.actor_token_id != actor.token_id or job.actor_kind != actor.actor_kind):
         raise not_found()
 
 
@@ -605,8 +592,6 @@ async def run_view(session, row):
 def cursor_binding(actor, resource, section):
     return {
         "purpose": "bid_review_cursor",
-        "org_id": str(actor.org_id),
-        "user_id": str(actor.user_id),
         "token_id": str(actor.token_id) if actor.token_id else None,
         "actor_kind": actor.actor_kind,
         "resource": str(resource),
@@ -694,7 +679,9 @@ async def show(
         return data
     actor.require("bid-review:source:read")
     if not privacy_current and not (
-        actor.role in {"admin", "bidder"} and "bid-review:original:read" in actor.scopes
+        actor.actor_kind == "session"
+        and actor.token_id is None
+        and "bid-review:original:read" in actor.scopes
     ):
         return data
     start = offset(actor, review_id, section, cursor, settings)

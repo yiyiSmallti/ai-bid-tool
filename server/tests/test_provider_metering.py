@@ -55,7 +55,7 @@ def adapter(**options):
             llm_model="synthetic",
             **options,
         ),
-        org_owned=True,
+        provider_config_id=uuid4(),
     )
 
 
@@ -146,7 +146,6 @@ async def test_browser_execution_uses_call_plan_and_settles_failure(accounting, 
 
     monkeypatch.setattr(provider, "_execute_unaccounted", fail)
     descriptor = RunDescriptor(
-        org_id=uuid4(),
         job_id=uuid4(),
         attempt_id=uuid4(),
         input_sha256=hashlib.sha256(b"synthetic html").hexdigest(),

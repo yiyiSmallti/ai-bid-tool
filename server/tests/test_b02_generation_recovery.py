@@ -25,15 +25,15 @@ def artifact(scenario, data):
 
 @pytest.mark.parametrize("change", ["unchanged", "confirmation_only", "manual_append"])
 async def test_subset_preparation_binds_whole_scope_and_keeps_human_review_separate(
-    tenants, tmp_path, change
+    database, tmp_path, change
 ):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        header = headers[0]
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
         selected = requirements[2]["id"]
         receipt = await submit(api, header, task, extraction, requirement_ids=[selected])
-        org = UUID(header["X-Org-Id"])
-        async with app.state.db.transaction(org) as session:
+
+        async with app.state.db.transaction() as session:
             job = await session.get(Job, UUID(receipt["data"]["job_id"]))
             manifest = job.result["submission"]["input_manifest"]
             assert {item["requirement_id"] for item in manifest["requirements"]} == {selected}
@@ -42,7 +42,7 @@ async def test_subset_preparation_binds_whole_scope_and_keeps_human_review_separ
             } == {row["id"] for row in requirements}
             if change == "confirmation_only":
                 await confirm_requirements_async(
-                    session, org, UUID(task), settings=app.state.processor.settings
+                    session, UUID(task), settings=app.state.processor.settings
                 )
         if change == "manual_append":
             review = await api.get(f"/v4/requirements/{selected}/review", headers=header)

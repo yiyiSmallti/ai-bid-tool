@@ -1,11 +1,12 @@
 import { test, expect } from "@playwright/test";
+import { openConsole } from "./access-key.js";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 
 const output = resolve(process.env.E2E_OUTPUT ?? "../data/work/bid-review-run/browser");
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-const ids = { org: uuid(1), user: uuid(2), task: uuid(3), submission: uuid(4), document: uuid(5), bid: uuid(6), grant: uuid(7), job: uuid(8), review: uuid(9) };
+const ids = { task: uuid(3), submission: uuid(4), document: uuid(5), bid: uuid(6), grant: uuid(7), job: uuid(8), review: uuid(9) };
 const hash = "a".repeat(64), now = "2026-10-08T00:00:00Z", quote = "投标文件须逐页加盖公章。<img src=x onerror=window.__unsafe=1>";
 const zero = { calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 };
 const result = (command, data = {}, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: zero, duration_ms: 0 });
@@ -16,9 +17,8 @@ async function fixture(page, options = {}) {
   mkdirSync(output, { recursive: true });
   const directory = resolve(process.env.E2E_STATIC_DIR), origin = new URL(process.env.E2E_BASE_URL ?? "https://console.test").origin;
   if (!origin.startsWith("https://")) throw new Error("HTTPS origin required for exact page scope hashing");
-  const state = { role: "bidder", owner: true, partial: true, staleSubmit: false, blockers: [], grants: [], authorizations: 0, revocations: 0, namesWrites: 0, namesRevision: 0, previews: 0, submissions: 0, reads: [], errors: [], unexpected: [], submitted: false, ...options };
+  const state = { partial: true, staleSubmit: false, blockers: [], grants: [], authorizations: 0, revocations: 0, namesWrites: 0, namesRevision: 0, previews: 0, submissions: 0, reads: [], errors: [], unexpected: [], submitted: false, ...options };
   page.on("pageerror", error => state.errors.push(error.message));
-  await page.addInitScript(({ org }) => sessionStorage.setItem("bid.org.session", JSON.stringify({ session: "synthetic-review-session", orgId: org, orgName: "合成单位", email: "bidder@example.test" })), { org: ids.org });
   const pages = [
     { page_id: uuid(20), document_id: ids.document, page: 1, role: "tender", sanitized_text_sha256: hash, sanitized_text: quote, price_page: false, price_classification: "non_price", notes: [], redaction_counts: {}, outbound_eligible: true },
     { page_id: uuid(21), document_id: ids.bid, page: 1, role: "bid", sanitized_text_sha256: hash, sanitized_text: "[投标单位] 承诺逐页核对。", price_page: false, price_classification: "non_price", notes: [], redaction_counts: { derived_names: 1 }, outbound_eligible: true },
@@ -28,7 +28,7 @@ async function fixture(page, options = {}) {
   const redaction = () => ({ submission_id: ids.submission, expected_revision: (state.grants[0]?.revision ?? 0) + 1, expected_authorization_id: state.grants[0]?.id ?? null, expected_submission_manifest_sha256: hash, expected_preparation_input_hash: hash, expected_redaction_manifest_sha256: hash, provider_bindings_sha256: hash, redaction_revision: 1, redaction_rule_version: "synthetic-v1", confidential_binding_sha256: hash, derived_name_lists_sha256: hash, human_name_revision: state.namesRevision, pages, total: pages.length, next_cursor: null, blockers: [] });
   const run = () => ({ id: ids.review, task_id: ids.task, submission_id: ids.submission, job_id: ids.job, status: state.submitted ? "succeeded" : "queued", completion: state.submitted ? state.partial ? "partial" : "complete" : null, input_hash: hash, created_at: now, coverage: { tender_pages_total: 1, tender_pages_authorized: 1, tender_pages_assessed: 1 }, uncovered_codes: state.partial ? ["signing_presence_unchecked"] : [], advisory_only: true, validity: "current", review_slice: "compliance" });
   const citation = { document_id: ids.document, page_id: uuid(20), page: 1, quote, location: null, page_label: "original_pdf" };
-  const detail = { submission: { id: ids.submission, org_id: ids.org, task_id: ids.task, revision: 1, manifest_sha256: hash, state: "prepared", created_by: ids.user, created_at: now, preparation_job_id: uuid(30), preparation_input_hash: hash, documents: [
+  const detail = { submission: { id: ids.submission, task_id: ids.task, revision: 1, manifest_sha256: hash, state: "prepared", created_at: now, preparation_job_id: uuid(30), preparation_input_hash: hash, documents: [
     { id: ids.document, role: "tender", kind: "tender", media_type: "application/pdf", sha256: hash, size_bytes: 1000 },
     { id: ids.bid, role: "bid", kind: "commercial_technical", media_type: "application/pdf", sha256: hash, size_bytes: 1000 },
   ] }, preparation: null, inventory: [], signature_validations: [], signing_candidates: [], signing_candidate_count: 0, signing_candidates_next_cursor: null };
@@ -40,13 +40,14 @@ async function fixture(page, options = {}) {
       return route.fulfill({ contentType: { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" }[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
     }
     if (path === "/health") return route.fulfill({ json: result("health", { status: "ok" }) });
-    expect(request.headers()["x-org-id"]).toBe(ids.org);
+    if (method === "POST" && path === "/auth/session") return route.fulfill({ json: result("auth session create", { session: "synthetic-session", expires_in: 86400 }) });
+    if (method === "GET" && path === "/auth/session") return route.fulfill({ json: result("auth session show", { actor_kind: "session", scopes: [], expires_at: null }) });
+    if (!["/health", "/auth/session"].includes(path)) expect(request.headers().authorization).toBe("Bearer synthetic-session");
     let response;
-    if (path === "/org/current" && method === "GET") response = result("org current", { org_id: ids.org, user_id: ids.user, role: state.role });
-    else if (path === `/tasks/${ids.task}/progress` && method === "GET") response = result("task progress", { access: {role:state.role === "viewer" ? "observer" : state.owner ? "owner" : "contributor",review_domains:[]},event_cursor:"opaque-snapshot",workflow: { org_id: ids.org, task_id: ids.task, state: "active", owner_user_id: state.owner ? ids.user : uuid(99) } });
+    if (path === `/tasks/${ids.task}/progress` && method === "GET") response = result("task progress", { task_id: ids.task, event_cursor: "opaque-snapshot", as_of: now });
     else if (path === `/bid-submissions/${ids.submission}` && method === "GET") response = result("review submission show", detail);
-    else if (path === `/bid-submissions/${ids.submission}/redaction` && method === "GET") { expect(state.owner).toBe(true); expect(url.searchParams.get("cursor")).toBe("0"); expect(url.searchParams.get("limit")).toBe("25"); response = result("review redaction", redaction()); }
-    else if (path === `/bid-submissions/${ids.submission}/outbound-authorizations` && method === "GET") { expect(state.owner).toBe(true); expect(url.searchParams.get("limit")).toBe("100"); const cursor = Number(url.searchParams.get("cursor")), width = state.grantPageSize ?? 100; response = result("review outbound list", { total: state.grants.length, next_cursor: cursor + width < state.grants.length ? cursor + width : null }, state.grants.slice(cursor, cursor + width)); }
+    else if (path === `/bid-submissions/${ids.submission}/redaction` && method === "GET") { expect(url.searchParams.get("cursor")).toBe("0"); expect(url.searchParams.get("limit")).toBe("25"); response = result("review redaction", redaction()); }
+    else if (path === `/bid-submissions/${ids.submission}/outbound-authorizations` && method === "GET") { expect(url.searchParams.get("limit")).toBe("100"); const cursor = Number(url.searchParams.get("cursor")), width = state.grantPageSize ?? 100; response = result("review outbound list", { total: state.grants.length, next_cursor: cursor + width < state.grants.length ? cursor + width : null }, state.grants.slice(cursor, cursor + width)); }
     else if (path === `/bid-submissions/${ids.submission}/outbound-authorizations` && method === "POST") {
       const body = request.postDataJSON(), fixed = redaction();
       for (const key of ["expected_revision", "expected_authorization_id", "expected_submission_manifest_sha256", "expected_preparation_input_hash", "expected_redaction_manifest_sha256", "provider_bindings_sha256"]) expect(body[key]).toEqual(fixed[key]);
@@ -54,7 +55,7 @@ async function fixture(page, options = {}) {
       expect(body.authorized_sanitized_context_sha256).toBe(scopeHash(body.pages)); expect(body.privacy_reviewed).toBe(true); expect(body.allow_external).toBe(true); expect(body.purposes).toEqual(["bid_review_text"]); expect(body.allowed_capabilities).toEqual(["llm"]);
       expect(body).not.toHaveProperty("sanitized_text");
       state.authorizations++;
-      state.grants = [{ id: ids.grant, org_id: ids.org, task_id: ids.task, submission_id: ids.submission, submission_manifest_sha256: hash, preparation_input_hash: hash, redaction_manifest_sha256: hash, authorized_sanitized_context_sha256: body.authorized_sanitized_context_sha256, provider_bindings_sha256: hash, revision: body.expected_revision, prior_authorization_id: body.expected_authorization_id, allow_external: true, purposes: body.purposes, allowed_capabilities: body.allowed_capabilities, pages: body.pages, authorized_by: ids.user, authorized_at: now, reason_sha256: hash, actor_kind: "session", immutable: true, price_pages_included: false, current: true }];
+      state.grants = [{ id: ids.grant, task_id: ids.task, submission_id: ids.submission, submission_manifest_sha256: hash, preparation_input_hash: hash, redaction_manifest_sha256: hash, authorized_sanitized_context_sha256: body.authorized_sanitized_context_sha256, provider_bindings_sha256: hash, revision: body.expected_revision, prior_authorization_id: body.expected_authorization_id, allow_external: true, purposes: body.purposes, allowed_capabilities: body.allowed_capabilities, pages: body.pages, authorized_at: now, reason_sha256: hash, actor_kind: "session", immutable: true, price_pages_included: false, current: true }];
       response = result("review outbound authorize", state.grants[0]);
     } else if (path === `/bid-submissions/${ids.submission}/outbound-authorizations/revoke` && method === "POST") {
       const body = request.postDataJSON(); expect(body.expected_revision).toBe(state.grants[0].revision); expect(body.expected_authorization_id).toBe(ids.grant);
@@ -103,8 +104,8 @@ async function authorize(page) {
   await expect(page.getByRole("table", { name: "外发授权记录", exact: true })).toContainText("当前授权");
 }
 
-test("owner authorizes exact safe pages, previews call-free then explicitly submits partial signing checklist", async ({ page }) => {
-  const state = await fixture(page); await page.goto(`/app/org/tasks/${ids.task}/bid-submissions/${ids.submission}`);
+test("human authorizes exact safe pages, previews call-free then explicitly submits partial signing checklist", async ({ page }) => {
+  const state = await fixture(page); await openConsole(page, `/org/tasks/${ids.task}/bid-submissions/${ids.submission}`);
   const cards = page.getByTestId("sanitized-page"); await expect(cards).toHaveCount(4);
   await expect(cards.nth(2)).toContainText("报价页：禁止外发"); await expect(cards.nth(2).locator(".el-checkbox")).toHaveClass(/is-disabled/);
   await expect(cards.nth(3)).toContainText("报价分类未确定"); await expect(cards.nth(3).locator(".el-checkbox")).toHaveClass(/is-disabled/);
@@ -126,7 +127,7 @@ test("owner authorizes exact safe pages, previews call-free then explicitly subm
 });
 
 test("revoking authorization clears the preview and explicit submit consent", async ({ page }) => {
-  const state = await fixture(page); await page.goto(`/app/org/tasks/${ids.task}/bid-submissions/${ids.submission}`); await authorize(page);
+  const state = await fixture(page); await openConsole(page, `/org/tasks/${ids.task}/bid-submissions/${ids.submission}`); await authorize(page);
   await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await expect(page.getByTestId("review-preview")).toBeVisible();
   await page.getByText("确认已授权文本与配置，提交检验运行", { exact: true }).click();
   await page.getByLabel("授权或撤销理由", { exact: true }).fill("撤销当前外发范围"); await page.getByRole("button", { name: "撤销外发授权", exact: true }).click();
@@ -135,7 +136,7 @@ test("revoking authorization clears the preview and explicit submit consent", as
 });
 
 test("stale submit invalidates receipt and blocked preview cannot be submitted", async ({ page }) => {
-  const state = await fixture(page, { staleSubmit: true }); await page.goto(`/app/org/tasks/${ids.task}/bid-submissions/${ids.submission}`);
+  const state = await fixture(page, { staleSubmit: true }); await openConsole(page, `/org/tasks/${ids.task}/bid-submissions/${ids.submission}`);
   await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await page.getByText("确认已授权文本与配置，提交检验运行", { exact: true }).click(); await page.getByRole("button", { name: "提交检验运行", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("输入已变化"); await expect(page.getByTestId("review-preview")).toHaveCount(0);
   state.blockers = ["outbound_authorization_required"]; await page.getByRole("button", { name: "预检检验运行", exact: true }).click();
@@ -143,17 +144,9 @@ test("stale submit invalidates receipt and blocked preview cannot be submitted",
   expect(state.submissions).toBe(0); await artifact(page, state, "04-stale-and-blocked");
 });
 
-test("viewer receives safe run metadata without protected page text or controls", async ({ page }) => {
-  const state = await fixture(page, { owner: false, role: "viewer" }); await page.goto(`/app/org/tasks/${ids.task}/bid-submissions/${ids.submission}`);
-  await expect(page.getByRole("table", { name: "检验运行列表", exact: true })).toBeVisible();
-  await expect(page.getByTestId("sanitized-page")).toHaveCount(0); await expect(page.getByRole("button", { name: "预检检验运行", exact: true })).toHaveCount(0); await expect(page.getByRole("button", { name: "授权所选页面", exact: true })).toHaveCount(0);
-  expect(state.reads.some(path => path.includes("/redaction"))).toBe(false); expect(state.reads.some(path => path.includes("outbound-authorizations"))).toBe(false);
-  expect(await page.locator("body").innerText()).not.toContain(quote); await artifact(page, state, "05-reader-gate");
-});
-
 
 test("supplemental name replacement clears previous authorization consent and preview", async ({ page }) => {
-  const state = await fixture(page); await page.goto(`/app/org/tasks/${ids.task}/bid-submissions/${ids.submission}`); await authorize(page);
+  const state = await fixture(page); await openConsole(page, `/org/tasks/${ids.task}/bid-submissions/${ids.submission}`); await authorize(page);
   await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await expect(page.getByTestId("review-preview")).toBeVisible();
   await page.getByText("补充单位与人员脱敏名单", { exact: true }).click();
   await page.getByLabel("投标单位补充名单", { exact: true }).fill("Synthetic supplemental bidder"); await page.getByLabel("人员补充名单", { exact: true }).fill("Synthetic supplemental staff");
@@ -163,15 +156,8 @@ test("supplemental name replacement clears previous authorization consent and pr
   expect(await page.evaluate(() => Object.values(sessionStorage).join(" "))).not.toContain("Synthetic supplemental"); await artifact(page, state, "06-supplemental-names");
 });
 
-test("technical contributor can preview an authorized run without originating grants", async ({ page }) => {
-  const state = await fixture(page, { owner: false, role: "technical" }); await page.goto(`/app/org/tasks/${ids.task}/bid-submissions/${ids.submission}`);
-  await expect(page.getByRole("button", { name: "预检检验运行", exact: true })).toBeVisible(); await expect(page.getByTestId("sanitized-page")).toHaveCount(0);
-  await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await expect(page.getByTestId("review-preview")).toBeVisible();
-  expect(state.reads.some(path => path.includes("/redaction"))).toBe(false); expect(state.authorizations).toBe(0); await artifact(page, state, "07-technical-run-gate");
-});
-
 test("authorization history follows the bounded next cursor", async ({ page }) => {
-  const state = await fixture(page, { grantPageSize: 1 }); await page.goto(`/app/org/tasks/${ids.task}/bid-submissions/${ids.submission}`); await authorize(page);
+  const state = await fixture(page, { grantPageSize: 1 }); await openConsole(page, `/org/tasks/${ids.task}/bid-submissions/${ids.submission}`); await authorize(page);
   state.grants.push({ ...state.grants[0], id: uuid(56), revision: 1, current: false });
   await page.getByRole("button", { name: "刷新外发授权", exact: true }).click();
   await page.getByRole("button", { name: "更多外发授权记录", exact: true }).click(); await expect(page.getByRole("table", { name: "外发授权记录", exact: true })).toContainText("历史授权或已失效");

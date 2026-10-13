@@ -48,7 +48,9 @@ async def current(session, execution, job):
             "preflight_token": None,
         }
     )
-    fixed = await review.snapshot(session, actor, job.task_id, request, execution.settings)
+    fixed = await review.snapshot(
+        session, actor, job.task_id, request, execution.settings, execution.db
+    )
     if (
         fixed.input_hash != submitted["input_hash"]
         or fixed.manifest != submitted["input_manifest"]
@@ -59,7 +61,7 @@ async def current(session, execution, job):
 
 
 async def process(execution: JobExecution, storage) -> None:
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         actor, fixed = await current(session, execution, job)
         submitted = job.result["submission"]
@@ -241,7 +243,7 @@ async def process(execution: JobExecution, storage) -> None:
         if uncovered or len(completed) < fixed.manifest["tender_page_count"]
         else "complete"
     )
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         actor, live = await current(session, execution, job)
         await check_semantic.usage_integrity(session, job, execution.run_id, reported)
@@ -250,7 +252,6 @@ async def process(execution: JobExecution, storage) -> None:
         if run is None or run.job_id != job.id or run.input_hash != live.input_hash:
             bids.fail("bid_review_input_changed", "Review parent binding changed", 409, 4)
         common = {
-            "org_id": job.org_id,
             "task_id": job.task_id,
             "submission_id": run.submission_id,
             "review_id": run.id,
@@ -262,7 +263,7 @@ async def process(execution: JobExecution, storage) -> None:
                     **common,
                     page_id=UUID(value["citation"]["page_id"]),
                     ordinal=ordinal,
-                    details_encrypted=bids.seal(execution.settings, job.org_id, value["id"], value),
+                    details_encrypted=bids.seal(execution.settings, value["id"], value),
                 )
             )
         for ordinal, value in enumerate(signing.values(), 1):
@@ -274,7 +275,7 @@ async def process(execution: JobExecution, storage) -> None:
                     candidate_id=UUID(value["candidate_id"]) if value["candidate_id"] else None,
                     applicability=value["applicability"],
                     ordinal=ordinal,
-                    details_encrypted=bids.seal(execution.settings, job.org_id, value["id"], value),
+                    details_encrypted=bids.seal(execution.settings, value["id"], value),
                 )
             )
         await session.flush()

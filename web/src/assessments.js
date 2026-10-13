@@ -1,27 +1,28 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from "vue-router";
-import { confirmAction, orgRequest } from "./org.js";
+import { request } from "./api.js";
+import { confirmAction } from "./org.js";
 
 export const severityLabels = { disqualification_risk: "废标风险", deduction_risk: "扣分风险", info: "提示" };
-export const domainLabels = { commercial: "商务负责人（投标专员）", technical: "技术负责人", unclassified: "待管理员分配职责" };
+export const domainLabels = { commercial: "商务", technical: "技术", unclassified: "待分类" };
 export const stateLabels = { current: "当前有效", stale: "已过期", complete: "已完成", partial: "部分完成", candidate: "待审核", confirmed: "已确认", rejected: "已驳回", superseded: "已被新版本替代", open: "待处理", dismissed: "已忽略", response: "响应", comply_only: "须遵守", gap: "缺口", assessed: "已评估", unassessed: "尚未评估", not_requested: "未请求语义检查", no_risk_found: "在已评估范围未发现风险", risk: "发现风险", unknown: "未知", valid: "有效", expired: "已过期", not_yet_valid: "尚未生效" };
 const errors = {
   requirement_unconfirmed: "评分来源要求尚未确认，请核对要求并重新读取评分条件", requirement_invalidated: "评分来源要求确认已失效，请重新核对要求并刷新评分条件", review_changed: "要求审阅修订已变化，请重新读取并核对来源后再明确提交",
-  redaction_required: "尚未开启外发遮挡，请由管理员或投标专员处理后重新预览",
+  redaction_required: "尚未开启外发遮挡，请处理后重新预览",
   check_stale_draft: "初稿已过期，请重新组表并预览", score_stale_draft: "初稿已过期，请重新组表并预览",
   check_input_changed: "初稿内容或设置已变化，请重新组表并预览", score_input_changed: "初稿或评分规则已变化，请重新预览评分",
   rubric_input_changed: "评分要求或设置已变化，请重新预览", score_rubric_unconfirmed: "请先完成所选评分规则的审核清单",
-  rubric_incomplete: "评分规则审核尚未完成，请检查覆盖、职责和逐项确认", unclassified: "请管理员先分配审核职责",
-  revision_conflict: "内容已被他人修改，已刷新当前修订；请核对后再次明确提交",
+  rubric_incomplete: "评分规则审核尚未完成，请检查覆盖、分类和逐项确认", unclassified: "请先选择审核分类",
+  revision_conflict: "内容修订已变化，已刷新当前修订；请核对后再次明确提交",
   assessment_view_changed: "审核快照已变化，请重新读取当前分组", rubric_superseded: "此评分规则已有新版本，请打开新版本",
   invalid_transition: "当前状态不能执行此操作，请核对当前修订", queue_unavailable: "任务已保存，等待重新调度",
   assessment_entry_too_large: "此条记录超过当前显示上限，详情暂不可用", invalid_cursor: "分页已失效，请返回第一页",
-  forbidden: "当前角色无权执行此操作", human_required: "此操作需要职责负责人本人登录",
-  rubric_context_limit: "完整评分表超出模型上下文上限，请联系管理员选择支持该范围的模型",
-  sensitive_scoring_source: "评分原文包含需要保护的内容，请联系职责负责人核对外发范围",
+  forbidden: "当前会话无权执行此操作", human_required: "此操作需要本人登录",
+  rubric_context_limit: "完整评分表超出模型上下文上限，请选择支持该范围的模型",
+  sensitive_scoring_source: "评分原文包含需要保护的内容，请核对外发范围",
   empty_scoring_requirements: "所选提取结果没有评分要求，请核对提取范围",
   unsupported_reasoning: "模型不支持所选推理档位，请核对配置",
-  provider_unavailable: "模型服务不可用，请联系管理员核对配置", context_limit_exceeded: "输入超过模型上下文上限，请核对输入或模型配置",
+  provider_unavailable: "模型服务不可用，请核对配置", context_limit_exceeded: "输入超过模型上下文上限，请核对输入或模型配置",
   no_scoring_requirements: "所选提取结果没有评分要求，请核对提取范围",
 };
 export const assessmentError = (exc) => exc?.status === 404 ? "记录不存在或无权查看" : `${errors[exc?.code] ?? "操作未完成，请核对输入或重新读取"}${exc?.code ? `（${exc.code}）` : ""}`;
@@ -38,8 +39,8 @@ export function useUnsaved(dirty, clear) {
   onBeforeRouteLeave(guard);
   onBeforeRouteUpdate(guard);
   window.addEventListener("beforeunload", beforeUnload);
-  window.addEventListener("bid:org-reset", reset);
-  onBeforeUnmount(() => { window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("bid:org-reset", reset); });
+  window.addEventListener("bid:session-reset", reset);
+  onBeforeUnmount(() => { window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("bid:session-reset", reset); });
 }
 export function usePreviewInvalidation(invalidate, taskId) {
   const changed = (event) => { const id = event.detail?.taskId ?? event.detail?.task_id; if (!id || id === taskId.value) invalidate(); };
@@ -54,25 +55,25 @@ export function useAssessmentPage(path, filters, changed) {
   let serial = 0;
   const next = computed(() => meta.value?.next_cursor);
   async function load(cursor = null, reset = true) {
-    const request = ++serial; loading.value = true; error.value = "";
+    const token = ++serial; loading.value = true; error.value = "";
     // A filter change can switch the row shape (e.g. items to coverage); drop the old page
     // before the request so templates never render rows from the previous part.
     if (reset) { rows.value = []; meta.value = null; }
     try {
-      const result = await orgRequest("GET", queryPath(path.value, { view: "console", ...filters.value, limit: 50, cursor }));
-      if (request !== serial) return;
+      const result = await request("GET", queryPath(path.value, { view: "console", ...filters.value, limit: 50, cursor }));
+      if (token !== serial) return;
       if (reset) { cursors.value = [null]; position.value = 0; }
       rows.value = result.items; meta.value = result.data;
     } catch (exc) {
-      if (exc.name === "AbortError" || request !== serial) return;
+      if (exc.name === "AbortError" || token !== serial) return;
       error.value = assessmentError(exc);
       if (exc.code === "assessment_view_changed") { rows.value = []; meta.value = null; cursors.value = [null]; position.value = 0; await changed?.(); }
-    } finally { if (request === serial) loading.value = false; }
+    } finally { if (token === serial) loading.value = false; }
   }
   async function forward() { if (!next.value) return; const cursor = next.value; await load(cursor, false); if (!error.value) { position.value++; cursors.value[position.value] = cursor; } }
   async function back() { if (!position.value) return; const previous = position.value - 1; await load(cursors.value[previous], false); if (!error.value) position.value = previous; }
   const clear = () => { serial++; rows.value = []; meta.value = null; error.value = ""; };
-  window.addEventListener("bid:org-reset", clear);
-  onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", clear); });
+  window.addEventListener("bid:session-reset", clear);
+  onBeforeUnmount(() => { clear(); window.removeEventListener("bid:session-reset", clear); });
   return { rows, meta, error, loading, position, next, load, forward, back };
 }

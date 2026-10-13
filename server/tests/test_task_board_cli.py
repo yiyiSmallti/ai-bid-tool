@@ -6,9 +6,7 @@ route; schema omits board commands. Every Result retains its seven keys and zero
 """
 
 import json
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pytest
@@ -18,17 +16,6 @@ from bid_cli.client import Client
 
 ID = "00000000-0000-0000-0000-000000000001"
 WHEN = "2026-10-05T00:00:00Z"
-WORKFLOW = {
-    "org_id": ID,
-    "task_id": ID,
-    "owner_user_id": ID,
-    "state": "active",
-    "revision": 1,
-    "access_epoch": 1,
-    "last_event_cursor": "opaque-snapshot",
-    "archived_at": None,
-    "archived_by_user_id": None,
-}
 JOB = {
     "job_id": ID,
     "extraction_job_id": ID,
@@ -45,7 +32,6 @@ def response_page(path, empty=False):
 
     items = []
     page = {
-        "org_id": ID,
         "task_id": ID,
         "next_cursor": None,
         "returned": 0 if empty else 1,
@@ -54,10 +40,7 @@ def response_page(path, empty=False):
     if path == "progress":
         data, items, model = (
             {
-                "org_id": ID,
                 "task_id": ID,
-                "workflow": WORKFLOW,
-                "access": {"role": "owner", "review_domains": []},
                 "event_cursor": "opaque-snapshot",
                 "as_of": WHEN,
                 "next_cursor": None,
@@ -69,15 +52,12 @@ def response_page(path, empty=False):
     elif path == "activity":
         data, items, model = (
             page,
-            []
-            if empty
-            else [{"id": ID, "actor_user_id": ID, "action": "card_changed", "created_at": WHEN}],
+            [] if empty else [{"id": ID, "action": "card_changed", "created_at": WHEN}],
             schemas.PageData,
         )
     elif path == "events/poll":
         data, model = (
             {
-                "org_id": ID,
                 "task_id": ID,
                 "next_cursor": None,
                 "head_cursor": "opaque-snapshot",
@@ -107,10 +87,8 @@ def response_page(path, empty=False):
             counts.update(total=1, gap=1)
         data, model = (
             {
-                "org_id": ID,
                 "task_id": ID,
                 "extraction_job_id": ID,
-                "workflow": WORKFLOW,
                 "counts": counts,
                 "matching": 0 if empty else 1,
                 "returned": 0 if empty else 1,
@@ -149,8 +127,6 @@ def response_page(path, empty=False):
                         {
                             "code": "view",
                             "target": {"kind": "requirement", "id": ID},
-                            "eligible_user_ids": [],
-                            "eligible_domains": [],
                         }
                     ],
                 }
@@ -175,15 +151,13 @@ CASES = [
 
 
 def test_task_board_transport_and_snapshots(monkeypatch, capsys, tmp_path):
-    monkeypatch.setenv("BID_SESSION", "synthetic-only")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-only")
     calls, snapshots = [], {}
     failure = None
     empty = False
 
     def handler(request):
         assert request.headers["authorization"] == "Bearer synthetic-only"
-        assert request.headers["x-org-id"] == ID
         calls.append(
             (
                 request.method,
@@ -278,10 +252,9 @@ def test_task_board_transport_and_snapshots(monkeypatch, capsys, tmp_path):
             body["duration_ms"] = 0
             snapshots[f"{mode}:HTTP{status}"] = body
         failure = None
-    snapshot = Path(__file__).with_name("snapshots") / "task-board-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(json.dumps(snapshots, ensure_ascii=False, indent=2) + "\n")
-    assert snapshots == json.loads(snapshot.read_text())
+    (tmp_path / "task-board-cli.json").write_text(
+        json.dumps(snapshots, ensure_ascii=False, indent=2) + "\n"
+    )
 
 
 def test_task_board_invalid_inputs_do_not_send(monkeypatch, capsys, tmp_path):

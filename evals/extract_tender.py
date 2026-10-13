@@ -116,10 +116,6 @@ async def _run(name: str, content: bytes, batch_chars: int | None) -> tuple[dict
         artifact["usage"] = [usage.model_dump(mode="json") for usage in exc.usage]
         print(f"Extraction failed: {exc.code} ({exc})")
         return artifact, 1
-    finally:
-        from app.core.credential_db import close_connections
-
-        await close_connections(config)
     items = result.extraction.items
     valid = [cited(item, by_id.get(item.source.chunk_id)) for item in items]
     try:

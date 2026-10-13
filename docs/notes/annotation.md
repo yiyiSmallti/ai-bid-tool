@@ -16,7 +16,7 @@ hash. The source and permission boundaries are defined in the
 
 ## Usage
 
-A human task owner or contributor with `evidence:annotate` opens the annotation
+The human with `evidence:annotate` opens the annotation
 editor from an editable response card, explicitly selecting its extraction scope.
 The source picker reads archived certificate PDF pages. The human inspects the
 original, enters a crop and up to 20 boxes in source pixels, and selects “预览标注”.
@@ -43,7 +43,7 @@ existing recovery commands.
 After inspecting the actual candidate, “用于此响应卡” opens the existing response
 editor. A human writes a visual observation, stages an `ImageEvidenceInput`, and
 explicitly saves the response. Neither render success nor attachment confirms
-Evidence. Current requirement confirmation (人工确认), professional-domain review
+Evidence. Current requirement confirmation (人工确认), human response review
 and current response approval remain independent gates. Complete response
 approval queues the confirmed rendition. Release history and preview use
 `evidence annotation releases` and `evidence annotation release preview`; the
@@ -62,7 +62,7 @@ identifies one exact payload; retries cannot bind it to newer source or card dat
 with `--annotation-describe`. Rust measures the fixed provenance footer and returns
 only the bounded canvas and content mapping. It performs no image render, storage
 write, job creation or model call. The worker uses the same binary and the
-`annotation-render-v1` pipe protocol for the actual candidate. The Linux-only [process launcher](../../server/app/providers/annotation_process.py)
+`annotation-render-v2` pipe protocol for the actual candidate. The Linux-only [process launcher](../../server/app/providers/annotation_process.py)
 requires a non-root runtime and a root-owned executable and ancestors. It applies
 non-increasable CPU/address-space/process/core limits, rejects inherited sockets,
 and installs `no_new_privs` plus architecture-checked seccomp rules that deny network,
@@ -73,8 +73,8 @@ PNG limits, plan/provenance hashes, renderer identity and the reversible source
 mapping. The complete canvas includes padding and footer limits; it cannot scale
 or clip the source to fit.
 
-Immutable annotation requests, materials and releases carry tenant/task/source
-bindings. Jobs retain the initiating human and fixed input; publication rechecks
+Immutable annotation requests, materials and releases carry task/source
+bindings. Jobs retain the initiating actor kind and fixed input; publication rechecks
 live task authority, source selection, card revision and worker execution fencing. Each attempt records its
 private output key and a delayed cleanup delivery before upload. Reconciliation waits
 for the grace period, checks the immutable run fence and every committed rendition
@@ -84,14 +84,17 @@ no SDK retries; the job processor owns retries.
 Candidate pixels retain the fixed `UNCONFIRMED` footer. The worker does not attach
 materials, edit card text or create a human decision.
 
-Existing response-card actions supply the approval binding.
+Existing response-card actions supply the approval binding. The v2 protocol binds
+confirmation by timestamp, candidate and card revision, requirement pin, reviewed
+region, content and mapping hashes. It carries no org or user identifiers, review
+domain or co-signing state; these fields are rejected by the fixed contract.
 The server normalizes the approval's `confirmed_at` to UTC before hashing; reloading
 the same PostgreSQL timestamp through another connection time zone must retain the
 same complete approval JSON and hash. The exact-approval comparison remains required.
 Release rendering removes the candidate footer and retains already marked content;
 it must not crop or draw boxes a second time. Only the fixed `CONFIRMED` footer may
 change. Content-pixel hashes, the candidate mapping, canonical Evidence identity,
-and the complete current requirement/domain decision bind consumption.
+and the complete current requirement and human approval bind consumption.
 Drafts use confirmed canonical Evidence. B05 image exports additionally require
 its current confirmed release; stale, absent or corrupt release images cannot fall
 back to candidate bytes.
@@ -102,8 +105,7 @@ material's authorized download handler, never a source UUID as a tender document
 ID. It verifies the PNG hash and clears obsolete requests and images on context
 changes. Unsent coordinates remain only in the active tab. Source/card conflicts
 retain those coordinates, clear the previous acknowledgement and require explicit
-re-preview. Read-only members can inspect authorized history but cannot submit,
-attach or retry.
+re-preview. Scoped tokens can inspect permitted metadata but cannot submit, attach or retry.
 
 ## Pitfalls
 
@@ -124,7 +126,7 @@ attach or retry.
   [Compose worker](../../deploy/docker-compose.yml). CI installs the protected binary
   before the Linux process/API suites in [check.yml](../../.github/workflows/check.yml).
 - Mocked transport/browser scenarios prove client behavior. They do not establish
-  PostgreSQL RLS, migration behavior, worker recovery or real-renderer publication.
+  PostgreSQL human gates, migration behavior, worker recovery or real-renderer publication.
   Repeatable acceptance artifacts belong under the ignored
   `data/work/annotation-acceptance/`, never under `docs/`.
 
@@ -133,8 +135,8 @@ attach or retry.
 - [annotation_contracts.py](../../server/app/schemas/annotation_contracts.py):
   `AnnotationInput`, input manifests, preflight, candidate and release contracts.
 - [annotations.py](../../server/app/models/annotations.py): immutable request,
-  material and release storage; [0053_cloud_annotations.py](../../server/migrations/versions/0053_cloud_annotations.py):
-  RLS, composite bindings and mutation guards.
+  material and release storage; [single-user baseline](../../server/migrations/baseline/00_functions_bid.sql):
+  human gates, composite bindings and mutation guards.
 - [annotations.py](../../server/app/services/annotations.py): `preflight`, `submit`,
   `approval_binding`, `enqueue_releases`, `retry_release`, `release_for_evidence`.
 - [annotation_jobs.py](../../server/app/services/annotation_jobs.py): cancellable

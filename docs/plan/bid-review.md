@@ -4,37 +4,18 @@ kind: plan
 
 # Uploaded-bid review and score estimate
 
-Status: **Approved; phase 1 implemented (slices 1–5). Clef triage is on by default.**
-
-Slice 3a
-implements exact human-authorized sanitized native-text review, cited tender
-obligations and signing-clause applicability with unresolved location inventories.
-Slice 3b adds authorized bid-text compliance findings, deterministic rules and
-append-only classified human decisions within that same run.
-Slice 4 adds the
-immutable console/Word snapshot and human-only report artifacts.
-Database/browser acceptance remains pending for these implementation slices.
-Upload/preparation and local signature evidence are implemented.
-PostgreSQL and
-browser acceptance remain pending; static checks do not establish those gates.
-The delivered boundaries are in [slice 3a](#slice-3a-authorized-native-text-review),
-[slice 3b](#slice-3b-native-text-compliance-findings-and-human-decisions) and
-[slice 4](#slice-4-console-report-and-word-artifacts) and
-[slice 5](#slice-5-default-on-presence-triage); their mechanisms are in
-[the mechanism note](../notes/bid-review.md).
-
 This contract adds an independent uploaded-bid review flow to B09/B10 in the
 [roadmap](roadmap.md), with B04/B05 evidence, P03 vision and E01/E02 evaluation
-dependencies. The importable [Pydantic v2 contract](bid-review/bid_review_contracts.py)
-defines payloads and service/Provider Protocols. The document contract itself
-registers no runtime components. Implementation follows the approved
+dependencies. The [runtime review schemas](../../server/app/schemas/bid_review.py) and related
+review schema modules define payloads; the
+[mechanism note](../notes/bid-review.md) defines runtime behavior. Implementation follows the approved
 [decisions](#open-decisions) under [agent.md](../../agent.md#workflow).
 
 ## Objective and input boundary
 
 A user uploads a tender document (招标文件) and an already-written bid (投标文件),
 possibly split into qualification, commercial/technical, price and declaration
-PDF/DOCX files. An authenticated task provides the org and permissions;
+PDF/DOCX files. An authenticated request provides scopes and selects a task;
 creating response cards or using the drafting flow is not a prerequisite. The result
 is an advisory review report (检验报告) in the console and Word, with rejection risks,
 signature completeness, evidence checks, remediation and, when requested, score ranges.
@@ -70,12 +51,12 @@ rule; competitor research and strategic recommendations remain excluded by
 | --- | --- |
 | `AssessmentRequest`, `AssessmentInput`, `VerifiedCitation`, `AssessmentJobAccepted` in [check_contracts.py](../../server/app/schemas/check_contracts.py); `access`/snapshot in [check_inputs.py](../../server/app/services/check_inputs.py); `fixed_rows`/`snapshot` in [score_run_inputs.py](../../server/app/services/score_run_inputs.py) | Requests require `draft_id`, the input fixes `confirmed_draft`, and services read confirmed draft partitions. Reuse citations and job receipts, never these input loaders for arbitrary uploads. |
 | `Contract`, `Source`, `Location`, `Result`, `Cost`, `CONTRACT_VERSION` in [contracts.py](../../server/app/schemas/contracts.py) | Use Result 5.0 and original PDF-page or DOCX-block citations. Add an uploaded-bid citation branch without changing the existing `VerifiedCitation` union. |
-| `Storage.read_bounded`, `FileCipher`, `validate_key` in [storage.py](../../server/app/providers/storage.py) | Encrypted immutable objects bound to `org/{org_id}/`, bounded reads then hash/size checks. The Protocol has no deletion method; retention/purge needs separate implementation, not an assumed storage API. |
+| `Storage.read_bounded`, `FileCipher`, `validate_key` in [storage.py](../../server/app/providers/storage.py) | Encrypted immutable objects bound to their keys, bounded reads then hash/size checks. The Protocol has no deletion method; retention/purge needs separate implementation, not an assumed storage API. |
 | `run_pdf_operation_async` in [pdf_process.py](../../server/app/core/pdf_process.py), raster bounds in [pdf_raster.py](../../server/app/core/pdf_raster.py), `parse_docx` in [docx_blocks.py](../../server/app/services/docx_blocks.py) | Reuse isolated PDF work and structural Word locations. Existing parsing does not establish seal coverage, stable Word pages or cryptographic signature validity. New preparation must preserve those distinctions. |
-| `resolve_llm` in [llm.py](../../server/app/providers/llm.py), [configured.py](../../server/app/providers/configured.py), [provider configuration](provider-config.md) | Existing org revision/platform default resolution supplies extraction, mapping and semantic LLMs. Clef needs an explicit optional adapter/capability; it is not an implicit LLM fallback. |
+| `resolve_llm` in [llm.py](../../server/app/providers/llm.py), [configured.py](../../server/app/providers/configured.py), [provider configuration](provider-config.md) | Local provider-configuration resolution supplies extraction, mapping and semantic LLMs. Clef needs an explicit optional adapter/capability; it is not an implicit LLM fallback. |
 | `CallPlan`, `PreflightData` in [preflight_contracts.py](../../server/app/schemas/preflight_contracts.py), `attach` in [preflight.py](../../server/app/services/preflight.py), [JobExecution](../../server/app/jobs/execution.py) | Reuse shared admission, accounting and terminal usage attachment.|
 | `redact`, `redact_tree`, `library_value` in [redaction.py](../../server/app/services/redaction.py) | Existing patterns and registered values protect text. Bid-derived name lists, page classification, pixel privacy, outbound grants and restricted report projections are additions, not existing guarantees. |
-| `Identity.require`, `HUMAN_ONLY_SCOPES`, `SCOPES`, `ROLE_SCOPES` in [auth.py](../../server/app/services/auth.py); [task_access.py](../../server/app/services/task_access.py) | Preserve session-only actions, live Membership/task authority and token ceilings in API, workers and DB. Proposed scopes below are declarations only. |
+| `Identity.require`, `HUMAN_ONLY_SCOPES`, `SCOPES`, `HUMAN_SCOPES` in [auth.py](../../server/app/services/auth.py); [task_access.py](../../server/app/services/task_access.py) | Preserve session-only actions, task/source bindings and live scoped identity and token ceilings in API, workers and DB. Proposed scopes below are declarations only. |
 | [Screenshot evidence](../notes/screenshot-evidence.md), [annotation](annotation.md), [attachment archives](attachment-archive.md) | Reuse exact pixels, source/rendition hashes, mappings, privacy lineage and separate human confirmation. Archive approval, annotation and image similarity do not prove a response claim. Uploaded-bid pages require an explicit new source branch before any later reuse in B04/B05. |
 
 The [local PDF validator](../../server/app/services/bid_pdf_signatures.py) and
@@ -160,7 +141,7 @@ not establish certificate authenticity.
 
 The outcome is `supports`, `contradicts`, `insufficient` or `unknown`, with independent
 dimension outcomes and locally verified text or an exact page/region observation.
-Semantic LLM/OCR output remains a proposal. A human in the proper review domain must
+Semantic LLM/OCR output remains a proposal. The human must
 inspect the actual pinned image and record confirm/reject/reopen with a reason before
 the report labels it human-reviewed support. Pending evidence can appear as unresolved
 review work; it cannot silently earn confirmed-evidence points. If privacy masks hide
@@ -171,7 +152,7 @@ The primary metric is accuracy on deliberately mutated claims, especially wrong
 model/value, with false acceptance reported separately. Exact source and privacy
 lineage follows [B05](annotation.md#pixel-provenance-and-renderer-contract) and
 [attachment source binding](attachment-archive.md#b05-source-binding-and-invalidation).
-A review decision does not set `Evidence.confirmed_by`, approve a response card, or
+A review decision does not set `Evidence.confirmed_at`, approve a response card, or
 authorize draft/export. Any later adoption into B04/B05 must enter those existing
 human confirmation gates with a separately accepted uploaded-page adapter.
 
@@ -241,7 +222,7 @@ same input hash, coverage, findings and score status. The report follows this or
 | 四、高风险缺陷 | Fatal/high/medium findings, rejection or lost-points impact, exact basis, original machine result and current human disposition. |
 | 五、得分预估 | Each technical/commercial/price part: maximum, nullable estimate/range, rule and bid basis with verbatim citations, deduction reasons, unassessable items and assessed subtotal distinguished from a total. First slice explicitly says scoring not requested/not implemented. |
 | 六、证据核对 | Claim-to-image comparisons, model/value/owner/validity dimension results, actual page regions, privacy limits and pending/accepted/rejected human reviews. |
-| 七、补救清单 | One actionable entry per issue, linked finding, responsible role, expected impact and deadline only if known from a cited tender date or explicit human input. No invented deadline or fabricated supporting material. |
+| 七、补救清单 | One actionable entry per issue, linked finding, expected impact and deadline only if known from a cited tender date or explicit human input. No invented deadline or fabricated supporting material. |
 | 八、检验说明 | Input scope, excluded/unparsed pages, checks not run, models/versions and local rules used, incurred cost and unresolved holds, run/decision time, and “评标委员会决定最终评审结果；本报告仅供辅助审查。” |
 
 Console lists are paginated and show linked source pages on demand. Word generation
@@ -272,8 +253,7 @@ mean arithmetic under supplied data, not predictions about the actual committee.
 
 Human decisions append `dismiss`, `reopen` or `confirm`, retaining actor, time,
 nonblank reason, expected finding revision, prior decision ID and run input hash.
-Only the stored domain's authorized human reviewer can act; admin role alone is not
-a technical/commercial review grant. Unclassified findings require classification
+Only the human can act, for either commercial or technical findings. Unclassified findings require classification
 before a decision. Stale input or concurrent revision conflicts with no partial write.
 Dismissal changes current disposition only, preserving the machine finding, original
 severity and score output. New runs do not inherit dismissals. A corrected file needs
@@ -311,13 +291,12 @@ Clef is enabled by default.
 The submitter may turn
 it off for a single review in preflight, which shows the planned Clef calls and their
 resource estimates under the same call admission.
-When that platform configuration is missing
+When that local configuration is missing
 or invalid, or the gateway check fails, the review runs without Clef and the report states
 that triage was unavailable; local checks, cited LLM paths and human review still cover
 every required location.
-Initial Clef has no org BYOK path.
-LLM BYOK remains governed
-by the existing provider and resource-usage contract.
+Clef credentials are encrypted local settings. LLM configuration remains governed
+by the provider and resource-usage contract.
 Provider image limits are stricter than general page
 rendering: at most 4 MiB and 16 million pixels per image, 8 MiB total decoded image
 bytes and 13 MiB complete serialized request; no remote URLs.
@@ -336,12 +315,11 @@ Further calls require current authority and resource admission.
 Clef traffic goes only through a configured Cloudflare AI Gateway, using its Workers AI
 route (`gateway.ai.cloudflare.com/v1/{account}/{gateway}/workers-ai/@cf/cloudflare/clef`),
 never the direct Workers AI REST endpoint.
-It needs two separate platform credentials
-under [platform credentials](platform-credentials.md): the Workers AI model token
+It needs two separate encrypted local credentials
+under [service credentials](platform-credentials.md): the Workers AI model token
 (`Authorization`) and the gateway authentication token (`cf-aig-authorization`); a gateway
 with authentication enabled rejects either alone.
-Neither is org-visible, and a missing
-one blocks Clef.
+Neither is returned in plaintext by settings views, and a missing one blocks Clef.
 Configuration and connection tests read the gateway through its API and
 record that authentication is on, log collection and log push are off, caching is
 disabled, gateway retries are off and a rate limit is set; any other state blocks
@@ -364,12 +342,12 @@ usage.
 Local OCR retains the existing free-call accounting and its own page count.
 Cancellation, failed citations and model refusal never erase incurred usage.
 
-## Confidentiality, roles and lifecycle
+## Confidentiality, human gates and lifecycle
 
 Original bids, page images, OCR, identity lists, quotations, certificate subjects and
-human reasons are encrypted org business content. Use existing file permissions plus
+human reasons are encrypted local business content. Use existing file permissions plus
 the stricter source-origin gates below. Storage keys are server-generated beneath
-`org/{org_id}/bid-review/{submission_id}/`; public views carry IDs/hashes, never keys.
+`bid-review/{submission_id}/`; public views carry IDs/hashes, never keys.
 Read bounded ciphertext/plaintext and validate descriptor/hash before parse/use.
 Neutral filenames, no-store responses and signed application links with live
 authorization follow [attachment downloads](attachment-archive.md#privacy-permissions-and-signed-downloads).
@@ -395,7 +373,7 @@ review, not just a mask proposal. Owner/holder checks needing hidden identity us
 local processing or a human; they cannot be inferred from anonymized pixels.
 
 Price pages, including mixed pages and uncertain price-page classifications, are
-excluded from external calls by default. A human task owner with admin/bidder authority
+excluded from external calls by default. The human
 may explicitly enable specified price pages for a pinned submission/provider/purpose,
 using a revision-checked, audited grant. This permits only sanitized page transmission,
 never removal of mandatory value redaction or external competitor-price comparison.
@@ -403,18 +381,16 @@ Remaining price-dependent judgments run locally/human or stay unknown. Revocatio
 changed pixels/settings stops later calls and invalidates the preflight; in-flight
 usage still settles. Human clearance for a page/purpose cannot widen to all files.
 
-| Proposed scope | Role/task intersection and token boundary |
+| Scope | Human and token boundary |
 | --- | --- |
-| `bid-review:read` | All four org roles with live task read; explicitly issued tokens receive only safe IDs/counts/status and redacted advisory summaries. No raw text, identity, price, pixel, human reason or artifact link in token projections. |
-| `bid-review:run` | Admin/bidder/technical task owner or contributor; explicit tokens may preview/submit only an exact already human-authorized sanitized scope. No upload, raw-source authority, new page disclosure or built-in-agent tool expansion is implied. |
-| `bid-review:upload`, `bid-review:prepare`, `bid-review:original:read` | Human admin/bidder task owner/contributor for upload/prepare; original reads recheck live task access. Technical/viewer gets only explicitly privacy-cleared human views, not raw bid files. |
-| `bid-review:source:read`, `bid-review:report:read` | Human task readers; admin/bidder may read originals/protected details with original-read authority, others only a purpose-built privacy-cleared projection. Never serialize the full protected report to a reader who lacks original-read authority. |
-| `bid-review:decide`, `bid-review:evidence:review` | Human bidder for commercial and technical for technical, intersected with stored domain/task review rights and authorized evidence pixels. No admin cross-domain override. |
-| `bid-review:outbound:authorize`, `bid-review:price:release` | Human task owner with admin/bidder authority; pins exact sanitized page/submission and provider/purpose. Agents/workers cannot originate a grant. Pixel clearance uses the existing human screenshot privacy workflow. The price scope also permits local opening-price input, whose separate human receipt does not imply an external-page grant. |
-| `bid-review:classify` | Human admin with task management authority records a finding's professional domain with expected revision/hash and reason; classification grants no finding/evidence decision authority. |
-| `bid-review:report:render`, `bid-review:report:download` | Human admin/bidder with protected report access and task access; Word and full report JSON are protected report artifacts, never an agent download channel or bid `export` grant. |
+| `bid-review:read` | Explicitly scoped tokens receive safe IDs/counts/status only; no text, pixels, reasons or artifact links. |
+| `bid-review:run` | The human or an explicitly scoped token can submit only an exact current human-authorized sanitized snapshot. |
+| Upload, prepare, original/source/report reads | Human-only; retain exact task/source binding and protected report checks. |
+| Decisions, evidence review and classification | Human-only for all review domains; retain expected revision/hash, predecessor and reason. |
+| Outbound authorization and price release | Human-only; fixes exact sanitized pages, provider and purpose. |
+| Report render/download | Human-only; no Evidence confirmation or ordinary bid-export grant is implied. |
 
-Add the human-only scopes to `auth.HUMAN_ONLY_SCOPES`, role/task ceilings and DB token
+Add the human-only scopes to `auth.HUMAN_ONLY_SCOPES` and DB token
 constraints together during implementation, preserving `evidence:confirm`, `export`
 and every existing exclusion. Deny mixed forbidden token grants atomically. Existing
 tokens gain nothing. A worker carries the verified initiator and a fixed job scope;
@@ -426,7 +402,7 @@ through generic document/chunk/source/rendition/job/SSE/history/download routes 
 Retention/deletion remains an [open decision](#open-decisions). Recommended first
 slice follows attachment preservation: no automatic purge, cascading content delete
 or public deletion route; deactivation blocks new use while protected history remains.
-Define any later org-requested purge across originals, OCR, renders, reports, caches,
+Define any later human-requested purge across originals, OCR, renders, reports, caches,
 model retention and backups before claiming erasure. Plaintext processing directories
 are attempt-owned and removed after success/failure/cancel; unreachable encrypted
 objects are reconciled only after proving they are unreferenced. Do not erase audit
@@ -461,7 +437,7 @@ The manifest pins file/page/order hashes,
 tender extraction/source/rule coverage, local preparation/trust versions, redaction
 and human outbound grants, model/prompt/schema/rule versions, scoring inputs
 and limits.
-A signed preflight receipt binds actor/org/task,
+A signed preflight receipt binds actor/task,
 options/hash and expiry without persisting a preview or trusting client estimates.
 
 It reports limits, first-pass planned calls/resource estimates, maximum
@@ -500,7 +476,7 @@ authorization. Paths remain proposed until approval; their service boundaries ar
 defined in the contract module.
 All commands are noninteractive; absent arguments fail. Local and remote CLI modes
 retain server, PostgreSQL and identity gates. Pagination defaults to 50, maximum 100;
-actor/org/task/filter-bound cursors expire at 15 minutes. A large report is assembled
+actor/task/filter-bound cursors expire at 15 minutes. A large report is assembled
 from bounded sections/pages, not one unrestricted list response.
 
 Result retains exactly `ok`, `command`, `data`, `items`, `warnings`, `cost`,
@@ -580,7 +556,7 @@ Local free OCR separately ≤1,000 pages and remains accounted.|
 | PDF/page raster/process limits from existing settings; one active preparation/render per job | Preserve [PDF isolation](../notes/pdf-parsing.md), bounded Office conversion and cleanup; fail if an original page cannot be inspected within the active limits. No unsafe parent-process fallback. |
 
 Deterministic preflight uses available metadata and never consumes a run call.
-Cache identity includes org/task/actor/submission/hash/date/slice/providers/privacy/
+Cache identity includes task/actor/submission/hash/date/slice/providers/privacy/
 rules/rubric; reuse only after fresh authorization.
 Partial reports are immutable
 terminal cache entries.
@@ -596,7 +572,7 @@ remain independent service/DB gates.
 | Proposed persistence | Content and migration obligations |
 | --- | --- |
 | `bid_submissions`, `bid_submission_documents` | Immutable ordered version, tender/task/lot, document roles, encrypted names, source hashes/lengths, uploader and request replay identity. Bid roles must never appear in tender-only extraction lists. |
-| `bid_document_pages`, preparation bindings | Original/rendered page identity, structural map, parse/OCR warnings and encrypted text; reference existing org storage/source/rendition objects through explicit uploaded-bid lineage, not another unrestricted image store. |
+| `bid_document_pages`, preparation bindings | Original/rendered page identity, structural map, parse/OCR warnings and encrypted text; reference existing installation storage/source/rendition objects through explicit uploaded-bid lineage, not another unrestricted image store. |
 | `bid_review_runs`, coverage and input bindings | Exact prepared submission, request/preflight/output hashes, scope, limits, rule/model/trust/privacy versions, Job and completion/stop reason; source-to-requirement mappings are normalized task-bound links. |
 | `bid_review_findings`, citation/search links | Immutable machine findings and normalized tender/bid source parents; searched absence inventory and coverage are first-class, never fabricated quotation rows. |
 | Signature requirements/checks and PDF validation rows | Requirement-to-required-location expansion, page-group links, per-dimension result, original PDF revision/certificate validation evidence and encrypted identity detail. |
@@ -604,17 +580,12 @@ remain independent service/DB gates.
 | Review decisions and outbound privacy/price grants | Append-only human actor/time/reason, previous decision/revision/hash and exact page/purpose. Authoritative allowlists derived from current decisions; no agent-written confirmation flags. |
 | Report artifacts | Immutable report/decision snapshot, renderer, Word/console data hash/size, storage reference and human publication authority; no overwrite on later decisions. |
 
-Every business row requires `org_id NOT NULL`, task binding, `ENABLE` and `FORCE RLS`,
-current-org `USING`/`WITH CHECK`, org/task composite FKs and runtime non-owner grants.
-Actor references use org Membership, not bare User. Document/page/finding/citation/
-job/decision joins include all required same-task/submission parents. JSON IDs alone
-do not enforce relationships. Add parent composite keys first, then tables/indexes,
-RLS, immutability/actor/state guards, token exclusions and source-origin checks;
-enable routes only after two-org gate acceptance. No content backfill or confirmed
-draft migration is needed. Preserve existing source discriminators; add explicit
-uploaded source branches with exclusive-kind CHECKs only where required. If sharing
-Document/Chunk tables, all older APIs/jobs must reject uploaded-bid origin unless
-they enforce its stronger privacy policy.
+The [single-user baseline](../../server/migrations/baseline/10_tables.sql) is
+immutable for this conversion. Its task/submission/page/finding/decision parents,
+source-origin checks, human gates, token exclusions and publication guards remain
+authoritative. Human decisions retain timestamps without a separate human ID.
+Preserve source discriminators; legacy tender APIs must reject uploaded-bid origin
+unless they enforce the stronger privacy policy.
 
 Reuse Job, UsageRecord, VendorCall, AuditLog and task events for durable resource attribution
 or queue.
@@ -626,7 +597,7 @@ not delete an object with an ambiguous committed reference.
 
 Audit submission/preparation/review/report publication, human decisions, privacy/price
 grants/revocations, original/report link issuance and actual authorized byte delivery.
-Reuse fixed event prefixes `bid_review.*`; store org/task/object/job/run/actor IDs,
+Reuse fixed event prefixes `bid_review.*`; store task/object/job/run/actor IDs,
 hashes, counts, model revisions, fixed codes and times.
 Keep human reasons only
 in encrypted authorized history; audits carry hashes.
@@ -641,7 +612,7 @@ Dry-run writes no audit.
 | Incomplete parse, missing expected document, unmapped clause or signature position | Preserve exact gap and scope; partial/unknown, never “all clear.” |
 | Invalid PDF signature, changed signed revision, unknown chain/revocation | Independent deterministic result and cited risk/limitation; no visual/model override. |
 | Redaction missing, privacy review stale, price page excluded, identity required but hidden | Block external dispatch for that scope; local/human work or explicit unknown. Never fall back to raw pages. |
-| Wrong org/task/source, changed membership or token | Uniform 404 or existing identity error before content disclosure; recheck each call, read and publication. |
+| Wrong task/source, revoked actor or changed input | Uniform 404 or existing identity error before content disclosure; recheck each call, read and publication. |
 | Wrong/ambiguous/unsent quote, forged bounding box or changed image hash | Reject conclusion, retain fixed reason and unresolved coverage; no source repair or nearest-page substitution. |
 | Clef turned off or unavailable, quote absent, malformed probability or high-confidence error | Retain triage failure and route to the configured cited/human path; no final verdict or implicit vendor switch. |
 | Resource/call ceiling reached or later independent Provider batch fails | Stop new calls; retain safely validated partial coverage and full usage where permitted. Unknown sends remain unresolved and block automatic resend. |
@@ -681,13 +652,13 @@ before default-on triage ships.
 
 | Acceptance track | Required scenario and repeatable artifact |
 | --- | --- |
-| Standalone flow | New task/tender + multiple bid PDFs/DOCX → explicit prepare/preflight/submit → console/Word, with no DraftRun/cards. Same report IDs, findings, source anchors and section order in both artifacts. A role-based browser flow exercises original/cleared views and remediation. |
+| Standalone flow | New task/tender + multiple bid PDFs/DOCX → explicit prepare/preflight/submit → console/Word, with no DraftRun/cards. Same report IDs, findings, source anchors and section order in both artifacts. A human-versus-token browser flow exercises original/cleared views and remediation. |
 | Signature completeness | Synthetic required locations with removed seals/signatures/dates; faint, greyscale, partial, displaced, wrong-owner and seam variants; every-page/group coverage. Primary missing-mark recall and false-positive rate separately; initial curated critical-negative gate: no known missing required mark may be silently passed. Unknown/triage escalation rates are reported, not counted as correct detections. |
 | Local PDF cryptography | Locally generated signed fixtures: intact, modified content/incremental update, multiple signatures, untrusted/expired certificate, missing/stale revocation proof, timestamp absence, unsigned visual seal and unsupported format. Assert no external/model calls and distinct crypto/trust/coverage results. |
 | Claim evidence | Mutate model, numeric value/unit, holder/manufacturer and validity around the bid date while retaining plausible document appearance. Report mutation accuracy, false acceptance and abstentions separately; require no silently accepted curated wrong-model/value cases and source-bound human confirmation. |
 | Human-report benchmark | With separately authorized reference access, compare the generated report against the existing human review report for the reference bid. Freeze reviewer adjudication and matching criteria; publish only aggregate agreement on rejection items, high-risk defects and per-part score-range overlap/containment. Investigate unmatched human findings; do not treat a winning bid or human report as infallible ground truth. Owner-approved tolerances follow baseline measurement. |
 | Scope/scoring | Existing check/score continue to reject uploads. No competitor input → only technical/commercial estimate and null total; supplied prices still require complete formula/input authority. Ambiguous rubric/partial evidence never earns default marks. Compliance-only completion distinguishes intentionally unrequested scoring. |
-| Confidentiality and permissions | Two orgs and same-org wrong task for every route/table/source/job/history/download; no-context FORCE RLS; token projections, generic legacy-route bypass, live revocation, raw/cleared pixels, price grants, bid-derived names and sentinel secrets absent from all fake external requests/logs/artifacts. Human/worker/agent decisions rejected at API and DB boundaries. |
+| Confidentiality and permissions | Wrong task/source for every route/table/source/job/history/download; human-versus-agent gates; token projections, generic legacy-route bypass, live revocation, raw/cleared pixels, price grants, bid-derived names and sentinel secrets absent from all fake external requests/logs/artifacts. Token/worker/agent decisions rejected at API and DB boundaries. |
 | Accounting/preflight | No writes/calls on previews; expiry/hash/provider/privacy races; exact pinned Clef request plan despite varied reported tokens; duplicate usage recording, unresolved timeout outcomes, retries and shared call ceilings; LLM BYOK usage, finite call limits and partial exit 5. No actual Provider calls in CI. |
 | Citations/history/recovery | PDF and DOCX original/render mapping, absence anchors, changed hashes, joined/ambiguous quotes, boxes outside content, dismiss/reopen conflicts, immutable old Word snapshots; lease/cancel/orphan/render/storage failures and bounded pagination. |
 
@@ -695,7 +666,7 @@ Before implementation, enumerate these failure scenarios and drive end-to-end
 API → worker → console/CLI tests using synthetic Providers and documents. Store
 replay commands, fixture hashes, sanitized Result snapshots, Word/PNG outputs and
 JUnit/browser evidence under ignored `data/work/bid-review-acceptance/`, never
-`docs/`. Real sample evaluation is opt-in, under org permissions, with aggregate-only
+`docs/`. Real sample evaluation is opt-in, under explicit human authorization, with aggregate-only
 export. Contract drafting checks are ruff/format, pyright, import/model JSON Schemas,
 document JSON validation, local links and `git diff --check`; they do not establish
 database, cryptographic-validator, visual-model or runtime acceptance.
@@ -716,7 +687,7 @@ The signing checklist must work without Clef.
 ### Slice 3a: Authorized native-text review
 
 This slice provides the first accounted LLM path over prepared uploads. It includes
-human task-owner cleared-text inspection and exact page/hash authorization,
+human cleared-text inspection and exact page/hash authorization,
 registered-value and bid-derived identity masking, append-only grants/revocations,
 live provider/privacy/input fences, write-free preflight and explicit durable
 submission. Token execution requires a prior current human grant; tokens receive
@@ -737,13 +708,12 @@ or provider configuration blocks admission.
 subset of the proposed full contract. It does not include clause-to-bid compliance
 judgments, visible mark presence, finding decisions, evidence-image validation,
 score estimates, Word rendering or Clef triage. Those stages remain required for
-the complete first phase. The implemented interfaces and code pointers are in
+the complete first phase. Interfaces and code pointers are in
 [authorized native-text review](../notes/bid-review.md#authorized-native-text-review).
 
 The [synthetic HTTP-to-worker scenarios](../../server/tests/test_bid_review_run_db.py)
 cover disclosure, citations, authority, stale grants, cancellation, deduplication
-and accounting. PostgreSQL execution and real-browser acceptance have not been
-performed for this slice. Captured request/result receipts belong under ignored
+and accounting. Captured request/result receipts belong under ignored
 `data/work/bid-review-run`, outside documentation.
 
 ### Slice 3b: Native-text compliance findings and human decisions
@@ -758,15 +728,14 @@ envelope; unresolved price-dependent and unsearched work remains unknown.
 
 Immutable findings and normalized sources are published with the review. Human
 classification and dismiss/reopen/confirm use an append-only shared revision chain,
-with responsible-domain task authority and no admin decision override. The CLI and
+with human-only authority across commercial and technical domains. The CLI and
 existing review page expose findings, filters, source quotes and human history.
 The bounded runtime subset is defined by
 [finding schemas](../../server/app/schemas/bid_review_findings.py) and the
 [mechanism note](../notes/bid-review.md#bid-compliance-and-human-decisions).
 
 The [HTTP/worker acceptance suite](../../server/tests/test_bid_review_findings_db.py)
-and [mocked browser suite](../../web/e2e/bid-review-findings.spec.js) are implemented.
-Their database/browser execution remains pending in the main session. Generated
+and [mocked browser suite](../../web/e2e/bid-review-findings.spec.js) define acceptance. Generated
 verification artifacts belong under ignored `data/work/bid-review-findings`.
 Visible mark presence, image evidence review, scoring, Word rendering and Clef
 remain outside this slice.
@@ -780,9 +749,8 @@ Published partial reviews remain partial, with explicit unknowns and uncovered
 scope. Unpublished reviews cannot enter report rendering.
 
 The console reads bounded sections from the same snapshot used by the local Word
-renderer. Original-read authority controls protected details; other human readers
-receive a purpose-built cleared projection and tokens receive safe metadata.
-Human admin/bidder render admission uses a call-free, write-free preview and signed
+renderer. Human original-read authority controls protected details; tokens receive only safe metadata.
+Human render admission uses a call-free, write-free preview and signed
 hash receipt. The report job publishes verified encrypted console/Word artifacts
 together; download links and authenticated byte reads repeat live authority.
 The [runtime schemas](../../server/app/schemas/bid_review_report.py) define this
@@ -791,21 +759,18 @@ links its implementation.
 
 The [HTTP/worker suite](../../server/tests/test_bid_review_report_db.py) and
 [mocked browser suite](../../web/e2e/bid-review-report.spec.js) cover snapshot drift,
-projections, sections, failures and downloads. Database and browser execution remain
-pending in the main session; static checks and CLI tests do not establish those
-gates. Repeatable acceptance artifacts belong under ignored
+projections, sections, failures and downloads. Static checks and CLI tests do not establish database or browser gates. Repeatable acceptance artifacts belong under ignored
 `data/work/bid-review-report`. Scoring, claim-to-image evidence verification,
 visible mark presence and Clef remain outside this slice.
 
 ## Slice 5: default-on presence triage
 
-Phase 1 implements page-level company-seal and signature-presence questions only.
+Phase 1 requires page-level company-seal and signature-presence questions only.
 Date-filled, owner identity, required-box position, seam completeness, page-type
 classification, claim-to-image assessment and scoring remain local/human or explicit
 future scope. The visible state is always 初筛 / 需人工确认, never confirmed presence.
 
-Required locations first become available in a published native-text review. A human
-admin/bidder task owner then explicitly prepares presence derivatives from that review,
+Required locations first become available in a published native-text review. The human then explicitly prepares presence derivatives from that review,
 inspects the exact JPEGs, authorizes their separate `bid_review_presence` purpose,
 and previews a new review run. Newly extracted required pages must intersect those
 exact authorized source pages; other locations remain uncovered. The first run and
@@ -813,8 +778,8 @@ unconfigured/blocked runs continue with an explicit triage-unavailable coverage 
 Per-run `clef_enabled=false` remains bound to the preflight and job identity.
 
 The [presence mechanism](../notes/bid-review.md#presence-only-clef-triage) defines
-pixel lineage, approval invalidation and runtime boundaries. Platform operators manage
-`bid platform clef show/set/check`; human owners use
+pixel lineage, approval invalidation and runtime boundaries. The human manages
+`bid platform clef show/set/check` and uses
 `bid review presence prepare/preview/authorize`. The latter authorization command also
 records revocation with `allow_external=false`; its receipt cannot authorize text.
 [Runtime image contracts](../../server/app/schemas/bid_review_presence.py) and
@@ -835,7 +800,7 @@ results. Missing/uncertain marks carry an explicit escalation.
 The [HTTP/worker acceptance suite](../../server/tests/test_bid_review_clef_db.py),
 [HTTPS mocked browser suite](../../web/e2e/bid-review-clef.spec.js) and
 [synthetic blur experiment](../../scripts/check_bid_presence_blur.py) cover the slice.
-PostgreSQL and browser execution remain pending; numeric blur checks alone establish
+Numeric blur checks alone establish
 neither real-document privacy nor missing-mark recall. Artifacts belong under ignored
 `data/work/bid-review-clef`, outside documentation.
 
@@ -846,13 +811,13 @@ neither real-document privacy nor missing-mark recall. Artifacts belong under ig
 | Input/command scope | Independent `uploaded_bid`, `bid review …`, immutable multi-file submission; no DraftRun prerequisite | Keeps confirmed-draft services and agent permissions unchanged. |
 | First slice | Upload + local preparation + signature completeness including local PDF validation + default-on Clef presence/page-type triage + rule/LLM compliance + console/Word | Score and Clef image-supports-claim triage remain next-slice capabilities, visibly unavailable. |
 | Limits | 20 files, 100 MiB/file, 500 MiB/submission, 1,000 combined pages; lower deployment limits win; 200 external calls with 100/60/40 stage ceilings | Benchmark maximum accepted inputs before raising actual deployment settings. |
-| PDF validator/trust | **Approved:** `gmssl==3.2.2` for GM/T 0010 SM2/SM3; bounded strict DER; straightforward RSA/ECDSA through existing `cryptography`; pyHanko deferred | Platform operators upload public root/intermediate CA certificates on 信任根证书 under [ADR 0010](../adr/0010-offline-signature-trust.md). Pin each preparation to the enabled store hash; keep crypto, coverage, modification, certificate validity, trust, timestamp and revocation independent. No OCSP/CRL/network checks or automatic trust. |
-| Clef | On by default once platform adapter, credentials and capability configuration are ready; per-review opt-out in preflight; no initial BYOK. | Missing configuration or failed gateway checks leave Clef undispatched and report triage unavailable. Check image/context/call bounds before every dispatch. |
-| Clef transport | On by default once platform adapter, credentials and capability configuration are ready; per-review opt-out in preflight; no initial BYOK. | A gateway in any other state blocks Clef; 429 is a retryable non-completion. |
+| PDF validator/trust | **Approved:** `gmssl==3.2.2` for GM/T 0010 SM2/SM3; bounded strict DER; straightforward RSA/ECDSA through existing `cryptography`; pyHanko deferred | The human uploads public root/intermediate CA certificates on 信任根证书 under [ADR 0012](../adr/0012-single-user-installation.md). Pin each preparation to the enabled store hash; keep crypto, coverage, modification, certificate validity, trust, timestamp and revocation independent. No OCSP/CRL/network checks or automatic trust. |
+| Clef | On by default once local adapter, credentials and capability configuration are ready; per-review opt-out in preflight; local encrypted credentials. | Missing configuration or failed gateway checks leave Clef undispatched and report triage unavailable. Check image/context/call bounds before every dispatch. |
+| Clef transport | On by default once local adapter, credentials and capability configuration are ready; per-review opt-out in preflight; local encrypted credentials. | A gateway in any other state blocks Clef; 429 is a retryable non-completion. |
 | Confidentiality | Mandatory external redaction including bid-derived names and exact reviewed image derivatives | Local/human handling when necessary identity/value is masked. |
-| Price pages and opening data | Price pages excluded unless human task owner explicitly permits exact sanitized pages; opening prices processed locally | No full score or competitor comparison from missing/guessed input; no strategic pricing. |
+| Price pages and opening data | Price pages excluded unless the human explicitly permits exact sanitized pages; opening prices processed locally | No full score or competitor comparison from missing/guessed input; no strategic pricing. |
 | Human authority | Raw files/reports restricted; responsible domain decides findings/evidence; token advisory grants require prior exact human outbound authorization | No token access through quotations, generic sources, jobs or report links. |
 | Reports | Common console/Word snapshot, advisory statement, unknowns and original machine conclusions retained | Human dismissal never overwrites history or silently changes scores. |
 | Preflight | Write-free, 15-minute actor-bound hash receipt, explicit submission and live per-call admission | No external discovery during dry-run or automatic retry after changed input. |
-| Retention/deletion | Preserve encrypted originals/reports/decisions without automatic expiry for first slice; cleanup transient plaintext | Decide retention duration, org erasure, backups and provider retention before adding any purge promise or operation. |
+| Retention/deletion | Preserve encrypted originals/reports/decisions without automatic expiry for first slice; cleanup transient plaintext | Decide retention duration, local erasure, backups and provider retention before adding any purge promise or operation. |
 | Release metrics | Zero silent passes on curated critical missing-mark/wrong-model/value negatives; general thresholds after broader baseline and human-report comparison | Small feasibility samples cannot serve as release accuracy claims. |

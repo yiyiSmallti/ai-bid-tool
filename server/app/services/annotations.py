@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 from psycopg import InterfaceError as DriverInterfaceError
 from psycopg import OperationalError as DriverOperationalError
 from pydantic import ValidationError
-from sqlalchemy import literal, select, tuple_
+from sqlalchemy import func, literal, select, tuple_
 from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app.core.errors import ServiceError, not_found
@@ -42,7 +42,7 @@ from app.services import (
     preflight as preflight_service,
 )
 from app.services import response_cards as cards
-from app.services.auth import HUMAN_ONLY_SCOPES, ROLE_SCOPES, Identity, set_actor_context
+from app.services.auth import HUMAN_ONLY_SCOPES, Identity, set_actor_context
 from app.services.versioned import audit
 
 CANDIDATE_PROFILE = "annotation-candidate-v1"
@@ -79,12 +79,13 @@ async def access(session, actor, task_id, *, create=False, lock=False):
         task_id,
         scope="evidence:annotate" if create else "card:read",
         write=create,
-        require_member=True,
         lock=lock,
     )
     for scope in READ_SCOPES:
         actor.require(scope)
     if create:
+        if actor.session_id is not None or actor.principal_id is not None:
+            fail("forbidden", "A human installation session is required", 403, 4)
         actor.require("card:write")
     return result
 
@@ -95,36 +96,21 @@ async def worker_access(session, job, *, bind_context=True):
         job.actor_kind != "session"
         or job.actor_token_id is not None
         or job.agent_principal_id is not None
-        or job.actor_user_id is None
+        or job.agent_session_id is not None
     ):
         fail("forbidden", "Annotation jobs require a fixed human request", 403, 4)
     actor = Identity(
-        job.actor_user_id,
-        job.org_id,
-        set(job.actor_scopes) - HUMAN_ONLY_SCOPES,
-        "viewer",
+        scopes=set(job.actor_scopes) - HUMAN_ONLY_SCOPES,
         actor_kind="worker",
         job_id=job.id,
         run_id=job.run_id,
     )
     actor = await task_access.live_actor(session, actor)
-    _, workflow, member = await task_access.access(
-        session,
-        actor,
-        job.task_id,
-        scope="card:read",
-        require_member=True,
-        bind_context=bind_context,
+    await task_access.access(
+        session, actor, job.task_id, scope="card:read", bind_context=bind_context
     )
-    if workflow.state == "archived":
-        fail("task_archived", "Task is archived")
-    if job.kind == "annotation_render" and (
-        "evidence:annotate" not in job.actor_scopes
-        or "evidence:annotate" not in ROLE_SCOPES[actor.role]
-        or member is None
-        or member.role not in {"owner", "contributor"}
-    ):
-        fail("forbidden", "Annotation initiator no longer has create authority", 403, 4)
+    if job.kind == "annotation_render" and "evidence:annotate" not in job.actor_scopes:
+        fail("forbidden", "Annotation initiator lacks create authority", 403, 4)
     for scope in READ_SCOPES:
         actor.require(scope)
     if bind_context:
@@ -210,7 +196,6 @@ async def manifest_for(session, actor, task_id, target, renderer, *, publication
         fail("source_inactive", "Source belongs to a replaced task selection")
     try:
         manifest = schema.AnnotationInputManifest(
-            org_id=actor.org_id,
             task_id=task_id,
             target=target,
             card_content_sha256=card_content_hash(revision),
@@ -314,7 +299,7 @@ async def enqueue(session, queue, job, *, retry=False):
                 None,
                 0,
             )
-            job.queue_id = await queue.enqueue_in_transaction(session, str(job.org_id), str(job.id))
+            job.queue_id = await queue.enqueue_in_transaction(session, str(job.id))
         elif job.status == "queued":
             await queue.ensure_process_delivery(session, job)
     except (
@@ -334,7 +319,6 @@ async def submit(session, actor, task_id, body, storage, queue, settings, render
     saved = await session.scalar(
         select(AnnotationRequest).where(
             AnnotationRequest.task_id == task_id,
-            AnnotationRequest.actor_user_id == actor.user_id,
             AnnotationRequest.request_id == body.request_id,
         )
     )
@@ -393,7 +377,6 @@ async def submit(session, actor, task_id, body, storage, queue, settings, render
     request_id = uuid4()
     job = Job(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=task_id,
         document_id=extraction.document_id,
         kind="annotation_render",
@@ -402,14 +385,11 @@ async def submit(session, actor, task_id, body, storage, queue, settings, render
         cache_key=digest(
             {
                 "kind": "annotation_render",
-                "org": str(actor.org_id),
                 "task": str(task_id),
-                "actor": str(actor.user_id),
                 "request": str(body.request_id),
                 "input": preview.input_hash,
             }
         ),
-        actor_user_id=actor.user_id,
         actor_token_id=None,
         actor_kind="session",
         actor_scopes=sorted(actor.scopes),
@@ -419,7 +399,6 @@ async def submit(session, actor, task_id, body, storage, queue, settings, render
                 "annotation_request_id": str(request_id),
                 "input_manifest": manifest.model_dump(mode="json"),
                 "input_hash": preview.input_hash,
-                "actor_user_id": str(actor.user_id),
                 "actor_token_id": None,
                 "actor_kind": "session",
                 "scopes": sorted(actor.scopes),
@@ -434,14 +413,12 @@ async def submit(session, actor, task_id, body, storage, queue, settings, render
     assert isinstance(source, schema.CertificatePageBinding)
     row = AnnotationRequest(
         id=request_id,
-        org_id=actor.org_id,
         task_id=task_id,
         extraction_job_id=extraction.id,
         requirement_id=requirement.id,
         card_id=card.id,
         expected_card_revision=card.revision,
         expected_card_revision_id=revision.id,
-        actor_user_id=actor.user_id,
         request_id=body.request_id,
         request_sha256=request_digest(body),
         input_hash=preview.input_hash,
@@ -452,7 +429,6 @@ async def submit(session, actor, task_id, body, storage, queue, settings, render
         renderer=manifest.renderer.model_dump(mode="json"),
         privacy_attestation={
             "reviewed_source_sha256": body.reviewed_source_png_sha256,
-            "reviewed_by": str(actor.user_id),
         },
         job_id=job.id,
         source_kind="certificate_page",
@@ -507,7 +483,6 @@ async def material_row(session, actor, annotation_id):
 def candidate_view(row):
     return schema.AnnotationCandidateView(
         id=row.id,
-        org_id=row.org_id,
         task_id=row.task_id,
         job_id=row.job_id,
         input_hash=row.input_hash,
@@ -588,7 +563,7 @@ async def show(session, actor, annotation_id):
 
 
 async def page(session, actor, task_id, query, settings, *, annotation=None):
-    _, workflow, _ = await access(session, actor, task_id)
+    await access(session, actor, task_id)
     model = AnnotationRelease if annotation else AnnotationMaterial
     purpose = "annotation-releases" if annotation else "annotations"
     binding = {
@@ -604,9 +579,7 @@ async def page(session, actor, task_id, query, settings, *, annotation=None):
             raise not_found()
         statement = statement.where(model.card_id == query.card_id)
     if query.cursor:
-        cursor = task_events.open_cursor(
-            query.cursor, actor, task_id, workflow, settings, purpose=purpose
-        )
+        cursor = task_events.open_cursor(query.cursor, actor, task_id, settings, purpose=purpose)
         if cursor.get("b") != binding:
             fail("invalid_annotation_cursor", "Cursor does not match this list", 422)
         try:
@@ -625,7 +598,6 @@ async def page(session, actor, task_id, query, settings, *, annotation=None):
         task_events.issue_cursor(
             actor,
             task_id,
-            workflow,
             settings,
             purpose=purpose,
             b=binding,
@@ -670,9 +642,7 @@ async def approval_binding(session, actor, material, evidence_id, *, storage=Non
     if (
         linked is None
         or revision.state != "confirmed"
-        or revision.confirmed_by is None
         or revision.confirmed_at is None
-        or evidence.confirmed_by is None
         or evidence.confirmed_at is None
     ):
         fail(
@@ -686,18 +656,31 @@ async def approval_binding(session, actor, material, evidence_id, *, storage=Non
         evidence.image_sha256,
     ) != (material.asset_id, material.rendition_id, candidate.rendering.image.sha256):
         fail("release_binding_changed", "Evidence does not bind this candidate image")
-    review = (await cards.review_approvals(session, actor.org_id, [card.id]))[card.id]
-    if not review["approved"]:
-        fail("approval_stale", "Review approval or source inputs changed")
+    invalid_evidence = (
+        select(CardEvidenceLink.id)
+        .join(Evidence, Evidence.id == CardEvidenceLink.evidence_id)
+        .where(
+            CardEvidenceLink.revision_id == revision.id,
+            (Evidence.confirmed_at.is_(None))
+            | (func.response_evidence_active(Evidence.id).is_not(True)),
+        )
+        .exists()
+    )
+    sources_current = await session.scalar(
+        select(
+            func.response_citation_valid(requirement.id).is_(True)
+            & func.response_quote_current(revision.id).is_(True)
+            & ~invalid_evidence
+        )
+    )
+    if not sources_current:
+        fail("approval_stale", "Confirmed response citations or evidence changed")
     pin = await requirement_pin(session, requirement, confirmed=True)
-    if revision.review_domain not in {"commercial", "technical"}:
-        fail("approval_not_complete", "A classified review domain is required")
     values = dict(
         evidence_id=evidence.id,
         card_id=card.id,
         card_revision=card.revision,
         card_revision_id=revision.id,
-        confirmed_by=revision.confirmed_by,
         # PostgreSQL may reload timestamptz with a connection-local offset; the
         # approval hash must retain the confirming transaction's UTC representation.
         confirmed_at=revision.confirmed_at.astimezone(UTC),
@@ -710,8 +693,6 @@ async def approval_binding(session, actor, material, evidence_id, *, storage=Non
         root_mapping_sha256=candidate.rendering.root_mapping_sha256,
         reviewed_region=PixelRect.model_validate(evidence.region),
         requirement=pin,
-        decision_kind="single_domain",
-        review_domain=revision.review_domain,
         card_content_sha256=card_content_hash(revision),
         evidence_binding_sha256=digest(
             {
@@ -735,7 +716,12 @@ async def approval_binding(session, actor, material, evidence_id, *, storage=Non
 
 async def enqueue_releases(session, actor, card, revision, *, queue=None):
     """Called only inside the final successful human confirmation transaction."""
-    if actor.actor_kind != "session" or actor.token_id is not None:
+    if (
+        actor.actor_kind != "session"
+        or actor.token_id is not None
+        or actor.principal_id is not None
+        or actor.session_id is not None
+    ):
         fail("forbidden", "Only a completed human decision can admit release rendering", 403, 4)
     materials = list(
         (
@@ -754,8 +740,8 @@ async def enqueue_releases(session, actor, card, revision, *, queue=None):
     queue = queue or session.info.get("annotation_queue")
     if queue is None:
         fail("annotation_queue_unavailable", "Release queue is unavailable", 503, 3)
-    # Signers may be reviewers, without evidence:annotate. Approval, not annotation
-    # creation authority, is the authorization for these fixed automatic jobs.
+    # A completed human approval authorizes this fixed release job; it never
+    # grants a worker annotation creation or confirmation authority.
     for material, evidence in materials:
         approval = await approval_binding(session, actor, material, evidence.id)
         manifest = schema.AnnotationInputManifest.model_validate(material.manifest)
@@ -763,7 +749,6 @@ async def enqueue_releases(session, actor, card, revision, *, queue=None):
         cache_key = digest(
             {
                 "kind": "annotation_release",
-                "org_id": str(actor.org_id),
                 "task_id": str(card.task_id),
                 "evidence": str(evidence.id),
                 "card_revision_id": str(revision.id),
@@ -779,14 +764,12 @@ async def enqueue_releases(session, actor, card, revision, *, queue=None):
         assert extraction is not None
         job = Job(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=card.task_id,
             document_id=extraction.document_id,
             kind="annotation_release",
             status="queued",
             attempts=0,
             cache_key=cache_key,
-            actor_user_id=actor.user_id,
             actor_token_id=None,
             actor_kind="session",
             actor_scopes=sorted(actor.scopes),
@@ -798,7 +781,6 @@ async def enqueue_releases(session, actor, card, revision, *, queue=None):
                     "annotation_id": str(material.id),
                     "approval": approval.model_dump(mode="json"),
                     "renderer": renderer.model_dump(mode="json"),
-                    "actor_user_id": str(actor.user_id),
                     "actor_token_id": None,
                     "actor_kind": "session",
                     "scopes": sorted(actor.scopes),
@@ -985,10 +967,6 @@ async def check_job_access(session, actor, job, *, cancel=False):
     submitted = job.result.get("submission", {})
     manifest = schema.AnnotationInputManifest.model_validate(submitted["input_manifest"])
     await source_binding(session, actor, job.task_id, manifest.target.source)
-    if cancel:
-        _, _, member = await access(session, actor, job.task_id, create=True)
-        if actor.user_id != job.actor_user_id and (member is None or member.role != "owner"):
-            fail("forbidden", "Only the initiating human or task owner can cancel", 403, 4)
 
 
 async def attachment_gate(session, actor, rendition_id, *, storage=None):
@@ -1036,39 +1014,39 @@ async def board_metadata(session, actor, task_id, card_ids):
     rows = await session.execute(
         text("""
         SELECT c.id AS card_id, m.id AS annotation_id,
-          public.annotation_source_current(c.org_id,m.request_id)
+          public.annotation_source_current(m.request_id)
             AND NOT EXISTS(SELECT 1 FROM public.screenshot_withdrawals sw
-              WHERE sw.org_id=c.org_id AND sw.asset_id=m.asset_id) AS source_current,
+              WHERE sw.asset_id=m.asset_id) AS source_current,
           EXISTS(SELECT 1 FROM public.card_evidence_links l JOIN public.evidence e
-            ON (e.org_id,e.id)=(l.org_id,l.evidence_id)
-            WHERE l.org_id=c.org_id AND l.revision_id=c.current_revision_id
+            ON e.id=l.evidence_id
+            WHERE l.revision_id=c.current_revision_id
               AND e.screenshot_rendition_id=m.rendition_id) AS attached,
           j.id AS job_id,j.status AS job_status,
           EXISTS(SELECT 1 FROM public.annotation_releases rel
-            WHERE rel.org_id=c.org_id AND rel.annotation_id=m.id
+            WHERE rel.annotation_id=m.id
               AND rel.card_revision_id=c.current_revision_id
-              AND public.annotation_release_current(c.org_id,rel.id)) AS released
+              AND public.annotation_release_current(rel.id)) AS released
         FROM public.response_cards c
         JOIN LATERAL (
           SELECT mat.* FROM public.annotation_materials mat
-          WHERE mat.org_id=c.org_id AND mat.task_id=c.task_id AND (mat.card_id=c.id OR EXISTS(
+          WHERE mat.task_id=c.task_id AND (mat.card_id=c.id OR EXISTS(
             SELECT 1 FROM public.card_evidence_links l JOIN public.evidence e
-              ON (e.org_id,e.id)=(l.org_id,l.evidence_id)
-            WHERE l.org_id=c.org_id AND l.revision_id=c.current_revision_id
+              ON e.id=l.evidence_id
+            WHERE l.revision_id=c.current_revision_id
               AND e.screenshot_rendition_id=mat.rendition_id))
           ORDER BY mat.created_at DESC,mat.id DESC LIMIT 1
         ) m ON true
         LEFT JOIN LATERAL (
           SELECT job.id,job.status FROM public.jobs job
-          WHERE job.org_id=c.org_id AND job.task_id=c.task_id AND job.kind='annotation_release'
+          WHERE job.task_id=c.task_id AND job.kind='annotation_release'
             AND job.result->>'annotation_id'=m.id::text
             AND job.result->>'card_id'=c.id::text
             AND job.result->>'expected_card_revision'=c.revision::text
           ORDER BY job.created_at DESC,job.id DESC LIMIT 1
         ) j ON true
-        WHERE c.org_id=:org AND c.task_id=:task AND c.id=ANY(CAST(:cards AS uuid[]))
+        WHERE c.task_id=:task AND c.id=ANY(CAST(:cards AS uuid[]))
     """),
-        {"org": actor.org_id, "task": task_id, "cards": list(card_ids)},
+        {"task": task_id, "cards": list(card_ids)},
     )
     return {row["card_id"]: dict(row) for row in rows.mappings()}
 
@@ -1086,7 +1064,7 @@ async def list_jobs(
     limit=20,
 ):
     """Bounded auxiliary job reads for the editor, with every job's live source ACL."""
-    _, workflow, _ = await access(session, actor, task_id)
+    await access(session, actor, task_id)
     actor.require("job:read")
     if kind not in {"annotation_render", "annotation_release"}:
         fail("invalid_annotation_job_kind", "Unsupported annotation job kind", 422)
@@ -1111,9 +1089,7 @@ async def list_jobs(
             Job.result["extraction_job_id"].astext == str(extraction_job_id)
         )
     if cursor:
-        saved = task_events.open_cursor(
-            cursor, actor, task_id, workflow, settings, purpose="annotation-jobs"
-        )
+        saved = task_events.open_cursor(cursor, actor, task_id, settings, purpose="annotation-jobs")
         if saved.get("b") != binding:
             fail("invalid_annotation_cursor", "Job cursor filters changed", 422)
         try:
@@ -1131,7 +1107,6 @@ async def list_jobs(
         task_events.issue_cursor(
             actor,
             task_id,
-            workflow,
             settings,
             purpose="annotation-jobs",
             b=binding,

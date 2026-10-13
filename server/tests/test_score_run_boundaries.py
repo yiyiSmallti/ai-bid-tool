@@ -2,10 +2,10 @@
 
 Failure inventory: a later provider batch can stop after earlier model results;
 usage persistence can fail after a vendor response; a confirmed card can advance
-past the revision fixed by a DraftRun; and an otherwise valid score token or foreign
-tenant can try to read or cancel another score job. These cases must respectively
+past the revision fixed by a DraftRun; and an otherwise valid scoped score token can try to read or cancel a score job
+without the required grant. These cases must respectively
 publish an explicit partial report, publish no report, reject the stale draft, and
-preserve both scope enforcement and tenant-hidden 404 behavior.
+preserve scope enforcement.
 """
 
 import copy
@@ -20,11 +20,11 @@ from app.models.score import ScoreReport
 from app.providers.base import ProviderFailure
 from app.providers.scoring import HTTPScoreProvider, score_provider
 from app.services import score_execution, score_run_inputs, score_semantic
-from app.services.auth import ROLE_SCOPES, Identity
+from app.services.auth import HUMAN_SCOPES, Identity
 from sqlalchemy import func, select
 from test_card_generation import token_header
-from test_check_combined import platform_llm, seed_platform, semantic_llm
-from test_response_cards import require_action, set_role
+from test_check_combined import semantic_llm
+from test_response_cards import require_action
 from test_score_api import rubric_case as rubric_case
 from test_score_api import rubric_input_case as rubric_input_case
 from test_score_review import base, confirm_contents, decision, replacement, show
@@ -54,24 +54,12 @@ class SecondBatchRefusalVendor(ScoreVendor):
                 "choices": [
                     {
                         "finish_reason": "stop",
-                        "message": {
-                            "content": "{}",
-                            "refusal": "Synthetic second-batch refusal",
-                        },
+                        "message": {"content": "{}", "refusal": "Synthetic second-batch refusal"},
                     }
                 ],
                 "usage": {"prompt_tokens": 100, "completion_tokens": 20},
             },
         )
-
-
-def role(case, value: str) -> None:
-    set_role(
-        case["admin_engine"],
-        case["tenants"]["orgs"][0],
-        case["tenants"]["users"][0],
-        value,
-    )
 
 
 async def split_and_confirm_rubric(case) -> dict:
@@ -101,14 +89,8 @@ async def split_and_confirm_rubric(case) -> dict:
 
 
 async def one_item_batch_budget(case, rubric: dict) -> int:
-    org_id = case["tenants"]["orgs"][0]
-    actor = Identity(
-        case["tenants"]["users"][0],
-        org_id,
-        set(ROLE_SCOPES["bidder"]),
-        "bidder",
-    )
-    async with case["app"].state.db.transaction(org_id) as session:
+    actor = Identity(set(HUMAN_SCOPES))
+    async with case["app"].state.db.transaction() as session:
         fixed = await score_run_inputs.snapshot(
             session,
             actor,
@@ -118,11 +100,7 @@ async def one_item_batch_budget(case, rubric: dict) -> int:
             date(2026, 10, 5),
         )
         await score_execution.prepare(
-            session,
-            fixed,
-            case["score_llm"],
-            None,
-            case["app"].state.processor.settings,
+            session, fixed, case["score_llm"], None, case["app"].state.processor.settings
         )
     request = score_semantic.provider_request(fixed.secret["outbound"])
     assert request is not None and len(request.items) == 2
@@ -144,19 +122,12 @@ async def test_later_refused_batch_publishes_partial_report(score_case, monkeypa
     case["rubric"] = rubric
     budget = await one_item_batch_budget(case, rubric)
     vendor = SecondBatchRefusalVendor()
-    llm = semantic_llm(
-        case["tmp_path"],
-        vendor,
-        score_batch_chars=budget,
-        llm_concurrency=1,
-    )
+    llm = semantic_llm(case["tmp_path"], vendor, score_batch_chars=budget, llm_concurrency=1)
     install_score_resolver(monkeypatch, llm)
-
     preview = await preview_score(case)
     accepted = await submit_score(case, preview)
     assert accepted.status_code == 200, accepted.text
     terminal = await finish_score(case, accepted.json()["data"])
-
     assert terminal["status"] == "succeeded", terminal
     assert len(vendor.requests) == 2
     assert terminal["result"]["completion"] == "partial"
@@ -165,8 +136,7 @@ async def test_later_refused_batch_publishes_partial_report(score_case, monkeypa
     assert terminal["result"]["estimated_total"] is None
     assert terminal["result"]["stop_reason"] == "provider_refused"
     response = await case["api"].get(
-        f"/tasks/{case['task']}/scores/{terminal['result']['report_id']}",
-        headers=case["header"],
+        f"/tasks/{case['task']}/scores/{terminal['result']['report_id']}", headers=case["header"]
     )
     assert response.status_code == 200, response.text
     assert response.json()["ok"] is False
@@ -176,7 +146,6 @@ async def test_later_refused_batch_publishes_partial_report(score_case, monkeypa
 async def test_card_revision_makes_fixed_draft_stale_before_score_call(score_case):
     case = score_case
     preview = await preview_score(case)
-    role(case, "technical")
     reopened = await require_action(
         case["api"],
         case["header"],
@@ -192,8 +161,6 @@ async def test_card_revision_makes_fixed_draft_stale_before_score_call(score_cas
         json={"expected_revision": reopened["revision"], "content": content},
     )
     assert revised.status_code == 200, revised.text
-    role(case, "bidder")
-
     refused = await submit_score(case, preview)
     assert refused.status_code == 409, refused.text
     assert refused.json()["data"]["error"]["code"] == "score_stale_draft"
@@ -202,7 +169,6 @@ async def test_card_revision_makes_fixed_draft_stale_before_score_call(score_cas
 
 async def test_score_token_scopes_and_foreign_job_are_enforced(score_case):
     case = score_case
-    role(case, "admin")
     agent = await token_header(
         case["api"],
         case["header"],
@@ -216,7 +182,6 @@ async def test_score_token_scopes_and_foreign_job_are_enforced(score_case):
             "job:cancel",
         ],
     )
-    role(case, "bidder")
     preview_response = await case["api"].post(
         f"/tasks/{case['task']}/scores/preview",
         headers=agent,
@@ -241,17 +206,6 @@ async def test_score_token_scopes_and_foreign_job_are_enforced(score_case):
     assert accepted.status_code == 200, accepted.text
     job_id = accepted.json()["data"]["job_id"]
     assert (await case["api"].get(f"/jobs/{job_id}", headers=agent)).status_code == 200
-
-    set_role(
-        case["admin_engine"],
-        case["tenants"]["orgs"][1],
-        case["tenants"]["users"][1],
-        "bidder",
-    )
-    foreign = case["headers"][1]
-    assert (await case["api"].get(f"/jobs/{job_id}", headers=foreign)).status_code == 404
-    assert (await case["api"].post(f"/jobs/{job_id}/cancel", headers=foreign)).status_code == 404
-
     cancelled = await case["api"].post(f"/jobs/{job_id}/cancel", headers=agent)
     assert cancelled.status_code == 200, cancelled.text
     assert cancelled.json()["data"]["status"] == "cancelled"
@@ -286,14 +240,10 @@ async def test_historical_report_remains_readable_after_rubric_revision(score_ca
     terminal = await finish_score(case, accepted.json()["data"])
     assert terminal["status"] == "succeeded", terminal
     report_id = terminal["result"]["report_id"]
-
     revised = await case["api"].post(
-        base(case) + "/revisions",
-        headers=case["header"],
-        json=replacement(case["rubric"]),
+        base(case) + "/revisions", headers=case["header"], json=replacement(case["rubric"])
     )
     assert revised.status_code == 200, revised.text
-
     historical = await case["api"].get(
         f"/tasks/{case['task']}/scores/{report_id}", headers=case["header"]
     )
@@ -349,12 +299,8 @@ async def test_usage_persistence_failure_is_visible_and_publishes_no_report(
     score_case, monkeypatch
 ):
     case = score_case
-    await seed_platform(
-        case["admin_engine"], case["app"].state.processor.settings, case["tenants"]["orgs"][0]
-    )
     install_score_resolver(
-        monkeypatch,
-        platform_llm(case["app"].state.processor.settings, case["score_vendor"]),
+        monkeypatch, semantic_llm(case["app"].state.processor.settings, case["score_vendor"])
     )
 
     async def fail_usage(*args, **kwargs):
@@ -366,10 +312,9 @@ async def test_usage_persistence_failure_is_visible_and_publishes_no_report(
     assert accepted.status_code == 200, accepted.text
     terminal = await finish_score(case, accepted.json()["data"])
     job_id = UUID(terminal["id"])
-
     assert terminal["status"] == "failed"
     assert terminal["error"]["code"] == "usage_accounting_failed"
-    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         assert (
             await session.scalar(
                 select(func.count()).select_from(ScoreReport).where(ScoreReport.job_id == job_id)

@@ -123,7 +123,7 @@ async def material_inputs(session: AsyncSession, actor: Identity, task_id: UUID,
     for source in sources:
         archived, selected, original = await require_source(session, actor, source.id)
         if original.id not in files:
-            content = await storage.read(actor.org_id, original.storage_key)
+            content = await storage.read(original.storage_key)
             if (
                 len(content) != original.file["size_bytes"]
                 or hashlib.sha256(content).hexdigest() != original.file["sha256"]
@@ -241,27 +241,23 @@ async def snapshot(
         )
     memory_request = memory_output = None
     if actor.principal_id is None:
+        # Memory stays sanitized even when the human disables outbound model
+        # redaction. Derive bounded retrieval tags from that same safe query.
+        memory_query = (
+            await sanitize(
+                session,
+                actor,
+                " ".join(row["quote"] for row in original_requirements),
+                settings,
+            )
+        )[:2000] or "drafting"
         memory_request = MemoryRetrievalRequest(
-            org_id=actor.org_id,
-            scopes=["org"],
+            scopes=["library"],
             task_id=task.id,
-            query=(
-                await sanitize(
-                    session,
-                    actor,
-                    " ".join(row["quote"] for row in original_requirements),
-                    settings,
-                )
-            )[:2000]
-            or "drafting",
-            keywords=list(
-                dict.fromkeys(
-                    word
-                    for row in sent_requirements
-                    for word in row["quote"].split()
-                    if len(word) <= 40
-                )
-            )[:20],
+            query=memory_query,
+            keywords=list(dict.fromkeys(word for word in memory_query.split() if len(word) <= 30))[
+                :20
+            ],
             tags=["drafting"],
         )
         memory_output = await memory_retrieval.retrieve(
@@ -274,7 +270,6 @@ async def snapshot(
     preparation = await requirement_consumption.preparation(session, scope_requirements)
     manifest = {
         "requirement_preparation": preparation,
-        "org_id": str(actor.org_id),
         "task_id": str(task.id),
         "requirements": [
             {
@@ -297,7 +292,6 @@ async def snapshot(
         "model_redaction_revision": task.model_redaction_revision,
         "redaction_rule_version": redaction.RULE_VERSION,
         "redacted_counts": dict(totals),
-        # Value IDs, never values: a changed value is a new input.
         "confidential_values": sorted(
             str(entry.value.id) for entry in registered.values() if entry.value is not None
         ),
@@ -432,10 +426,7 @@ async def submit_generation(
                 "selected_requirements": selected,
                 "skipped": skipped,
                 "input_hash": input_hash,
-                **{
-                    key: manifest["model"][key]
-                    for key in ("model", "platform_model_id", "model_revision")
-                },
+                **{key: manifest["model"][key] for key in ("model", "model_revision")},
                 "reasoning": reasoning,
                 "model_redaction_enabled": task.model_redaction_enabled,
                 "input_refs": [entry["ref"] for entry in manifest["materials"]],
@@ -500,9 +491,7 @@ async def submit_generation(
     else:
         memory_output = None
         if "memory" in manifest:
-            await memory_retrieval.require_current(
-                session, actor.org_id, manifest["memory"], lock=True
-            )
+            await memory_retrieval.require_current(session, manifest["memory"], lock=True)
             memory_output = MemoryRetrievalOutput.model_validate(secret["memory_output"])
             await memory_retrieval.persist(
                 session,
@@ -520,7 +509,6 @@ async def submit_generation(
         generation_id = uuid4()
         job = Job(
             id=generation_id,
-            org_id=actor.org_id,
             task_id=task_id,
             document_id=extraction.document_id,
             kind="card_generate",
@@ -545,15 +533,9 @@ async def submit_generation(
                     "warnings": warnings,
                     "encrypted_input": crypto.encrypt(
                         json.dumps(
-                            {
-                                "org_id": str(actor.org_id),
-                                "job_id": str(generation_id),
-                                "payload": secret,
-                            },
-                            ensure_ascii=False,
+                            {"job_id": str(generation_id), "payload": secret}, ensure_ascii=False
                         )
                     ),
-                    "actor_user_id": str(actor.user_id),
                     "actor_token_id": str(actor.token_id) if actor.token_id else None,
                     "actor_kind": actor.actor_kind,
                     **provenance_fields(actor),
@@ -595,12 +577,9 @@ async def submit_generation(
 def worker(job: Job) -> Identity:
     submitted = job.result["submission"]
     return Identity(
-        UUID(submitted["actor_user_id"]),
-        job.org_id,
-        set(submitted["scopes"]),
-        "viewer",
-        UUID(submitted["actor_token_id"]) if submitted["actor_token_id"] else None,
-        "worker",
+        scopes=set(submitted["scopes"]),
+        token_id=UUID(submitted["actor_token_id"]) if submitted["actor_token_id"] else None,
+        actor_kind="worker",
         principal_id=UUID(submitted["agent_principal_id"])
         if submitted.get("agent_principal_id")
         else None,
@@ -626,9 +605,7 @@ async def check_input_access(session, actor, task_id, manifest, *, active=False)
         actor.require("memory:read")
         actor.require("memory:retrieve")
     if active and "memory" in manifest:
-        await memory_retrieval.require_current(
-            session, actor.org_id, manifest.get("memory"), lock=True
-        )
+        await memory_retrieval.require_current(session, manifest.get("memory"), lock=True)
     for entry in manifest["materials"] + manifest["unavailable_pages"]:
         if entry["kind"] == "certificate_pdf_page":
             source, selected, _ = await require_source(
@@ -649,13 +626,12 @@ async def check_input_access(session, actor, task_id, manifest, *, active=False)
 
 
 async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
-    settings, db, org_id, job_id = (
+    settings, db, job_id = (
         execution.settings,
         execution.db,
-        execution.org_id,
         execution.job_id,
     )
-    async with db.transaction(org_id) as session:
+    async with db.transaction() as session:
         job = await execution.owned_job(session)
         actor = await cards.access(session, worker(job), "card:generate")
         actor.require("card:read")
@@ -671,7 +647,9 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
         await check_input_access(session, actor, job.task_id, manifest, active=True)
         llm, _, _ = with_reasoning(llm, job.reasoning)
         if model_identity(llm) != manifest["model"]:
-            cards.fail("generation_model_changed", "Model catalog changed; submit again", 409, 3)
+            cards.fail(
+                "generation_model_changed", "Model configuration changed; submit again", 409, 3
+            )
         if (
             manifest["prompt_version"] != PROMPT_VERSION
             or manifest.get("schema_version") != SCHEMA_VERSION
@@ -679,7 +657,7 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
         ):
             cards.fail("generation_rules_changed", "Drafting rules changed; submit again", 409, 3)
         envelope = json.loads(Secrets.for_data(settings).decrypt(submitted["encrypted_input"]))
-        if envelope.get("org_id") != str(org_id) or envelope.get("job_id") != str(job_id):
+        if envelope.get("job_id") != str(job_id):
             cards.fail("memory_snapshot_invalid", "Fixed input binding is invalid", 409, 4)
         secret = envelope["payload"]
 
@@ -734,7 +712,7 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
         }
     ):
         raise output.failure
-    async with db.transaction(org_id) as session:
+    async with db.transaction() as session:
         await cards.task_lock(session, UUID(manifest["task_id"]))
         job = await execution.owned_job(session)
         actor = await cards.access(session, worker(job), "card:generate")
@@ -755,7 +733,7 @@ async def publish(session, actor, job, output, secret, storage, settings):
     submitted = job.result["submission"]
     manifest = submitted["input_manifest"]
     if "memory" in manifest:
-        await memory_retrieval.require_current(session, actor.org_id, manifest["memory"], lock=True)
+        await memory_retrieval.require_current(session, manifest["memory"], lock=True)
     await current_preparation(
         session,
         job.task_id,
@@ -990,13 +968,11 @@ async def publish(session, actor, job, output, secret, storage, settings):
     result["agent_provenance"] = await provenance(session, job.id)
     run = CardGenerationRun(
         id=uuid4(),
-        org_id=job.org_id,
         task_id=job.task_id,
         extraction_job_id=UUID(manifest["extraction_job_id"]),
         generation_job_id=job.id,
         generation_run_id=job.run_id,
         input_hash=submitted["input_hash"],
-        actor_user_id=actor.user_id,
         actor_token_id=actor.token_id,
         actor_kind="worker",
         input_manifest={
@@ -1010,7 +986,6 @@ async def publish(session, actor, job, output, secret, storage, settings):
             "requirement_calls": requirement_calls,
         },
         target_revisions=submitted["target_revisions"],
-        platform_model_id=manifest["model"]["platform_model_id"],
         model_revision=manifest["model"]["model_revision"],
         reasoning=job.reasoning,
         model_redaction_enabled=manifest["model_redaction_enabled"],

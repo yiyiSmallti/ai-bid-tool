@@ -1,7 +1,7 @@
 """Opt-in large synthetic export for opening in Word or WPS.
 
 Builds a long labelled tender, a many-page synthetic certificate whose every page is
-confirmed evidence, confirms every card through the human roles, and releases a final
+confirmed evidence, confirms every card through the human session, and releases a final
 section. Writes the DOCX and a receipt to data/work/export-acceptance/scale. Set
 BID_EXPORT_SCALE_PAGES to run it; CI leaves it skipped.
 """
@@ -28,9 +28,7 @@ from test_response_cards import (
     create_card,
     labelled_pdf,
     phase_one_client,
-    require_action,
     run_document_job,
-    set_role,
 )
 
 PAGES = int(os.environ.get("BID_EXPORT_SCALE_PAGES", "0"))
@@ -120,10 +118,9 @@ async def starter_template(api, header, task):
     return selected, binding.json()["data"]
 
 
-async def test_large_synthetic_final_export(tenants, tmp_path, admin_engine, monkeypatch):
-    org, user = tenants["orgs"][0], tenants["users"][0]
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+async def test_large_synthetic_final_export(database, tmp_path, admin_engine, monkeypatch):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         app.state.processor.llm = ScaleExtraction()
         count = PAGES + EXTRA
         task = (
@@ -149,7 +146,6 @@ async def test_large_synthetic_final_export(tenants, tmp_path, admin_engine, mon
         ).json()["items"]
         assert len(requirements) == count
         selected, binding = await starter_template(api, header, task)
-
         data = {
             "kind": "qualification",
             "name": "合成测试质量管理体系认证证书",
@@ -188,7 +184,6 @@ async def test_large_synthetic_final_export(tenants, tmp_path, admin_engine, mon
             )
             assert response.status_code == 200, response.text
             sources.append(response.json()["data"]["source"])
-
         cards = []
         for index, requirement in enumerate(requirements):
             number = index + 1
@@ -212,10 +207,7 @@ async def test_large_synthetic_final_export(tenants, tmp_path, admin_engine, mon
                     requirement,
                     {
                         "response_kind": "evidence" if evidence else "commitment",
-                        "response_text": (
-                            f"完全响应。我单位承诺所投合成测试设备满足第 {number} 项规模要求，"
-                            "并按招标文件约定提供相应服务（合成测试材料）。"
-                        ),
+                        "response_text": f"完全响应。我单位承诺所投合成测试设备满足第 {number} 项规模要求，并按招标文件约定提供相应服务（合成测试材料）。",
                         "deviation": "negative" if number % 25 == 0 else "none",
                         "deviation_note": f"合成测试：第 {number} 项的质保期少于要求。"
                         if number % 25 == 0
@@ -224,22 +216,6 @@ async def test_large_synthetic_final_export(tenants, tmp_path, admin_engine, mon
                     },
                 )
             )
-        for role in ("technical", "bidder"):
-            set_role(admin_engine, org, user, role)
-            for index, card in enumerate(cards):
-                if (role == "bidder") != is_qualification(index + 1):
-                    continue
-                submitted = await require_action(api, header, card, "submit")
-                cards[index] = await require_action(
-                    api,
-                    header,
-                    submitted,
-                    "confirm",
-                    reviewed_evidence_ids=[e["id"] for e in submitted["evidence"]],
-                    reviewed_warning_codes=submitted["warning_codes"],
-                    reason="Synthetic review of the scale fixture.",
-                )
-
         draft_id = await draft(api, app, header, task, extraction)
         body = {
             "draft_id": draft_id,
@@ -260,7 +236,6 @@ async def test_large_synthetic_final_export(tenants, tmp_path, admin_engine, mon
         export = released.json()["data"]
         link = await api.get(f"/exports/{export['id']}/download-link", headers=header)
         content = (await api.get(link.json()["data"]["url"], headers=header)).content
-
     with ZipFile(BytesIO(content)) as package:
         media = sorted(
             hashlib.sha256(package.read(name)).hexdigest()

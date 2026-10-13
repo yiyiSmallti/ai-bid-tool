@@ -50,7 +50,6 @@ class Accounting:
         self.events: list[str] = []
         self.planned: list[int] = []
         self.plans: list[CallPlan] = []
-        self.platform_billed: list[bool] = []
         self.completed = []
         self.unknown_calls = []
 
@@ -61,7 +60,6 @@ class Accounting:
     async def admit(self, quote):
         self.events.append("admit")
         self.plans.append(quote)
-        self.platform_billed.append(quote.platform_model_id is not None)
         return uuid4()
 
     async def complete(self, call_id, usage) -> None:
@@ -120,14 +118,10 @@ class FakeCheckProvider:
         async def operation():
             self.calls += 1
             usage = self.synthetic_usage()
-            return self.wire, usage
+            return (self.wire, usage)
 
         quote = call_plan(
-            "llm",
-            self.name,
-            self.model,
-            self.version,
-            serialized_request(self.request_body(value)),
+            "llm", self.name, self.model, self.version, serialized_request(self.request_body(value))
         )
         wire, usage = await accounted_call(quote, operation)
         return CheckProviderResult(wire=wire, usages=[usage])
@@ -199,6 +193,7 @@ def output() -> dict:
 
 def adapter(tmp_path, vendor: Vendor) -> HTTPCheckProvider:
     settings = Settings(
+        access_key="synthetic-check-access-key-with-32-characters",
         database_url="postgresql+psycopg://synthetic:synthetic@localhost/synthetic",
         encryption_key=Fernet.generate_key().decode(),
         token_key=Fernet.generate_key().decode(),
@@ -209,12 +204,8 @@ def adapter(tmp_path, vendor: Vendor) -> HTTPCheckProvider:
         llm_base_url="https://check.example.test/v1",
         llm_max_output_tokens=2048,
     )
-    llm = OpenAICompatibleExtractor(
-        settings,
-        httpx.MockTransport(vendor),
-        platform_model_id="synthetic-check-catalog",
-    )
-    llm.version = "http-extract-v5:synthetic-check-catalog:7"
+    llm = OpenAICompatibleExtractor(settings, httpx.MockTransport(vendor))
+    llm.version = "http-extract-v5:synthetic-check-local:7"
     return HTTPCheckProvider(llm)
 
 
@@ -231,9 +222,7 @@ async def test_http_check_sends_one_exact_accounted_structured_request(tmp_path)
     provider = adapter(tmp_path, vendor)
     accounting = Accounting()
     vendor.events = accounting.events
-
     result = await run_check(provider, accounting)
-
     assert result.wire.items[0].findings[0].code == "semantic_contradiction"
     assert len(result.usages) == 1
     assert result.usages[0].tokens == 500
@@ -242,10 +231,8 @@ async def test_http_check_sends_one_exact_accounted_structured_request(tmp_path)
     assert accounting.events == ["plan", "admit", "http", "complete"]
     assert accounting.unknown_calls == []
     assert len(vendor.requests) == 1
-
     exact_body = provider.request_body(request())
     assert accounting.plans == [provider.llm.quote(exact_body)]
-    assert accounting.platform_billed == [True]
     assert accounting.plans[0].request_sha256 == provider.llm.quote(exact_body).request_sha256
     sent = json.loads(vendor.requests[0].content)
     assert sent == exact_body
@@ -276,10 +263,8 @@ async def test_truncation_is_distinct_and_actionable_after_one_accounted_call(tm
     provider = adapter(tmp_path, vendor)
     accounting = Accounting()
     vendor.events = accounting.events
-
     with pytest.raises(ProviderFailure) as truncated:
         await run_check(provider, accounting)
-
     error = truncated.value
     assert error.code == "provider_output_truncated"
     assert error.retryable is error.refused is False
@@ -302,16 +287,9 @@ def test_wire_preserves_duplicate_missing_and_unknown_ids_for_service_rejection(
     candidate["items"] = [
         candidate["items"][0],
         candidate["items"][0],
-        {
-            "requirement_id": "r999",
-            "status": "unknown",
-            "citations": [],
-            "findings": [],
-        },
+        {"requirement_id": "r999", "status": "unknown", "citations": [], "findings": []},
     ]
-
     wire = CheckWireOutput.model_validate(candidate)
-
     assert [item.requirement_id for item in wire.items] == ["r1", "r1", "r999"]
     assert "r2" not in [item.requirement_id for item in wire.items]
 
@@ -319,7 +297,6 @@ def test_wire_preserves_duplicate_missing_and_unknown_ids_for_service_rejection(
 def test_wire_contract_forbids_extra_fields():
     candidate = output()
     candidate["items"][0]["vendor_explanation"] = "untrusted"
-
     with pytest.raises(ValidationError):
         CheckWireOutput.model_validate(candidate)
 
@@ -328,7 +305,6 @@ async def test_check_requires_supported_http_adapter_and_accounting(tmp_path):
     with pytest.raises(ProviderFailure) as unsupported:
         HTTPCheckProvider(object())
     assert unsupported.value.code == "unsupported_check_provider"
-
     vendor = Vendor(output())
     provider = adapter(tmp_path, vendor)
     with pytest.raises(ProviderFailure) as unaccounted:
@@ -342,7 +318,6 @@ async def test_factory_wraps_http_and_reuses_accounted_protocol_fake(tmp_path):
     http = adapter(tmp_path, vendor)
     assert supports_check(http.llm) is True
     assert isinstance(check_provider(http.llm), HTTPCheckProvider)
-
     fake = FakeCheckProvider(output())
     assert supports_check(fake) is True
     assert check_provider(fake) is fake
@@ -361,7 +336,6 @@ async def test_factory_wraps_http_and_reuses_accounted_protocol_fake(tmp_path):
             serialized_request(fake.request_body(request())),
         )
     ]
-    assert accounting.platform_billed == [False]
 
 
 def test_factory_rejects_unsupported_capability_with_fixed_code():

@@ -450,7 +450,6 @@ def current_snapshot(payload):
 def artifact_view(row, snapshot):
     return c.BidReviewReportArtifact(
         id=row.id,
-        org_id=row.org_id,
         task_id=row.task_id,
         report_id=row.review_id,
         snapshot_id=row.snapshot_id,
@@ -507,9 +506,7 @@ async def submit(session, actor, review_id, body, queue, settings):
     expires = preview.as_of + timedelta(seconds=900)
     binding = {
         "purpose": "bid_review_report",
-        "org_id": str(actor.org_id),
         "task_id": str(run.task_id),
-        "actor_user_id": str(actor.user_id),
         "request_id": str(body.request_id),
         "review_id": str(run.id),
         "input_hash": payload["input_hash"],
@@ -540,7 +537,6 @@ async def submit(session, actor, review_id, body, queue, settings):
     await bids.replay_lock(session, actor, "bid_review_report", body.request_id)
     prior = await session.scalar(
         select(BidReviewReportSnapshot).where(
-            BidReviewReportSnapshot.created_by == actor.user_id,
             BidReviewReportSnapshot.request_id == body.request_id,
         )
     )
@@ -550,7 +546,6 @@ async def submit(session, actor, review_id, body, queue, settings):
     replay = await session.scalar(
         select(AuditLog).where(
             AuditLog.action == "bid_review.report_requested",
-            AuditLog.actor_user_id == actor.user_id,
             AuditLog.details["request_id"].astext == str(body.request_id),
         )
     )
@@ -560,7 +555,6 @@ async def submit(session, actor, review_id, body, queue, settings):
         prior = await session.scalar(
             select(BidReviewReportSnapshot)
             .where(
-                BidReviewReportSnapshot.created_by == actor.user_id,
                 BidReviewReportSnapshot.review_id == run.id,
                 BidReviewReportSnapshot.input_hash == payload["input_hash"],
             )
@@ -592,7 +586,6 @@ async def submit(session, actor, review_id, body, queue, settings):
         identifier = uuid4()
         job = Job(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=run.task_id,
             document_id=None,
             bid_submission_document_id=run.tender_document_id,
@@ -601,7 +594,6 @@ async def submit(session, actor, review_id, body, queue, settings):
                 {key: value for key, value in binding.items() if key != "request_id"}
             ),
             status="queued",
-            actor_user_id=actor.user_id,
             actor_token_id=None,
             actor_kind="session",
             actor_scopes=sorted(actor.scopes),
@@ -617,20 +609,18 @@ async def submit(session, actor, review_id, body, queue, settings):
         await session.flush()
         snapshot = BidReviewReportSnapshot(
             id=identifier,
-            org_id=actor.org_id,
             task_id=run.task_id,
             submission_id=run.submission_id,
             review_id=run.id,
             publication_id=publication.id,
             job_id=job.id,
-            created_by=actor.user_id,
             request_id=body.request_id,
             input_hash=payload["input_hash"],
             report_input_hash=run.input_hash,
             decisions_snapshot_sha256=payload["decisions_snapshot_sha256"],
             renderer_identity=RENDERER_IDENTITY,
             details_sha256=bids.digest(payload),
-            details_encrypted=bids.seal(settings, actor.org_id, identifier, payload),
+            details_encrypted=bids.seal(settings, identifier, payload),
         )
         session.add(snapshot)
         await session.flush()
@@ -891,8 +881,7 @@ async def history(session, actor, review_id, settings, *, cursor=None, limit=50)
             {
                 "snapshot_id": str(snapshot.id),
                 "input_hash": snapshot.input_hash,
-                "can_retry": snapshot.created_by == actor.user_id
-                and job.status in {"failed", "cancelled"},
+                "can_retry": findings.protected(actor) and job.status in {"failed", "cancelled"},
                 "created_at": snapshot.created_at.isoformat(),
                 "decisions_snapshot_sha256": snapshot.decisions_snapshot_sha256,
                 "report_input_hash": snapshot.report_input_hash,
@@ -932,7 +921,7 @@ async def download_gate(session, actor, artifact_id):
 
 async def read_artifact(session, actor, artifact_id, storage):
     row, snapshot = await download_gate(session, actor, artifact_id)
-    content = await storage.read_bounded(actor.org_id, row.storage_key, row.size_bytes)
+    content = await storage.read_bounded(row.storage_key, row.size_bytes)
     if len(content) != row.size_bytes or hashlib.sha256(content).hexdigest() != row.sha256:
         bids.fail(
             "bid_review_output_integrity", "Report artifact bytes failed integrity checks", 409, 4
@@ -955,5 +944,3 @@ async def job_access(session, actor, job, *, cancel=False):
     if snapshot is None:
         raise not_found()
     await report_access(session, actor, snapshot.task_id, scope="bid-review:report:render")
-    if cancel and job.actor_user_id != actor.user_id:
-        raise not_found()

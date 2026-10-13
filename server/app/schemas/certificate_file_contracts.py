@@ -70,7 +70,7 @@ class CertificateScanFile(Contract):
 
 class CertificateFileRevision(Contract):
     id: UUID
-    org_id: UUID
+
     certificate_id: UUID
     certificate_revision_id: UUID
     revision: int = Field(ge=1)

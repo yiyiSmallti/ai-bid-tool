@@ -1,4 +1,4 @@
-"""Authenticated, owner-scoped agent management commands."""
+"""Authenticated, human-managed agent management commands."""
 
 from uuid import UUID
 

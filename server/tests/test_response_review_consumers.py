@@ -10,11 +10,11 @@ ARTIFACT_ROOT = Path(__file__).resolve().parents[2] / "data/work/response-review
 
 
 async def test_single_domain_disposition_after_reopen_preserves_board_and_draft(
-    api, headers, tenants, admin_engine
+    api, headers, database, admin_engine
 ):
-    scope = await response_scope(api, headers, tenants, admin_engine, required=False)
-    await submit(api, headers[0], scope)
-    tech = scope["members"]["technical"]["headers"]
+    scope = await response_scope(api, headers, admin_engine)
+    await submit(api, headers, scope)
+    tech = headers
     card = scope["card"]
     confirmed = await api.post(
         f"/cards/{card['id']}/actions",
@@ -55,14 +55,14 @@ async def test_single_domain_disposition_after_reopen_preserves_board_and_draft(
     assert disposed.status_code == 200, disposed.text
     board = await api.get(
         f"/tasks/{scope['task_id']}/board",
-        headers=headers[0],
+        headers=headers,
         params={"extraction_job_id": str(scope["job_id"])},
     )
     assert board.status_code == 200, board.text
     assert board.json()["items"][0]["bucket"] == "comply_only"
     preview = await api.post(
         f"/tasks/{scope['task_id']}/drafts",
-        headers=headers[0],
+        headers=headers,
         json={"extraction_job_id": str(scope["job_id"]), "dry_run": True},
     )
     assert preview.status_code == 200, preview.text
@@ -74,7 +74,7 @@ async def test_human_confirmation_and_consumption_commit_atomically(
     api,
     application,
     headers,
-    tenants,
+    database,
     admin_engine,
     tmp_path,
     monkeypatch,
@@ -83,11 +83,11 @@ async def test_human_confirmation_and_consumption_commit_atomically(
     from app.core.errors import ServiceError
     from app.services import drafts, response_cards
 
-    scope = await response_scope(api, headers, tenants, admin_engine)
-    await attach_material(api, headers[0], scope, tmp_path)
-    await submit(api, headers[0], scope)
+    scope = await response_scope(api, headers, admin_engine)
+    await attach_material(api, headers, scope, tmp_path)
+    await submit(api, headers, scope)
     pending = scope["card"]
-    assert pending["evidence"] and all(row["confirmed_by"] is None for row in pending["evidence"])
+    assert pending["evidence"] and all(row["confirmed_at"] is None for row in pending["evidence"])
     validate = response_cards.validate_confirmation
     observations = []
 
@@ -95,7 +95,7 @@ async def test_human_confirmation_and_consumption_commit_atomically(
         await validate(session, actor, card, revision, requirement, body, storage)
         assert revision.state == "pending_review" and card.current_revision_id == revision.id
         evidence = await response_cards.linked_evidence(session, revision.id)
-        assert all(row.confirmed_by is None and row.confirmed_at is None for row in evidence)
+        assert all(row.confirmed_at is None for row in evidence)
         _, items, _, _, _ = await drafts.assemble(
             session, actor, card.task_id, card.extraction_job_id, storage
         )
@@ -111,19 +111,19 @@ async def test_human_confirmation_and_consumption_commit_atomically(
     monkeypatch.setattr(response_cards, "validate_confirmation", observe_final_recheck)
     final = await confirm(api, scope)
     assert len(observations) == 1
-    current = await api.get(f"/cards/{pending['id']}", headers=headers[0])
+    current = await api.get(f"/cards/{pending['id']}", headers=headers)
     assert current.status_code == 200
     card = current.json()["data"]
     if fail_after_validation:
         assert final.status_code == 409, final.text
         assert final.json()["data"]["error"]["code"] == "synthetic_final_review_failure"
         assert card["revision"] == pending["revision"] and card["state"] == "pending_review"
-        assert all(row["confirmed_by"] is None for row in card["evidence"])
+        assert all(row["confirmed_at"] is None for row in card["evidence"])
     else:
         assert final.status_code == 200, final.text
         assert card["revision"] == pending["revision"] + 1 and card["state"] == "confirmed"
-        assert card["confirmed_by"] == str(scope["members"]["technical"]["user"])
-        assert all(row["confirmed_by"] == card["confirmed_by"] for row in card["evidence"])
+        assert card["confirmed_at"] is not None
+        assert all(row["confirmed_at"] == card["confirmed_at"] for row in card["evidence"])
     target = ARTIFACT_ROOT / "confirmation-boundary"
     target.mkdir(parents=True, exist_ok=True)
     (target / (("rollback" if fail_after_validation else "commit") + ".json")).write_text(
@@ -133,7 +133,7 @@ async def test_human_confirmation_and_consumption_commit_atomically(
                 "observations": observations,
                 "final_http_status": final.status_code,
                 "confirmed_evidence": sum(
-                    row["confirmed_by"] is not None for row in card["evidence"]
+                    row["confirmed_at"] is not None for row in card["evidence"]
                 ),
             },
             indent=2,

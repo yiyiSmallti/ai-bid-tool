@@ -431,7 +431,7 @@ class ProviderSecretsCipher(Protocol):
 
 
 class RotationReport(CredentialContract):
-    """New admin provider-secrets report; existing default data-only report stays compatible."""
+    """Provider-secrets rotation report, separate from the data-only rotation report."""
 
     scope: Literal["provider-secrets"] = "provider-secrets"
     platform_checked: int = Field(ge=0)

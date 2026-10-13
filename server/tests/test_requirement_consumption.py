@@ -4,7 +4,7 @@ Failure inventory: preparing an unconfirmed requirement implies acceptance;
 response confirmation or comply-only bypasses the source gate; an all-gap draft
 includes candidate response text; reopening leaves old draft rows usable; default
 board counts pending requirements as response-complete or aliases drop review fields;
-opt-in progress silently chooses an extraction; foreign org projections leak data;
+opt-in progress silently chooses an extraction;
 a whole-rubric decision accepts an outstanding fixed scoring requirement.
 
 These tests require an explicitly supplied isolated bid_test PostgreSQL runtime.
@@ -24,7 +24,6 @@ from app.schemas.requirement_confirmation import (
     RequirementReviewData,
 )
 from app.schemas.task_board import BoardData, BoardRow
-from task_fixtures import reviewer_header
 from test_check import publish_draft
 from test_response_cards import (
     create_card,
@@ -109,17 +108,15 @@ async def draft_preview(api, headers, task, extraction):
 
 @pytest.mark.parametrize("operation", ["confirm", "comply_only"])
 async def test_requirement_confirmation_gates_response_and_disposition(
-    tenants, tmp_path, admin_engine, operation
+    database, tmp_path, admin_engine, operation
 ):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        owner = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        owner = headers
         task, _, extraction, requirements = await create_tender(
             api, app, owner, tmp_path, suffix=operation, confirmed=False
         )
         requirement = requirements[2]
-        _, professional = await reviewer_header(
-            api, admin_engine, tenants["orgs"][0], UUID(task), "technical"
-        )
+        professional = headers
         initial = await review(api, owner, requirement["id"])
         assert initial["requirement"]["state"] in {"unconfirmed", "legacy_unconfirmed"}
         card = None
@@ -182,10 +179,10 @@ async def test_requirement_confirmation_gates_response_and_disposition(
 
 
 async def test_unconfirmed_draft_gap_and_reopen_retire_accepted_rows(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        owner = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        owner = headers
         task, _, extraction, requirements = await create_tender(
             api, app, owner, tmp_path, suffix="draft-reopen", confirmed=False
         )
@@ -213,9 +210,7 @@ async def test_unconfirmed_draft_gap_and_reopen_retire_accepted_rows(
             "requirement_unconfirmed" in row["reasons"] for row in pending.json()["data"]["gaps"]
         )
         await source_decision(api, owner, requirement["id"], "confirm")
-        _, professional = await reviewer_header(
-            api, admin_engine, tenants["orgs"][0], UUID(task), "technical"
-        )
+        professional = headers
         card = await require_action(api, professional, card, "submit")
         card = await require_action(
             api,
@@ -250,15 +245,13 @@ async def test_unconfirmed_draft_gap_and_reopen_retire_accepted_rows(
         )
 
 
-async def test_requirement_board_optin_progress_contract_aliases_and_org_isolation(
-    tenants, tmp_path
-):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
+async def test_requirement_board_optin_progress_contract_aliases(database, tmp_path):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
         task, _, extraction, requirements = await create_tender(
-            api, app, headers[0], tmp_path, suffix="board", confirmed=False
+            api, app, headers, tmp_path, suffix="board", confirmed=False
         )
         params = {"extraction_job_id": extraction}
-        default = await api.get(f"/v4/tasks/{task}/board", headers=headers[0], params=params)
+        default = await api.get(f"/v4/tasks/{task}/board", headers=headers, params=params)
         assert default.status_code == 200, default.text
         BoardData.model_validate(default.json()["data"])
         for row in default.json()["items"]:
@@ -268,7 +261,7 @@ async def test_requirement_board_optin_progress_contract_aliases_and_org_isolati
             assert row["next_actions"][0]["code"] == "view"
         optin = await api.get(
             f"/v4/tasks/{task}/board",
-            headers=headers[0],
+            headers=headers,
             params={**params, "view": "requirement-review"},
         )
         assert optin.status_code == 200, optin.text
@@ -280,11 +273,11 @@ async def test_requirement_board_optin_progress_contract_aliases_and_org_isolati
             item = RequirementBoardItem.model_validate(row)
             assert item.requirement.bucket == "requirement_review"
             assert item.requirement.next_action == "confirm_requirement"
-            assert item.requirement.next_actor.user_id == tenants["users"][0]
+            assert item.requirement.next_actor.can_current_actor_act is True
             assert not item.requirement.counts_as_response_complete
         progress = await api.get(
             f"/v4/tasks/{task}/progress",
-            headers=headers[0],
+            headers=headers,
             params={**params, "view": "requirement-review"},
         )
         assert progress.status_code == 200, progress.text
@@ -292,13 +285,13 @@ async def test_requirement_board_optin_progress_contract_aliases_and_org_isolati
         assert projected.scope.extraction_job_id == UUID(extraction)
         assert projected.scope.summary.confirmed == 0
         missing = await api.get(
-            f"/v4/tasks/{task}/progress", headers=headers[0], params={"view": "requirement-review"}
+            f"/v4/tasks/{task}/progress", headers=headers, params={"view": "requirement-review"}
         )
         assert missing.status_code in {400, 422}, missing.text
         aliases = {}
         for prefix in ("", "/v4", "/v5"):
             current_default = await api.get(
-                f"{prefix}/tasks/{task}/board", headers=headers[0], params=params
+                f"{prefix}/tasks/{task}/board", headers=headers, params=params
             )
             assert current_default.status_code == 200, current_default.text
             assert current_default.headers["X-Bid-Contract-Version"] == "5.0"
@@ -315,16 +308,9 @@ async def test_requirement_board_optin_progress_contract_aliases_and_org_isolati
                 ("board", RequirementBoardData, optin),
                 ("progress", RequirementProgressData, progress),
             ):
-                foreign = await api.get(
-                    f"{prefix}/tasks/{task}/{part}",
-                    headers=headers[1],
-                    params={**params, "view": "requirement-review"},
-                )
-                assert foreign.status_code == 404, foreign.text
-                assert task not in foreign.text and extraction not in foreign.text
                 current = await api.get(
                     f"{prefix}/tasks/{task}/{part}",
-                    headers=headers[0],
+                    headers=headers,
                     params={**params, "view": "requirement-review"},
                 )
                 assert current.status_code == 200, current.text

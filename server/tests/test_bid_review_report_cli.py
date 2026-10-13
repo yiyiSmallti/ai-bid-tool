@@ -3,9 +3,7 @@
 import hashlib
 import io
 import json
-import os
 import zipfile
-from pathlib import Path
 
 import pytest
 from app.schemas import bid_review_report as reports
@@ -16,7 +14,7 @@ from bid_cli.schema import command_schema
 from docx import Document
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
-from test_bid_review_cli import ID, NOW, SHA, InterfaceClient, invoke
+from test_bid_review_cli import ID, NOW, SHA, InterfaceClient, assert_cli_contracts, invoke
 
 REVIEW = "00000000-0000-4000-8000-000000000004"
 SNAPSHOT = "00000000-0000-4000-8000-000000000005"
@@ -49,7 +47,6 @@ def interface():
     content = document_bytes()
     artifact = reports.BidReviewReportArtifact(
         id=ARTIFACT,
-        org_id=ID,
         task_id=ID,
         report_id=REVIEW,
         snapshot_id=SNAPSHOT,
@@ -81,7 +78,7 @@ def interface():
 
     @application.post("/v4/bid-reviews/{review_id}/artifacts")
     async def render(request: Request, review_id: str):
-        assert review_id == REVIEW and request.headers["x-org-id"] == ID
+        assert review_id == REVIEW
         body = reports.BidReportRenderRequest.model_validate(await request.json())
         assert str(body.report_id) == review_id
         assert body.expected_decisions_snapshot_sha256 == DECISIONS
@@ -144,7 +141,7 @@ def interface():
 
     @application.get("/v4/bid-review-artifacts/{artifact_id}/download-link")
     async def link(request: Request, artifact_id: str):
-        assert artifact_id == ARTIFACT and request.headers["x-org-id"] == ID
+        assert artifact_id == ARTIFACT
         state["calls"].append("link")
         return Result(
             ok=True,
@@ -155,8 +152,11 @@ def interface():
     @application.get("/bid-review-artifacts/{artifact_id}/download")
     async def download(request: Request, artifact_id: str):
         assert artifact_id == ARTIFACT
-        assert request.headers["x-org-id"] == ID
-        assert request.headers["authorization"] == "Bearer synthetic-report-session"
+        assert "x-org-id" not in request.headers
+        assert (
+            request.headers["authorization"]
+            == "Bearer synthetic-access-key-synthetic-report-session"
+        )
         assert request.query_params["signature"] == "synthetic-report-only"
         state["calls"].append("bytes")
         if state["expired"]:
@@ -187,10 +187,9 @@ def interface():
 
 def setup(monkeypatch, tmp_path):
     application, state = interface()
-    monkeypatch.setenv("BID_SESSION", "synthetic-report-session")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-access-key-synthetic-report-session")
     monkeypatch.setattr(
-        cli, "Client", lambda mode, server, saved: InterfaceClient(mode, server, saved, application)
+        cli, "Client", lambda mode, server: InterfaceClient(mode, server, application)
     )
     path = tmp_path / "report.json"
     path.write_text(
@@ -242,10 +241,21 @@ def test_report_cli_http_snapshots_and_verified_download_both_modes(monkeypatch,
             actual[f"{mode}: review report {name}"] = body
     assert state["calls"] == ["preview", "submit", "link", "bytes"] * 2
     assert not list(tmp_path.glob(".bid-download-*"))
-    snapshot = Path(__file__).with_name("snapshots") / "bid-review-report-cli-v4.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n")
-    assert actual == json.loads(snapshot.read_text())
+    assert_cli_contracts(actual)
+    for mode in ("local", "remote"):
+        prepared = reports.BidReportRenderPreview.model_validate(
+            actual[f"{mode}: review report dry-run"]["data"]
+        )
+        assert str(prepared.report_id) == REVIEW and prepared.input_hash == RENDER_INPUT
+        assert prepared.report_input_hash == SHA and prepared.decisions_snapshot_sha256 == DECISIONS
+        assert prepared.preflight.planned_calls == prepared.preflight.maximum_calls == 0
+        assert actual[f"{mode}: review report submit"]["data"]["job_id"] == ID
+        receipt = reports.BidReportDownloadReceipt.model_validate(
+            actual[f"{mode}: review report download"]["data"]
+        )
+        assert receipt.artifact.sha256 == state["artifact"][
+            "sha256"
+        ] and receipt.artifact.size_bytes == len(state["content"])
 
 
 @pytest.mark.parametrize(
@@ -345,7 +355,7 @@ def test_report_download_rejects_unsafe_routes(monkeypatch, tmp_path, capsys, li
     assert not list(tmp_path.glob(".bid-download-*"))
 
 
-@pytest.mark.parametrize("field,value", [("id", OTHER), ("org_id", OTHER), ("format", "console")])
+@pytest.mark.parametrize("field,value", [("id", OTHER), ("format", "console")])
 def test_report_download_rejects_wrong_descriptor_scope(
     monkeypatch, tmp_path, capsys, field, value
 ):

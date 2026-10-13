@@ -1,10 +1,10 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { confirmAction, display, errorText, jobKinds, jobStatuses, jobTag, label, orgRequest, warningText } from "../org.js";
+import { confirmAction, display, errorText, jobKinds, jobStatuses, jobTag, label, warningText } from "../org.js";
 import { assessmentError } from "../assessments.js";
 import { reviewError, safeWarning } from "../bid-review.js";
-import { count } from "../api.js";
-const props = defineProps({ jobId: String, writable: Boolean, assessmentMode: Boolean, bidPreparation: Boolean });
+import { count, request } from "../api.js";
+const props = defineProps({ jobId: String, assessmentMode: Boolean, bidPreparation: Boolean });
 const emit = defineEmits(["finished"]);
 const job = ref(null), warnings = ref([]), error = ref(""), cancelling = ref(false), actualCost = ref(null);
 const preparation = computed(() => props.bidPreparation || job.value?.kind === "bid_review_prepare");
@@ -22,7 +22,7 @@ async function load() {
   if (!props.jobId || document.hidden) return;
   controller = new AbortController();
   try {
-    const result = await orgRequest("GET", `/jobs/${props.jobId}`, undefined, { signal: controller.signal});
+    const result = await request("GET", `/jobs/${props.jobId}`, undefined, { signal: controller.signal});
     job.value = result.data; actualCost.value = result.cost; warnings.value = result.warnings; error.value = ""; failures = 0;
     if (terminal(job.value.status)) { if (finished !== props.jobId) { finished = props.jobId; emit("finished", job.value); } }
     else schedule(2000);
@@ -35,7 +35,7 @@ async function load() {
 async function cancel() {
   if (!await confirmAction(job.value?.kind === "bid_review_prepare" ? "取消本地准备后将不发布页面清单；可以明确重试。" : "取消后，已发出的调用仍可能返回结果。", "取消作业", "确认取消", true)) return;
   cancelling.value = true;
-  try { await orgRequest("POST", `/jobs/${props.jobId}/cancel`, undefined, {}); await load(); }
+  try { await request("POST", `/jobs/${props.jobId}/cancel`, undefined, {}); await load(); }
   catch (exc) { error.value = preparation.value ? reviewError(exc) : errorText(exc); }
   finally { cancelling.value = false; }
 }
@@ -51,7 +51,7 @@ onBeforeUnmount(() => { clearTimeout(timer); controller?.abort(); document.remov
         <h3>作业{{ job ? `：${label(jobKinds, job.kind)}` : "" }}</h3>
         <div class="actions">
           <el-button size="small" @click="load">刷新作业</el-button>
-          <el-button v-if="writable && job && !terminal(job.status)" size="small" type="danger" plain :loading="cancelling" @click="cancel">取消作业</el-button>
+          <el-button v-if="job && !terminal(job.status)" size="small" type="danger" plain :loading="cancelling" @click="cancel">取消作业</el-button>
         </div>
       </div>
     </template>

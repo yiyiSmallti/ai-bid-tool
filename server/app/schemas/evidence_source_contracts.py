@@ -32,7 +32,7 @@ class EvidenceSourcePreview(Contract):
 
 class EvidenceSourceArchive(Contract):
     id: UUID
-    org_id: UUID
+
     task_id: UUID
     task_certificate_id: UUID
     certificate_id: UUID
@@ -45,10 +45,11 @@ class EvidenceSourceArchive(Contract):
     dpi: Literal[150] = 150
     preview: EvidenceSourcePreview
     rendered_at: datetime
-    created_by: UUID
+
+    confirmed_at: Literal[None] = None
     active_selection: bool
     status: Literal["unconfirmed_source"] = "unconfirmed_source"
-    confirmed_by: Literal[None] = None
+
     eligible_for_draft_export: Literal[False] = False
 
     @model_validator(mode="after")

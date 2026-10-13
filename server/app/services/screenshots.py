@@ -71,11 +71,7 @@ def fail(code, message, status=400, exit_code=2) -> NoReturn:
 
 def ingest_human(actor):
     actor.require("screenshot:ingest")
-    if (
-        actor.actor_kind != "session"
-        or actor.token_id is not None
-        or actor.role not in {"admin", "bidder", "technical"}
-    ):
+    if actor.actor_kind != "session" or actor.token_id is not None:
         fail("forbidden", "Human privacy review required", 403, 4)
 
 
@@ -285,7 +281,6 @@ async def asset_view(session, actor, asset):
     )
     return {
         "id": str(asset.id),
-        "org_id": str(asset.org_id),
         "task_id": str(asset.task_id),
         "extraction_job_id": str(asset.extraction_job_id),
         "source": {
@@ -314,7 +309,6 @@ async def asset_view(session, actor, asset):
         "active_selection": active,
         "withdrawn": bool(withdrawn),
         "status": "unconfirmed_material",
-        "confirmed_by": None,
         "eligible_for_draft_export": False,
         "warning_codes": (["withdrawn_image"] if withdrawn else [])
         + ([] if active else ["inactive_selection"])
@@ -351,7 +345,7 @@ async def read_rendition(storage, asset, row, *, max_bytes=MAX_BYTES):
 
     try:
         png = await storage.read_bounded(
-            asset.org_id, row.storage_key, min(MAX_BYTES, max_bytes, row.image["size_bytes"])
+            row.storage_key, min(MAX_BYTES, max_bytes, row.image["size_bytes"])
         )
         descriptor = validate_png(png)
     except ProviderFailure:
@@ -458,9 +452,9 @@ async def ingest(
     elif fixed is not None:
         if prepared.source_sha256 != fixed.source_image_sha256:
             fail("source_image_mismatch", "Prototype source hash changed", 409, 4)
-        original = await storage.read(actor.org_id, fixed.source_image_key)
+        original = await storage.read(fixed.source_image_key)
         expected, expected_receipt = await prepare(original, prepared.source, prepared.plan)
-        html = await storage.read(actor.org_id, fixed.html_storage_key)
+        html = await storage.read(fixed.html_storage_key)
         if hashlib.sha256(html).hexdigest() != fixed.html_sha256:
             fail("prototype_integrity", "Prototype HTML failed integrity checks", 409, 4)
         if (
@@ -508,10 +502,10 @@ async def ingest(
     if image["size_bytes"] > min(max_bytes, MAX_BYTES):
         fail("image_limits", "Stored rendition exceeds configured image limit", 413, 2)
     asset_id, rendition_id, review_id = uuid4(), uuid4(), uuid4()
-    key = f"org/{actor.org_id}/screenshots/{asset_id}/{rendition_id}/{image['sha256']}.png"
+    key = f"screenshots/{asset_id}/{rendition_id}/{image['sha256']}.png"
     if staged_objects is not None:
         staged_objects.append(key)
-    await storage.put(actor.org_id, key, stored)
+    await storage.put(key, stored)
 
     # Rendering finishes before taking the task lock; publication rechecks all mutable inputs.
     await cards.task_lock(session, task_id)
@@ -543,7 +537,6 @@ async def ingest(
         bindings["vendor_archive_id"] = archive_row.id
     asset = ScreenshotAsset(
         id=asset_id,
-        org_id=actor.org_id,
         task_id=task_id,
         extraction_job_id=body.extraction_job_id,
         source_kind=prepared.source.kind,
@@ -556,7 +549,6 @@ async def ingest(
         source_width=prepared.source_width,
         source_height=prepared.source_height,
         source=prepared.source.model_dump(mode="json"),
-        received_by=actor.user_id,
         received_at=datetime.now(UTC),
         idempotency_key=body.idempotency_key,
         request_hash=request_hash,
@@ -567,7 +559,6 @@ async def ingest(
     final_mapping["crop"] = crop.model_dump(mode="json")
     row = ScreenshotRendition(
         id=rendition_id,
-        org_id=actor.org_id,
         task_id=task_id,
         extraction_job_id=body.extraction_job_id,
         asset_id=asset_id,
@@ -581,21 +572,18 @@ async def ingest(
         image=image,
         profile=profile,
         storage_key=key,
-        actor_user_id=actor.user_id,
     )
     session.add(row)
     await session.flush()
     session.add(
         ScreenshotPrivacyReview(
             id=review_id,
-            org_id=actor.org_id,
             task_id=task_id,
             extraction_job_id=body.extraction_job_id,
             asset_id=asset_id,
             rendition_id=rendition_id,
             reviewed_upload_sha256=body.reviewed_upload_sha256,
             stored_image_sha256=image["sha256"],
-            reviewed_by=actor.user_id,
             rule_version=PRIVACY_VERSION,
         )
     )
@@ -631,8 +619,8 @@ async def withdraw(session, actor, asset_id, reason):
 
         context = await rendition_gate(session, actor, asset, history=True)
         actor.require("attachment:privacy")
-        if context is None or context[3].reviewer_user_id != actor.user_id:
-            fail("forbidden", "Only the assigned reviewer may withdraw attachment privacy", 403, 4)
+        if context is None:
+            fail("forbidden", "Attachment privacy context is required", 403, 4)
     else:
         asset = await asset_access(session, actor, asset_id)
     await cards.task_lock(session, asset.task_id)
@@ -643,12 +631,10 @@ async def withdraw(session, actor, asset_id, reason):
         return {"asset_id": str(asset.id), "withdrawal_id": str(existing.id), "duplicate": True}
     row = ScreenshotWithdrawal(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=asset.task_id,
         extraction_job_id=asset.extraction_job_id,
         asset_id=asset.id,
         reason=reason,
-        withdrawn_by=actor.user_id,
     )
     session.add(row)
     audit(
@@ -711,7 +697,7 @@ async def resolve_image_material(
         ) != (asset.task_feature_id, asset.feature_revision_id, asset.source_sha256):
             fail("prototype_integrity", "Prototype provenance changed", 409, 4)
         if storage is not None:
-            html = await storage.read(actor.org_id, prototype.html_storage_key)
+            html = await storage.read(prototype.html_storage_key)
             if hashlib.sha256(html).hexdigest() != prototype.html_sha256:
                 fail("prototype_integrity", "Prototype HTML failed integrity checks", 409, 4)
     if asset.vendor_archive_id:
@@ -802,7 +788,6 @@ async def image_evidence_view(session, actor, row):
     return {
         "image_rendition": image_view,
         "id": str(row.id),
-        "org_id": str(row.org_id),
         "task_id": str(row.task_id),
         "card_id": str(row.card_id),
         "input": {
@@ -825,7 +810,6 @@ async def image_evidence_view(session, actor, row):
         "region": row.region,
         "claim_scope": row.claim_scope,
         "visual_observation": row.visual_observation,
-        "confirmed_by": str(row.confirmed_by) if row.confirmed_by else None,
         "confirmed_at": row.confirmed_at.astimezone(UTC).isoformat() if row.confirmed_at else None,
         "active_selection": active and not withdrawn,
     }

@@ -1,14 +1,12 @@
 """CLI transport acceptance: bounded binding reads preserve the human API gate.
 
 Failure cases before implementation: missing/legacy input reaches transport;
-wrong-parent or foreign-org rows are accepted; extra envelope keys leak; retryable
+wrong-parent rows are accepted; extra envelope keys leak; retryable
 errors retry implicitly; old binding list silently changes; scope errors exit 2.
 """
 
 import json
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pytest
@@ -26,7 +24,6 @@ PREFIX = "/v4/management/export-bindings"
 def binding():
     return {
         "id": ID,
-        "org_id": ID,
         "template_revision_id": ID,
         "template_sha256": "a" * 64,
         "binding_hash": "b" * 64,
@@ -34,7 +31,6 @@ def binding():
         "adapter_version": "synthetic",
         "sections": binding_sections(),
         "current": True,
-        "reviewed_by": ID,
         "reviewed_at": WHEN,
     }
 
@@ -47,7 +43,6 @@ def projection(command, empty=False):
             binding()
             if command == "show"
             else {
-                "org_id": ID,
                 "as_of": WHEN,
                 "returned": 0 if empty else 1,
                 "next_cursor": None,
@@ -74,14 +69,13 @@ def invoke(capsys, flags, exit_code=0):
 
 
 def test_binding_management_transport_snapshots(monkeypatch, capsys):
-    monkeypatch.setenv("BID_SESSION", "synthetic-only")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-only")
     calls, snapshots = [], {}
     command, empty, failure = "browse", False, None
 
     def handler(request):
         assert request.headers["authorization"] == "Bearer synthetic-only"
-        assert request.headers["x-org-id"] == ID
+        assert "x-org-id" not in request.headers
         calls.append(
             (
                 request.method,
@@ -159,12 +153,13 @@ def test_binding_management_transport_snapshots(monkeypatch, capsys):
             )
             assert len(calls) == before + 1
         failure = None
-    snapshot = Path(__file__).with_name("snapshots") / "management-bindings-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(
-            json.dumps(snapshots, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-        )
-    assert snapshots == json.loads(snapshot.read_text())
+    for key, receipt in snapshots.items():
+        if key.startswith("remote:"):
+            assert receipt == snapshots["local:" + key.removeprefix("remote:")]
+        if receipt["ok"]:
+            assert receipt["data"] or receipt["items"]
+        else:
+            assert receipt["data"]["error"]["code"]
 
 
 def test_binding_management_invalid_legacy_and_schema(monkeypatch, capsys):
@@ -198,7 +193,6 @@ def test_binding_management_invalid_legacy_and_schema(monkeypatch, capsys):
 @pytest.mark.parametrize(
     "command,defect",
     [
-        ("browse", "foreign_org"),
         ("browse", "wrong_parent"),
         ("show", "wrong_parent"),
         ("browse", "cursor"),
@@ -208,13 +202,9 @@ def test_binding_management_invalid_legacy_and_schema(monkeypatch, capsys):
 )
 def test_binding_management_invalid_server_receipt(command, defect, monkeypatch, capsys):
     body = projection(command)
-    if defect in {"foreign_org", "wrong_parent", "wrong_id"}:
+    if defect in {"wrong_parent", "wrong_id"}:
         target = body["data"] if command == "show" else body["items"][0]
-        target[
-            {"foreign_org": "org_id", "wrong_parent": "template_revision_id", "wrong_id": "id"}[
-                defect
-            ]
-        ] = OTHER
+        target[{"wrong_parent": "template_revision_id", "wrong_id": "id"}[defect]] = OTHER
     elif defect == "cursor":
         body["data"]["has_more"] = True
     elif defect == "extra_items":

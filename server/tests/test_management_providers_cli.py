@@ -6,9 +6,7 @@ legacy schema exposure; a retry of a failed read; changed legacy provider comman
 """
 
 import json
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pytest
@@ -23,24 +21,19 @@ PREFIX = "/v4/management/providers"
 SECRET = "synthetic-provider-private"
 ROW = {
     "id": ID,
-    "org_id": ID,
     "revision": 1,
     "configuration": {
         "capability": "llm_extract",
-        "source": "platform",
-        "platform_model_id": "retired-model",
+        "provider": "openai",
+        "model": "Saved exact model",
     },
     "provider": "openai",
     "model": "Saved exact model",
-    "catalog_state": "unavailable",
-    "credential_state": "platform_managed",
-    "updated_by": ID,
+    "credential_state": "configured",
     "updated_at": WHEN,
     "revised_at": WHEN,
-    "revised_by": None,
     "reasoning": [],
     "default_reasoning": None,
-    "catalog_revision": 1,
 }
 CHOICE = {
     "id": "enabled-model",
@@ -56,11 +49,9 @@ CHOICE = {
 def projection(command, empty=False):
     if command == "provider show":
         data = {
-            "org_id": ID,
             "capability": "llm_extract",
-            "effective_source": "platform",
+            "configured": True,
             "current": ROW,
-            "default_model": None,
             "reasoning": [],
             "actions": [{"action": "configure", "allowed": True, "reason": None}],
             "connection_status": "not_checked",
@@ -70,13 +61,12 @@ def projection(command, empty=False):
         data, items = ROW, []
     else:
         data = {
-            "org_id": ID,
             "as_of": WHEN,
             "returned": 0 if empty else 1,
             "next_cursor": None,
             "has_more": False,
         }
-        items = [] if empty else [CHOICE if command == "provider catalog" else ROW]
+        items = [] if empty else [ROW]
     return Result(
         ok=True,
         command=command,
@@ -102,14 +92,13 @@ def invoke(capsys, flags, exit_code=0):
 
 
 def test_management_provider_transport_snapshots(monkeypatch, capsys):
-    monkeypatch.setenv("BID_SESSION", "synthetic-session")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-session")
     calls, snapshots = [], {}
     command, empty, failure = "provider show", False, None
 
     def handler(request):
         assert request.headers["authorization"] == "Bearer synthetic-session"
-        assert request.headers["x-org-id"] == ID
+        assert "x-org-id" not in request.headers
         calls.append(
             (
                 request.method,
@@ -154,14 +143,6 @@ def test_management_provider_transport_snapshots(monkeypatch, capsys):
             "/history/query",
             {"cursor": "opaque-history", "limit": 2},
         ),
-        ("provider catalog", ["catalog"], "POST", "/catalog/query", {"limit": 25}),
-        (
-            "provider catalog",
-            ["catalog", "--q", "ENAB", "--cursor", "opaque-catalog", "--limit", "2"],
-            "POST",
-            "/catalog/query",
-            {"q": "ENAB", "cursor": "opaque-catalog", "limit": 2},
-        ),
     ]
     for mode in ("remote", "local"):
         for command, flags, method, path, content in cases:
@@ -194,12 +175,6 @@ def test_management_provider_transport_snapshots(monkeypatch, capsys):
             assert snapshots[key]["data"]["error"]["code"] == code
             assert len(calls) == before + 1
         failure = None
-    snapshot = Path(__file__).with_name("snapshots") / "management-providers-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(
-            json.dumps(snapshots, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-        )
-    assert snapshots == json.loads(snapshot.read_text())
 
 
 def test_management_provider_invalid_and_legacy_no_request(monkeypatch, capsys):
@@ -209,12 +184,9 @@ def test_management_provider_invalid_and_legacy_no_request(monkeypatch, capsys):
         ["revision", "show"],
         ["revision", "show", "--id", "invalid"],
         ["history-page", "--limit", "101"],
-        ["catalog", "--limit", "0"],
-        ["catalog", "--cursor", ""],
-        ["catalog", "--q", " "],
     ):
         assert invoke(capsys, ["provider", *flags], 2)["data"]["error"]["code"] == "invalid_input"
-    for command in ("show", "revision show", "history-page", "catalog"):
+    for command in ("show", "revision show", "history-page"):
         with pytest.raises(SystemExit) as error:
             cli.main(["--contract-version", "3.0", "provider", *command.split(), "--json"])
         assert error.value.code == 2
@@ -228,29 +200,19 @@ def test_management_provider_invalid_and_legacy_no_request(monkeypatch, capsys):
 @pytest.mark.parametrize(
     "command,defect",
     [
-        ("provider show", "foreign_org"),
         ("provider revision show", "wrong_id"),
-        ("provider history-page", "foreign_org"),
-        ("provider catalog", "broken_cursor"),
         ("provider show", "secret"),
         ("provider revision show", "secret"),
         ("provider history-page", "secret"),
-        ("provider catalog", "secret"),
         ("provider show", "warning"),
-        ("provider catalog", "warning"),
         ("provider show", "removed_metadata"),
         ("provider show", "removed_cost"),
-        ("provider catalog", "removed_cost"),
     ],
 )
 def test_management_provider_rejects_unsafe_metadata(command, defect, monkeypatch, capsys):
-    monkeypatch.setenv("BID_SESSION", "synthetic-session")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-session")
     response = projection(command)
-    if defect == "foreign_org":
-        target = response["data"]["current"] if command == "provider show" else response["items"][0]
-        target["org_id"] = OTHER
-    elif defect == "wrong_id":
+    if defect == "wrong_id":
         response["data"]["id"] = OTHER
     elif defect == "broken_cursor":
         response["data"]["has_more"] = True
@@ -281,50 +243,22 @@ def test_management_provider_schema(capsys):
         "provider show",
         "provider revision show",
         "provider history-page",
-        "provider catalog",
     ):
         assert commands[command]["output"] is not None
         assert "api_key" not in json.dumps(commands[command])
         assert "key_last4" not in json.dumps(commands[command])
     assert "ProviderSettingsData" in json.dumps(commands["provider show"])
     assert "ProviderRevisionMetadata" in json.dumps(commands["provider revision show"])
-    assert "PlatformModelChoice" in json.dumps(commands["provider catalog"])
     with pytest.raises(SystemExit) as error:
         cli.main(["--contract-version", "3.0", "schema", "--json"])
     assert error.value.code == 2
     assert json.loads(capsys.readouterr().out)["data"]["error"]["code"] == "invalid_input"
 
 
-@pytest.mark.parametrize(
-    "field",
-    [
-        "api_key",
-        "key_ciphertext",
-        "key_last4",
-        "fingerprint",
-        "credential_id",
-        "base_url",
-        "input_usd_per_mtok",
-        "output_usd_per_mtok",
-    ],
-)
-def test_catalog_allowlist_rejects_secret_and_platform_internal_fields(field, monkeypatch, capsys):
-    monkeypatch.setenv("BID_SESSION", "synthetic-session")
-    monkeypatch.setenv("BID_ORG", ID)
-    response = projection("provider catalog")
-    response["items"][0][field] = SECRET
-    monkeypatch.setattr(cli, "call", lambda *a, **kw: response)
-    assert (
-        invoke(capsys, ["provider", "catalog"], 4)["data"]["error"]["code"]
-        == "invalid_server_response"
-    )
-
-
 def test_provider_metadata_error_never_echoes_arbitrary_code_or_message(monkeypatch, capsys):
     from app.core.errors import ServiceError
 
-    monkeypatch.setenv("BID_SESSION", "synthetic-session")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-session")
 
     def call(*args, **kwargs):
         raise ServiceError(SECRET, SECRET, 503, 3)

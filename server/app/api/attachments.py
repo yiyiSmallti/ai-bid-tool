@@ -171,21 +171,6 @@ def create_router(context, settings, storage, crypto, queue=None):
         )
 
     @router.post(
-        "/resources/attachments/{attachment_id}/assignment",
-        response_model=Result,
-        name="resource_attachment_assign",
-    )
-    async def assignment_route(attachment_id: UUID, request: Request, ctx=Depends(configured)):
-        from app.services import attachments as service
-
-        return output(
-            "resource attachment assign",
-            await service.assign(
-                ctx[0], ctx[1], attachment_id, await body(request, c.AttachmentAssignment)
-            ),
-        )
-
-    @router.post(
         "/resources/attachments/{attachment_id}/deactivate",
         response_model=Result,
         name="resource_attachment_deactivate",
@@ -397,7 +382,7 @@ def create_router(context, settings, storage, crypto, queue=None):
             ids["state_version"] = root.state_version
         audit(session, actor, "attachment.download.issue", identifier, {"kind": kind})
         await session.flush()
-        return signed_link(crypto, path, kind, actor.org_id, id=identifier, **ids)
+        return signed_link(crypto, path, kind, id=identifier, **ids)
 
     @router.get(
         "/resources/attachments/revisions/{revision_id}/file/download-link",
@@ -423,7 +408,6 @@ def create_router(context, settings, storage, crypto, queue=None):
             crypto,
             signature,
             "attachment-original",
-            ctx[1].org_id,
             id=revision_id,
             state_version=root.state_version,
         )
@@ -450,9 +434,7 @@ def create_router(context, settings, storage, crypto, queue=None):
     async def part_bytes(revision_id: UUID, ordinal: int, signature: str, ctx=Depends(configured)):
         from app.services import attachments as service
 
-        check_signature(
-            crypto, signature, "attachment-part", ctx[1].org_id, id=revision_id, part=ordinal
-        )
+        check_signature(crypto, signature, "attachment-part", id=revision_id, part=ordinal)
         await service.read_original(ctx[0], ctx[1], revision_id, storage, part_ordinal=ordinal)
 
     @router.get(
@@ -491,7 +473,6 @@ def create_router(context, settings, storage, crypto, queue=None):
             crypto,
             signature,
             "attachment-page",
-            ctx[1].org_id,
             id=revision_id,
             page=page,
             zoom=zoom,
@@ -524,7 +505,6 @@ def create_router(context, settings, storage, crypto, queue=None):
             crypto,
             signature,
             "attachment-source",
-            ctx[1].org_id,
             id=source_id,
             history=int(history),
         )

@@ -12,24 +12,24 @@ from app.schemas.memory_contracts import MemoryTarget
 from app.services.auth import Identity
 
 
-def org_target(target: MemoryTarget) -> None:
-    if target.scope != "org":
+def library_target(target: MemoryTarget) -> None:
+    if target.scope != "library":
         raise ServiceError(
             "memory_scope_unavailable", "Requested memory scope is not enabled", 403, 4
         )
 
 
-def human_admin(actor: Identity, scope: str) -> None:
+def human(actor: Identity, scope: str) -> None:
     actor.require(scope)
-    if actor.actor_kind != "session" or actor.token_id is not None or actor.role != "admin":
-        raise ServiceError("forbidden", "Human organization administrator required", 403, 4)
+    if actor.actor_kind != "session" or actor.token_id is not None:
+        raise ServiceError("forbidden", "Human session required", 403, 4)
 
 
-def writable(actor: Identity, creator: UUID, token_id: UUID | None, status: str) -> None:
+def writable(actor: Identity, token_id: UUID | None, status: str) -> None:
     actor.require("memory:write")
-    if actor.actor_kind == "session" and actor.role == "admin":
+    if actor.actor_kind == "session" and actor.token_id is None:
         return
-    if status != "candidate" or actor.user_id != creator or actor.token_id != token_id:
+    if status != "candidate" or actor.token_id is None or actor.token_id != token_id:
         raise not_found()
 
 
@@ -42,9 +42,10 @@ def digest(value) -> str:
 def cursor_binding(actor: Identity, filters: dict) -> str:
     return digest(
         {
-            "org": str(actor.org_id),
-            "user": str(actor.user_id),
+            "actor_kind": actor.actor_kind,
             "token": str(actor.token_id),
+            "principal": str(actor.principal_id),
+            "session": str(actor.session_id),
             "filters": filters,
         }
     )
@@ -59,7 +60,7 @@ def read_cursor(settings, actor: Identity, filters: dict, cursor: str | None):
             actor, filters
         ):
             raise ValueError
-        return datetime.fromisoformat(data["created_at"]), UUID(data["id"])
+        return (datetime.fromisoformat(data["created_at"]), UUID(data["id"]))
     except (ServiceError, ValueError, KeyError, TypeError):
         raise ServiceError(
             "invalid_cursor", "Cursor does not match this authorized query", 400, 2
@@ -83,31 +84,11 @@ def normalize(value: str) -> str:
 
 
 async def access(session, actor: Identity, scope: str) -> Identity:
-    """Recheck live grants without imposing unrelated task capabilities."""
-    from datetime import UTC
+    """Recheck live scopes and preserve token, agent and worker attribution."""
+    from app.services.auth import set_actor_context
+    from app.services.task_access import live_actor
 
-    from app.models.entities import ApiToken, User
-    from app.services.auth import ROLE_SCOPES, SCOPES, membership, set_actor_context
-
-    member = await membership(session, actor.user_id, actor.org_id)
-    user = await session.get(User, actor.user_id)
-    if user is None or not user.active:
-        raise not_found()
-    scopes = actor.scopes & ROLE_SCOPES[member.role]
-    if actor.token_id is not None:
-        token = await session.get(ApiToken, actor.token_id)
-        if (
-            token is None
-            or token.user_id != actor.user_id
-            or token.org_id != actor.org_id
-            or token.revoked
-            or token.expires_at <= datetime.now(UTC)
-        ):
-            raise ServiceError("forbidden", "Permission denied", 403, 4)
-        scopes &= set(token.scopes) & SCOPES
-    live = Identity(
-        actor.user_id, actor.org_id, scopes, member.role, actor.token_id, actor.actor_kind
-    )
+    live = await live_actor(session, actor)
     live.require(scope)
     await set_actor_context(session, live)
     return live

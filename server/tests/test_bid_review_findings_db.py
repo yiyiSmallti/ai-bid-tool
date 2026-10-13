@@ -26,21 +26,23 @@ from app.services import bid_review_privacy
 from bid_signature_fixtures import gm_fixture, signed_pdf
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
-from task_access_fixtures import add_member, person, workflow
 from test_bid_review_run_db import (
     BIDDER,
     PRICE,
     PRIVATE_FILENAME,
     REGISTERED,
     STAFF,
+    add_field,
     artifact,
     assert_private_absent,
     authorization_body,
     data,
     document,
+    install_resolver,
     preview,
     redaction,
     review_llm,
+    set_value,
     submit,
     terminal,
 )
@@ -48,8 +50,6 @@ from test_bid_review_signatures_db import mutation
 from test_bid_review_upload_db import PDF, metadata, run, task, upload
 from test_bid_review_upload_db import preview as prepare_preview
 from test_bid_review_upload_db import submit as prepare_submit
-from test_check_combined import install_resolver
-from test_confidential_values import add_field, set_value
 
 CLAUSES = (
     "★ Delivery must occur within thirty calendar days.",
@@ -175,7 +175,6 @@ async def make_case(
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
     *,
@@ -187,12 +186,12 @@ async def make_case(
     identity=True,
 ):
     vendor = vendor or FindingsVendor()
-    install_resolver(monkeypatch, await review_llm(api, headers[0], tmp_path, vendor))
-    task_id = await task(api, headers[0])
+    install_resolver(monkeypatch, await review_llm(api, headers, tmp_path, vendor))
+    task_id = await task(api, headers)
     field = await add_field(
-        api, headers[0], "review_identity_" + uuid4().hex[:8], "Review identity", "other", "task"
+        api, headers, "review_identity_" + uuid4().hex[:8], "Review identity", "other", "task"
     )
-    await set_value(api, headers[0], field, REGISTERED, task=task_id)
+    await set_value(api, headers, field, REGISTERED, task=task_id)
     bid_text = bid_text if bid_text is not None else f"{BID_RESPONSE}\n{TECH_RESPONSE}"
     private_prefix = f"投标人：{BIDDER}\n法定代表人：{STAFF}\n{REGISTERED}\n" if identity else ""
     bid = document(
@@ -217,12 +216,12 @@ async def make_case(
         (PRIVATE_FILENAME + "-tender.pdf", PDF, document(["\n".join(vendor.clauses)])),
         (PRIVATE_FILENAME + "-bid.pdf", PDF, bid),
     ]
-    uploaded = data(await upload(api, headers[0], task_id, files, metadata(files)))
-    prep = data(await prepare_preview(api, headers[0], task_id, uploaded["id"]))
-    queued = data(await prepare_submit(api, headers[0], task_id, uploaded["id"], prep))
-    await run(application, tenants["orgs"][0], queued["job_id"])
+    uploaded = data(await upload(api, headers, task_id, files, metadata(files)))
+    prep = data(await prepare_preview(api, headers, task_id, uploaded["id"]))
+    queued = data(await prepare_submit(api, headers, task_id, uploaded["id"], prep))
+    await run(application, queued["job_id"])
     case = {"task": task_id, "submission": uploaded["id"], "vendor": vendor, "field": field}
-    cleared = await redaction(api, headers[0], case)
+    cleared = await redaction(api, headers, case)
     pages = [
         p
         for p in cleared["pages"]
@@ -231,7 +230,7 @@ async def make_case(
     grant = data(
         await api.post(
             f"/v4/bid-submissions/{case['submission']}/outbound-authorizations",
-            headers=headers[0],
+            headers=headers,
             json=authorization_body(cleared, pages=pages),
         )
     )
@@ -239,14 +238,14 @@ async def make_case(
     return case
 
 
-async def execute(api, headers, application, tenants, case):
-    receipt = data(await preview(api, headers[0], case))
+async def execute(api, headers, application, case):
+    receipt = data(await preview(api, headers, case))
     assert not receipt["admission_blockers"], receipt
-    accepted = data(await submit(api, headers[0], case, receipt))
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
+    accepted = data(await submit(api, headers, case, receipt))
+    finished = await terminal(api, headers, application, accepted)
     assert finished["status"] == "succeeded", finished
     case.update(receipt=receipt, accepted=accepted, finished=finished, review=accepted["review_id"])
-    response = await api.get(f"/v4/bid-reviews/{case['review']}/findings", headers=headers[0])
+    response = await api.get(f"/v4/bid-reviews/{case['review']}/findings", headers=headers)
     data(response)
     case["findings"] = response.json()["items"]
     return case
@@ -256,12 +255,11 @@ async def test_exact_authorized_inputs_and_locally_verified_two_sided_citations(
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
 ):
-    case = await make_case(api, headers, application, tenants, tmp_path, monkeypatch, price=True)
-    await execute(api, headers, application, tenants, case)
+    case = await make_case(api, headers, application, tmp_path, monkeypatch, price=True)
+    await execute(api, headers, application, case)
     calls = case["vendor"].requests
     assert any(p.get("operation") == "compliance" for p in calls)
     allowed = {p["sanitized_text"] for p in case["cleared"]["pages"] if p["outbound_eligible"]}
@@ -275,7 +273,7 @@ async def test_exact_authorized_inputs_and_locally_verified_two_sided_citations(
         assert all(set(p) <= {"ref", "text", "role"} for p in payload["texts"])
         assert_private_absent(payload)
     assert case["findings"]
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         for finding in case["findings"]:
             for side, role in (("tender_support", "tender"), ("bid_support", "bid")):
                 for citation in finding[side]:
@@ -332,13 +330,12 @@ async def test_invalid_or_unbound_bid_quotes_cannot_pass(
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
 ):
     vendor = FindingsVendor(clauses=CLAUSES[:1], attack=attack)
-    case = await make_case(api, headers, application, tenants, tmp_path, monkeypatch, vendor=vendor)
-    await execute(api, headers, application, tenants, case)
+    case = await make_case(api, headers, application, tmp_path, monkeypatch, vendor=vendor)
+    await execute(api, headers, application, case)
     assert case["findings"] and all(f["outcome"] != "responded" for f in case["findings"])
     assert any(f["outcome"] == "unknown" for f in case["findings"])
     assert all(not f["bid_support"] for f in case["findings"])
@@ -362,7 +359,6 @@ async def test_absence_is_a_separate_exact_inventory_and_partial_search_stays_un
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
 ):
@@ -371,7 +367,6 @@ async def test_absence_is_a_separate_exact_inventory_and_partial_search_stays_un
         api,
         headers,
         application,
-        tenants,
         tmp_path,
         monkeypatch,
         vendor=vendor,
@@ -380,7 +375,7 @@ async def test_absence_is_a_separate_exact_inventory_and_partial_search_stays_un
         selected=selected,
         identity=False,
     )
-    await execute(api, headers, application, tenants, case)
+    await execute(api, headers, application, case)
     assert case["findings"]
     assert all(f["outcome"] == expected for f in case["findings"])
     for finding in case["findings"]:
@@ -399,13 +394,12 @@ async def test_required_document_kind_rule_uses_submission_manifest(
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
 ):
     vendor = FindingsVendor(clauses=(DOCUMENT_CLAUSE,), outcome="missing")
-    case = await make_case(api, headers, application, tenants, tmp_path, monkeypatch, vendor=vendor)
-    await execute(api, headers, application, tenants, case)
+    case = await make_case(api, headers, application, tmp_path, monkeypatch, vendor=vendor)
+    await execute(api, headers, application, case)
     found = next(f for f in case["findings"] if f["code"] == "required_document_missing")
     assert found["basis"]["kind"] == "rule" and found["severity"] == "fatal"
     assert found["absence_search"]["kind"] == "submission_inventory"
@@ -418,19 +412,18 @@ async def test_cited_deviations_preserve_star_triangle_and_other_risk_grades(
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
 ):
     vendor = FindingsVendor(
         clauses=(*CLAUSES, "Warranty support must be included."), outcome="deviation"
     )
-    case = await make_case(api, headers, application, tenants, tmp_path, monkeypatch, vendor=vendor)
-    await execute(api, headers, application, tenants, case)
+    case = await make_case(api, headers, application, tmp_path, monkeypatch, vendor=vendor)
+    await execute(api, headers, application, case)
     models = [row for row in case["findings"] if row["basis"]["kind"] == "model"]
     assert [row["severity"] for row in models] == ["fatal", "high", "medium"]
     assert all(row["outcome"] == "deviation" and row["bid_support"] for row in models)
-    report = data(await api.get(f"/v4/bid-reviews/{case['review']}", headers=headers[0]))
+    report = data(await api.get(f"/v4/bid-reviews/{case['review']}", headers=headers))
     assert report["run"]["coverage"]["compliance_obligations_assessed"] == 3
     assert report["run"]["coverage"]["bid_compliance"] == "assessed"
     artifact(tmp_path, "findings-risk-grades", findings=case["findings"], report=report)
@@ -442,7 +435,6 @@ async def test_signed_file_local_validation_rules_retain_tender_basis(
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
 ):
@@ -451,13 +443,12 @@ async def test_signed_file_local_validation_rules_retain_tender_basis(
         api,
         headers,
         application,
-        tenants,
         tmp_path,
         monkeypatch,
         vendor=vendor,
         signature=signature,
     )
-    await execute(api, headers, application, tenants, case)
+    await execute(api, headers, application, case)
     found = [f for f in case["findings"] if f["code"] == "signature_validation_invalid"]
     assert found and all(f["basis"]["kind"] == "rule" for f in found)
     assert all(f["tender_support"][0]["quote"] == SIGNATURE_CLAUSE for f in found)
@@ -468,15 +459,12 @@ async def test_signature_defect_without_related_clause_does_not_invent_tender_ba
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
 ):
-    case = await make_case(
-        api, headers, application, tenants, tmp_path, monkeypatch, signature="invalid"
-    )
-    await execute(api, headers, application, tenants, case)
-    report = data(await api.get(f"/v4/bid-reviews/{case['review']}", headers=headers[0]))
+    case = await make_case(api, headers, application, tmp_path, monkeypatch, signature="invalid")
+    await execute(api, headers, application, case)
+    report = data(await api.get(f"/v4/bid-reviews/{case['review']}", headers=headers))
     assert "signature_defect_without_cited_obligation" in report["run"]["uncovered_codes"]
     assert report["run"]["completion"] == "partial"
     assert all(row["code"] != "signature_validation_invalid" for row in case["findings"])
@@ -488,18 +476,17 @@ async def test_stop_between_obligations_keeps_partial_results_and_unknown_unfini
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
 ):
     if stop == "ceiling":
         application.state.processor.settings.job_max_vendor_calls = 2
-    case = await make_case(api, headers, application, tenants, tmp_path, monkeypatch)
-    await execute(api, headers, application, tenants, case)
+    case = await make_case(api, headers, application, tmp_path, monkeypatch)
+    await execute(api, headers, application, case)
     assert len(case["vendor"].requests) == 2
     assert any(f["outcome"] == "responded" for f in case["findings"])
     assert any(f["outcome"] == "unknown" for f in case["findings"])
-    shown = data(await api.get(f"/v4/bid-reviews/{case['review']}", headers=headers[0]))
+    shown = data(await api.get(f"/v4/bid-reviews/{case['review']}", headers=headers))
     assert shown["run"]["completion"] == "partial"
     assert shown["run"]["uncovered_codes"]
     artifact(
@@ -517,17 +504,16 @@ async def test_finding_overflow_rejects_whole_groups_with_explicit_coverage(
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
 ):
     monkeypatch.setattr("app.services.bid_review_compliance." + bound, 1)
     vendor = FindingsVendor(outcome="missing" if bound == "PER_OBLIGATION_LIMIT" else "responded")
     case = await make_case(
-        api, headers, application, tenants, tmp_path, monkeypatch, vendor=vendor, identity=False
+        api, headers, application, tmp_path, monkeypatch, vendor=vendor, identity=False
     )
-    await execute(api, headers, application, tenants, case)
-    report = data(await api.get(f"/v4/bid-reviews/{case['review']}", headers=headers[0]))
+    await execute(api, headers, application, case)
+    report = data(await api.get(f"/v4/bid-reviews/{case['review']}", headers=headers))
     assert report["run"]["completion"] == "partial"
     assert "bid_review_finding_limit" in report["run"]["uncovered_codes"]
     assert report["run"]["coverage"]["compliance_unassessed_obligation_ids"]
@@ -539,25 +525,24 @@ async def test_cancellation_inside_compliance_fences_all_findings_but_accounts_c
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
 ):
     vendor = FindingsVendor()
     vendor.entered, vendor.release = asyncio.Event(), asyncio.Event()
-    case = await make_case(api, headers, application, tenants, tmp_path, monkeypatch, vendor=vendor)
-    receipt = data(await preview(api, headers[0], case))
-    accepted = data(await submit(api, headers[0], case, receipt))
-    pending = asyncio.create_task(run(application, tenants["orgs"][0], accepted["job_id"]))
+    case = await make_case(api, headers, application, tmp_path, monkeypatch, vendor=vendor)
+    receipt = data(await preview(api, headers, case))
+    accepted = data(await submit(api, headers, case, receipt))
+    pending = asyncio.create_task(run(application, accepted["job_id"]))
     try:
         await asyncio.wait_for(vendor.entered.wait(), 20)
-        data(await api.post(f"/v4/jobs/{accepted['job_id']}/cancel", headers=headers[0]))
+        data(await api.post(f"/v4/jobs/{accepted['job_id']}/cancel", headers=headers))
     finally:
         vendor.release.set()
         await pending
-    finished = data(await api.get(f"/v4/jobs/{accepted['job_id']}", headers=headers[0]))
+    finished = data(await api.get(f"/v4/jobs/{accepted['job_id']}", headers=headers))
     assert finished["status"] == "cancelled"
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(BidReviewPublication)) == 0
         assert (
             await session.scalar(
@@ -593,52 +578,26 @@ async def classify(api, header, case, finding, domain="commercial"):
     )
 
 
-async def reviewer(api, headers, tenants, admin_engine, case, role, *, domains=None):
-    user, header = await person(api, admin_engine, tenants["orgs"][0], role=role)
-    current = await workflow(api, headers[0], case["task"])
-    response = await add_member(
-        api,
-        headers[0],
-        case["task"],
-        user,
-        current["revision"],
-        role="reviewer",
-        domains=domains or ["technical" if role == "technical" else "commercial"],
-    )
-    data(response)
-    return header
-
-
-async def test_classification_responsible_domains_append_only_decisions_history_and_cas(
+async def test_human_classification_append_only_decisions_history_and_cas(
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
-    admin_engine,
 ):
-    case = await make_case(api, headers, application, tenants, tmp_path, monkeypatch)
-    await execute(api, headers, application, tenants, case)
+    case = await make_case(api, headers, application, tmp_path, monkeypatch)
+    await execute(api, headers, application, case)
     finding = case["findings"][0]
     base = f"/v4/bid-reviews/{case['review']}/findings/{finding['id']}"
-    bidder = await reviewer(api, headers, tenants, admin_engine, case, "bidder")
-    technical = await reviewer(api, headers, tenants, admin_engine, case, "technical")
     unclassified = await api.post(
-        base + "/decisions", headers=bidder, json=decision_body(case, finding)
+        base + "/decisions", headers=headers, json=decision_body(case, finding)
     )
-    assert unclassified.status_code in {403, 409}
-    assert (await classify(api, bidder, case, finding)).status_code == 403
-    first = data(await classify(api, headers[0], case, finding))
+    assert unclassified.status_code == 409
+    first = data(await classify(api, headers, case, finding))
     assert first["action"] == "classify" and first["revision"] == 2
     current = {"revision": first["revision"], "latest_decision_id": first["id"]}
-    for unauthorized in (headers[0], technical):
-        denied = await api.post(
-            base + "/decisions", headers=unauthorized, json=decision_body(case, current)
-        )
-        assert denied.status_code == 403, denied.text
     blank = await api.post(
-        base + "/decisions", headers=bidder, json=decision_body(case, current, reason="   ")
+        base + "/decisions", headers=headers, json=decision_body(case, current, reason="   ")
     )
     assert blank.status_code in {400, 422}
     for stale in (
@@ -647,10 +606,10 @@ async def test_classification_responsible_domains_append_only_decisions_history_
         {"expected_decision_id": None},
     ):
         response = await api.post(
-            base + "/decisions", headers=bidder, json=decision_body(case, current, **stale)
+            base + "/decisions", headers=headers, json=decision_body(case, current, **stale)
         )
         assert response.status_code == 409, response.text
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         machine = await session.get(BidReviewFinding, UUID(finding["id"]))
         before = (
             machine.details_encrypted,
@@ -663,42 +622,39 @@ async def test_classification_responsible_domains_append_only_decisions_history_
         for _ in range(2)
     ]
     raced = await asyncio.gather(
-        *[api.post(base + "/decisions", headers=bidder, json=body) for body in bodies]
+        *[api.post(base + "/decisions", headers=headers, json=body) for body in bodies]
     )
     assert sorted(response.status_code for response in raced) == [200, 409]
     winner = next(response for response in raced if response.status_code == 200)
     dismissed = data(winner)
     assert dismissed["state"] == "dismissed" and dismissed["revision"] == 3
     winner_body = bodies[raced.index(winner)]
-    replay = data(await api.post(base + "/decisions", headers=bidder, json=winner_body))
+    replay = data(await api.post(base + "/decisions", headers=headers, json=winner_body))
     assert replay["id"] == dismissed["id"]
     reopened = data(
         await api.post(
-            base + "/decisions", headers=bidder, json=decision_body(case, dismissed, "reopen")
+            base + "/decisions", headers=headers, json=decision_body(case, dismissed, "reopen")
         )
     )
     confirmed = data(
         await api.post(
-            base + "/decisions", headers=bidder, json=decision_body(case, reopened, "confirm")
+            base + "/decisions", headers=headers, json=decision_body(case, reopened, "confirm")
         )
     )
     assert confirmed["state"] == "confirmed"
-    history = await api.get(base + "/decisions", headers=bidder, params={"limit": 2})
+    history = await api.get(base + "/decisions", headers=headers, params={"limit": 2})
     info = data(history)
     events = history.json()["items"]
     assert info["next_cursor"]
     next_page = await api.get(
-        base + "/decisions", headers=bidder, params={"limit": 2, "cursor": info["next_cursor"]}
+        base + "/decisions", headers=headers, params={"limit": 2, "cursor": info["next_cursor"]}
     )
     data(next_page)
     events += next_page.json()["items"]
     assert [e["action"] for e in events] == ["classify", "dismiss", "reopen", "confirm"]
     assert [e["revision"] for e in events] == [2, 3, 4, 5]
     assert all(e["immutable"] and e["actor_kind"] == "session" for e in events)
-    cleared_history = await api.get(base + "/decisions", headers=technical)
-    data(cleared_history)
-    assert_private_absent(cleared_history.json())
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         machine = await session.get(BidReviewFinding, UUID(finding["id"]))
         assert (
             machine.details_encrypted,
@@ -707,21 +663,21 @@ async def test_classification_responsible_domains_append_only_decisions_history_
             machine.outcome,
         ) == before
     technical_finding = case["findings"][-1]
-    classified = data(await classify(api, headers[0], case, technical_finding, "technical"))
+    classified = data(await classify(api, headers, case, technical_finding, "technical"))
     technical_base = f"/v4/bid-reviews/{case['review']}/findings/{technical_finding['id']}"
     allowed = await api.post(
         technical_base + "/decisions",
-        headers=technical,
+        headers=headers,
         json=decision_body(case, classified, "confirm"),
     )
     assert allowed.status_code == 200, allowed.text
-    denied = await api.post(
-        technical_base + "/decisions", headers=bidder, json=decision_body(case, classified)
+    stale = await api.post(
+        technical_base + "/decisions", headers=headers, json=decision_body(case, classified)
     )
-    assert denied.status_code == 403
+    assert stale.status_code == 409
     filtered = await api.get(
         f"/v4/bid-reviews/{case['review']}/findings",
-        headers=bidder,
+        headers=headers,
         params={"state": "confirmed", "severity": finding["severity"]},
     )
     data(filtered)
@@ -736,25 +692,22 @@ async def test_classification_responsible_domains_append_only_decisions_history_
     )
 
 
-async def test_safe_tokens_cross_org_cross_task_stale_input_and_rls_immutability(
+async def test_safe_tokens_cross_task_stale_input_and_immutability(
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
-    admin_engine,
 ):
-    case = await make_case(api, headers, application, tenants, tmp_path, monkeypatch)
-    await execute(api, headers, application, tenants, case)
+    case = await make_case(api, headers, application, tmp_path, monkeypatch)
+    await execute(api, headers, application, case)
     finding = case["findings"][0]
     base = f"/v4/bid-reviews/{case['review']}"
-    first = data(await classify(api, headers[0], case, finding))
-    bidder = await reviewer(api, headers, tenants, admin_engine, case, "bidder")
+    first = data(await classify(api, headers, case, finding))
     issued = data(
         await api.post(
             "/v4/tokens",
-            headers=headers[0],
+            headers=headers,
             json={
                 "name": "Synthetic finding metadata token",
                 "scopes": ["bid-review:read", "task:read"],
@@ -762,7 +715,7 @@ async def test_safe_tokens_cross_org_cross_task_stale_input_and_rls_immutability
             },
         )
     )
-    token = {**headers[0], "Authorization": "Bearer " + issued["token"]}
+    token = {**headers, "Authorization": "Bearer " + issued["token"]}
     safe = await api.get(base + "/findings", headers=token)
     data(safe)
     assert safe.json()["items"]
@@ -788,7 +741,7 @@ async def test_safe_tokens_cross_org_cross_task_stale_input_and_rls_immutability
     for scope in ("bid-review:decide", "bid-review:classify"):
         denied = await api.post(
             "/v4/tokens",
-            headers=headers[0],
+            headers=headers,
             json={
                 "name": "Forbidden human grant",
                 "scopes": ["bid-review:read", scope],
@@ -796,59 +749,37 @@ async def test_safe_tokens_cross_org_cross_task_stale_input_and_rls_immutability
             },
         )
         assert denied.status_code >= 400
-    for suffix in ("/findings", f"/findings/{finding['id']}/decisions"):
-        assert (await api.get(base + suffix, headers=headers[1])).status_code == 404
-    for suffix, body in (
-        ("decisions", decision_body(case, first)),
-        (
-            "classification",
-            {
-                k: v
-                for k, v in decision_body(case, first, review_domain="commercial").items()
-                if k != "action"
-            },
-        ),
-    ):
-        assert (
-            await api.post(
-                base + f"/findings/{finding['id']}/{suffix}", headers=headers[1], json=body
-            )
-        ).status_code == 404
-    other = await make_case(api, headers, application, tenants, tmp_path, monkeypatch)
-    await execute(api, headers, application, tenants, other)
+    other = await make_case(api, headers, application, tmp_path, monkeypatch)
+    await execute(api, headers, application, other)
     cross = await api.get(
-        f"/v4/bid-reviews/{other['review']}/findings/{finding['id']}/decisions", headers=headers[0]
+        f"/v4/bid-reviews/{other['review']}/findings/{finding['id']}/decisions", headers=headers
     )
     assert cross.status_code == 404
     tables = (BidReviewFinding, BidReviewFindingSource, BidReviewFindingEvent)
-    async with application.state.db.transaction(tenants["orgs"][1]) as session:
-        for model in tables:
-            assert await session.scalar(select(func.count()).select_from(model)) == 0
     for model in tables:
-        async with application.state.db.transaction(tenants["orgs"][0]) as session:
+        async with application.state.db.transaction() as session:
             own = await session.scalar(select(model).where(model.review_id == UUID(case["review"])))
             assert own is not None
             values = {column.name: getattr(own, column.name) for column in model.__table__.columns}
         for verb in ("UPDATE", "DELETE"):
             with pytest.raises(DBAPIError):
-                async with application.state.db.transaction(tenants["orgs"][0]) as session:
+                async with application.state.db.transaction() as session:
                     statement = (
                         f"UPDATE {model.__tablename__} SET id=id WHERE id=:id"
                         if verb == "UPDATE"
                         else f"DELETE FROM {model.__tablename__} WHERE id=:id"
                     )
                     await session.execute(text(statement), {"id": values["id"]})
-        values["id"], values["org_id"] = uuid4(), tenants["orgs"][1]
-        with pytest.raises(DBAPIError):
-            async with application.state.db.transaction(tenants["orgs"][1]) as session:
-                await session.execute(model.__table__.insert().values(**values))
-    await set_value(api, headers[0], case["field"], REGISTERED + "Changed", task=case["task"])
+    await set_value(api, headers, case["field"], REGISTERED + "Changed", task=case["task"])
     stale = await api.post(
         base + f"/findings/{finding['id']}/decisions",
-        headers=bidder,
+        headers=headers,
         json=decision_body(case, first),
     )
     assert stale.status_code == 409
     artifact(
-        tmp_path, "findings-isolation", safe=safe.json(), tables=[m.__tablename__ for m in tables]
+        tmp_path,
+        "findings-token-immutability",
+        safe=safe.json(),
+        tables=[m.__tablename__ for m in tables],
     )

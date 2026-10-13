@@ -10,10 +10,10 @@ from app.core.provider_secrets import ProviderSecrets
 from app.providers.calls import current_accounting, evaluation_calls
 from app.providers.llm import OpenAICompatibleExtractor
 from app.schemas.platform_credentials import (
-    CatalogResolveTarget,
     CredentialSpec,
     PlatformCredentialEnvelope,
     ResolvedCredential,
+    ServiceResolveTarget,
 )
 from cryptography.fernet import Fernet
 from pydantic import SecretStr
@@ -63,7 +63,7 @@ async def test_each_outbound_resolves_new_secret_and_refuses_disabled(
     adapter = OpenAICompatibleExtractor(
         config(llm_model="synthetic"),
         credential_resolver=resolver,
-        credential_target=CatalogResolveTarget(model_id="synthetic", expected_model_revision=1),
+        credential_target=ServiceResolveTarget(service="standalone_llm", credential_id=uuid4()),
     )
 
     def handler(request):
@@ -108,7 +108,7 @@ async def test_admission_wait_rechecks_and_releases_proven_unsent_call():
     adapter = OpenAICompatibleExtractor(
         config(llm_model="synthetic"),
         credential_resolver=resolver,
-        credential_target=CatalogResolveTarget(model_id="synthetic", expected_model_revision=1),
+        credential_target=ServiceResolveTarget(service="standalone_llm", credential_id=uuid4()),
     )
     token = current_accounting.set(Accounting())
     try:
@@ -138,7 +138,7 @@ def test_crypto_rotation_preserves_binding_and_rejects_other_domain():
     )
     envelope = PlatformCredentialEnvelope(
         name="synthetic",
-        purpose="catalog_llm",
+        purpose="standalone_llm",
         provider="openai",
         endpoint="https://api.openai.com/v1",
         credential_id=uuid4(),
@@ -169,7 +169,7 @@ def test_crypto_rotation_preserves_binding_and_rejects_other_domain():
     with pytest.raises(ServiceError):
         cipher.decrypt_platform(rewritten, expected=spec, credential_id=uuid4(), secret_version=1)
     with pytest.raises(ServiceError):
-        cipher.decrypt(rewritten, uuid4(), uuid4())
+        cipher.decrypt(rewritten, uuid4())
 
 
 @pytest.mark.parametrize(
@@ -286,7 +286,7 @@ async def test_search_rejects_credential_echo_before_returning_candidates(echo_f
 
 
 @pytest.mark.parametrize("exit_code", [3, 4])
-async def test_org_search_failure_projects_only_fixed_provider_error(
+async def test_search_failure_projects_only_fixed_provider_error(
     exit_code, explicit_offline_evaluation_calls
 ):
     from app.providers.search import PerplexitySearch, create_search_provider

@@ -85,7 +85,6 @@ class RubricGenerateRequest(Contract):
 
 
 class RubricInput(Contract):
-    org_id: UUID
     task_id: UUID
     extraction_job_id: UUID
     document_id: UUID
@@ -136,7 +135,6 @@ class RubricSectionSource(RubricSectionSourceSelection):
 
 class RubricSectionView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     rubric_id: UUID
     key: NonBlank
@@ -155,7 +153,6 @@ class RubricSectionView(Contract):
     normalization_errors: list[str] = Field(default_factory=list)
     state: RubricItemState
     revision: int = Field(ge=1)
-    confirmed_by: UUID | None = None
     confirmed_at: AwareDatetime | None = None
 
     @model_validator(mode="after")
@@ -178,16 +175,13 @@ class RubricSectionView(Contract):
                 )
             if (self.aggregation == "capped_sum") != (self.cap is not None):
                 raise ValueError("only capped_sum requires a cap")
-        if (self.confirmed_by is None) != (self.confirmed_at is None):
-            raise ValueError("rubric section confirmation actor and time must be paired")
-        if self.state == "confirmed" and (self.confirmed_by is None or self.review_domain is None):
-            raise ValueError("confirmed rubric sections require a domain and human actor")
+        if self.state == "confirmed" and (self.confirmed_at is None or self.review_domain is None):
+            raise ValueError("confirmed rubric sections require a domain and confirmation time")
         return self
 
 
 class RubricItemView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     rubric_id: UUID
     section_id: UUID
@@ -207,7 +201,6 @@ class RubricItemView(Contract):
     review_domain: ReviewDomain | None = None
     state: RubricItemState
     revision: int = Field(ge=1)
-    confirmed_by: UUID | None = None
     confirmed_at: AwareDatetime | None = None
 
     @model_validator(mode="after")
@@ -221,16 +214,13 @@ class RubricItemView(Contract):
                 raise ValueError("model-assessable rubric items require score bounds")
             if self.assessment_mode != "model_assessable" and self.ambiguity_reason is None:
                 raise ValueError("non-model assessment modes require an explicit reason")
-        if (self.confirmed_by is None) != (self.confirmed_at is None):
-            raise ValueError("rubric item confirmation actor and time must be paired")
-        if self.state == "confirmed" and (self.confirmed_by is None or self.review_domain is None):
-            raise ValueError("confirmed rubric items require a domain and human actor")
+        if self.state == "confirmed" and (self.confirmed_at is None or self.review_domain is None):
+            raise ValueError("confirmed rubric items require a domain and confirmation time")
         return self
 
 
 class RubricRequirementCoverageView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     rubric_id: UUID
     requirement_id: UUID
@@ -239,7 +229,6 @@ class RubricRequirementCoverageView(Contract):
     rubric_item_ids: list[UUID]
     canonical_requirement_id: UUID | None = None
     reason: NonBlank | None = None
-    decided_by: UUID | None = None
     decided_at: AwareDatetime | None = None
     revision: int = Field(ge=1)
 
@@ -255,9 +244,7 @@ class RubricRequirementCoverageView(Contract):
             raise ValueError("only duplicate requirements may name a canonical requirement")
         if self.disposition in {"duplicate", "excluded"} and self.reason is None:
             raise ValueError("duplicate and excluded requirements require a reason")
-        if (self.decided_by is None) != (self.decided_at is None):
-            raise ValueError("coverage decision actor and time must be paired")
-        if (self.disposition == "pending") != (self.decided_by is None):
+        if (self.disposition == "pending") != (self.decided_at is None):
             raise ValueError("only pending coverage may lack a human decision")
         return self
 
@@ -305,7 +292,6 @@ class RubricRequirementReadiness(Contract):
 class RubricSetView(Contract):
     id: UUID
     prior_rubric_id: UUID | None = None
-    org_id: UUID
     task_id: UUID
     extraction_job_id: UUID
     document_id: UUID
@@ -323,7 +309,6 @@ class RubricSetView(Contract):
     overall_cap: CandidateScoreNumber | None = None
     completeness: RubricCompletenessView
     requirement_review: RubricRequirementReadiness | None = None
-    confirmed_by: UUID | None = None
     confirmed_at: AwareDatetime | None = None
     created_at: AwareDatetime
 
@@ -346,10 +331,8 @@ class RubricSetView(Contract):
                 )
             if (self.overall_aggregation == "capped_sum") != (self.overall_cap is not None):
                 raise ValueError("only capped_sum requires an overall cap")
-        if (self.confirmed_by is None) != (self.confirmed_at is None):
-            raise ValueError("rubric set confirmation actor and time must be paired")
         if self.state == "confirmed" and (
-            not self.completeness.complete or self.confirmed_by is None
+            not self.completeness.complete or self.confirmed_at is None
         ):
             raise ValueError("confirmed rubric sets must be complete and human-confirmed")
         return self
@@ -501,7 +484,6 @@ class RubricSetDecisionRequest(Contract):
 class RubricDecisionView(Contract):
     kind: Literal["decision"] = "decision"
     id: UUID
-    org_id: UUID
     task_id: UUID
     rubric_id: UUID
     section_id: UUID | None = None
@@ -509,7 +491,6 @@ class RubricDecisionView(Contract):
     revision: int = Field(ge=2)
     action: RubricDecision
     reason: NonBlank
-    decided_by: UUID
     decided_at: AwareDatetime
     actor_kind: Literal["session"] = "session"
 
@@ -524,7 +505,6 @@ class RubricDecisionView(Contract):
 class RubricCoverageDecisionView(Contract):
     kind: Literal["coverage_decision"] = "coverage_decision"
     id: UUID
-    org_id: UUID
     task_id: UUID
     rubric_id: UUID
     requirement_id: UUID
@@ -533,7 +513,6 @@ class RubricCoverageDecisionView(Contract):
     rubric_item_ids: list[UUID]
     canonical_requirement_id: UUID | None = None
     reason: NonBlank
-    decided_by: UUID
     decided_at: AwareDatetime
     actor_kind: Literal["session"] = "session"
 
@@ -555,7 +534,6 @@ class RubricCoverageDecisionView(Contract):
 class RubricClassificationView(Contract):
     kind: Literal["classification"] = "classification"
     id: UUID
-    org_id: UUID
     task_id: UUID
     rubric_id: UUID
     section_id: UUID | None = None
@@ -563,7 +541,6 @@ class RubricClassificationView(Contract):
     revision: int = Field(ge=2)
     review_domain: ReviewDomain
     reason: NonBlank
-    decided_by: UUID
     decided_at: AwareDatetime
     actor_kind: Literal["session"] = "session"
 
@@ -577,14 +554,12 @@ class RubricClassificationView(Contract):
 class RubricRevisionView(Contract):
     kind: Literal["revision"] = "revision"
     id: UUID
-    org_id: UUID
     task_id: UUID
     rubric_id: UUID
     prior_rubric_id: UUID
     version: int = Field(ge=2)
     input_hash: Sha256
     reason: NonBlank
-    revised_by: UUID
     revised_at: AwareDatetime
     actor_kind: Literal["session"] = "session"
 
@@ -623,7 +598,6 @@ class ScorePreview(AssessmentPreview[AssessmentInput]):
 
 class ScoreItemView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     report_id: UUID
     rubric_item_id: UUID
@@ -700,7 +674,6 @@ class ScoreSectionSummary(Contract):
 
 class ScoreRunView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     job_id: UUID
     run_id: UUID

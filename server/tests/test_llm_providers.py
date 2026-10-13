@@ -111,24 +111,26 @@ def settings_for(tmp_path, provider, **overrides):
     return Settings(**(values | overrides))
 
 
-async def usage_rows(app, tenants):
-    async with app.state.db.transaction(tenants["orgs"][0]) as session:
+async def usage_rows(app):
+    async with app.state.db.transaction() as session:
         return (
             await session.scalars(select(UsageRecord).where(UsageRecord.provider != "tesseract"))
         ).all()
 
 
-async def requirement_rows(app, tenants):
-    async with app.state.db.transaction(tenants["orgs"][0]) as session:
+async def requirement_rows(app):
+    async with app.state.db.transaction() as session:
         return (await session.scalars(select(Requirement).order_by(Requirement.page))).all()
 
 
-async def test_anthropic_extraction_saves_cited_requirements_and_cost(tenants, tmp_path, pdf_bytes):
+async def test_anthropic_extraction_saves_cited_requirements_and_cost(
+    database, tmp_path, pdf_bytes
+):
     vendor = Vendor(anthropic_reply(GOOD_ITEMS))
     settings = settings_for(tmp_path, "anthropic")
     llm = AnthropicExtractor(settings, transport=vendor.transport())
     app = await credential_app(settings, llm=llm, queue=FakeQueue())
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         assert (await api.get("/health")).json()["data"]["real_llm_configured"] is True
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
@@ -143,7 +145,7 @@ async def test_anthropic_extraction_saves_cited_requirements_and_cost(tenants, t
             "browser_units": 0,
             "unresolved_calls": 0,
         }
-        rows = await requirement_rows(app, tenants)
+        rows = await requirement_rows(app)
         assert [(r.page, r.quote) for r in rows] == [
             (1, "Minimum memory is 64 GB."),
             (2, "A valid certificate must be provided."),
@@ -154,7 +156,7 @@ async def test_anthropic_extraction_saves_cited_requirements_and_cost(tenants, t
         ]
         assert rows[0].condition == {"param": "memory", "op": ">=", "value": "64", "unit": "GB"}
         assert rows[1].condition == {}
-        [usage] = await usage_rows(app, tenants)
+        [usage] = await usage_rows(app)
         assert (usage.provider, usage.model, usage.tokens) == ("anthropic", "claude-opus-5-5", 1500)
     [request] = vendor.requests
     body = json.loads(request.content)
@@ -170,7 +172,7 @@ async def test_anthropic_extraction_saves_cited_requirements_and_cost(tenants, t
     assert SYNTHETIC_KEY not in json.dumps(status)
 
 
-async def test_openai_compatible_extraction_records_usage(tenants, tmp_path, pdf_bytes):
+async def test_openai_compatible_extraction_records_usage(database, tmp_path, pdf_bytes):
     reply = {
         "model": "synthetic-model",
         "choices": [
@@ -185,7 +187,7 @@ async def test_openai_compatible_extraction_records_usage(tenants, tmp_path, pdf
     settings = settings_for(tmp_path, "openai", llm_base_url="https://llm.example.test/v1")
     llm = OpenAICompatibleExtractor(settings, transport=vendor.transport())
     app = await credential_app(settings, llm=llm, queue=FakeQueue())
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
@@ -198,7 +200,7 @@ async def test_openai_compatible_extraction_records_usage(tenants, tmp_path, pdf
             "browser_units": 0,
             "unresolved_calls": 0,
         }
-        assert len(await requirement_rows(app, tenants)) == 2
+        assert len(await requirement_rows(app)) == 2
 
     [request] = vendor.requests
     body = json.loads(request.content)
@@ -210,7 +212,7 @@ async def test_openai_compatible_extraction_records_usage(tenants, tmp_path, pdf
 
 @pytest.mark.parametrize("provider", ["anthropic", "openai"])
 async def test_pdf_items_keep_exact_source_spans_and_reject_unknown_and_ambiguous_quotes(
-    provider, tenants, tmp_path
+    provider, database, tmp_path
 ):
     # A line break survives PDF text extraction; runs of spaces are rebuilt from layout.
     exact_source = "Response\ntext must be accepted."
@@ -239,7 +241,7 @@ async def test_pdf_items_keep_exact_source_spans_and_reject_unknown_and_ambiguou
         llm=adapter(settings, vendor.transport()),
         queue=FakeQueue(),
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         task, document = await create_document(api, header, content)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
@@ -339,12 +341,12 @@ FAILURES = {
 
 
 @pytest.mark.parametrize("case", FAILURES)
-async def test_vendor_failures_map_to_job_states(case, tenants, tmp_path, pdf_bytes):
+async def test_vendor_failures_map_to_job_states(case, database, tmp_path, pdf_bytes):
     reply, job_status, code, exit_code, billed_calls = FAILURES[case]
     settings = settings_for(tmp_path, "anthropic")
     llm = AnthropicExtractor(settings, transport=Vendor(reply).transport())
     app = await credential_app(settings, llm=llm, queue=FakeQueue())
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
         if job_status == "queued":
@@ -360,8 +362,8 @@ async def test_vendor_failures_map_to_job_states(case, tenants, tmp_path, pdf_by
         assert status["status"] == job_status
         assert (status["error"]["code"], status["error"]["exit_code"]) == (code, exit_code)
         assert SYNTHETIC_KEY not in json.dumps(status)
-        assert await requirement_rows(app, tenants) == []
-        assert len(await usage_rows(app, tenants)) == billed_calls
+        assert await requirement_rows(app) == []
+        assert len(await usage_rows(app)) == billed_calls
         if case == "unknown_page":
             assert status["result"]["rejected"] == [
                 {
@@ -372,7 +374,7 @@ async def test_vendor_failures_map_to_job_states(case, tenants, tmp_path, pdf_by
             ]
 
 
-async def test_failure_in_later_batch_keeps_usage_of_finished_batches(tenants, tmp_path):
+async def test_failure_in_later_batch_keeps_usage_of_finished_batches(database, tmp_path):
     with pymupdf.open() as pdf:
         for line in ("Minimum memory is 64 GB.", "A valid certificate must be provided."):
             page = pdf.new_page()
@@ -382,13 +384,13 @@ async def test_failure_in_later_batch_keeps_usage_of_finished_batches(tenants, t
     settings = settings_for(tmp_path, "anthropic", llm_batch_chars=1000)
     llm = AnthropicExtractor(settings, transport=vendor.transport())
     app = await credential_app(settings, llm=llm, queue=FakeQueue())
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await create_document(api, header, content)
         await run_job(api, app, header, document, "parse")
         with pytest.raises(ProviderFailure):
             await run_job(api, app, header, document, "extract")
         assert len(vendor.requests) == 2
-        [usage] = await usage_rows(app, tenants)
+        [usage] = await usage_rows(app)
         assert usage.tokens == 1500
 
 
@@ -511,7 +513,7 @@ async def test_request_options_reach_the_vendor_without_overriding_core_fields(
             settings_for(tmp_path, "anthropic", llm_request_options=invalid)
 
 
-async def test_truncation_down_to_a_single_line_fails_and_bills_each_call(tenants, tmp_path):
+async def test_truncation_down_to_a_single_line_fails_and_bills_each_call(database, tmp_path):
     with pymupdf.open() as pdf:
         pdf.new_page().insert_text(
             (40, 60), "Line one is required.\nLine two is required.\nLine three.\nLine four."
@@ -529,7 +531,7 @@ async def test_truncation_down_to_a_single_line_fails_and_bills_each_call(tenant
         llm=AnthropicExtractor(settings, transport=httpx.MockTransport(vendor)),
         queue=FakeQueue(),
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await create_document(api, header, content)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
@@ -539,8 +541,8 @@ async def test_truncation_down_to_a_single_line_fails_and_bills_each_call(tenant
         )
         assert "BID_LLM_MAX_OUTPUT_TOKENS" in status["error"]["message"]
         assert "single line" not in status["error"]["message"]
-        assert await requirement_rows(app, tenants) == []
-        assert len(await usage_rows(app, tenants)) == len(requests)
+        assert await requirement_rows(app) == []
+        assert len(await usage_rows(app)) == len(requests)
 
     # The page, then halves of its lines, each still presented as page 1, down to one line.
     shown = [re.findall(r'<page number="(\d+)">\n(.*?)\n</page>', r, re.S) for r in requests]
@@ -550,21 +552,21 @@ async def test_truncation_down_to_a_single_line_fails_and_bills_each_call(tenant
 
 
 async def test_quota_message_names_the_reset_time_but_no_other_vendor_text(
-    tenants, tmp_path, pdf_bytes
+    database, tmp_path, pdf_bytes
 ):
     vendor_message = "已达到 5 小时的使用上限。您的限额将在 2026-10-02 14:01:58 重置。PRIVATE-ECHO"
     reply = httpx.Response(429, json={"error": {"code": "1308", "message": vendor_message}})
     settings = settings_for(tmp_path, "openai", llm_base_url="https://llm.example.test/v1")
     llm = OpenAICompatibleExtractor(settings, transport=Vendor(reply).transport())
     app = await credential_app(settings, llm=llm, queue=FakeQueue())
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
     assert status["status"] == "failed" and status["attempts"] == 1
     message = status["error"]["message"]
     assert "resets at 2026-10-02 14:01:58" in message
-    assert "Contact your system administrator" in message
+    assert "Review the vendor account quota" in message
     assert "PRIVATE-ECHO" not in message and "使用上限" not in message
 
 
@@ -578,7 +580,9 @@ def not_json():
 
 
 @pytest.mark.parametrize("recovers", [True, False])
-async def test_malformed_output_is_retried_in_smaller_parts(recovers, tenants, tmp_path, pdf_bytes):
+async def test_malformed_output_is_retried_in_smaller_parts(
+    recovers, database, tmp_path, pdf_bytes
+):
     requests: list[str] = []
 
     def vendor(request: httpx.Request) -> httpx.Response:
@@ -595,36 +599,36 @@ async def test_malformed_output_is_retried_in_smaller_parts(recovers, tenants, t
         llm=AnthropicExtractor(settings, transport=httpx.MockTransport(vendor)),
         queue=FakeQueue(),
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
         # Every call, including the malformed ones, is billed.
         if recovers:
             assert status["status"] == "succeeded", status
-            assert len(requests) == 3 and len(await requirement_rows(app, tenants)) == 2
+            assert len(requests) == 3 and len(await requirement_rows(app)) == 2
             # One malformed call (6 tokens) plus two good ones (1,500 each), summed.
             assert status["result"]["cost"]["llm_tokens"] == 6 + 2 * 1500
         else:
-            assert len(await usage_rows(app, tenants)) == len(requests)
+            assert len(await usage_rows(app)) == len(requests)
             assert (status["status"], status["error"]["code"]) == (
                 "failed",
                 "invalid_provider_output",
             )
-            assert await requirement_rows(app, tenants) == []
+            assert await requirement_rows(app) == []
 
 
-async def test_items_with_an_empty_quote_are_rejected_not_fatal(tenants, tmp_path, pdf_bytes):
+async def test_items_with_an_empty_quote_are_rejected_not_fatal(database, tmp_path, pdf_bytes):
     reply = anthropic_reply([GOOD_ITEMS[0], GOOD_ITEMS[1] | {"quote": "  "}])
     settings = settings_for(tmp_path, "anthropic")
     llm = AnthropicExtractor(settings, transport=Vendor(reply).transport())
     app = await credential_app(settings, llm=llm, queue=FakeQueue())
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
         assert status["status"] == "succeeded", status
-        assert [r.quote for r in await requirement_rows(app, tenants)] == [GOOD_ITEMS[0]["quote"]]
+        assert [r.quote for r in await requirement_rows(app)] == [GOOD_ITEMS[0]["quote"]]
     assert status["result"]["rejected"] == [
         {"position": "第 2 页", "quote": "  ", "reason": "empty_quote"}
     ]
@@ -632,7 +636,7 @@ async def test_items_with_an_empty_quote_are_rejected_not_fatal(tenants, tmp_pat
 
 
 async def test_unexpected_failure_keeps_billed_usage_and_logs_no_message(
-    tenants, tmp_path, pdf_bytes, monkeypatch, caplog
+    database, tmp_path, pdf_bytes, monkeypatch, caplog
 ):
     secret = "SECRET-" + "TENDER-TEXT"  # built at runtime so the source line does not hold it
 
@@ -643,21 +647,21 @@ async def test_unexpected_failure_keeps_billed_usage_and_logs_no_message(
     settings = settings_for(tmp_path, "anthropic")
     llm = AnthropicExtractor(settings, transport=Vendor(anthropic_reply(GOOD_ITEMS)).transport())
     app = await credential_app(settings, llm=llm, queue=FakeQueue())
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
         assert (status["status"], status["error"]["code"]) == ("failed", "processing_failed")
         # The vendor call was billed and is recorded although nothing was saved.
-        assert len(await usage_rows(app, tenants)) == 1
-        assert await requirement_rows(app, tenants) == []
+        assert len(await usage_rows(app)) == 1
+        assert await requirement_rows(app) == []
     assert "RuntimeError" in caplog.text and "SECRET-TENDER-TEXT" not in caplog.text
     assert "SECRET-TENDER-TEXT" not in json.dumps(status)
 
 
 @pytest.mark.parametrize("recovers", [True, False])
 async def test_dropped_connections_are_retried_within_the_batch(
-    recovers, tenants, tmp_path, pdf_bytes, monkeypatch
+    recovers, database, tmp_path, pdf_bytes, monkeypatch
 ):
     monkeypatch.setattr(AnthropicExtractor, "retry_delays", (0, 0))
     # A TLS connection dropped mid-response surfaces from httpx as a raw ssl.SSLError.
@@ -668,13 +672,13 @@ async def test_dropped_connections_are_retried_within_the_batch(
     app = await credential_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
         if recovers:
             _, status = await run_job(api, app, header, document, "extract")
             assert status["status"] == "succeeded", status
-            assert len(await requirement_rows(app, tenants)) == 2
+            assert len(await requirement_rows(app)) == 2
         else:
             # After the retries the job is requeued as a transient failure, as before.
             with pytest.raises(ProviderFailure) as failure:

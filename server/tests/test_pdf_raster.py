@@ -275,13 +275,13 @@ async def test_mixed_parse_merges_without_duplicate_or_truncated_citations(recog
         assert "128 GB" in text
 
 
-async def test_reparse_job_reports_preserved_historical_citations(tenants, tmp_path, monkeypatch):
+async def test_reparse_job_reports_preserved_historical_citations(database, tmp_path, monkeypatch):
     app = create_app(Settings(data_dir=tmp_path), ocr=RecordingOCR(), queue=FakeQueue())
 
     async def legacy_parse(*args):
         return [PageText(page=1, text="1")], [], []
 
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await create_document(api, header, pdf_page(scanned=True))
         with monkeypatch.context() as legacy:
             legacy.setattr("app.services.tender_jobs.PARSER_VERSION", "parse-v2")
@@ -295,10 +295,10 @@ async def test_reparse_job_reports_preserved_historical_citations(tenants, tmp_p
         assert chunks[0]["text"] == "1"
 
 
-async def test_native_text_job_records_no_ocr_usage(tenants, tmp_path, pdf_bytes):
+async def test_native_text_job_records_no_ocr_usage(database, tmp_path, pdf_bytes):
     ocr = RecordingOCR()
     app = create_app(Settings(data_dir=tmp_path), ocr=ocr, queue=FakeQueue())
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         _, parsed = await run_job(api, app, header, document, "parse")
         assert parsed["status"] == "succeeded" and parsed["result"]["cost"]["ocr_pages"] == 0
@@ -306,10 +306,10 @@ async def test_native_text_job_records_no_ocr_usage(tenants, tmp_path, pdf_bytes
         assert all(not chunk["ocr"] for chunk in chunks) and ocr.images == []
 
 
-async def test_mixed_page_job_and_extraction_verify_body_citation(tenants, tmp_path):
+async def test_mixed_page_job_and_extraction_verify_body_citation(database, tmp_path):
     ocr = RecordingOCR("1\n" + BODY)
     app = create_app(Settings(data_dir=tmp_path), ocr=ocr, llm=FakeLLM(), queue=FakeQueue())
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         task, document = await create_document(api, header, pdf_page(scanned=True))
         _, parsed = await run_job(api, app, header, document, "parse")
         assert parsed["status"] == "succeeded" and parsed["result"]["cost"]["ocr_pages"] == 1
@@ -334,16 +334,14 @@ async def test_oversized_legacy_job_fails_cleanly(api, application, headers, mon
 
     with monkeypatch.context() as legacy:
         legacy.setattr("app.services.documents.validate_document_async", legacy_validation)
-        task, document = await create_document(api, headers[0], content)
-    _, failed = await run_job(api, application, headers[0], document, "parse")
+        task, document = await create_document(api, headers, content)
+    _, failed = await run_job(api, application, headers, document, "parse")
     assert failed["status"] == "failed" and failed["attempts"] == 1
     assert failed["error"]["code"] == "pdf_raster_limits"
     assert failed["error"]["exit_code"] != 3
-    assert (await api.get(f"/documents/{document}/chunks", headers=headers[0])).json()[
-        "items"
-    ] == []
+    assert (await api.get(f"/documents/{document}/chunks", headers=headers)).json()["items"] == []
     upload = await api.post(
-        f"/tasks/{task}/documents", headers=headers[0], files={"file": ("oversized.pdf", content)}
+        f"/tasks/{task}/documents", headers=headers, files={"file": ("oversized.pdf", content)}
     )
     assert (
         upload.status_code == 400 and upload.json()["data"]["error"]["code"] == "pdf_raster_limits"

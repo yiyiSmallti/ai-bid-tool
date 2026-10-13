@@ -53,7 +53,7 @@ class SnapshotGraph:
 
 
 def source_graph(word):
-    org, task, job, document, chunk_id, requirement_id = [UUID(int=n) for n in range(1, 7)]
+    task, job, document, chunk_id, requirement_id = [UUID(int=n) for n in range(2, 7)]
     location = (
         {
             "block_id": "p1",
@@ -72,7 +72,6 @@ def source_graph(word):
     text = f"Synthetic surrounding text.\n{quote}\nSynthetic end."
     requirement = SimpleNamespace(
         id=requirement_id,
-        org_id=org,
         task_id=task,
         job_id=job,
         document_id=document,
@@ -87,7 +86,6 @@ def source_graph(word):
     )
     chunk = SimpleNamespace(
         id=chunk_id,
-        org_id=org,
         task_id=task,
         document_id=document,
         text=text,
@@ -96,7 +94,7 @@ def source_graph(word):
         page=None if word else 1,
         citation_verified=True,
     )
-    document_row = SimpleNamespace(id=document, org_id=org, task_id=task, sha256="a" * 64)
+    document_row = SimpleNamespace(id=document, task_id=task, sha256="a" * 64)
     return SnapshotGraph(requirement, chunk, document_row)
 
 
@@ -114,7 +112,7 @@ def add_card(graph, *, origin="human", manifest=None):
 
 
 async def snapshot(graph):
-    actor = SimpleNamespace(org_id=graph.requirement.org_id, principal_id=UUID(int=7))
+    actor = SimpleNamespace(principal_id=UUID(int=7))
     task = SimpleNamespace(
         id=graph.requirement.task_id,
         model_redaction_enabled=False,

@@ -294,7 +294,7 @@ class Supervisor:
         self.db.execute("PRAGMA synchronous=FULL")
         self.db.execute("""CREATE TABLE IF NOT EXISTS groups (
             group_id TEXT PRIMARY KEY, binding TEXT NOT NULL, deadline REAL NOT NULL,
-            state TEXT NOT NULL, org_id TEXT NOT NULL, memory_bytes INTEGER NOT NULL,
+            state TEXT NOT NULL, memory_bytes INTEGER NOT NULL,
             metrics TEXT NOT NULL DEFAULT '{}')""")
         columns = {row[1] for row in self.db.execute("PRAGMA table_info(groups)")}
         if "metrics" not in columns:
@@ -334,9 +334,9 @@ class Supervisor:
     def register(self, descriptor: RunDescriptor, deadline: float) -> str:
         if self.quarantined:
             raise SandboxFailure("sandbox_node_quarantined")
-        group = hashlib.sha256(
-            f"{descriptor.org_id}:{descriptor.job_id}:{descriptor.attempt_id}".encode()
-        ).hexdigest()[:32]
+        group = hashlib.sha256(f"{descriptor.job_id}:{descriptor.attempt_id}".encode()).hexdigest()[
+            :32
+        ]
         memory = (1024 if descriptor.purpose == "prototype_offline" else 2048) * MIB
         self.db.execute("BEGIN IMMEDIATE")
         try:
@@ -346,18 +346,18 @@ class Supervisor:
             if previous:
                 raise SandboxFailure("sandbox_attempt_exists")
             active = self.db.execute(
-                "SELECT org_id,memory_bytes FROM groups WHERE state != 'complete'"
+                "SELECT memory_bytes FROM groups WHERE state != 'complete'"
             ).fetchall()
             if (
                 len(active) >= self.config.node_capacity
-                or sum(row[1] for row in active) + memory > self.config.memory_capacity_bytes
+                or sum(row[0] for row in active) + memory > self.config.memory_capacity_bytes
             ):
                 raise SandboxFailure("sandbox_node_capacity")
-            if sum(row[0] == str(descriptor.org_id) for row in active) >= 2:
-                raise SandboxFailure("sandbox_org_capacity")
+            if len(active) >= 2:
+                raise SandboxFailure("sandbox_capacity")
             self.db.execute(
-                "INSERT INTO groups (group_id,binding,deadline,state,org_id,memory_bytes) VALUES (?,?,?,?,?,?)",
-                (group, descriptor.digest, deadline, "running", str(descriptor.org_id), memory),
+                "INSERT INTO groups (group_id,binding,deadline,state,memory_bytes) VALUES (?,?,?,?,?)",
+                (group, descriptor.digest, deadline, "running", memory),
             )
             self.db.commit()
         except (sqlite3.Error, SandboxFailure):
@@ -619,9 +619,9 @@ class Supervisor:
         }
 
     async def status(self, descriptor: RunDescriptor, writer: asyncio.StreamWriter) -> None:
-        group = hashlib.sha256(
-            f"{descriptor.org_id}:{descriptor.job_id}:{descriptor.attempt_id}".encode()
-        ).hexdigest()[:32]
+        group = hashlib.sha256(f"{descriptor.job_id}:{descriptor.attempt_id}".encode()).hexdigest()[
+            :32
+        ]
         record = self.db.execute(
             "SELECT binding,state,metrics FROM groups WHERE group_id=?", (group,)
         ).fetchone()

@@ -302,6 +302,10 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):
+        if request.url.path.startswith("/platform/credentials"):
+            return error_response(
+                request, ServiceError("invalid_input", "Invalid credential input", 422, 2)
+            )
         if request.url.path in {
             "/providers",
             "/providers/test",
@@ -526,8 +530,15 @@ def create_app(
     from app.api.management_providers import create_router as create_management_provider_router
 
     app.include_router(create_management_provider_router(context, settings))
+    from app.api.platform_clef import create_router as create_clef_settings_router
+    from app.api.platform_credentials import create_router as create_credential_settings_router
+    from app.api.platform_trust_anchors import create_router as create_trust_anchor_settings_router
+
+    app.include_router(create_credential_settings_router(settings, db, context))
+    app.include_router(create_clef_settings_router(settings, db, context))
+    app.include_router(create_trust_anchor_settings_router(db, context))
     app.include_router(create_confidential_router(context, settings))
-    app.include_router(create_bid_review_router(context, settings, storage, queue))
+    app.include_router(create_bid_review_router(context, settings, storage, queue, db))
     app.include_router(create_check_router(context, db, storage, queue, settings))
     app.include_router(create_score_router(context, db, storage, queue, settings))
     from app.api.memory import create_router as create_memory_router

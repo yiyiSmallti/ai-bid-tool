@@ -23,7 +23,7 @@ from app.schemas.bid_review import (
 from app.schemas.contracts import Cost, Result
 
 
-def create_router(context, settings, storage, queue):
+def create_router(context, settings, storage, queue, db):
     router = APIRouter()
 
     def result(command, data, items=None):
@@ -217,7 +217,7 @@ def create_router(context, settings, storage, queue):
     async def presence_binding(ctx):
         from app.services import platform_clef
 
-        resolved = await platform_clef.resolve(ctx[0], settings)
+        resolved = await platform_clef.resolve(ctx[0], settings, db)
         if resolved.config is None or resolved.blockers:
             raise ServiceError("clef_unavailable", "Inspect platform Clef configuration", 409, 4)
         return resolved.config.model_dump(mode="json")
@@ -301,7 +301,7 @@ def create_router(context, settings, storage, queue):
     ):
         from app.services import bid_review_run
 
-        data = await bid_review_run.submit(ctx[0], ctx[1], task_id, body, queue, settings)
+        data = await bid_review_run.submit(ctx[0], ctx[1], task_id, body, queue, settings, db)
         response = result("review run", data)
         if isinstance(data, run_contracts.BidReviewPreview):
             response.cost = data.preflight.estimate
@@ -408,10 +408,8 @@ def create_router(context, settings, storage, queue):
             TokenSigner.for_tokens(settings),
             path,
             "bid-review-report",
-            ctx[1].org_id,
             id=row.id,
             sha256=row.sha256,
-            actor_user_id=ctx[1].user_id,
         )
         audit(
             ctx[0],
@@ -440,10 +438,8 @@ def create_router(context, settings, storage, queue):
             TokenSigner.for_tokens(settings),
             signature,
             "bid-review-report",
-            ctx[1].org_id,
             id=row.id,
             sha256=row.sha256,
-            actor_user_id=ctx[1].user_id,
         )
         content, descriptor = await bid_review_report.read_artifact(
             ctx[0], ctx[1], artifact_id, storage

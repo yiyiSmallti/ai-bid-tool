@@ -45,7 +45,6 @@ async def scoped_requirements(session, actor, task_id, extraction, *, limit):
         await session.scalars(
             select(Requirement)
             .where(
-                Requirement.org_id == actor.org_id,
                 Requirement.task_id == task_id,
                 Requirement.job_id == extraction.id,
                 Requirement.document_id == extraction.document_id,
@@ -62,9 +61,7 @@ async def load(session, actor, requirements, task_id, assessment_day, *, review_
     chunks = {
         row.id: row
         for row in await session.scalars(
-            select(Chunk).where(
-                Chunk.org_id == actor.org_id, Chunk.id.in_({row.chunk_id for row in requirements})
-            )
+            select(Chunk).where(Chunk.id.in_({row.chunk_id for row in requirements}))
         )
     }
     citations = response_cards.citation_validity_batch(requirements, chunks)
@@ -83,16 +80,13 @@ async def load(session, actor, requirements, task_id, assessment_day, *, review_
             select(ResponseCard, ResponseCardRevision)
             .join(ResponseCardRevision, ResponseCardRevision.id == ResponseCard.current_revision_id)
             .where(
-                ResponseCard.org_id == actor.org_id,
                 ResponseCard.task_id == task_id,
                 ResponseCard.requirement_id.in_(required),
             )
         )
     )
     selections = [
-        select(literal(kind).label("kind"), model.id, model.active).where(
-            model.org_id == actor.org_id, model.task_id == task_id
-        )
+        select(literal(kind).label("kind"), model.id, model.active).where(model.task_id == task_id)
         for kind, model in [
             ("product", TaskResource),
             ("feature", TaskFeature),
@@ -103,7 +97,7 @@ async def load(session, actor, requirements, task_id, assessment_day, *, review_
     selections.append(
         select(literal("certificate_pdf_page"), EvidenceSource.id, TaskCertificate.active)
         .join(TaskCertificate, TaskCertificate.id == EvidenceSource.task_certificate_id)
-        .where(EvidenceSource.org_id == actor.org_id, EvidenceSource.task_id == task_id)
+        .where(EvidenceSource.task_id == task_id)
     )
     material_query = union_all(*selections)
     materials = {
@@ -113,7 +107,6 @@ async def load(session, actor, requirements, task_id, assessment_day, *, review_
         row.generation_job_id: row.input_manifest
         for row in await session.scalars(
             select(CardGenerationRun).where(
-                CardGenerationRun.org_id == actor.org_id,
                 CardGenerationRun.generation_job_id.in_(
                     {revision.model_job_id for _, revision in pairs if revision.model_job_id}
                 ),
@@ -130,14 +123,13 @@ async def load(session, actor, requirements, task_id, assessment_day, *, review_
                     CertificateRevision,
                     CertificateRevision.id == TaskCertificate.certificate_revision_id,
                 )
-                .where(TaskCertificate.org_id == actor.org_id, TaskCertificate.task_id == task_id)
+                .where(TaskCertificate.task_id == task_id)
             )
         ).all()
     )
     latest = (
         select(PrototypeEvidenceDecision)
         .where(
-            PrototypeEvidenceDecision.org_id == actor.org_id,
             PrototypeEvidenceDecision.task_id == task_id,
         )
         .distinct(PrototypeEvidenceDecision.evidence_id)
@@ -189,7 +181,6 @@ async def load(session, actor, requirements, task_id, assessment_day, *, review_
             )
             .outerjoin(latest, latest.c.evidence_id == Evidence.id)
             .where(
-                CardEvidenceLink.org_id == actor.org_id,
                 CardEvidenceLink.revision_id.in_({revision.id for _, revision in pairs}),
             )
         )
@@ -197,9 +188,6 @@ async def load(session, actor, requirements, task_id, assessment_day, *, review_
     evidence_by_revision = {}
     for entry in evidence_rows:
         evidence_by_revision.setdefault(entry[0], []).append(entry)
-    approvals = await response_cards.review_approvals(
-        session, actor.org_id, [card.id for card, _ in pairs]
-    )
     views = {}
     for card, revision in pairs:
         requirement = required[card.requirement_id]
@@ -311,7 +299,7 @@ async def load(session, actor, requirements, task_id, assessment_day, *, review_
                     valid_decision = bool(
                         prototype
                         and revision.state == "confirmed"
-                        and row.confirmed_by is not None
+                        and row.confirmed_at is not None
                         and active
                         and not is_withdrawn
                         and decision_revision == revision.id
@@ -352,7 +340,7 @@ async def load(session, actor, requirements, task_id, assessment_day, *, review_
                     date_advisory = True
                 if inactive:
                     blockers.append("certificate_inactive")
-            evidence.append({"confirmed_by": row.confirmed_by, "active_selection": active})
+            evidence.append({"confirmed_at": row.confirmed_at, "active_selection": active})
         eligibility = response_cards.card_eligibility(
             revision,
             requirement,
@@ -373,21 +361,6 @@ async def load(session, actor, requirements, task_id, assessment_day, *, review_
             "date_advisory": date_advisory,
             "prototype_blocked": prototype_blocked,
         }
-    for view in views.values():
-        approval = approvals.get(view["id"])
-        if approval is not None:
-            response_cards.apply_approval(view, approval)
-            approval_blockers = response_cards.approval_gap_reasons(
-                view["blockers"], approval, state=view["state"], disposition=None
-            )
-            # Legacy policies still block consumption; the board exposes the
-            # retained confirmation state without offering a removed action.
-            view["blockers"] = list(
-                dict.fromkeys(
-                    "needs_reconfirmation" if reason == "cosign_required" else reason
-                    for reason in approval_blockers
-                )
-            )
     from app.services.annotations import board_metadata
 
     annotation_rows = await board_metadata(session, actor, task_id, [card.id for card, _ in pairs])

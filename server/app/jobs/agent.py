@@ -42,8 +42,6 @@ AUTHORITY_STOPS = {
     "forbidden",
     "invalid_session",
     "not_found",
-    "org_inactive",
-    "task_archived",
 }
 RECOVERY_STOPS = {
     "agent_request_uncertain",
@@ -68,10 +66,7 @@ async def actor_for(session, row, *, job=None, step=None, kind="worker"):
     if principal is None:
         raise ProviderFailure("Agent authority unavailable", code="agent_authority_expired")
     return Identity(
-        row.owner_user_id,
-        row.org_id,
-        set(principal.scopes),
-        "viewer",
+        scopes=set(principal.scopes),
         actor_kind=kind,
         principal_id=row.principal_id,
         session_id=row.id,
@@ -87,7 +82,7 @@ async def actor_for(session, row, *, job=None, step=None, kind="worker"):
 
 
 async def enqueue_controller(session, row, actor, settings, queue):
-    """Persist Job, ownership and queue delivery in the caller's transaction."""
+    """Persist Job, session association and queue delivery in the caller's transaction."""
     if queue is None:
         raise ServiceError("queue_unavailable", "Agent queue is unavailable", 503, 3)
     if row.current_job_id is not None:
@@ -99,8 +94,8 @@ async def enqueue_controller(session, row, actor, settings, queue):
     submitted = replace(
         actor,
         scopes=set(principal.scopes),
-        principal_id=row.principal_id,
-        session_id=row.id,
+        principal_id=None if actor.actor_kind == "session" else row.principal_id,
+        session_id=None if actor.actor_kind == "session" else row.id,
         step_id=None,
         invocation_id=uuid4(),
         job_id=None,
@@ -110,7 +105,6 @@ async def enqueue_controller(session, row, actor, settings, queue):
     model = row.model_snapshot["model"]
     job = Job(
         id=uuid4(),
-        org_id=row.org_id,
         task_id=row.task_id,
         document_id=row.document_id,
         kind="agent",
@@ -122,7 +116,6 @@ async def enqueue_controller(session, row, actor, settings, queue):
         provider_identity=model,
         command="agent start",
         initiated_by="builtin_agent",
-        on_behalf_of_user_id=row.owner_user_id,
         agent_principal_id=row.principal_id,
         agent_session_id=row.id,
         invocation_id=submitted.invocation_id,
@@ -133,7 +126,6 @@ async def enqueue_controller(session, row, actor, settings, queue):
     session.add(
         AgentJobLink(
             id=uuid4(),
-            org_id=row.org_id,
             session_id=row.id,
             task_id=row.task_id,
             document_id=row.document_id,
@@ -144,8 +136,8 @@ async def enqueue_controller(session, row, actor, settings, queue):
     )
     row.current_job_id, row.current_run_id = job.id, None
     row.state = "queued"
-    job.queue_id = await queue.enqueue_in_transaction(session, str(row.org_id), str(job.id))
-    await queue.enqueue_agent_wake(session, str(row.org_id), str(row.id))
+    job.queue_id = await queue.enqueue_in_transaction(session, str(job.id))
+    await queue.enqueue_agent_wake(session, str(row.id))
     await session.flush()
     await set_actor_context(session, actor)
     return job
@@ -179,11 +171,9 @@ async def decision_request(
         messages.append(
             AgentMessageView(
                 id=uuid4(),
-                org_id=row.org_id,
                 session_id=row.id,
                 ordinal=1,
                 role="human",
-                author_user_id=row.owner_user_id,
                 content=content,
                 content_sha256=agents.digest(content),
                 created_at=timestamp,
@@ -196,7 +186,6 @@ async def decision_request(
         0,
         AgentMessageView(
             id=row.id,
-            org_id=row.org_id,
             session_id=row.id,
             ordinal=1,
             role="system",
@@ -356,7 +345,6 @@ async def new_step(session, row, job, kind, settings, *, call=None, refs=(), req
     )
     step = AgentStep(
         id=step_id,
-        org_id=row.org_id,
         session_id=row.id,
         task_id=row.task_id,
         document_id=row.document_id,
@@ -374,9 +362,7 @@ async def new_step(session, row, job, kind, settings, *, call=None, refs=(), req
         input_refs=[
             ref.model_dump(mode="json") if isinstance(ref, AgentInputRef) else ref for ref in refs
         ],
-        arguments_enc=agents.seal(settings, step_id, row.org_id, row.id, payload)
-        if payload
-        else None,
+        arguments_enc=agents.seal(settings, step_id, row.id, payload) if payload else None,
         arguments_sha256=agents.digest(payload) if payload else None,
         usage_ids=[],
         created_at=await agents.now(session),
@@ -408,12 +394,6 @@ async def checkpoint(
     # ORM cost queries may autoflush. Complete them before marking a session
     # terminal: that transition must include its cleared execution binding.
     cost = Cost.model_validate(await job_cost(session, job.id))
-    from app.models.team_workflow import TaskWorkflow
-
-    archived = (
-        await session.scalar(select(TaskWorkflow.state).where(TaskWorkflow.task_id == row.task_id))
-        == "archived"
-    )
     checkpoint_revision = row.revision + 1
     disposition = (
         "terminal"
@@ -453,10 +433,6 @@ async def checkpoint(
         await session.flush([row])
     job.result = result.model_dump(mode="json")
     job.status, job.finished_at, job.lease_until, job.error = "succeeded", timestamp, None, None
-    if archived:
-        # Archive permits failure settlement, but never a new success publication.
-        job.status = "failed"
-        job.error = {"code": "task_archived", "message": "Task is archived", "exit_code": 2}
     audit(
         session,
         actor,
@@ -473,7 +449,7 @@ async def checkpoint(
     )
     if state not in agent_limits.TERMINAL:
         await processor.queue.enqueue_agent_wake(
-            session, str(row.org_id), str(row.id), delay=0 if state == "queued" else 30
+            session, str(row.id), delay=0 if state == "queued" else 30
         )
     await session.flush()
 
@@ -529,7 +505,7 @@ async def record_tool_output(session, row, step, job, output, settings):
         step,
         job,
         "completed",
-        result_enc=agents.seal(settings, step.id, row.org_id, row.id, payload),
+        result_enc=agents.seal(settings, step.id, row.id, payload),
         result_sha256=agents.digest(payload),
         exit_code=output.exit_code,
         usage_ids=usage_ids,
@@ -603,7 +579,7 @@ async def invocation_context(session, row, step, job):
 
 async def decide(processor, execution):
     settings = processor.settings
-    async with processor.db.transaction(execution.org_id) as session:
+    async with processor.db.transaction() as session:
         row, job, actor = await fence(session, execution)
         await agent_limits.enforce(session, row, settings)
         llm = await resolve_llm(processor, session, job)
@@ -630,7 +606,7 @@ async def decide(processor, execution):
                 "run_id": str(job.run_id),
             },
         )
-    async with processor.db.transaction(execution.org_id) as session:
+    async with processor.db.transaction() as session:
         row, job, _ = await fence(session, execution, expected_revision=expected)
         quote = provider.quote(request)
         await agent_limits.enforce(session, row, settings, quote)
@@ -665,7 +641,7 @@ async def decide(processor, execution):
 
     execution.before_admit = before_admit
     output = await provider.decide(request)
-    async with processor.db.transaction(execution.org_id) as session:
+    async with processor.db.transaction() as session:
         row, job, actor = await fence(session, execution, expected_revision=expected)
         await agent_limits.enforce(session, row, settings)
         step = await session.get(AgentStep, step.id)
@@ -705,7 +681,7 @@ async def decide(processor, execution):
             step,
             job,
             "completed",
-            result_enc=agents.seal(settings, step.id, row.org_id, row.id, payload),
+            result_enc=agents.seal(settings, step.id, row.id, payload),
             result_sha256=agents.digest(payload),
             exit_code=0,
             usage_ids=[str(value) for value in usage_ids],
@@ -806,7 +782,7 @@ async def execute_tool(
 ):
     # Save the counted intent before trying the command. A failed preflight or a
     # rolled-back child submission still consumes its step, but no vendor call.
-    async with processor.db.transaction(execution.org_id) as session:
+    async with processor.db.transaction() as session:
         row, job, actor = await fence(session, execution)
         await agent_limits.enforce(session, row, processor.settings)
         if tool_step_id is None:
@@ -818,9 +794,7 @@ async def execute_tool(
                 from app.schemas.agent_contracts import ToolCall
 
                 call = TypeAdapter(ToolCall).validate_python(
-                    agents.unseal(
-                        processor.settings, prior.id, row.org_id, row.id, prior.arguments_enc
-                    )
+                    agents.unseal(processor.settings, prior.id, row.id, prior.arguments_enc)
                 )
                 if prior.child_job_id is not None and call.command in {"card generate", "draft"}:
                     call = call.model_copy(
@@ -834,9 +808,7 @@ async def execute_tool(
                     )
             else:
                 decision = AgentDecision.model_validate(
-                    agents.unseal(
-                        processor.settings, prior.id, row.org_id, row.id, prior.result_enc
-                    )
+                    agents.unseal(processor.settings, prior.id, row.id, prior.result_enc)
                 )
                 assert isinstance(decision.action, ToolDecision)
                 call = decision.action.call
@@ -844,7 +816,7 @@ async def execute_tool(
                 session, row, job, "tool", processor.settings, call=call, refs=prior.input_refs
             )
             tool_step_id = step.id
-    async with processor.db.transaction(execution.org_id) as session:
+    async with processor.db.transaction() as session:
         from pydantic import TypeAdapter
 
         from app.schemas.agent_contracts import ToolCall
@@ -856,7 +828,7 @@ async def execute_tool(
         if step.state != "planned":
             raise ProviderFailure("Tool step was already advanced", code="job_attempt_stopped")
         call = TypeAdapter(ToolCall).validate_python(
-            agents.unseal(processor.settings, step.id, row.org_id, row.id, step.arguments_enc)
+            agents.unseal(processor.settings, step.id, row.id, step.arguments_enc)
         )
         agent = replace(
             live,
@@ -916,7 +888,7 @@ async def execute_tool(
                 step,
                 job,
                 "waiting_job",
-                result_enc=agents.seal(processor.settings, step.id, row.org_id, row.id, payload),
+                result_enc=agents.seal(processor.settings, step.id, row.id, payload),
                 result_sha256=agents.digest(payload),
             )
             await session.flush([step])
@@ -940,7 +912,7 @@ async def execute_tool(
 
 
 async def collect_child(processor, execution, step_id):
-    async with processor.db.transaction(execution.org_id) as session:
+    async with processor.db.transaction() as session:
         row, job, actor = await fence(session, execution)
         live = await agent_limits.enforce(session, row, processor.settings)
         step = await session.get(AgentStep, step_id)
@@ -1045,7 +1017,7 @@ async def collect_child(processor, execution, step_id):
 
 
 async def fragment(processor, execution):
-    async with processor.db.transaction(execution.org_id) as session:
+    async with processor.db.transaction() as session:
         row, job, actor = await fence(session, execution)
         await agent_limits.enforce(session, row, processor.settings)
         last = await session.scalar(
@@ -1113,7 +1085,7 @@ async def fragment(processor, execution):
         saved_action = None
         if last is not None and kind == "decision" and state == "completed":
             saved_action = AgentDecision.model_validate(
-                agents.unseal(processor.settings, last.id, row.org_id, row.id, last.result_enc)
+                agents.unseal(processor.settings, last.id, row.id, last.result_enc)
             ).action
         if changed_intent:
             saved_action = None
@@ -1135,7 +1107,7 @@ async def fail_fragment(processor, execution, error):
         if isinstance(error, (ServiceError, ProviderFailure))
         else "agent_processing_failed"
     )
-    async with processor.db.transaction(execution.org_id) as session:
+    async with processor.db.transaction() as session:
         row, job, actor = await fence(session, execution)
         last = await session.scalar(
             select(AgentStep)
@@ -1225,7 +1197,7 @@ async def fail_fragment(processor, execution, error):
         elif code in AUTHORITY_STOPS:
             kind, question = (
                 "authority",
-                "The owner's delegation expired or permissions changed. Resume from a current human session after restoring the required access.",
+                "The delegation expired or permissions changed. Resume from a current human session after restoring the required access.",
             )
         elif code in CONFIGURATION_STOPS:
             kind, question = (
@@ -1263,8 +1235,8 @@ async def fail_fragment(processor, execution, error):
         )
 
 
-async def process_if_agent(processor, org_id, job_id):
-    async with processor.db.transaction(org_id) as session:
+async def process_if_agent(processor, job_id):
+    async with processor.db.transaction() as session:
         kind = await session.scalar(select(Job.kind).where(Job.id == job_id))
         if kind != "agent":
             return False
@@ -1279,7 +1251,7 @@ async def process_if_agent(processor, org_id, job_id):
         if job.status == "running":
             # The durable wake, rather than a queue retry, owns expired-attempt
             # recovery and creates a fresh controller with the saved checkpoint.
-            await processor.queue.enqueue_agent_wake(session, str(org_id), str(row.id), delay=0)
+            await processor.queue.enqueue_agent_wake(session, str(row.id), delay=0)
             return True
         if (
             row.state in agent_limits.TERMINAL
@@ -1309,7 +1281,7 @@ async def process_if_agent(processor, org_id, job_id):
                 session,
                 row,
                 "authority",
-                "Restore the owner's current membership and delegation before resuming.",
+                "Renew the delegation before resuming.",
                 processor.settings,
             )
             row.current_job_id, row.current_run_id = None, None
@@ -1325,7 +1297,7 @@ async def process_if_agent(processor, org_id, job_id):
         await session.flush([row])
         run_id = job.run_id
         assert run_id is not None
-    execution = JobExecution(processor.settings, processor.db, org_id, job_id, run_id)
+    execution = JobExecution(processor.settings, processor.db, job_id, run_id)
     async with execution.activate():
         try:
             await fragment(processor, execution)
@@ -1340,9 +1312,9 @@ async def process_if_agent(processor, org_id, job_id):
     return True
 
 
-async def wake(processor, org_id, session_id):
-    """An org-scoped durable wake advances a checkpoint or saves its successor."""
-    async with processor.db.transaction(org_id) as session:
+async def wake(processor, session_id):
+    """An durable wake advances a checkpoint or saves its successor."""
+    async with processor.db.transaction() as session:
         row = await agent_limits.locked_session(session, session_id)
         if row.state in agent_limits.TERMINAL:
             return
@@ -1354,7 +1326,7 @@ async def wake(processor, org_id, session_id):
             and current.lease_until
             and current.lease_until > timestamp
         )
-        await processor.queue.enqueue_agent_wake(session, str(org_id), str(session_id))
+        await processor.queue.enqueue_agent_wake(session, str(session_id))
         actor = await actor_for(session, row)
         await set_actor_context(session, actor)
         if timestamp >= row.expires_at or (
@@ -1417,7 +1389,7 @@ async def wake(processor, org_id, session_id):
                 session,
                 row,
                 "authority",
-                "Renew the owner's delegation from a valid human session.",
+                "Renew the delegation from a valid human session.",
                 processor.settings,
             )
             row.current_job_id, row.current_run_id = None, None

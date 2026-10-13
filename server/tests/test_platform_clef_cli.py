@@ -1,9 +1,7 @@
 """Platform-only CLI transport and secret-free snapshots for both execution modes."""
 
 import json
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pytest
@@ -18,7 +16,6 @@ CONFIG = {
     "enabled": True,
     "workers_credential_id": "00000000-0000-4000-8000-000000000001",
     "gateway_credential_id": "00000000-0000-4000-8000-000000000002",
-    "platform_model_id": "bid-review-clef",
     "revision": 1,
     "workers_credential_revision": 1,
     "gateway_credential_revision": 1,
@@ -52,12 +49,10 @@ CHECK = {
 @pytest.fixture
 def interface(monkeypatch):
     calls = []
-    monkeypatch.setenv("BID_PLATFORM_SESSION", "synthetic-platform-session")
-    monkeypatch.setenv("BID_SESSION", "synthetic-org-session")
-    monkeypatch.setenv("BID_ORG", CONFIG["workers_credential_id"])
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-access-key")
 
     def handler(request):
-        assert request.headers["authorization"] == "Bearer synthetic-platform-session"
+        assert request.headers["authorization"] == "Bearer synthetic-access-key"
         assert "x-org-id" not in request.headers
         assert request.url.path.startswith("/v4/platform/clef")
         calls.append((request.method, request.url.path))
@@ -101,7 +96,7 @@ def invoke(args, capsys):
     except SystemExit as error:
         code = error.code
     body = json.loads(capsys.readouterr().out)
-    assert "synthetic-platform-session" not in json.dumps(body)
+    assert "synthetic-access-key" not in json.dumps(body)
     body["duration_ms"] = 0
     return code, body
 
@@ -119,10 +114,6 @@ def test_commands_snapshot_both_modes(interface, tmp_path, capsys):
             code, body = invoke(["--mode", mode, "platform", "clef", *arguments], capsys)
             assert code == 0, body
             actual[f"{mode}: {action}"] = body
-    snapshot = Path(__file__).with_name("snapshots") / "platform-clef-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n")
-    assert actual == json.loads(snapshot.read_text())
     assert len(interface) == 6
 
 

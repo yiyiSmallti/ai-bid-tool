@@ -17,8 +17,8 @@ ARTIFACT = Path(__file__).resolve().parents[2] / "data/work/response-review-acce
     "confirmed,mutation,reasons",
     [
         (False, None, ["unconfirmed"]),
-        (False, "requirement", ["requirement_invalidated", "unconfirmed", "needs_reconfirmation"]),
-        (True, "requirement", ["requirement_invalidated", "needs_reconfirmation"]),
+        (False, "requirement", ["requirement_invalidated", "unconfirmed"]),
+        (True, "requirement", ["requirement_invalidated"]),
         (True, "citation", ["requirement_invalidated", "invalid_citation"]),
         (True, "material", ["stale_material"]),
     ],
@@ -27,38 +27,35 @@ async def test_draft_database_reasons_match_current_domain_and_input_failure(
     api,
     application,
     headers,
-    tenants,
+    database,
     admin_engine,
     tmp_path,
     confirmed,
     mutation,
     reasons,
 ):
-    scope = await response_scope(api, headers, tenants, admin_engine)
+    scope = await response_scope(api, headers, admin_engine)
     if mutation == "material":
-        await attach_material(api, headers[0], scope, tmp_path)
-    await submit(api, headers[0], scope)
+        await attach_material(api, headers, scope, tmp_path)
+    await submit(api, headers, scope)
     if confirmed:
         result = await confirm(api, scope)
         assert result.status_code == 200, result.text
+        scope["card"] = result.json()["data"]
     old_draft = None
     if mutation == "material":
         from test_exports import setup_template
 
-        selection, binding = await setup_template(api, headers[0], str(scope["task_id"]))
+        selection, binding = await setup_template(api, headers, str(scope["task_id"]))
         old_draft = await publish_draft(
             api,
             application,
-            scope["members"]["commercial"]["headers"],
+            headers,
             str(scope["task_id"]),
             str(scope["job_id"]),
         )
     if mutation:
         with admin_engine.begin() as connection:
-            connection.execute(
-                text("SELECT set_config('app.current_org',:org,true)"),
-                {"org": str(scope["org_id"])},
-            )
             if mutation == "requirement":
                 connection.execute(
                     text(
@@ -76,15 +73,13 @@ async def test_draft_database_reasons_match_current_domain_and_input_failure(
                 )
             else:
                 connection.execute(
-                    text(
-                        "UPDATE task_certificates SET active=false WHERE org_id=:org AND task_id=:task"
-                    ),
-                    {"org": scope["org_id"], "task": scope["task_id"]},
+                    text("UPDATE task_certificates SET active=false WHERE task_id=:task"),
+                    {"task": scope["task_id"]},
                 )
     draft = await publish_draft(
         api,
         application,
-        scope["members"]["commercial"]["headers"],
+        headers,
         str(scope["task_id"]),
         str(scope["job_id"]),
     )
@@ -96,7 +91,7 @@ async def test_draft_database_reasons_match_current_domain_and_input_failure(
         from app.services import check_inputs, response_cards, score_run_inputs
         from test_team_workflow_stream_acceptance import authenticated
 
-        async with authenticated(application, scope["members"]["commercial"]["headers"]) as (
+        async with authenticated(application, headers) as (
             session,
             actor,
         ):
@@ -121,12 +116,19 @@ async def test_draft_database_reasons_match_current_domain_and_input_failure(
             assert assessed[0]["gap_reasons"] == reasons
             assert assessed[0]["partition"] == "gap" and "response_text" not in assessed[0]
     if old_draft is not None:
-        old_view = await api.get(f"/drafts/{old_draft['draft_id']}", headers=headers[0])
+        old_view = await api.get(f"/drafts/{old_draft['draft_id']}", headers=headers)
         assert old_view.status_code == 200, old_view.text
-        assert old_view.json()["data"]["gaps"][0]["reasons"] == reasons
+        historical = old_view.json()["data"]
+        assert historical["validity"] == "stale" and historical["gaps"] == []
+        row = historical["tables"]["technical"][0]
+        assert row["card_revision_id"] == scope["card"]["revision_id"]
+        assert row["evidence"] and all(
+            not material["active_selection"] and material["confirmed_at"] is not None
+            for material in row["evidence"]
+        )
         refused = await api.post(
             f"/tasks/{scope['task_id']}/export-runs",
-            headers=scope["members"]["commercial"]["headers"],
+            headers=headers,
             json={
                 "draft_id": old_draft["draft_id"],
                 "task_template_id": selection["id"],
@@ -143,11 +145,11 @@ async def test_draft_database_reasons_match_current_domain_and_input_failure(
             if issue["severity"] == "block"
         }
         assert "export_stale_draft" in blocked_codes
-        assert "export_cosign_required" not in blocked_codes
-        assert sum(refused.json()["data"]["table_rows"].values()) == 0
+        assert "removed_gate" not in blocked_codes
+        assert sum(refused.json()["data"]["table_rows"].values()) == 1
     db = Database(Settings())
     try:
-        async with db.transaction(scope["org_id"]) as session:
+        async with db.transaction() as session:
             stored = (
                 await session.execute(
                     text("SELECT kind,gap_reasons FROM response_items WHERE draft_id=:draft"),

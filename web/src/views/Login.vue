@@ -1,34 +1,30 @@
 <script setup>
-import { Coin } from "@element-plus/icons-vue";
+import { Coin, Key } from "@element-plus/icons-vue";
 import { ref } from "vue";
-import { useRouter } from "vue-router";
-import { request, session } from "../api.js";
+import { useRoute, useRouter } from "vue-router";
+import { exchangeAccessKey } from "../api.js";
+import { errorText } from "../org.js";
 
-const router = useRouter();
-const email = ref("");
-const password = ref("");
-const totp = ref("");
-const error = ref("");
+const router = useRouter(), route = useRoute();
+const accessKey = ref("");
+const error = ref(route.query.rejected ? "访问密钥无效，请重新输入" : route.query.unavailable ? "暂时无法核验会话，请稍后重试" : "");
 const busy = ref(false);
 
 async function submit() {
+  // The field is consumed once, so the key does not stay in component state after submit.
+  const key = accessKey.value;
+  accessKey.value = "";
   error.value = "";
-  if (!email.value || !password.value || !/^\d{6}$/.test(totp.value)) {
-    error.value = "填写邮箱、密码和 6 位验证码";
+  if (!key) {
+    error.value = "请输入访问密钥";
     return;
   }
   busy.value = true;
   try {
-    const result = await request("POST", "/platform/auth/login", {
-      email: email.value,
-      password: password.value,
-      totp: totp.value,
-    });
-    session.set(result.data.session);
-    router.push("/platform/models");
+    await exchangeAccessKey(key);
+    await router.push("/org/tasks");
   } catch (exc) {
-    error.value = exc.status === 429 ? "失败次数过多，请 15 分钟后再试" : "邮箱、密码或验证码不正确";
-    totp.value = "";
+    error.value = exc.status === 401 ? "访问密钥无效，请重新输入" : errorText(exc);
   } finally {
     busy.value = false;
   }
@@ -38,14 +34,16 @@ async function submit() {
 <template>
   <el-card class="auth-card" shadow="always">
     <div class="auth-brand"><el-icon :size="20"><Coin /></el-icon>AI 标书工具</div>
-    <h2>平台后台登录</h2>
-    <p class="hint">平台运营人员使用，需要身份验证器中的 6 位验证码。</p>
+    <h2>输入访问密钥</h2>
+    <p class="hint">访问密钥在安装时配置，桌面应用打开本页时会自动完成登录。</p>
+    <ul class="auth-facts">
+      <li>本机单人使用：密钥只用于换取本机会话，不会上传到其他服务。</li>
+      <li>密钥保存在安装配置中；桌面应用通过 URL 片段传入，输入后立即从地址栏移除。</li>
+    </ul>
     <el-form label-position="top" @submit.prevent="submit">
-      <el-form-item label="邮箱"><el-input v-model="email" type="email" autocomplete="username" name="email" size="large" /></el-form-item>
-      <el-form-item label="密码"><el-input v-model="password" type="password" autocomplete="current-password" name="password" size="large" show-password /></el-form-item>
-      <el-form-item label="验证码"><el-input v-model="totp" inputmode="numeric" maxlength="6" autocomplete="one-time-code" name="totp" placeholder="身份验证器中的 6 位数字" size="large" /></el-form-item>
+      <el-form-item label="访问密钥"><el-input v-model="accessKey" type="password" autocomplete="off" name="access_key" size="large" show-password :prefix-icon="Key" /></el-form-item>
       <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
-      <el-button type="primary" native-type="submit" size="large" :loading="busy">登录</el-button>
+      <el-button type="primary" native-type="submit" size="large" :loading="busy">进入</el-button>
     </el-form>
   </el-card>
 </template>

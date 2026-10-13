@@ -10,11 +10,11 @@ from task_access_fixtures import new_task
 from task_fixtures import actor_context, confirm_requirements
 
 
-async def seed_scope(api, headers, admin_engine, *, count=1):
+async def seed_scope(api, headers, admin_engine, *, count=1, quote=None):
     task_id = UUID(await new_task(api, headers))
     document_id, job_id, chunk_id = uuid4(), uuid4(), uuid4()
     requirements = [uuid4() for _ in range(count)]
-    quotes = [f"Synthetic requirement {index + 1}." for index in range(count)]
+    quotes = [quote or f"Synthetic requirement {index + 1}." for index in range(count)]
     with Session(admin_engine) as session, session.begin():
         actor_context(session)
         session.add(
@@ -82,8 +82,8 @@ async def seed_scope(api, headers, admin_engine, *, count=1):
     }
 
 
-async def response_scope(api, headers, admin_engine, *, count=1):
-    scope = await seed_scope(api, headers, admin_engine, count=count)
+async def response_scope(api, headers, admin_engine, *, count=1, quote=None):
+    scope = await seed_scope(api, headers, admin_engine, count=count, quote=quote)
     with Session(admin_engine) as session, session.begin():
         confirm_requirements(session, scope["task_id"])
     created = await api.post(

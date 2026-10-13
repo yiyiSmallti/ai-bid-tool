@@ -58,7 +58,6 @@ def descriptor(html: bytes, wall_ms: int | None = None) -> RunDescriptor:
     return RunDescriptor(
         uuid4(),
         uuid4(),
-        uuid4(),
         hashlib.sha256(html).hexdigest(),
         "prototype_offline",
         budget_wall_ms=wall_ms,

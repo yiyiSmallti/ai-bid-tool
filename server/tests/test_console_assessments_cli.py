@@ -1,8 +1,6 @@
 """Console assessment CLI acceptance at the public CLI/ASGI boundary."""
 
 import json
-import os
-from pathlib import Path
 
 import pytest
 from app.schemas.contracts import Result
@@ -17,7 +15,6 @@ from test_score_cli import write_inputs
 def rubric_summary():
     return {
         "id": IDENTIFIER,
-        "org_id": IDENTIFIER,
         "task_id": IDENTIFIER,
         "extraction_job_id": IDENTIFIER_2,
         "document_id": IDENTIFIER,
@@ -158,7 +155,6 @@ def score_console_interface(requests, total_status="unavailable"):
 def report_header():
     return {
         "id": IDENTIFIER,
-        "org_id": IDENTIFIER,
         "task_id": IDENTIFIER,
         "job_id": IDENTIFIER,
         "extraction_job_id": IDENTIFIER_2,
@@ -214,7 +210,6 @@ def console_interface(requests, *, error_exit=None):
         if path.endswith("/assessment-inputs"):
             command = "assessment inputs"
             data = {
-                "org_id": IDENTIFIER,
                 "task_id": IDENTIFIER,
                 "extraction_job_id": IDENTIFIER_2,
                 "document_id": IDENTIFIER,
@@ -397,9 +392,7 @@ def test_check_console_cli_local_remote_snapshots(monkeypatch, tmp_path, capsys)
     for mode in ("local", "remote"):
         actual[mode] = {}
         for name, arguments in commands.items():
-            code, body = invoke(
-                ["--mode", mode, "--state", str(tmp_path / f"{mode}.enc"), *arguments], capsys
-            )
+            code, body = invoke(["--mode", mode, *arguments], capsys)
             assert code == (
                 5 if name.startswith("check ") and name != "check list console" else 0
             ), body
@@ -428,13 +421,11 @@ def test_check_console_cli_local_remote_snapshots(monkeypatch, tmp_path, capsys)
         "cursor": "first-page",
         "limit": "25",
     }
-    snapshot = Path(__file__).with_name("snapshots") / "console-check-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(
-            json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    assert actual == json.loads(snapshot.read_text(encoding="utf-8"))
+    artifact = tmp_path / "console-check-cli.json"
+    artifact.write_text(
+        json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    assert json.loads(artifact.read_text(encoding="utf-8")) == actual
 
 
 @pytest.mark.parametrize(
@@ -693,13 +684,11 @@ def test_rubric_console_cli_local_remote_snapshots(monkeypatch, tmp_path, capsys
     assert requests[7]["params"] == requests[8]["params"] == {"view": "console"}
     assert requests[7]["json"]["expected_input_hash"] == SHA
     assert requests[8]["json"]["expected_revision"] == 1
-    snapshot = Path(__file__).with_name("snapshots") / "console-rubric-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(
-            json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    assert actual == json.loads(snapshot.read_text(encoding="utf-8"))
+    artifact = tmp_path / "console-rubric-cli.json"
+    artifact.write_text(
+        json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    assert json.loads(artifact.read_text(encoding="utf-8")) == actual
 
 
 def test_rubric_console_schema_registers_exact_parts():
@@ -721,7 +710,7 @@ def test_rubric_console_schema_registers_exact_parts():
         )
 
 
-def test_score_console_cli_local_remote_snapshots(monkeypatch, capsys):
+def test_score_console_cli_local_remote_snapshots(monkeypatch, capsys, tmp_path):
     requests = []
     shared = ["--task", IDENTIFIER, "--report", IDENTIFIER]
     commands = {
@@ -780,13 +769,11 @@ def test_score_console_cli_local_remote_snapshots(monkeypatch, capsys):
         "cursor": "score-page",
         "limit": "25",
     }
-    snapshot = Path(__file__).with_name("snapshots") / "console-score-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(
-            json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    assert actual == json.loads(snapshot.read_text(encoding="utf-8"))
+    artifact = tmp_path / "console-score-cli.json"
+    artifact.write_text(
+        json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    assert json.loads(artifact.read_text(encoding="utf-8")) == actual
 
 
 def test_score_console_schema_registers_exact_parts():

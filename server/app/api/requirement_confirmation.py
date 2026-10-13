@@ -16,6 +16,7 @@ from app.schemas.requirement_confirmation import (
     RequirementDecision,
     ReviewPageQuery,
 )
+from app.services import requirement_confirmation as service
 
 
 def create_router(context, settings):
@@ -60,8 +61,6 @@ def create_router(context, settings):
         query: ReviewPageQuery = Depends(review_query),
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import requirement_confirmation as service
-
         data, items = await service.list_reviews(
             ctx[0], ctx[1], task_id, job_id, query, settings=settings
         )
@@ -73,8 +72,6 @@ def create_router(context, settings):
 
     @router.get("/requirements/{requirement_id}/review", response_model=Result)
     async def show(requirement_id: UUID, ctx=Depends(context, scope="function")):
-        from app.services import requirement_confirmation as service
-
         data = await service.show(ctx[0], ctx[1], requirement_id, settings=settings)
         return result("req show", data.model_dump(mode="json"))
 
@@ -84,8 +81,6 @@ def create_router(context, settings):
         query: PageQuery = Depends(page_query),
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import requirement_confirmation as service
-
         data, items = await service.history(
             ctx[0], ctx[1], requirement_id, query, settings=settings
         )
@@ -102,8 +97,6 @@ def create_router(context, settings):
         query: PageQuery = Depends(page_query),
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import requirement_confirmation as service
-
         data, items = await service.rejected(
             ctx[0], ctx[1], task_id, job_id, query, settings=settings
         )
@@ -121,8 +114,6 @@ def create_router(context, settings):
     async def preview(
         task_id: UUID, body: ManualRequirementInput, ctx=Depends(context, scope="function")
     ):
-        from app.services import requirement_confirmation as service
-
         data = await service.preview_manual(ctx[0], ctx[1], task_id, body, settings=settings)
         return result("req add", data.model_dump(mode="json"))
 
@@ -138,8 +129,6 @@ def create_router(context, settings):
         response: Response,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import requirement_confirmation as service
-
         data = await service.add_manual(ctx[0], ctx[1], task_id, body, settings=settings)
         response.status_code = 200 if data.replayed else 201
         return result("req add", data.model_dump(mode="json"))
@@ -148,8 +137,6 @@ def create_router(context, settings):
     async def decide(
         requirement_id: UUID, body: RequirementDecision, ctx=Depends(context, scope="function")
     ):
-        from app.services import requirement_confirmation as service
-
         data = await service.decide(ctx[0], ctx[1], requirement_id, body, settings=settings)
         return result(f"req {body.action}", data.model_dump(mode="json"))
 
@@ -162,8 +149,6 @@ def create_router(context, settings):
         body: RequirementConfirmBatch,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import requirement_confirmation as service
-
         data, items = await service.confirm_batch(
             ctx[0], ctx[1], task_id, job_id, body, settings=settings
         )

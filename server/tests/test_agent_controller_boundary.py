@@ -27,22 +27,16 @@ from app.services.auth import Identity, set_actor_context
 async def test_child_read_identity_cannot_publish_controller_receipts(
     monkeypatch, tmp_path, child_status
 ):
-    org_id, owner_id, principal_id, session_id, job_id, run_id, step_id, invocation_id = (
-        uuid4() for _ in range(8)
-    )
+    principal_id, session_id, job_id, run_id, step_id, invocation_id = (uuid4() for _ in range(6))
     scopes = {"task:read", "card:read", "draft:read", "job:read"}
     row = SimpleNamespace(
         id=session_id,
-        org_id=org_id,
-        owner_user_id=owner_id,
         principal_id=principal_id,
         task_id=uuid4(),
         extraction_job_id=uuid4(),
     )
     job = SimpleNamespace(
         id=job_id,
-        org_id=org_id,
-        actor_user_id=owner_id,
         kind="agent",
         run_id=run_id,
         agent_principal_id=principal_id,
@@ -60,10 +54,7 @@ async def test_child_read_identity_cannot_publish_controller_receipts(
     principal = SimpleNamespace(scopes=sorted(scopes))
     draft = SimpleNamespace(id=uuid4(), generation_job_id=uuid4(), input_hash="a" * 64)
     live = Identity(
-        owner_id,
-        org_id,
-        scopes,
-        "technical",
+        scopes=scopes,
         actor_kind="agent",
         principal_id=principal_id,
         session_id=session_id,
@@ -106,8 +97,7 @@ async def test_child_read_identity_cannot_publish_controller_receipts(
 
     class Database:
         @asynccontextmanager
-        async def transaction(self, org):
-            assert org == org_id
+        async def transaction(self):
             yield session
 
     async def current_fence(db, execution, *, step=None):
@@ -162,7 +152,7 @@ async def test_child_read_identity_cannot_publish_controller_receipts(
     monkeypatch.setattr(controller.agents, "add_message", publish)
     monkeypatch.setattr(drafts, "show_draft", show_draft)
     processor = SimpleNamespace(db=Database(), storage=None, settings=None, queue=None)
-    execution = SimpleNamespace(org_id=org_id, job_id=job_id, run_id=run_id)
+    execution = SimpleNamespace(job_id=job_id, run_id=run_id)
     if child_status == "completion":
         await controller.finish_goal(
             session,

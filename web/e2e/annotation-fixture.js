@@ -1,21 +1,22 @@
+import { SESSION_KEY } from "../src/session-storage.js";
 import { expect } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
-export const ids={org:id(1),task:id(2),user:id(3),card:id(4),extract:id(5),requirement:id(6),source:id(7),annotation:id(8),job:id(9),asset:id(10),rendition:id(11),document:id(12),releaseJob:id(13),release:id(14)};
+export const ids={task:id(2),card:id(4),extract:id(5),requirement:id(6),source:id(7),annotation:id(8),job:id(9),asset:id(10),rendition:id(11),document:id(12),releaseJob:id(13),release:id(14)};
 const png=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=","base64"),hash=createHash("sha256").update(png).digest("hex"),now="2026-10-06T12:00:00Z";
 const cost={ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 };
 const result=(command,data={},items=[],ok=true)=>({ok,command,data,items,warnings:[],cost,duration_ms:0});
 export async function annotationFixture(page,options={}){
   if(!process.env.E2E_STATIC_DIR)throw new Error("E2E_STATIC_DIR required; fixture starts no services");
   const directory=resolve(process.env.E2E_STATIC_DIR),state={requests:[],unexpected:[],submits:0,cardWrites:0,cancels:0,releaseRetries:0,images:0,maxImages:0,...options};
-  const boundary={org_id:ids.org,task_id:ids.task},source={id:ids.source,...boundary,task_certificate_id:id(20),certificate_id:id(21),certificate_revision_id:id(22),certificate_file_id:id(23),source_kind:"user_supplied_certificate_pdf",original:{name:"合成证书.pdf",sha256:hash,size_bytes:100,media_type:"application/pdf",page_count:1},page:1,render_profile:"pdf-page-preview-v1",dpi:150,preview:{name:"page.png",sha256:hash,size_bytes:png.length,media_type:"image/png",width_px:100,height_px:100},rendered_at:now,created_by:ids.user,active_selection:true,status:"unconfirmed_source",confirmed_by:null,eligible_for_draft_export:false};
+  const boundary={task_id:ids.task},source={id:ids.source,...boundary,task_certificate_id:id(20),certificate_id:id(21),certificate_revision_id:id(22),certificate_file_id:id(23),source_kind:"user_supplied_certificate_pdf",original:{name:"合成证书.pdf",sha256:hash,size_bytes:100,media_type:"application/pdf",page_count:1},page:1,render_profile:"pdf-page-preview-v1",dpi:150,preview:{name:"page.png",sha256:hash,size_bytes:png.length,media_type:"image/png",width_px:100,height_px:100},rendered_at:now,active_selection:true,status:"unconfirmed_source",confirmed_by:null,eligible_for_draft_export:false};
   const citation={document_id:ids.document,chunk_id:id(24),page:1,quote:"合成证书要求"};
   const card={id:ids.card,...boundary,extraction_job_id:ids.extract,requirement_id:ids.requirement,revision:1,revision_id:id(25),state:"draft",review_domain:"technical",disposition:null,origin:"human",actor_kind:"session",source:citation,content:{response_kind:"evidence",response_text:"",deviation:"none",deviation_note:"",evidence:[]},evidence:[],confirmed_by:null,confirmed_at:null,warning_codes:[],eligibility:options.requirementState==="unconfirmed"?"requirement_unconfirmed":"unconfirmed"};
   let target=null;
-  const candidate=()=>({id:ids.annotation,...boundary,job_id:ids.job,input_hash:hash,manifest:{org_id:ids.org,task_id:ids.task,target:target??{extraction_job_id:ids.extract,card_id:ids.card,expected_card_revision:1,source:{kind:"certificate_page",evidence_source_id:ids.source},plan:{crop:null,boxes:[]}}},asset_id:ids.asset,rendition_id:ids.rendition,rendering:{image:{sha256:hash,size_bytes:png.length,width_px:1024,height_px:(target?.plan.crop.height??100)+40},canvas:{width_px:1024,height_px:(target?.plan.crop.height??100)+40,mapping:{crop:target?.plan.crop??{x:0,y:0,width:100,height:100},content_offset_x:Math.floor((1024-(target?.plan.crop.width??100))/2),content_offset_y:0,content_width:target?.plan.crop.width??100,content_height:target?.plan.crop.height??100,footer_height:40}}},created_at:now,status:"unconfirmed_material",confirmed_by:null,eligible_for_draft_export:false});
-  await page.addInitScript(value=>sessionStorage.setItem("bid.org.session",JSON.stringify({orgId:value.org,session:"synthetic-session"})),ids);
+  const candidate=()=>({id:ids.annotation,...boundary,job_id:ids.job,input_hash:hash,manifest:{task_id:ids.task,target:target??{extraction_job_id:ids.extract,card_id:ids.card,expected_card_revision:1,source:{kind:"certificate_page",evidence_source_id:ids.source},plan:{crop:null,boxes:[]}}},asset_id:ids.asset,rendition_id:ids.rendition,rendering:{image:{sha256:hash,size_bytes:png.length,width_px:1024,height_px:(target?.plan.crop.height??100)+40},canvas:{width_px:1024,height_px:(target?.plan.crop.height??100)+40,mapping:{crop:target?.plan.crop??{x:0,y:0,width:100,height:100},content_offset_x:Math.floor((1024-(target?.plan.crop.width??100))/2),content_offset_y:0,content_width:target?.plan.crop.width??100,content_height:target?.plan.crop.height??100,footer_height:40}}},created_at:now,status:"unconfirmed_material",confirmed_by:null,eligible_for_draft_export:false});
+  await page.addInitScript(key=>sessionStorage.removeItem(key),SESSION_KEY);
   await page.route("**/*",async route=>{
     const req=route.request(),url=new URL(req.url()),path=url.pathname,method=req.method();
     if(url.origin!==new URL(process.env.E2E_BASE_URL??"http://127.0.0.1:8000").origin){state.unexpected.push("external-origin");return route.abort();}
@@ -24,10 +25,10 @@ export async function annotationFixture(page,options={}){
     state.requests.push({method,path,query:Object.fromEntries(url.searchParams),...(body?{body}: {})});
     let response;
     try{
-      expect(req.headers()["x-org-id"]).toBe(ids.org);
-      if(/\/annotations|\/annotation-releases/.test(path))expect(url.pathname.startsWith("/")).toBe(true);
-      if(method==="GET"&&path==="/org/current")response=result("org current",{org_id:ids.org,user_id:ids.user,role:options.role??"technical"});
-      else if(path===`/tasks/${ids.task}/progress`)response=result("task progress",{access: {role:options.taskRole??"contributor",review_domains:["technical"]},event_cursor:"opaque-snapshot",workflow:{...boundary,owner_user_id:ids.user,state:"active",revision:1,access_epoch:1,last_event_cursor:"opaque-seed"}});
+      if(req.headers().authorization)expect(req.headers().authorization).toBe("Bearer synthetic-session");
+      if(path==="/auth/session"&&method==="POST")return route.fulfill({json:result("auth session create",{session:"synthetic-session",expires_in:3600})});
+      if(path==="/auth/session")response=result("auth session show",{actor_kind:"session",scopes:[],expires_at:null});
+      else if(path===`/tasks/${ids.task}/progress`)response=result("task progress",{task_id:ids.task,event_cursor:"opaque-snapshot",as_of:now,next_cursor:null,returned:0,jobs:[]});
       else if(path===`/tasks/${ids.task}/events`)return route.fulfill({contentType:"text/event-stream",body:`data: ${JSON.stringify({type:"heartbeat",cursor:"opaque-seed"})}\n\n`});
       else if(path===`/tasks/${ids.task}/events/poll`)response=result("task events",{...boundary,next_cursor:"opaque-seed"});
       else if(path===`/cards/${ids.card}`&&method==="GET")response=result("card show",card);
@@ -56,7 +57,7 @@ export async function annotationFixture(page,options={}){
       else if(path===`/evidence-sources/${ids.source}/preview/download-link`)response=result("evidence source preview",{url:`/evidence-sources/${ids.source}/preview/download?signature=synthetic`,expires_in:300});
       else if((path.endsWith("/preview/download")||path.endsWith("/content"))){state.images++;state.maxImages=Math.max(state.maxImages,state.images);try{if(options.sourceDelay&&path.startsWith("/evidence-sources/"))await new Promise(resolve=>setTimeout(resolve,500));return await route.fulfill({contentType:"image/png",body:png});}finally{state.images--;}}
       else if(path===`/tasks/${ids.task}/annotations`&&method==="POST"){
-        expect(["owner","contributor"]).toContain(options.taskRole??"contributor");target=body.input;expect(target.source).toEqual({kind:"certificate_page",evidence_source_id:ids.source});expect(target.card_id).toBe(ids.card);
+        target=body.input;expect(target.source).toEqual({kind:"certificate_page",evidence_source_id:ids.source});expect(target.card_id).toBe(ids.card);
         if(body.dry_run)response=result("evidence stamp",{dry_run:true,input_hash:hash,manifest:{target,source:{source_png:{sha256:hash}}},predicted_output:{width_px:1024,height_px:target.plan.crop.height+40},blocker_codes:[]});
         else{state.submits++;expect(body.expected_input_hash).toBe(hash);expect(body.reviewed_source_png_sha256).toBe(hash);expect(body.request_id).toMatch(/^[a-f0-9-]{36}$/);if(options.conflict)return route.fulfill({status:409,json:result("evidence stamp",{error:{code:"annotation_input_changed",message:"Source changed",exit_code:2}},[],false)});response=result("evidence stamp",{job_id:ids.job,task_id:ids.task,card_id:ids.card,kind:"annotation_render",status:"queued",duplicate:false});}
       }

@@ -413,7 +413,7 @@ def _token_bounds(
     capability: _VisionCapability,
 ) -> tuple[int, int]:
     # Text keeps the existing byte-level bound. Image tokens come only from the verified
-    # catalog rule; encoded PNG length is deliberately removed before measuring text.
+    # capability rule; encoded PNG length is deliberately removed before measuring text.
     text_tokens = len(provider.serialized_request(_without_image_bytes(body))) + TEXT_FRAMING_TOKENS
     input_tokens = text_tokens + capability.token_bound.tokens(images)
     output_tokens = provider.output_token_bound(body)
@@ -457,7 +457,7 @@ def preview(
         "input_tokens": prepared.input_tokens,
         "output_tokens": prepared.output_tokens,
         "planned_calls": 1,
-        # Platform adapters embed model id and catalog revision in version.
+        # The provider version fixes the configured model and its capability settings.
         "catalog_identity": provider.version,
     }
 

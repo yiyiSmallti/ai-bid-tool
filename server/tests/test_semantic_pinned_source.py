@@ -32,23 +32,23 @@ RESPONSE = "我方投标设备配置64GB内存，型号参数表列明了该配�
 
 def source_case(case):
     if case == "repeat_outside":
-        return SOURCE, f"其他条款也提及{QUOTE}。\n{SOURCE}\n附件另列{QUOTE}。", QUOTE
+        return (SOURCE, f"其他条款也提及{QUOTE}。\n{SOURCE}\n附件另列{QUOTE}。", QUOTE)
     if case == "repeat_inside":
         source = f"技术评分：{QUOTE}；配置要求再次列明{QUOTE}。满足要求得5分。"
-        return source, source, QUOTE
+        return (source, source, QUOTE)
     if case == "outside_only":
         source = "技术评分条款：投标设备应配备32GB内存。符合条件得5分。"
-        return source, f"{source}\n其他条款：{QUOTE}。", QUOTE
+        return (source, f"{source}\n其他条款：{QUOTE}。", QUOTE)
     if case == "ambiguous_source":
-        return SOURCE, f"{SOURCE}\n重复条款：{SOURCE}", QUOTE
+        return (SOURCE, f"{SOURCE}\n重复条款：{SOURCE}", QUOTE)
     if case == "missing_source":
-        return SOURCE, f"另一个评分条款仅提及{QUOTE}，未包含固定条款。", QUOTE
+        return (SOURCE, f"另一个评分条款仅提及{QUOTE}，未包含固定条款。", QUOTE)
     if case == "source_boundary_preference":
         source = "5mm插孔，符合条件得5分。"
-        return source, f"其他规格：3.{source}\n{source}", "5mm插孔"
+        return (source, f"其他规格：3.{source}\n{source}", "5mm插孔")
     if case == "literal_repeat_inside":
         source = "技术评分：3.5mm插孔；5mm插孔。符合条件得5分。"
-        return source, source, "5mm插孔"
+        return (source, source, "5mm插孔")
     raise AssertionError(f"Unknown synthetic case: {case}")
 
 
@@ -89,7 +89,6 @@ async def test_semantic_citation_stays_within_pinned_source(
 ):
     source_text, full_location, citation_quote = source_case(case)
     response = RESPONSE if "5mm" not in citation_quote else "我方设备配备5mm插孔，参数表已列明。"
-
     if pipeline == "check":
         secret = input_case(response)
         source = pinned_source(secret["items"][0]["source"], document_format, source_text)
@@ -111,10 +110,7 @@ async def test_semantic_citation_stays_within_pinned_source(
         secret = fixed_secret(response=response)
         source = pinned_source(secret["items"][0]["source"], document_format, source_text)
         secret["items"][0] |= {"source": source, "tender_original": full_location}
-        secret["rubric"]["items"][0] |= {
-            "source": source,
-            "rule_text": "设备满足指定配置得5分。",
-        }
+        secret["rubric"]["items"][0] |= {"source": source, "rule_text": "设备满足指定配置得5分。"}
         wire = score_answer()
         wire["items"][0]["tender_citations"] = [{"ref": "s1.tender", "quote": citation_quote}]
         wire["items"][0]["draft_citations"] = [{"ref": "d1.response_text", "quote": citation_quote}]
@@ -128,7 +124,6 @@ async def test_semantic_citation_stays_within_pinned_source(
         assert evaluated[1]["outcome"] == "assessed"
         citations = row["citations"]
         tender_ref = "s1.tender"
-
     assert len(sent) == 1
     payload = json.loads(sent[0]["messages"][1]["content"])
     tender_text = next(text for text in payload["context"]["texts"] if text["ref"] == tender_ref)
@@ -140,7 +135,6 @@ async def test_semantic_citation_stays_within_pinned_source(
         assert tender["source"] == {**source, "quote": citation_quote}
     else:
         assert citations == []
-
     artifact = tmp_path / "pinned-source-semantic.json"
     artifact.write_text(
         json.dumps(
@@ -183,7 +177,6 @@ async def test_semantic_tender_ref_excludes_summary_and_location(tmp_path, pipel
     source = pinned_source(secret["items"][0]["source"], "docx", source_text)
     source["location"]["label"] = f"技术评分摘要：{QUOTE}"
     secret["items"][0] |= {"source": source, "tender_original": source_text}
-
     if pipeline == "check":
         candidate = check_answer()
         candidate["citations"] = [
@@ -196,7 +189,7 @@ async def test_semantic_tender_ref_excludes_summary_and_location(tmp_path, pipel
         assert row["semantic_reason_code"] == reason
         assert row["semantic_status"] == ("assessed" if reason is None else "unassessed")
         citations = row["semantic_citations"]
-        tender_ref, metadata_ref = "r1.tender", "r1.location"
+        tender_ref, metadata_ref = ("r1.tender", "r1.location")
     else:
         secret["rubric"]["items"][0] |= {
             "source": source,
@@ -211,8 +204,7 @@ async def test_semantic_tender_ref_excludes_summary_and_location(tmp_path, pipel
         assert row["reason_code"] == ("supported" if reason is None else reason)
         assert row["outcome"] == ("assessed" if reason is None else "unassessable")
         citations = row["citations"]
-        tender_ref, metadata_ref = "s1.tender", "s1.rule"
-
+        tender_ref, metadata_ref = ("s1.tender", "s1.rule")
     payload = json.loads(sent[0]["messages"][1]["content"])
     texts = {text["ref"]: text["text"] for text in payload["context"]["texts"]}
     assert texts[tender_ref] == source_text
@@ -223,7 +215,6 @@ async def test_semantic_tender_ref_excludes_summary_and_location(tmp_path, pipel
         assert tender["source"] == {**source, "quote": QUOTE}
     else:
         assert citations == []
-
     artifact = tmp_path / "sent-source-semantic.json"
     artifact.write_text(
         json.dumps(

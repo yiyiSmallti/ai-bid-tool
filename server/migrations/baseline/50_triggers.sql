@@ -674,7 +674,7 @@ CREATE TRIGGER response_evidence_gate BEFORE INSERT OR DELETE OR UPDATE ON publi
 CREATE CONSTRAINT TRIGGER response_generation_revision_gate AFTER INSERT ON public.response_card_revisions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.response_generation_revision_gate();
 
 -- TRIGGER: response_items response_item_complete
-CREATE CONSTRAINT TRIGGER response_item_complete AFTER INSERT ON public.response_items DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.response_item_gate();
+CREATE CONSTRAINT TRIGGER response_item_complete AFTER INSERT ON public.response_items DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.response_item_complete();
 
 -- TRIGGER: response_items response_item_gate
 CREATE TRIGGER response_item_gate BEFORE INSERT ON public.response_items FOR EACH ROW EXECUTE FUNCTION public.response_item_gate();
@@ -1905,6 +1905,30 @@ CREATE CONSTRAINT TRIGGER zz_annotation_publication_complete AFTER INSERT ON pub
 
 -- TRIGGER: requirement_review_events zz_annotation_requirement_dependency
 CREATE TRIGGER zz_annotation_requirement_dependency AFTER INSERT ON public.requirement_review_events FOR EACH ROW EXECUTE FUNCTION public.annotation_dependency_event();
+
+-- TRIGGER: requirements zz_annotation_dependency
+CREATE TRIGGER zz_annotation_dependency AFTER INSERT OR DELETE OR UPDATE ON public.requirements FOR EACH ROW EXECUTE FUNCTION public.annotation_dependency_event();
+
+-- TRIGGER: chunks zz_annotation_dependency
+CREATE TRIGGER zz_annotation_dependency AFTER INSERT OR DELETE OR UPDATE ON public.chunks FOR EACH ROW EXECUTE FUNCTION public.annotation_dependency_event();
+
+-- TRIGGER: task_resources zz_annotation_dependency
+CREATE TRIGGER zz_annotation_dependency AFTER INSERT OR DELETE OR UPDATE ON public.task_resources FOR EACH ROW EXECUTE FUNCTION public.annotation_dependency_event();
+
+-- TRIGGER: task_features zz_annotation_dependency
+CREATE TRIGGER zz_annotation_dependency AFTER INSERT OR DELETE OR UPDATE ON public.task_features FOR EACH ROW EXECUTE FUNCTION public.annotation_dependency_event();
+
+-- TRIGGER: task_certificates zz_annotation_dependency
+CREATE TRIGGER zz_annotation_dependency AFTER INSERT OR DELETE OR UPDATE ON public.task_certificates FOR EACH ROW EXECUTE FUNCTION public.annotation_dependency_event();
+
+-- TRIGGER: task_org_profiles zz_annotation_dependency
+CREATE TRIGGER zz_annotation_dependency AFTER INSERT OR DELETE OR UPDATE ON public.task_org_profiles FOR EACH ROW EXECUTE FUNCTION public.annotation_dependency_event();
+
+-- TRIGGER: screenshot_withdrawals zz_annotation_dependency
+CREATE TRIGGER zz_annotation_dependency AFTER INSERT ON public.screenshot_withdrawals FOR EACH ROW EXECUTE FUNCTION public.annotation_dependency_event();
+
+-- TRIGGER: response_cards zz_annotation_dependency
+CREATE CONSTRAINT TRIGGER zz_annotation_dependency AFTER UPDATE ON public.response_cards DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.annotation_dependency_event();
 
 -- TRIGGER: attachment_files zz_attachment_file_guard
 CREATE TRIGGER zz_attachment_file_guard AFTER INSERT ON public.attachment_files FOR EACH ROW EXECUTE FUNCTION public.attachment_revision_guard();

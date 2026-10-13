@@ -5,26 +5,25 @@ foreign task/job/asset/rendition/run/decision access; token privacy release;
 wrong hash or image kind; footer-region observations; stale preflight;
 withdrawal between admission/publication; unknown vendor refs; missing provider configuration;
 paid invalid model output; batch decision omissions and changed card revisions.
-Database scenarios use the actual tenant API and Processor. No real vendor calls.
+Database scenarios use the actual installation API and Processor. No real vendor calls.
 """
 
 import asyncio
 import hashlib
 import json
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import httpx
 import pytest
 from app.api.screenshots import memory_upload
 from app.core.errors import ServiceError
-from app.schemas.screenshot_contracts import ImagePlan, ScreenshotIngest, UploadSource
+from app.schemas.screenshot_contracts import ImagePlan
 from app.services import screenshots
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from test_response_cards import create_tender, phase_one_client
 from test_screenshot_cards import ingest_synthetic_screenshot, selected_feature
-from test_screenshot_renderer import _rgb_png
 
 
 @pytest.fixture
@@ -105,92 +104,9 @@ async def test_memory_ingest_parser_never_uses_framework_temporary_files(parser_
             assert result.status_code in {400, 413}
 
 
-async def test_all_screenshot_routes_reject_foreign_org(tenants, tmp_path):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        task, _, extraction, requirements = await create_tender(
-            api, app, headers[1], tmp_path, suffix="foreign-images"
-        )
-        feature = await selected_feature(api, headers[1], task)
-        stored = await ingest_synthetic_screenshot(api, headers[1], task, extraction, feature["id"])
-        asset, rendition = stored["asset"], stored["rendition"]
-        for method, path, payload in (
-            ("GET", f"/tasks/{task}/screenshots?job={extraction}", None),
-            ("GET", f"/screenshots/{asset['id']}", None),
-            (
-                "POST",
-                f"/screenshots/{asset['id']}/withdrawals",
-                {"reason": "Synthetic isolation check"},
-            ),
-            ("POST", f"/screenshot-renditions/{rendition['id']}/preview-link", None),
-            ("GET", f"/screenshot-renditions/{rendition['id']}/content?signature=invalid", None),
-            (
-                "POST",
-                f"/screenshots/{asset['id']}/renditions",
-                {
-                    "parent_rendition_id": rendition["id"],
-                    "expected_image_sha256": rendition["image"]["sha256"],
-                    "plan": {},
-                    "dry_run": True,
-                },
-            ),
-            (
-                "POST",
-                f"/tasks/{task}/prototype-decisions/preview",
-                {
-                    "extraction_job_id": extraction,
-                    "module_label": "Synthetic",
-                    "task_feature_ids": [feature["id"]],
-                },
-            ),
-            ("GET", f"/tasks/{task}/prototype-decisions?job={extraction}", None),
-            ("GET", f"/screenshot-analyses/{uuid4()}/suggestions", None),
-        ):
-            response = await api.request(method, path, headers=headers[0], json=payload)
-            assert response.status_code == 404, (path, response.text)
-        # A fully valid foreign receipt must also fail at the task/source boundary.
-        png, prepared = await screenshots.prepare(
-            _rgb_png(2, 2, [(10, 20, 30)] * 4),
-            UploadSource(
-                kind="upload",
-                task_feature_id=UUID(feature["id"]),
-                image_kind="diagram",
-                source_label="Synthetic",
-                software_version="1",
-                environment="test",
-            ),
-            ImagePlan(),
-        )
-        body = ScreenshotIngest(
-            extraction_job_id=UUID(extraction),
-            prepared=prepared,
-            reviewed_upload_sha256=prepared.image.sha256,
-            idempotency_key=uuid4(),
-        )
-        denied = await api.post(
-            f"/tasks/{task}/screenshots",
-            headers=headers[0],
-            files={"file": ("safe.png", png, "image/png"), "input": (None, body.model_dump_json())},
-        )
-        assert denied.status_code == 404
-        artifact = Path("data/work/screenshots/api-isolation.json")
-        artifact.parent.mkdir(parents=True, exist_ok=True)
-        await asyncio.to_thread(
-            artifact.write_text,
-            json.dumps(
-                {
-                    "task_id": task,
-                    "asset_id": asset["id"],
-                    "image_sha256": rendition["image"]["sha256"],
-                    "foreign_access": "rejected",
-                },
-                indent=2,
-            ),
-        )
-
-
-async def test_image_jobs_preview_download_derivation_and_withdrawal(tenants, tmp_path):
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+async def test_image_jobs_preview_download_derivation_and_withdrawal(database, tmp_path):
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         task, _, extraction, _ = await create_tender(
             api, app, header, tmp_path, suffix="render-job"
         )
@@ -220,7 +136,7 @@ async def test_image_jobs_preview_download_derivation_and_withdrawal(tenants, tm
         )
         assert response.status_code == 200, response.text
         job_id = response.json()["data"]["job_id"]
-        await app.state.processor(header["X-Org-Id"], job_id)
+        await app.state.processor(job_id)
         completed = (await api.get(f"/jobs/{job_id}", headers=header)).json()["data"]
         assert completed["status"] == "succeeded", completed
         derived = completed["result"]["rendition"]

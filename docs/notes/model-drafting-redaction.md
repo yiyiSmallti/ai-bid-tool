@@ -3,7 +3,7 @@
 ## Problem
 
 A model needs enough selected material to propose a response without receiving
-unrelated tenant data or private values that the task has not authorized for
+data from unrelated tasks or private values that the task has not authorized for
 outbound use. Its citations must describe material it actually saw. A model
 response is neither an authenticated document nor a human review.
 
@@ -34,9 +34,9 @@ paths, credentials, templates or memory are attached.
 Original PDF bytes are checked against their stored hash and length before local
 page text extraction. A selected page with no text is listed by source ID as
 `page_text_unavailable`; it never triggers OCR or image upload. Snapshot text is
-encrypted with `Secrets` and protected by tenant RLS. The public manifest and
+encrypted with `Secrets` and bound to its generation job. The public manifest and
 dry-run contain IDs, text/location hashes, redaction state and revision, rule
-version, model/catalog/reasoning identity and hit counts. They contain no text
+version, provider configuration/model/reasoning identity and hit counts. They contain no text
 values. Preview performs the same read authorization and no writes or calls.
 
 ### Outbound rules
@@ -68,7 +68,7 @@ expose the remainder of a labelled value. Counts are rule detections before
 overlap merging, grouped by category; they are not counts of unique people or
 accounts. The same detection counts are reported when masking is disabled.
 
-The task switch defaults on. Only a human org admin can change it through the
+The task switch defaults on. Only the installation human can change it through the
 revision-checked, audited task setting. The job fixes that revision at submission
 and checks it before every admitted call, including retries and halves. A changed
 revision stops further calls and requires a fresh submission. A disabled switch
@@ -125,7 +125,7 @@ vendor error strings at the HTTP boundary before they can reach job errors.
   that still produces malformed/truncated output fails explicitly. Large selected
   materials may require choosing a smaller resource set.
 - A masked quote cannot become evidence of the original private value. Turning
-  masking off is a separate human admin decision, not automatic retry behavior.
+  masking off is a separate human decision, not automatic retry behavior.
 - Already admitted calls can finish after cancellation or a setting change and
   still incur usage. Their accounting and publication fences are separate.
 

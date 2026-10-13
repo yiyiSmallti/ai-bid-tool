@@ -25,9 +25,7 @@ def create_router(context, settings):
         started = time.monotonic()
         page = await management.query(ctx[0], ctx[1], body, settings)
         return management.page_result(
-            "memory browse",
-            page,
-            round((time.monotonic() - started) * 1000),
+            "memory browse", page, round((time.monotonic() - started) * 1000)
         )
 
     @router.get("/{memory_id}", name="management_memory_show", response_model=Result)
@@ -43,9 +41,7 @@ def create_router(context, settings):
             ctx[0], ctx[1], memory_id, ResourceDetailQuery(revision=revision), settings
         )
         return management.detail_result(
-            "memory show",
-            value,
-            round((time.monotonic() - started) * 1000),
+            "memory show", value, round((time.monotonic() - started) * 1000)
         )
 
     @router.post(
@@ -59,9 +55,7 @@ def create_router(context, settings):
         started = time.monotonic()
         page = await management.history(ctx[0], ctx[1], memory_id, body, settings)
         return management.page_result(
-            "memory history",
-            page,
-            round((time.monotonic() - started) * 1000),
+            "memory history", page, round((time.monotonic() - started) * 1000)
         )
 
     return router

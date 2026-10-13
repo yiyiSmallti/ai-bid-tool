@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { orgRequest } from "../org.js";
+import { request } from "../api.js";
 import { reviewError } from "../bid-review.js";
-const props = defineProps({ taskId: String, submissionId: String, reviewId: String, allowed: Boolean, authorizationEpoch: Number });
+const props = defineProps({ taskId: String, submissionId: String, reviewId: String, authorizationEpoch: Number });
 const emit = defineEmits(["changed"]);
 const preview = ref(null), selected = ref([]), pixels = ref({}), consent = ref(false), reason = ref(""), busy = ref(false), error = ref("");
 const path = computed(() => `/bid-submissions/${encodeURIComponent(props.submissionId)}`);
@@ -25,7 +25,7 @@ async function show(data, token) {
   // Fetch exact authenticated JPEG bytes, then verify the authorized hash before
   // showing any pixels. No remote URL or authorization token enters an img tag.
   for (const image of data.images) {
-    const blob = await orgRequest("GET", `/bid-presence-images/${encodeURIComponent(image.id)}/content`, undefined, { signal: controller.signal, binary: true });
+    const blob = await request("GET", `/bid-presence-images/${encodeURIComponent(image.id)}/content`, undefined, { signal: controller.signal, binary: true });
     if (token !== epoch) return;
     if (blob.type !== "image/jpeg" || blob.size !== image.size_bytes) throw new Error("presence derivative size mismatch");
     const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
@@ -39,19 +39,19 @@ async function show(data, token) {
 }
 async function load() {
   const token = ++epoch; controller?.abort(); controller = new AbortController(); clear(); error.value = ""; busy.value = true;
-  try { if (props.allowed) await show((await orgRequest("GET", `${path.value}/presence-preview`, undefined, { signal: controller.signal })).data, token); }
+  try { await show((await request("GET", `${path.value}/presence-preview`, undefined, { signal: controller.signal })).data, token); }
   catch (exc) { if (token === epoch && exc.name !== "AbortError") { clearPixels(); emit("changed", null); error.value = reviewError(exc); } }
   finally { if (token === epoch) busy.value = false; }
 }
 async function prepare() {
-  const token = epoch; if (!props.allowed || busy.value) return;
+  const token = epoch; if (busy.value) return;
   busy.value = true; error.value = "";
-  try { await show((await orgRequest("POST", `${path.value}/presence-preparations`, { review_id: props.reviewId }, { signal: controller.signal })).data, token); emit("changed", null); }
+  try { await show((await request("POST", `${path.value}/presence-preparations`, { review_id: props.reviewId }, { signal: controller.signal })).data, token); emit("changed", null); }
   catch (exc) { if (token === epoch && exc.name !== "AbortError") { clearPixels(); emit("changed", null); error.value = reviewError(exc); } }
   finally { if (token === epoch) busy.value = false; }
 }
 async function authorize(allowExternal) {
-  if (!props.allowed || busy.value || !preview.value || !reason.value.trim()) return;
+  if (busy.value || !preview.value || !reason.value.trim()) return;
   if (allowExternal && (!sourceMatches.value || !consent.value || !chosen.value.length || preview.value.blockers.length || Object.keys(pixels.value).length !== preview.value.images.length)) return;
   if (!allowExternal && !preview.value.revocable_authorization) return;
   const token = epoch, fixed = preview.value;
@@ -59,23 +59,23 @@ async function authorize(allowExternal) {
   const body = { request_id: crypto.randomUUID(), expected_revision: fixed.expected_revision, expected_authorization_id: fixed.expected_authorization_id, manifest_sha256: receipt.manifest_sha256, image_ids: allowExternal ? chosen.value.map(image => image.id) : receipt.image_ids, privacy_reviewed: true, allow_external: allowExternal, reason: reason.value.trim() };
   busy.value = true; error.value = "";
   try {
-    const result = await orgRequest("POST", `${path.value}/presence-authorizations`, body, { signal: controller.signal });
+    const result = await request("POST", `${path.value}/presence-authorizations`, body, { signal: controller.signal });
     if (token !== epoch) return;
     if (result.data.purpose !== "bid_review_presence" || result.data.manifest_sha256 !== receipt.manifest_sha256 || result.data.allow_external !== allowExternal) throw new Error("presence authorization mismatch");
     emit("changed", allowExternal ? result.data.id : null); await load();
   } catch (exc) { if (token === epoch && exc.name !== "AbortError") { consent.value = false; error.value = reviewError(exc); } }
   finally { if (token === epoch) busy.value = false; }
 }
-watch(() => [props.submissionId, props.reviewId, props.allowed, props.authorizationEpoch], load, { immediate: true });
+watch(() => [props.submissionId, props.reviewId, props.authorizationEpoch], load, { immediate: true });
 watch(selected, () => { consent.value = false; }, { deep: true });
 onBeforeUnmount(() => { epoch++; controller?.abort(); clear(); });
 </script>
 <template>
   <el-card class="section" shadow="never"><template #header><h3>签章初筛图片授权</h3></template>
     <p>只从本次检验已确认的签章目标页生成全页模糊 JPEG。请逐页核对下方实际外发像素，确认文字、印章名称和身份信息均不可读。报价页及未确认目标页禁止外发。</p>
-    <p>此授权仅用于签章存在性初筛（bid_review_presence），与文本授权分开。准备、脱敏、服务配置或授权人职责变化后需要重新核对。</p>
+    <p>此授权仅用于签章存在性初筛（bid_review_presence），与文本授权分开。准备、脱敏或服务配置变化后需要重新核对。</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
-    <el-button :loading="busy" :disabled="!allowed" @click="prepare">生成本次目标页模糊图片</el-button>
+    <el-button :loading="busy" @click="prepare">生成本次目标页模糊图片</el-button>
     <el-button :disabled="busy" @click="load">刷新图片授权</el-button>
     <template v-if="preview">
       <p role="status">{{ preview.current ? '图片授权有效' : '图片尚未授权或授权已失效' }}</p>

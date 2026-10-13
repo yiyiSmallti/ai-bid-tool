@@ -40,8 +40,7 @@ REVIEW = {
 
 
 def test_annotation_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
-    monkeypatch.setenv("BID_SESSION", "synthetic-session")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-installation-access-key")
     calls, snapshots = ([], {})
     scenario = "queued"
 

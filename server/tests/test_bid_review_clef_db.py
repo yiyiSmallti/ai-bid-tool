@@ -20,8 +20,8 @@ from app.models.entities import UsageRecord, VendorCall
 from app.providers.clef import HTTPClefProvider
 from app.providers.clef_gateway import HTTPGatewayChecker
 from app.schemas.clef import ClefCheckRequest, ClefSettingsSet
-from app.schemas.platform_credentials import CredentialSetActive, PlatformOperator
-from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
+from app.schemas.platform_credentials import CredentialSetActive
+from app.services.auth import HUMAN_SCOPES, Identity, set_actor_context
 from app.services.platform_clef import PlatformClefService
 from app.services.platform_credentials import PlatformCredentialService
 from conftest import seed_platform_credential
@@ -36,6 +36,7 @@ from test_bid_review_run_db import (
     authorize,
     data,
     document,
+    install_resolver,
     preview,
     review_case,
     review_llm,
@@ -45,7 +46,6 @@ from test_bid_review_run_db import (
 from test_bid_review_upload_db import PDF, run, task, upload
 from test_bid_review_upload_db import preview as prepare_preview
 from test_bid_review_upload_db import submit as prepare_submit
-from test_check_combined import install_resolver
 
 WORKERS_TOKEN = "synthetic-clef-workers-token"
 GATEWAY_TOKEN = "synthetic-clef-gateway-token"
@@ -167,10 +167,12 @@ async def configure(application, monkeypatch, *, unsafe=False):
         endpoint="https://api.cloudflare.com/client/v4",
         key=GATEWAY_TOKEN,
     )
-    actor = PlatformOperator("fixture@example.test", datetime.now(UTC) + timedelta(minutes=30))
+    actor = Identity(scopes=set(HUMAN_SCOPES))
     fake = Gateway(unsafe=unsafe)
     service = PlatformClefService(
-        settings, checker=HTTPGatewayChecker(transport=httpx.MockTransport(fake))
+        settings,
+        application.state.db,
+        checker=HTTPGatewayChecker(transport=httpx.MockTransport(fake)),
     )
     saved = await service.set(
         actor,
@@ -202,7 +204,6 @@ async def source_case(
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
     *,
@@ -211,12 +212,10 @@ async def source_case(
 ):
     vendor = ReviewVendor(applicability=applicability)
     if bid_pages == 1:
-        case = await review_case(
-            api, headers, application, tenants, tmp_path, monkeypatch, vendor=vendor
-        )
+        case = await review_case(api, headers, application, tmp_path, monkeypatch, vendor=vendor)
     else:
-        task_id = await task(api, headers[0])
-        llm = await review_llm(api, headers[0], tmp_path, vendor)
+        task_id = await task(api, headers)
+        llm = await review_llm(api, headers, tmp_path, vendor)
         install_resolver(monkeypatch, llm)
         files = [
             ("synthetic-tender.pdf", PDF, document([SAFE_CLAUSE + "\n" + SIGNING])),
@@ -229,17 +228,16 @@ async def source_case(
                 ),
             ),
         ]
-        uploaded = data(await upload(api, headers[0], task_id, files))
-        prepared = data(await prepare_preview(api, headers[0], task_id, uploaded["id"]))
-        preparation = data(await prepare_submit(api, headers[0], task_id, uploaded["id"], prepared))
-        await run(application, tenants["orgs"][0], preparation["job_id"])
+        uploaded = data(await upload(api, headers, task_id, files))
+        prepared = data(await prepare_preview(api, headers, task_id, uploaded["id"]))
+        preparation = data(await prepare_submit(api, headers, task_id, uploaded["id"], prepared))
+        await run(application, preparation["job_id"])
         case = {"task": task_id, "submission": uploaded["id"], "vendor": vendor}
-        await authorize(api, headers[0], case)
-    receipt = data(await preview(api, headers[0], case))
-    accepted = data(await submit(api, headers[0], case, receipt))
-    assert (await terminal(api, headers[0], application, tenants["orgs"][0], accepted))[
-        "status"
-    ] == "succeeded"
+        await authorize(api, headers, case)
+    receipt = data(await preview(api, headers, case))
+    accepted = data(await submit(api, headers, case, receipt))
+    finished = await terminal(api, headers, application, accepted)
+    assert finished["status"] == "succeeded", finished.get("error", finished)
     case["source_review"] = accepted["review_id"]
     return case
 
@@ -279,8 +277,8 @@ async def authorize_images(api, header, case, *, expected_images=1, subset=False
     return grant
 
 
-async def ledger(application, org, accepted):
-    async with application.state.db.transaction(org) as session:
+async def ledger(application, accepted):
+    async with application.state.db.transaction() as session:
         return (
             list(
                 (
@@ -307,14 +305,14 @@ async def ledger(application, org, accepted):
 
 @pytest.mark.parametrize("failure", [None, "429", "timeout", "malformed", "always_429"])
 async def test_exact_blurred_gateway_call_fixed_settlement_and_human_triage(
-    api, headers, application, tenants, tmp_path, monkeypatch, admin_engine, failure
+    api, headers, application, tmp_path, monkeypatch, failure
 ):
-    case = await source_case(api, headers, application, tenants, tmp_path, monkeypatch)
+    case = await source_case(api, headers, application, tmp_path, monkeypatch)
     await configure(application, monkeypatch)
-    await authorize_images(api, headers[0], case)
+    await authorize_images(api, headers, case)
     vendor = ClefVendor(failure=failure)
     install_vendor(monkeypatch, vendor)
-    receipt = data(await preview(api, headers[0], case))
+    receipt = data(await preview(api, headers, case))
     assert receipt["input"]["clef_enabled"] is True
     assert receipt["input"]["clef"]["available"] is True
     assert "binding" not in receipt["input"]["clef"] and "images" not in receipt["input"]["clef"]
@@ -322,10 +320,10 @@ async def test_exact_blurred_gateway_call_fixed_settlement_and_human_triage(
     assert "gateway_credential_id" not in json.dumps(receipt)
     assert receipt["input"]["clef"]["planned_calls"] == 1
     assert not vendor.requests
-    accepted = data(await submit(api, headers[0], case, receipt))
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
-    assert finished["status"] == "succeeded", finished
-    calls, usages = await ledger(application, tenants["orgs"][0], accepted)
+    accepted = data(await submit(api, headers, case, receipt))
+    finished = await terminal(api, headers, application, accepted)
+    assert finished["status"] == "succeeded", finished.get("error", finished)
+    calls, usages = await ledger(application, accepted)
     expected_calls = 40 if failure == "always_429" else 2 if failure == "429" else 1
     assert len(calls) == len(vendor.requests) == expected_calls
     assert vendor.maximum_active <= 3
@@ -345,7 +343,7 @@ async def test_exact_blurred_gateway_call_fixed_settlement_and_human_triage(
     detail = data(
         await api.get(
             f"/v4/bid-reviews/{accepted['review_id']}",
-            headers=headers[0],
+            headers=headers,
             params={"section": "signing_requirements"},
         )
     )
@@ -371,7 +369,7 @@ async def test_exact_blurred_gateway_call_fixed_settlement_and_human_triage(
         assert all(location["status"] == "unresolved" for location in locations)
     report = await api.get(
         f"/v4/bid-reviews/{accepted['review_id']}/report",
-        headers=headers[0],
+        headers=headers,
         params={"section": "signatures"},
     )
     assert report.status_code == 200 and "需人工确认" in report.text
@@ -379,16 +377,16 @@ async def test_exact_blurred_gateway_call_fixed_settlement_and_human_triage(
         from test_bid_review_report_db import docx_text, render
 
         case["review"] = accepted["review_id"]
-        rendered, _ = await render(api, headers[0], application, tenants["orgs"][0], case)
+        rendered, _ = await render(api, headers, application, case)
         descriptor = next(
             item for item in rendered["result"]["artifacts"] if item["format"] == "docx"
         )
         link = data(
             await api.get(
-                f"/v4/bid-review-artifacts/{descriptor['id']}/download-link", headers=headers[0]
+                f"/v4/bid-review-artifacts/{descriptor['id']}/download-link", headers=headers
             )
         )
-        download = await api.get(link["url"], headers=headers[0])
+        download = await api.get(link["url"], headers=headers)
         assert download.status_code == 200
         content = docx_text(download.content)
         assert "初筛疑似缺失" in content and "需人工确认" in content
@@ -426,79 +424,53 @@ async def test_clef_unavailable_or_opt_out_preserves_run_and_explicit_coverage(
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
-    admin_engine,
     blocked,
 ):
-    case = await source_case(api, headers, application, tenants, tmp_path, monkeypatch)
+    case = await source_case(api, headers, application, tmp_path, monkeypatch)
     if blocked != "unconfigured":
         actor, checked, workers, gateway = await configure(
             application, monkeypatch, unsafe=blocked == "gateway_unsafe"
         )
         if blocked in {"workers_missing", "gateway_missing"}:
             target = workers if blocked == "workers_missing" else gateway
-            await PlatformCredentialService(Settings()).set_active(
+            await PlatformCredentialService(Settings(), application.state.db).set_active(
                 actor,
                 target.id,
                 CredentialSetActive(expected_revision=1, active=False, reason="incident"),
             )
         if blocked == "opt_out":
-            await authorize_images(api, headers[0], case)
+            await authorize_images(api, headers, case)
     vendor = ClefVendor()
     install_vendor(monkeypatch, vendor)
     options = {"clef_enabled": False} if blocked == "opt_out" else {}
-    receipt = data(await preview(api, headers[0], case, **options))
+    receipt = data(await preview(api, headers, case, **options))
     assert not receipt["input"]["clef"]["available"]
     assert not receipt["admission_blockers"], receipt
-    accepted = data(await submit(api, headers[0], case, receipt, **options))
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
-    assert finished["status"] == "succeeded", finished
-    detail = data(await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers[0]))
+    accepted = data(await submit(api, headers, case, receipt, **options))
+    finished = await terminal(api, headers, application, accepted)
+    assert finished["status"] == "succeeded", finished.get("error", finished)
+    detail = data(await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers))
     assert detail["run"]["coverage"]["clef"] == (
         "disabled" if blocked == "opt_out" else "unavailable"
     )
     assert not vendor.requests
-    assert await ledger(application, tenants["orgs"][0], accepted) == ([], [])
+    assert await ledger(application, accepted) == ([], [])
 
 
-async def test_presence_pixels_are_not_disclosed_cross_org_or_to_tokens(
+async def test_presence_pixels_are_not_disclosed_to_tokens(
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
 ):
-    case = await source_case(api, headers, application, tenants, tmp_path, monkeypatch)
+    case = await source_case(api, headers, application, tmp_path, monkeypatch)
     await configure(application, monkeypatch)
-    await authorize_images(api, headers[0], case)
+    await authorize_images(api, headers, case)
     image_id = case["presence"]["images"][0]["id"]
     path = f"/v4/bid-presence-images/{image_id}/content"
-    assert (await api.get(path, headers=headers[1])).status_code == 404
-    for endpoint, body in (
-        ("presence-preview", None),
-        ("presence-preparations", {"review_id": case["source_review"]}),
-        (
-            "presence-authorizations",
-            {
-                "request_id": str(uuid4()),
-                "expected_revision": 2,
-                "manifest_sha256": case["presence"]["manifest_sha256"],
-                "image_ids": [image_id],
-                "privacy_reviewed": True,
-                "reason": "Synthetic foreign authorization",
-            },
-        ),
-    ):
-        url = f"/v4/bid-submissions/{case['submission']}/{endpoint}"
-        response = (
-            await api.get(url, headers=headers[1])
-            if body is None
-            else await api.post(url, headers=headers[1], json=body)
-        )
-        assert response.status_code == 404
     from app.models.bid_review_presence import (
         BidPresenceAuthorization,
         BidPresenceImage,
@@ -511,14 +483,12 @@ async def test_presence_pixels_are_not_disclosed_cross_org_or_to_tokens(
         BidPresenceAuthorization,
         BidPresenceAuthorizedImage,
     ):
-        async with application.state.db.transaction(tenants["orgs"][0]) as session:
+        async with application.state.db.transaction() as session:
             assert (await session.scalars(select(model))).first() is not None
-        async with application.state.db.transaction(tenants["orgs"][1]) as session:
-            assert (await session.scalars(select(model))).first() is None
     issued = data(
         await api.post(
             "/v4/tokens",
-            headers=headers[0],
+            headers=headers,
             json={
                 "name": "Synthetic Clef token",
                 "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
@@ -526,31 +496,33 @@ async def test_presence_pixels_are_not_disclosed_cross_org_or_to_tokens(
             },
         )
     )
-    token_header = {**headers[0], "Authorization": "Bearer " + issued["token"]}
+    token_header = {**headers, "Authorization": "Bearer " + issued["token"]}
     assert (await api.get(path, headers=token_header)).status_code == 403
     assert (
         await api.get(
             f"/v4/bid-submissions/{case['submission']}/presence-preview", headers=token_header
         )
     ).status_code == 403
-    assert (await api.get("/platform/clef", headers=headers[0])).status_code in {401, 403}
+    denied = await api.get("/platform/clef", headers=token_header)
+    assert denied.status_code == 401
+    assert denied.json()["data"]["error"]["code"] == "invalid_session"
 
 
 async def test_visual_concurrency_is_three_and_token_variation_is_recorded(
-    api, headers, application, tenants, tmp_path, monkeypatch, admin_engine
+    api, headers, application, tmp_path, monkeypatch
 ):
-    case = await source_case(api, headers, application, tenants, tmp_path, monkeypatch, bid_pages=6)
+    case = await source_case(api, headers, application, tmp_path, monkeypatch, bid_pages=6)
     await configure(application, monkeypatch)
-    await authorize_images(api, headers[0], case, expected_images=6)
+    await authorize_images(api, headers, case, expected_images=6)
     vendor = ClefVendor(probability=0.98)
     vendor.first_group = asyncio.Event()
     install_vendor(monkeypatch, vendor)
-    receipt = data(await preview(api, headers[0], case))
+    receipt = data(await preview(api, headers, case))
     assert receipt["input"]["clef"]["planned_calls"] == 6
-    accepted = data(await submit(api, headers[0], case, receipt))
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
-    assert finished["status"] == "succeeded", finished
-    calls, usages = await ledger(application, tenants["orgs"][0], accepted)
+    accepted = data(await submit(api, headers, case, receipt))
+    finished = await terminal(api, headers, application, accepted)
+    assert finished["status"] == "succeeded", finished.get("error", finished)
+    calls, usages = await ledger(application, accepted)
     assert len(calls) == len(usages) == 6
     assert vendor.maximum_active == 3
     assert len({usage.tokens for usage in usages}) > 1
@@ -560,35 +532,26 @@ async def test_grant_subset_cannot_expand_and_revoked_queued_pixels_never_dispat
     api,
     headers,
     application,
-    tenants,
     tmp_path,
     monkeypatch,
-    admin_engine,
 ):
-    case = await source_case(api, headers, application, tenants, tmp_path, monkeypatch, bid_pages=3)
+    case = await source_case(api, headers, application, tmp_path, monkeypatch, bid_pages=3)
     await configure(application, monkeypatch)
-    grant = await authorize_images(api, headers[0], case, expected_images=3, subset=True)
+    grant = await authorize_images(api, headers, case, expected_images=3, subset=True)
     assert len(grant["image_ids"]) == 1
     first, unauthorized = case["presence"]["images"][:2]
     from app.models.bid_review_presence import BidPresenceImage
 
     with pytest.raises(DBAPIError):
-        async with application.state.db.transaction(tenants["orgs"][0]) as session:
+        async with application.state.db.transaction() as session:
             await set_actor_context(
                 session,
-                Identity(
-                    tenants["users"][0],
-                    tenants["orgs"][0],
-                    ROLE_SCOPES["admin"],
-                    "admin",
-                    actor_kind="session",
-                ),
+                Identity(scopes=set(HUMAN_SCOPES)),
             )
             original = await session.get(BidPresenceImage, UUID(first["id"]))
             session.add(
                 BidPresenceAuthorizedImage(
                     id=uuid4(),
-                    org_id=tenants["orgs"][0],
                     task_id=UUID(case["task"]),
                     submission_id=UUID(case["submission"]),
                     presence_preparation_id=original.presence_preparation_id,
@@ -599,13 +562,13 @@ async def test_grant_subset_cannot_expand_and_revoked_queued_pixels_never_dispat
             await session.flush()
     vendor = ClefVendor()
     install_vendor(monkeypatch, vendor)
-    receipt = data(await preview(api, headers[0], case))
+    receipt = data(await preview(api, headers, case))
     assert receipt["input"]["clef"]["planned_calls"] == 1
-    accepted = data(await submit(api, headers[0], case, receipt))
+    accepted = data(await submit(api, headers, case, receipt))
     revoked = data(
         await api.post(
             f"/v4/bid-submissions/{case['submission']}/presence-authorizations",
-            headers=headers[0],
+            headers=headers,
             json={
                 "request_id": str(uuid4()),
                 "expected_revision": grant["revision"] + 1,
@@ -619,29 +582,29 @@ async def test_grant_subset_cannot_expand_and_revoked_queued_pixels_never_dispat
         )
     )
     assert not revoked["allow_external"]
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
-    assert finished["status"] == "failed"
+    finished = await terminal(api, headers, application, accepted)
+    assert finished["status"] == "failed", finished.get("error", finished)
     assert not vendor.requests
-    assert await ledger(application, tenants["orgs"][0], accepted) == ([], [])
+    assert await ledger(application, accepted) == ([], [])
 
 
 @pytest.mark.parametrize("applicability", ["unknown", "not_applicable"])
 async def test_unconfirmed_required_locations_never_create_presence_derivatives(
-    api, headers, application, tenants, tmp_path, monkeypatch, applicability
+    api, headers, application, tmp_path, monkeypatch, applicability
 ):
     from app.models.bid_review_presence import BidPresenceImage, BidPresencePreparation
 
     case = await source_case(
-        api, headers, application, tenants, tmp_path, monkeypatch, applicability=applicability
+        api, headers, application, tmp_path, monkeypatch, applicability=applicability
     )
     await configure(application, monkeypatch)
     response = await api.post(
         f"/v4/bid-submissions/{case['submission']}/presence-preparations",
-        headers=headers[0],
+        headers=headers,
         json={"review_id": case["source_review"]},
     )
     assert response.status_code == 409
     assert response.json()["data"]["error"]["code"] == "presence_required_locations_missing"
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         assert (await session.scalars(select(BidPresencePreparation))).first() is None
         assert (await session.scalars(select(BidPresenceImage))).first() is None

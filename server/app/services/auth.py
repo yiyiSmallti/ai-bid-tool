@@ -79,6 +79,9 @@ SCOPES = {
 SCOPES.update(BID_REVIEW_TOKEN_SCOPES)
 
 HUMAN_ONLY_SCOPES = {
+    "credential:manage",
+    "clef:manage",
+    "trust-anchor:manage",
     "agent:cancel",
     "agent:read",
     "agent:run",
@@ -107,6 +110,9 @@ HUMAN_ONLY_SCOPES.update(ATTACHMENT_HUMAN_SCOPES)
 HUMAN_ONLY_SCOPES.update(BID_REVIEW_HUMAN_SCOPES)
 
 HUMAN_SCOPES = {
+    "credential:manage",
+    "clef:manage",
+    "trust-anchor:manage",
     "agent:cancel",
     "agent:read",
     "agent:run",

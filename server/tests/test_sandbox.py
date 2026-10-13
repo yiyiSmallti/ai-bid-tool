@@ -1,15 +1,15 @@
 """API/processor gate tests; vendors are synthetic and runtime is explicitly fake.
 
 Failure inventory before implementation:
-- Cross-org and same-org cross-task/document/extraction/selection/revision bindings.
+- Cross-task/document/extraction/selection/revision bindings.
 - Missing success extraction, hash mismatch, non-UTF8 HTML, forged/extra input fields.
 - Dry-run writes/dispatch, idempotency conflict, repeated capture causing new fetch.
-- Revoked member/token, changed scopes/selection/policy while queued/running/downloading.
+- Revoked token, changed scopes/selection/policy while queued/running/downloading.
 - Cancellation/lease takeover, stale attempt publication, failed cleanup, oversized output.
 - Mutable archived inputs/artifacts/receipts, forged parent chain, missing manifest.
 - Signed-link substitution, stale selection, raw HTML serving in application origin.
 - Raw HTML/query/header canaries in jobs/audit/errors; duplicate model usage records.
-- RLS SELECT/INSERT/UPDATE/DELETE without scope and across both orgs for every new table.
+- Database actor gates, immutable history and mixed-parent writes.
 These fake-runtime tests prove integration gates only. Opt-in runtime tests own isolation.
 """
 
@@ -25,7 +25,7 @@ import httpx
 import pytest
 from app.api.main import create_app
 from app.core.config import Settings
-from app.models.entities import AuditLog, Job, UsageRecord
+from app.models.entities import AuditLog, UsageRecord
 from app.providers.browser import ArtifactPayload, ExecutionResult
 from conftest import FakeQueue
 from fakes import FakeLLM
@@ -100,12 +100,12 @@ class FakeBrowser:
 
 
 class SandboxQueue(FakeQueue):
-    async def enqueue_sandbox(self, org_id: str, job_id: str):
-        return await self.enqueue(org_id, job_id)
+    async def enqueue_sandbox(self, job_id: str):
+        return await self.enqueue(job_id)
 
 
 @pytest.fixture
-def application(tenants, tmp_path, monkeypatch):
+def application(database, tmp_path, monkeypatch):
     policy = tmp_path / "policy.json"
     policy.write_text(
         json.dumps(
@@ -219,7 +219,7 @@ async def submitted(api, header, task, spec):
 
 async def completed(api, application, header, task, spec):
     run, body = await submitted(api, header, task, spec)
-    await application.state.processor(header["X-Org-Id"], run["job_id"])
+    await application.state.processor(run["job_id"])
     shown = await api.get(f"/sandbox-runs/{run['id']}", headers=header)
     assert shown.status_code == 200, shown.text
     final = shown.json()["data"]
@@ -231,20 +231,20 @@ async def completed(api, application, header, task, spec):
 async def test_api_processor_encrypted_transfer_idempotency_and_download(
     api, headers, application, pdf_bytes, tmp_path, vendor
 ):
-    task, spec = await prepared(api, application, headers[0], pdf_bytes, vendor=vendor)
+    task, spec = await prepared(api, application, headers, pdf_bytes, vendor=vendor)
     before = len(application.state.queue.calls)
-    preview = await post(api, headers[0], task, {"spec": spec, "dry_run": True})
+    preview = await post(api, headers, task, {"spec": spec, "dry_run": True})
     assert preview.json()["data"]["ready"]
     assert len(application.state.queue.calls) == before
-    async with application.state.db.transaction(UUID(headers[0]["X-Org-Id"])) as session:
+    async with application.state.db.transaction() as session:
         assert await session.scalar(text("SELECT count(*) FROM sandbox_runs")) == 0
         usage_before = await session.scalar(select(func.count()).select_from(UsageRecord))
-    final, body = await completed(api, application, headers[0], task, spec)
+    final, body = await completed(api, application, headers, task, spec)
     assert final["cleanup_state"] == "complete"
     assert application.state.processor.sandbox_browser.calls == 1
-    again = await post(api, headers[0], task, body)
+    again = await post(api, headers, task, body)
     assert again.json()["data"]["id"] == final["id"]
-    await application.state.processor(headers[0]["X-Org-Id"], final["job_id"])
+    await application.state.processor(final["job_id"])
     assert application.state.processor.sandbox_browser.calls == 1
     kinds = {a["kind"] for a in final["artifacts"]}
     assert {"rendered_html", "provenance_manifest"} <= kinds
@@ -252,10 +252,10 @@ async def test_api_processor_encrypted_transfer_idempotency_and_download(
     payloads = {}
     for artifact in final["artifacts"]:
         linked = await api.get(
-            f"/sandbox-artifacts/{artifact['id']}/download-link", headers=headers[0]
+            f"/sandbox-artifacts/{artifact['id']}/download-link", headers=headers
         )
         link = linked.json()["data"]["url"]
-        download = await api.get(link, headers=headers[0])
+        download = await api.get(link, headers=headers)
         assert download.status_code == 200
         assert len(download.content) == artifact["size_bytes"]
         assert hashlib.sha256(download.content).hexdigest() == artifact["sha256"]
@@ -263,7 +263,6 @@ async def test_api_processor_encrypted_transfer_idempotency_and_download(
         assert "attachment" in download.headers["content-disposition"]
         if artifact["kind"] == "rendered_html":
             assert download.headers["content-type"] == "application/octet-stream"
-        assert (await api.get(link, headers=headers[1])).status_code == 404
         payloads[artifact["kind"]] = download.content
     provenance = json.loads(payloads["provenance_manifest"])
     assert provenance["origin"] == ("public_web_capture" if vendor else "prototype")
@@ -272,7 +271,7 @@ async def test_api_processor_encrypted_transfer_idempotency_and_download(
     if not vendor:
         assert payloads["rendered_html"] == HTML
         assert provenance["html_sha256"] == hashlib.sha256(HTML).hexdigest()
-    async with application.state.db.transaction(UUID(headers[0]["X-Org-Id"])) as session:
+    async with application.state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(UsageRecord)) == usage_before
         audits = (
             await session.scalars(select(AuditLog).where(AuditLog.action.like("sandbox.%")))
@@ -286,9 +285,7 @@ async def test_api_processor_encrypted_transfer_idempotency_and_download(
         } <= {a.action for a in audits}
         assert "CANARY_HTML_PRIVATE" not in json.dumps([a.details for a in audits])
         assert "version=fixed" not in json.dumps([a.details for a in audits])
-    stored = [
-        p.read_bytes() for p in (application.state.storage.root / "org").rglob("*") if p.is_file()
-    ]
+    stored = [p.read_bytes() for p in application.state.storage.root.rglob("*") if p.is_file()]
     assert stored and all(b"CANARY_HTML_PRIVATE" not in b for b in stored)
     artifact_dir = Path("data/work/sandbox-verification")
     await asyncio.to_thread(artifact_dir.mkdir, parents=True, exist_ok=True)
@@ -303,34 +300,18 @@ async def test_api_processor_encrypted_transfer_idempotency_and_download(
     )
 
 
-async def test_foreign_routes_and_input_bindings(api, headers, application, pdf_bytes):
-    task_a, spec_a = await prepared(api, application, headers[0], pdf_bytes)
-    task_b, spec_b = await prepared(api, application, headers[1], pdf_bytes)
-    run_b, _ = await completed(api, application, headers[1], task_b, spec_b)
-    for path in (
-        f"/tasks/{task_b}/sandbox-runs",
-        f"/sandbox-runs/{run_b['id']}",
-        f"/sandbox-runs/{uuid4()}",
-        f"/sandbox-artifacts/{run_b['artifacts'][0]['id']}/download-link",
-    ):
-        assert (await api.get(path, headers=headers[0])).status_code == 404
-    for target, body in (
-        (task_b, spec_a),
-        (task_a, spec_b),
-        (task_a, {**spec_a, "extraction_job_id": spec_b["extraction_job_id"]}),
-        (task_a, {**spec_a, "task_feature_id": spec_b["task_feature_id"]}),
-    ):
+async def test_missing_routes_and_input_bindings(api, headers, application, pdf_bytes):
+    task_a, spec_a = await prepared(api, application, headers, pdf_bytes)
+    for target in (str(uuid4()),):
         assert (
-            await post(api, headers[0], target, {"spec": body, "dry_run": True})
+            await post(api, headers, target, {"spec": spec_a, "dry_run": True})
         ).status_code == 404
-    other, other_spec = await prepared(api, application, headers[0], pdf_bytes)
-    assert (
-        await post(api, headers[0], other, {"spec": spec_a, "dry_run": True})
-    ).status_code == 404
+    other, other_spec = await prepared(api, application, headers, pdf_bytes)
+    assert (await post(api, headers, other, {"spec": spec_a, "dry_run": True})).status_code == 404
     assert (
         await post(
             api,
-            headers[0],
+            headers,
             task_a,
             {
                 "spec": {**spec_a, "extraction_job_id": other_spec["extraction_job_id"]},
@@ -341,17 +322,17 @@ async def test_foreign_routes_and_input_bindings(api, headers, application, pdf_
 
 
 async def test_hash_utf8_size_and_immutable_spec_gates(api, headers, application, pdf_bytes):
-    task, spec = await prepared(api, application, headers[0], pdf_bytes)
-    assert (await post(api, headers[0], task, {"spec": spec})).status_code == 422
+    task, spec = await prepared(api, application, headers, pdf_bytes)
+    assert (await post(api, headers, task, {"spec": spec})).status_code == 422
     assert (
-        await post(api, headers[0], task, {"spec": spec, "expected_request_hash": "0" * 64})
+        await post(api, headers, task, {"spec": spec, "expected_request_hash": "0" * 64})
     ).status_code == 409
     assert (
-        await post(api, headers[0], task, {"spec": spec, "dry_run": True}, b"wrong")
+        await post(api, headers, task, {"spec": spec, "dry_run": True}, b"wrong")
     ).status_code == 409
     bad = {**spec, "html_size_bytes": 1, "html_sha256": hashlib.sha256(b"\xff").hexdigest()}
     assert (
-        await post(api, headers[0], task, {"spec": bad, "dry_run": True}, b"\xff")
+        await post(api, headers, task, {"spec": bad, "dry_run": True}, b"\xff")
     ).status_code == 422
     for extra in (
         {"generation_job_id": str(uuid4())},
@@ -359,101 +340,80 @@ async def test_hash_utf8_size_and_immutable_spec_gates(api, headers, application
         {"confirmed_by": str(uuid4())},
     ):
         assert (
-            await post(api, headers[0], task, {"spec": {**spec, **extra}, "dry_run": True})
+            await post(api, headers, task, {"spec": {**spec, **extra}, "dry_run": True})
         ).status_code == 422
     assert (
-        await post(api, headers[0], task, {"spec": spec, "dry_run": True, "retry": True})
+        await post(api, headers, task, {"spec": spec, "dry_run": True, "retry": True})
     ).status_code == 422
 
 
 async def test_capture_key_policy_revocation_and_signed_download_binding(
     api, headers, application, pdf_bytes
 ):
-    task, spec = await prepared(api, application, headers[0], pdf_bytes, vendor=True)
-    final, body = await completed(api, application, headers[0], task, spec)
+    task, spec = await prepared(api, application, headers, pdf_bytes, vendor=True)
+    final, body = await completed(api, application, headers, task, spec)
     changed = {**spec, "viewport": {"width": 1000, "height": 700}}
-    preview = await post(api, headers[0], task, {"spec": changed, "dry_run": True})
+    preview = await post(api, headers, task, {"spec": changed, "dry_run": True})
     collision = await post(
         api,
-        headers[0],
+        headers,
         task,
         {"spec": changed, "expected_request_hash": preview.json()["data"]["request_hash"]},
     )
     assert collision.status_code == 409
     first, second = final["artifacts"][:2]
     url = (
-        await api.get(f"/sandbox-artifacts/{first['id']}/download-link", headers=headers[0])
+        await api.get(f"/sandbox-artifacts/{first['id']}/download-link", headers=headers)
     ).json()["data"]["url"]
     assert (
-        await api.get(url.replace(first["id"], second["id"]), headers=headers[0])
+        await api.get(url.replace(first["id"], second["id"]), headers=headers)
     ).status_code == 404
     policy = json.loads(application.state.sandbox_policy_path.read_text())
     policy["revoked_revisions"] = ["synthetic-v1"]
     application.state.sandbox_policy_path.write_text(json.dumps(policy))
-    assert (await api.get(url, headers=headers[0])).status_code == 403
+    assert (await api.get(url, headers=headers)).status_code == 403
     assert (
-        await api.get(f"/sandbox-artifacts/{first['id']}/download-link", headers=headers[0])
+        await api.get(f"/sandbox-artifacts/{first['id']}/download-link", headers=headers)
     ).status_code == 403
 
 
 async def test_cleanup_failure_never_publishes_or_retries(api, headers, application, pdf_bytes):
-    task, spec = await prepared(api, application, headers[0], pdf_bytes)
+    task, spec = await prepared(api, application, headers, pdf_bytes)
     browser = application.state.processor.sandbox_browser
     browser.cleanup_state = "failed"
-    run, body = await submitted(api, headers[0], task, spec)
-    await application.state.processor(headers[0]["X-Org-Id"], run["job_id"])
-    final = (await api.get(f"/sandbox-runs/{run['id']}", headers=headers[0])).json()["data"]
+    run, body = await submitted(api, headers, task, spec)
+    await application.state.processor(run["job_id"])
+    final = (await api.get(f"/sandbox-runs/{run['id']}", headers=headers)).json()["data"]
     assert final["state"] == "cleanup_pending" and final["artifacts"] == []
-    retry = await post(api, headers[0], task, {**body, "retry": True})
+    retry = await post(api, headers, task, {**body, "retry": True})
     assert retry.status_code == 409
 
 
 async def test_cancel_and_authorization_loss_fence_publication(
     api, headers, application, pdf_bytes
 ):
-    task, spec = await prepared(api, application, headers[0], pdf_bytes)
+    task, spec = await prepared(api, application, headers, pdf_bytes)
     browser = application.state.processor.sandbox_browser
     browser.entered, browser.gate = asyncio.Event(), asyncio.Event()
-    run, _ = await submitted(api, headers[0], task, spec)
-    working = asyncio.create_task(
-        application.state.processor(headers[0]["X-Org-Id"], run["job_id"])
-    )
+    run, _ = await submitted(api, headers, task, spec)
+    working = asyncio.create_task(application.state.processor(run["job_id"]))
     await asyncio.wait_for(browser.entered.wait(), 5)
-    assert (await api.post(f"/jobs/{run['job_id']}/cancel", headers=headers[0])).status_code == 200
+    assert (await api.post(f"/jobs/{run['job_id']}/cancel", headers=headers)).status_code == 200
     browser.gate.set()
     await working
-    final = (await api.get(f"/sandbox-runs/{run['id']}", headers=headers[0])).json()["data"]
+    final = (await api.get(f"/sandbox-runs/{run['id']}", headers=headers)).json()["data"]
     assert final["state"] == "cancelled" and not final["artifacts"]
-
-
-async def test_replaced_selection_and_revoked_actor_before_execution(
-    api, headers, application, pdf_bytes, tenants, admin_engine
-):
-    task, spec = await prepared(api, application, headers[0], pdf_bytes)
-    run, _ = await submitted(api, headers[0], task, spec)
-    # Revoke outside the runtime role; bid_app changes members only through admin CAS.
-    with admin_engine.begin() as connection:
-        connection.execute(
-            text("UPDATE memberships SET active=false WHERE org_id=:org AND user_id=:user"),
-            {"org": tenants["orgs"][0], "user": tenants["users"][0]},
-        )
-    await application.state.processor(headers[0]["X-Org-Id"], run["job_id"])
-    assert application.state.processor.sandbox_browser.calls == 0
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
-        job = await session.get(Job, UUID(run["job_id"]))
-        assert job.status == "failed"
-        assert await session.scalar(text("SELECT count(*) FROM sandbox_artifacts")) == 0
 
 
 async def test_tokens_need_new_explicit_scopes_for_jobs_and_runs(
     api, headers, application, pdf_bytes
 ):
-    task, spec = await prepared(api, application, headers[0], pdf_bytes)
-    run, _ = await submitted(api, headers[0], task, spec)
+    task, spec = await prepared(api, application, headers, pdf_bytes)
+    run, _ = await submitted(api, headers, task, spec)
     token = (
         await api.post(
             "/tokens",
-            headers=headers[0],
+            headers=headers,
             json={
                 "name": "synthetic-old",
                 "scopes": ["task:read", "job:read", "resource:read", "job:cancel"],
@@ -461,7 +421,7 @@ async def test_tokens_need_new_explicit_scopes_for_jobs_and_runs(
             },
         )
     ).json()["data"]["token"]
-    old = {**headers[0], "Authorization": "Bearer " + token}
+    old = {**headers, "Authorization": "Bearer " + token}
     for method, path in (
         ("GET", f"/sandbox-runs/{run['id']}"),
         ("GET", f"/jobs/{run['job_id']}"),
@@ -471,75 +431,36 @@ async def test_tokens_need_new_explicit_scopes_for_jobs_and_runs(
     assert (await post(api, old, task, {"spec": spec, "dry_run": True})).status_code == 403
 
 
-@pytest.mark.parametrize("table", TABLES)
-async def test_new_tables_force_rls_and_immutable_history(
-    table, api, headers, application, pdf_bytes, admin_engine
-):
-    from app.models import Base
-
-    for header in headers:
-        task, spec = await prepared(api, application, header, pdf_bytes, vendor=True)
-        await completed(api, application, header, task, spec)
-    a, b = [UUID(h["X-Org-Id"]) for h in headers]
-    async with application.state.db.transaction(a) as session:
-        visible = (await session.execute(text(f"SELECT org_id FROM {table}"))).scalars().all()
-        assert visible and set(visible) == {a}
-    async with application.state.db.transaction() as session:
-        assert not (await session.execute(text(f"SELECT id FROM {table}"))).all()
-    model = Base.metadata.tables[table]
-    with admin_engine.connect() as connection:
-        foreign = dict(
-            connection.execute(select(model).where(model.c.org_id == b)).mappings().first()
-        )
-        flags = connection.execute(
-            text("SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname=:table"),
-            {"table": table},
-        ).one()
-        assert flags.relrowsecurity and flags.relforcerowsecurity
-    foreign["id"] = uuid4()
-    with pytest.raises(DBAPIError):
-        async with application.state.db.transaction() as session:
-            await session.execute(model.insert().values(**foreign))
-    with pytest.raises(DBAPIError):
-        async with application.state.db.transaction(a) as session:
-            await session.execute(model.insert().values(**foreign))
-    for statement in (f"UPDATE {table} SET org_id=:b", f"DELETE FROM {table}"):
-        with pytest.raises(DBAPIError):
-            async with application.state.db.transaction(a) as session:
-                await session.execute(text(statement), {"b": b})
-
-
 async def test_selection_replacement_blocks_download_but_retains_history(
     api, headers, application, pdf_bytes
 ):
-    task, spec = await prepared(api, application, headers[0], pdf_bytes)
-    final, _ = await completed(api, application, headers[0], task, spec)
+    task, spec = await prepared(api, application, headers, pdf_bytes)
+    final, _ = await completed(api, application, headers, task, spec)
     artifact = final["artifacts"][0]
     link = (
-        await api.get(f"/sandbox-artifacts/{artifact['id']}/download-link", headers=headers[0])
+        await api.get(f"/sandbox-artifacts/{artifact['id']}/download-link", headers=headers)
     ).json()["data"]["url"]
-    async with application.state.db.transaction(UUID(headers[0]["X-Org-Id"])) as session:
+    async with application.state.db.transaction() as session:
         await session.execute(
             text("UPDATE task_features SET active=false WHERE id=:id"),
             {"id": UUID(spec["task_feature_id"])},
         )
-    view = (await api.get(f"/sandbox-runs/{final['id']}", headers=headers[0])).json()["data"]
+    view = (await api.get(f"/sandbox-runs/{final['id']}", headers=headers)).json()["data"]
     assert view["selection_active"] is False
     assert view["artifacts"]
-    assert (await api.get(link, headers=headers[0])).status_code == 409
+    assert (await api.get(link, headers=headers)).status_code == 409
 
 
-async def test_sql_same_org_parent_mix_and_terminal_attempt_mutation_rejected(
+async def test_sql_same_task_parent_mix_and_terminal_attempt_mutation_rejected(
     api, headers, application, pdf_bytes
 ):
     from app.models import Base
 
     finals = []
     for _ in range(2):
-        task, spec = await prepared(api, application, headers[0], pdf_bytes, vendor=True)
-        final, _ = await completed(api, application, headers[0], task, spec)
+        task, spec = await prepared(api, application, headers, pdf_bytes, vendor=True)
+        final, _ = await completed(api, application, headers, task, spec)
         finals.append(final)
-    org = UUID(headers[0]["X-Org-Id"])
     for table, changed in (
         ("sandbox_inputs", "task_id"),
         ("sandbox_runs", "input_id"),
@@ -548,7 +469,7 @@ async def test_sql_same_org_parent_mix_and_terminal_attempt_mutation_rejected(
         ("sandbox_fetch_receipts", "attempt_record_id"),
     ):
         model = Base.metadata.tables[table]
-        async with application.state.db.transaction(org) as session:
+        async with application.state.db.transaction() as session:
             rows = (
                 (await session.execute(select(model).order_by(model.c.created_at))).mappings().all()
             )
@@ -562,22 +483,22 @@ async def test_sql_same_org_parent_mix_and_terminal_attempt_mutation_rejected(
         if table == "sandbox_attempts":
             first["attempt_id"] = uuid4()
         with pytest.raises(DBAPIError):
-            async with application.state.db.transaction(org) as session:
+            async with application.state.db.transaction() as session:
                 await session.execute(model.insert().values(**first))
     with pytest.raises(DBAPIError):
-        async with application.state.db.transaction(org) as session:
+        async with application.state.db.transaction() as session:
             await session.execute(text("UPDATE sandbox_attempts SET metrics='{}'::jsonb"))
 
 
 async def test_cancellation_before_dispatch_and_queue_age_gate(
     api, headers, application, pdf_bytes
 ):
-    task, spec = await prepared(api, application, headers[0], pdf_bytes)
-    run, _ = await submitted(api, headers[0], task, spec)
-    await api.post(f"/jobs/{run['job_id']}/cancel", headers=headers[0])
-    await application.state.processor(headers[0]["X-Org-Id"], run["job_id"])
+    task, spec = await prepared(api, application, headers, pdf_bytes)
+    run, _ = await submitted(api, headers, task, spec)
+    await api.post(f"/jobs/{run['job_id']}/cancel", headers=headers)
+    await application.state.processor(run["job_id"])
     assert application.state.processor.sandbox_browser.calls == 0
-    assert (await api.get(f"/sandbox-runs/{run['id']}", headers=headers[0])).json()["data"][
+    assert (await api.get(f"/sandbox-runs/{run['id']}", headers=headers)).json()["data"][
         "state"
     ] == "cancelled"
 
@@ -591,13 +512,13 @@ async def test_opt_in_real_api_processor_container_and_storage(
     api, headers, application, pdf_bytes, vendor
 ):
     """End-to-end gates: real runtime completion, exact PDF source bytes, explicit
-    page selection, encrypted artifact transfer and foreign-org download denial.
+    page selection and encrypted artifact transfer.
     Vendor HTTP is MockTransport; this gate never accesses a real vendor.
     """
     from app.providers.browser import create_browser_provider
 
     application.state.processor.sandbox_browser = create_browser_provider()
-    task, spec = await prepared(api, application, headers[0], pdf_bytes, vendor=vendor)
+    task, spec = await prepared(api, application, headers, pdf_bytes, vendor=vendor)
     if vendor:
         spec = {**spec, "format": "pdf", "pdf_pages": [2], "archive": "bundle"}
         application.state.processor.sandbox_fetch_transport = httpx.MockTransport(
@@ -605,7 +526,7 @@ async def test_opt_in_real_api_processor_container_and_storage(
                 200, content=pdf_bytes, headers={"content-type": "application/pdf"}
             )
         )
-    final, _ = await completed(api, application, headers[0], task, spec)
+    final, _ = await completed(api, application, headers, task, spec)
     assert final["cleanup_state"] == "complete"
     if vendor:
         assert [item["page"] for item in final["artifacts"] if item["kind"] == "pdf_page_png"] == [
@@ -615,12 +536,11 @@ async def test_opt_in_real_api_processor_container_and_storage(
         assert original["sha256"] == hashlib.sha256(pdf_bytes).hexdigest()
     for artifact in final["artifacts"]:
         linked = (
-            await api.get(f"/sandbox-artifacts/{artifact['id']}/download-link", headers=headers[0])
+            await api.get(f"/sandbox-artifacts/{artifact['id']}/download-link", headers=headers)
         ).json()["data"]
-        actual = await api.get(linked["url"], headers=headers[0])
+        actual = await api.get(linked["url"], headers=headers)
         assert actual.status_code == 200
         assert hashlib.sha256(actual.content).hexdigest() == artifact["sha256"]
-        assert (await api.get(linked["url"], headers=headers[1])).status_code == 404
     target = Path("data/work/sandbox-verification/runtime")
     await asyncio.to_thread(target.mkdir, parents=True, exist_ok=True)
     (target / f"api-{'pdf' if vendor else 'prototype'}.json").write_text(

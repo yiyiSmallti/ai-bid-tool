@@ -91,7 +91,6 @@ class FindingBasis(Contract):
     rule_or_prompt_version: NonBlank
     confidence: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
     provider_config_id: UUID | None = None
-    platform_model_id: str | None = Field(default=None, max_length=100)
     provider_revision: int | None = Field(default=None, ge=1)
     model: str | None = Field(default=None, max_length=100)
 
@@ -101,7 +100,7 @@ class FindingBasis(Contract):
             self.confidence is None
             or not self.model
             or self.provider_revision is None
-            or not (self.provider_config_id or self.platform_model_id)
+            or not self.provider_config_id
         ):
             raise ValueError("model basis requires confidence and pinned model identity")
         if self.kind == "rule" and any(
@@ -109,7 +108,6 @@ class FindingBasis(Contract):
             for v in (
                 self.confidence,
                 self.provider_config_id,
-                self.platform_model_id,
                 self.provider_revision,
                 self.model,
             )
@@ -246,7 +244,6 @@ class BidReviewEventView(Contract):
     state: FindingState
     reason: NonBlank
     reason_sha256: Sha256
-    decided_by: UUID
     decided_at: AwareDatetime
     actor_kind: Literal["session"] = "session"
     immutable: Literal[True] = True

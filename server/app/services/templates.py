@@ -31,7 +31,6 @@ def revision_data(row: TemplateRevision) -> dict:
 def snapshot_data(row: TaskTemplate, revision: TemplateRevision) -> dict:
     return TaskTemplateSnapshot(
         id=row.id,
-        org_id=row.org_id,
         task_id=row.task_id,
         template_revision_id=revision.id,
         revision=revision.revision,
@@ -64,10 +63,8 @@ def stored_file(actor: Identity, descriptor: TemplateFile, content: bytes, stora
     columns = {"id": uuid4(), "file": descriptor.model_dump(mode="json"), "storage_key": ""}
 
     async def attach(revision: TemplateRevision, template: Template):
-        revision.storage_key = (
-            f"org/{actor.org_id}/template/{template.id}/{revision.id}/{descriptor.sha256}.docx"
-        )
-        await storage.put(actor.org_id, revision.storage_key, content)
+        revision.storage_key = f"template/{template.id}/{revision.id}/{descriptor.sha256}.docx"
+        await storage.put(revision.storage_key, content)
 
     return columns, attach
 
@@ -157,7 +154,7 @@ async def read_revision(
     session: AsyncSession, actor: Identity, revision_id: UUID, storage: Storage
 ):
     revision = await require_revision(session, actor, revision_id)
-    content = await storage.read(actor.org_id, revision.storage_key)
+    content = await storage.read(revision.storage_key)
     descriptor = TemplateFile.model_validate(revision.file)
     if (
         len(content) != descriptor.size_bytes

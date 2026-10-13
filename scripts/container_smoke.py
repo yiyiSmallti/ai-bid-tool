@@ -13,13 +13,14 @@ import sys
 import time
 from pathlib import Path
 from urllib.parse import quote
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import httpx
 import pymupdf
 from app.core.config import Settings
 from app.providers.storage import S3Storage
 from cryptography.fernet import Fernet
+from pydantic import SecretStr
 
 
 def main():
@@ -37,16 +38,13 @@ def main():
     args.root.mkdir(mode=0o700, parents=True)
     project = "bid-test-" + uuid4().hex[:12]
     key = Fernet.generate_key().decode()
-    password = secrets.token_urlsafe(24)
     values = {
         "BID_OWNER_PASSWORD": secrets.token_urlsafe(24),
         "BID_DATABASE_PASSWORD": secrets.token_urlsafe(24),
-        "BID_PLATFORM_DATABASE_PASSWORD": secrets.token_urlsafe(24),
-        "BID_CREDENTIAL_DATABASE_PASSWORD": secrets.token_urlsafe(24),
+        "BID_ACCESS_KEY": secrets.token_urlsafe(32),
         "BID_SECRETS_KEY": Fernet.generate_key().decode(),
         "BID_ENCRYPTION_KEY": key,
         "BID_TOKEN_KEY": Fernet.generate_key().decode(),
-        "BID_CLI_KEY": Fernet.generate_key().decode(),
         "BID_S3_ACCESS_KEY": "synthetic-test-" + uuid4().hex[:12],
         "BID_S3_SECRET_KEY": secrets.token_urlsafe(24),
         "SEARXNG_SECRET": secrets.token_hex(32),
@@ -61,12 +59,6 @@ def main():
         + quote(values["BID_DATABASE_PASSWORD"], safe="")
         + "@postgres/bid"
     )
-    for prefix, role in (("PLATFORM", "bid_platform_app"), ("CREDENTIAL", "bid_credential_reader")):
-        values[f"BID_{prefix}_DATABASE_URL"] = (
-            f"postgresql+psycopg://{role}:"
-            + quote(values[f"BID_{prefix}_DATABASE_PASSWORD"], safe="")
-            + "@postgres/bid"
-        )
     env_file = args.root / "test.env"
     with os.fdopen(os.open(env_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as handle:
         handle.write("\n".join(f"{name}={value}" for name, value in values.items()))
@@ -80,8 +72,6 @@ def main():
         **values,
         "DOCKER_HOST": args.host,
         "DOCKER_CONFIG": str(docker_config),
-        "BID_BOOTSTRAP_PASSWORD": password,
-        "BID_PASSWORD": password,
     }
     override = args.root / "override.yml"
     s3 = """      BID_STORAGE: s3
@@ -132,8 +122,6 @@ def main():
                 "remote",
                 "--server",
                 base,
-                "--state",
-                str(args.root / "session.enc"),
                 *arguments,
                 "--json",
             ],
@@ -175,57 +163,40 @@ def main():
             checked("API and MinIO ready")
             storage = S3Storage(
                 Settings(
-                    database_url="postgresql+psycopg://unused@localhost/bid_test",
-                    encryption_key=key,
+                    database_url=SecretStr("postgresql+psycopg://unused@localhost/bid_test"),
+                    access_key=SecretStr(values["BID_ACCESS_KEY"]),
+                    encryption_key=SecretStr(key),
+                    token_key=SecretStr(values["BID_TOKEN_KEY"]),
                     storage="s3",
                     s3_endpoint=endpoint,
                     s3_bucket="bid-test",
-                    s3_access_key=values["BID_S3_ACCESS_KEY"],
-                    s3_secret_key=values["BID_S3_SECRET_KEY"],
+                    s3_access_key=SecretStr(values["BID_S3_ACCESS_KEY"]),
+                    s3_secret_key=SecretStr(values["BID_S3_SECRET_KEY"]),
                 )
             )
             storage.client.create_bucket(Bucket="bid-test")
             assert http.get(endpoint + "/bid-test").status_code == 403
             checked("fresh private test bucket")
-            organizations = []
-            sessions = []
-            for label in ("a", "b"):
-                output = run(
-                    [
-                        *compose,
-                        "run",
-                        "--rm",
-                        "--no-deps",
-                        "-e",
-                        "BID_BOOTSTRAP_PASSWORD",
-                        "migrate",
-                        "python",
-                        "-m",
-                        "app.admin",
-                        "bootstrap",
-                        "--org-name",
-                        "Synthetic container test " + label,
-                        "--email",
-                        label + "@example.invalid",
-                    ],
-                    capture=True,
-                )
-                org = str(UUID(output.strip().split()[-1]))
-                organizations.append(org)
-                response = http.post(
-                    base + "/auth/login",
-                    json={"email": label + "@example.invalid", "password": password, "org_id": org},
-                )
-                assert response.status_code == 200
-                sessions.append(
-                    {
-                        "Authorization": "Bearer " + response.json()["data"]["session"],
-                        "X-Org-Id": org,
-                    }
-                )
-            checked("new synthetic organizations and login")
-            status, _ = cli(["login", "--email", "a@example.invalid", "--org", organizations[0]])
-            assert status == 0
+            response = http.post(
+                base + "/auth/session", json={"access_key": values["BID_ACCESS_KEY"]}
+            )
+            assert response.status_code == 200
+            session_headers = {"Authorization": "Bearer " + response.json()["data"]["session"]}
+            for headers, has_expiry in (
+                ({"Authorization": "Bearer " + values["BID_ACCESS_KEY"]}, False),
+                (session_headers, True),
+            ):
+                identity = http.get(base + "/auth/session", headers=headers)
+                assert identity.status_code == 200
+                actor = identity.json()["data"]
+                assert actor["actor_kind"] == "session" and "export" in actor["scopes"]
+                assert (actor["expires_at"] is not None) == has_expiry
+            assert http.get(base + "/auth/session").status_code == 401
+            assert (
+                http.post(base + "/auth/session", json={"access_key": "invalid"}).status_code == 401
+            )
+            checked("installation access key, console session and unauthenticated rejection")
+            unknown_id = str(uuid4())
             document_path = args.root / "synthetic.pdf"
             with pymupdf.open() as document:
                 page = document.new_page()
@@ -316,10 +287,12 @@ def main():
             )
             assert status == 0 and [item["revision"] for item in history["items"]] == [1, 2]
             hidden = http.get(
-                base + "/resources/products", headers=sessions[1], params={"product_id": product_id}
+                base + "/resources/products",
+                headers=session_headers,
+                params={"product_id": unknown_id},
             )
             assert hidden.status_code == 404
-            checked("selection history, duplicate operation and resource tenant isolation")
+            checked("selection history, duplicate operation and unknown resource rejection")
             feature_data = {
                 "product_id": product_id,
                 "name": "Synthetic container feature",
@@ -379,12 +352,12 @@ def main():
             assert (
                 http.get(
                     base + "/resources/features",
-                    headers=sessions[1],
-                    params={"feature_id": feature_id},
+                    headers=session_headers,
+                    params={"feature_id": unknown_id},
                 ).status_code
                 == 404
             )
-            checked("feature history, repeat, conflict and tenant isolation")
+            checked("feature history, repeat, conflict and unknown resource rejection")
             certificate_data = {
                 "kind": "qualification",
                 "name": "Synthetic declaration",
@@ -459,12 +432,12 @@ def main():
             assert (
                 http.get(
                     base + "/resources/certificates",
-                    headers=sessions[1],
-                    params={"certificate_id": certificate_id},
+                    headers=session_headers,
+                    params={"certificate_id": unknown_id},
                 ).status_code
                 == 404
             )
-            checked("certificate history, repeat, conflict and tenant isolation")
+            checked("certificate history, repeat, conflict and unknown resource rejection")
             status, inspected = cli(
                 [
                     "task",
@@ -548,12 +521,12 @@ def main():
             assert (
                 http.get(
                     base + "/resources/profiles",
-                    headers=sessions[1],
-                    params={"profile_id": profile_id},
+                    headers=session_headers,
+                    params={"profile_id": unknown_id},
                 ).status_code
                 == 404
             )
-            checked("profile history, repeat, conflict and tenant isolation")
+            checked("profile history, repeat, conflict and unknown resource rejection")
             from io import BytesIO
 
             from docx import Document
@@ -638,12 +611,12 @@ def main():
             assert (
                 http.get(
                     base + "/resources/templates",
-                    headers=sessions[1],
-                    params={"template_id": template_id},
+                    headers=session_headers,
+                    params={"template_id": unknown_id},
                 ).status_code
                 == 404
             )
-            checked("template history, duplicate, conflict and tenant isolation")
+            checked("template history, duplicate, conflict and unknown resource rejection")
             for identifier, expected in [
                 (template["data"]["id"], initial_bytes.getvalue()),
                 (updated["data"]["id"], new_bytes.getvalue()),
@@ -757,24 +730,26 @@ def main():
             assert (
                 http.get(
                     base + "/resources/certificates/files",
-                    headers=sessions[1],
-                    params={"certificate_id": certificate_id},
+                    headers=session_headers,
+                    params={"certificate_id": unknown_id},
                 ).status_code
                 == 404
             )
             assert (
                 http.get(
-                    base + f"/resources/certificates/revisions/{scan_revision}/file/download-link",
-                    headers=sessions[1],
+                    base + f"/resources/certificates/revisions/{unknown_id}/file/download-link",
+                    headers=session_headers,
                 ).status_code
                 == 404
             )
             checked(
-                "certificate PDF revisions, fixed selections, no inheritance and tenant isolation"
+                "certificate PDF revisions, fixed selections, no inheritance and unknown resource rejection"
             )
             checked("genuine remote certificate file CLI and no-overwrite download")
             scan_objects = storage.client.list_objects_v2(Bucket="bid-test")["Contents"]
-            scan_keys = [entry["Key"] for entry in scan_objects if "/certificate/" in entry["Key"]]
+            scan_keys = [
+                entry["Key"] for entry in scan_objects if entry["Key"].startswith("certificate/")
+            ]
             assert len(scan_keys) == 1
             raw_stream = storage.client.get_object(Bucket="bid-test", Key=scan_keys[0])["Body"]
             try:
@@ -787,10 +762,10 @@ def main():
             )
             scan_link = http.get(
                 base + f"/resources/certificates/revisions/{scan_revision}/file/download-link",
-                headers=sessions[0],
+                headers=session_headers,
             ).json()["data"]
             assert (
-                http.get(base + scan_link["url"], headers=sessions[0]).content
+                http.get(base + scan_link["url"], headers=session_headers).content
                 == document_path.read_bytes()
             )
             checked("real encrypted S3 certificate original and authenticated download")
@@ -815,7 +790,7 @@ def main():
             source = archived["data"]["source"]
             assert (
                 source["certificate_revision_id"] == scan_revision
-                and source["confirmed_by"] is None
+                and source["confirmed_at"] is None
                 and source["eligible_for_draft_export"] is False
             )
             status, repeated = cli(source_add)
@@ -849,18 +824,21 @@ def main():
                 "genuine remote source CLI, decoded original pixels, repeat and private no-overwrite PNG"
             )
             source_path = f"/evidence-sources/{source['id']}/preview/download"
+            unknown_source_path = f"/evidence-sources/{unknown_id}/preview/download"
             for method, path, options in [
                 (
                     "POST",
-                    f"/tasks/{task['data']['id']}/evidence-sources",
+                    f"/tasks/{unknown_id}/evidence-sources",
                     {"json": {"task_certificate_id": source_choice["data"]["id"], "page": 1}},
                 ),
-                ("GET", f"/tasks/{task['data']['id']}/evidence-sources", {}),
-                ("GET", source_path + "-link", {}),
-                ("GET", source_path + "?signature=invalid", {}),
+                ("GET", f"/tasks/{unknown_id}/evidence-sources", {}),
+                ("GET", unknown_source_path + "-link", {}),
+                ("GET", unknown_source_path + "?signature=invalid", {}),
             ]:
                 assert (
-                    http.request(method, base + path, headers=sessions[1], **options).status_code
+                    http.request(
+                        method, base + path, headers=session_headers, **options
+                    ).status_code
                     == 404
                 )
             selection_file.write_text(json.dumps({"certificate_id": certificate_id}))
@@ -869,10 +847,12 @@ def main():
             assert cli(source_list)[1]["items"] == []
             old = cli([*source_list, "--history"])[1]
             assert len(old["items"]) == 1 and not old["items"][0]["active_selection"]
-            checked("all source routes hide foreign objects and replaced source remains history")
+            checked("all source routes reject unknown objects and replaced source remains history")
             source_objects = storage.client.list_objects_v2(Bucket="bid-test")["Contents"]
             source_keys = [
-                entry["Key"] for entry in source_objects if "/evidence-source/" in entry["Key"]
+                entry["Key"]
+                for entry in source_objects
+                if entry["Key"].startswith("evidence-source/")
             ]
             assert len(source_keys) == 1
             raw_stream = storage.client.get_object(Bucket="bid-test", Key=source_keys[0])["Body"]
@@ -884,14 +864,18 @@ def main():
                 raw.startswith(storage.cipher.marker)
                 and storage.cipher.decrypt(source_keys[0], raw) == png_output.read_bytes()
             )
-            source_link = http.get(base + source_path + "-link", headers=sessions[0]).json()["data"]
+            source_link = http.get(base + source_path + "-link", headers=session_headers).json()[
+                "data"
+            ]
             assert (
-                http.get(base + source_link["url"], headers=sessions[0]).content
+                http.get(base + source_link["url"], headers=session_headers).content
                 == png_output.read_bytes()
             )
             checked("real encrypted S3 PNG and authenticated history preview download")
             objects = storage.client.list_objects_v2(Bucket="bid-test")["Contents"]
-            template_keys = [entry["Key"] for entry in objects if "/template/" in entry["Key"]]
+            template_keys = [
+                entry["Key"] for entry in objects if entry["Key"].startswith("template/")
+            ]
             assert len(template_keys) == 2
             for key in template_keys:
                 raw = storage.client.get_object(Bucket="bid-test", Key=key)["Body"].read()
@@ -904,7 +888,7 @@ def main():
             object_key = next(
                 entry["Key"]
                 for entry in objects
-                if entry["Key"].endswith(".pdf") and "/certificate/" not in entry["Key"]
+                if entry["Key"].endswith(".pdf") and not entry["Key"].startswith("certificate/")
             )
             stored = storage.client.get_object(Bucket="bid-test", Key=object_key)["Body"]
             try:
@@ -913,22 +897,25 @@ def main():
                 stored.close()
             assert raw.startswith(storage.cipher.marker) and b"%PDF" not in raw
             assert storage.cipher.decrypt(object_key, raw) == document_path.read_bytes()
-            link = http.get(base + f"/documents/{document_id}/download-link", headers=sessions[0])
-            download = http.get(base + link.json()["data"]["url"], headers=sessions[0])
+            link = http.get(
+                base + f"/documents/{document_id}/download-link", headers=session_headers
+            )
+            download = http.get(base + link.json()["data"]["url"], headers=session_headers)
             assert download.status_code == 200 and download.content == document_path.read_bytes()
             checked("encrypted objects and signed authenticated download")
             assert (
-                http.get(base + f"/documents/{document_id}", headers=sessions[1]).status_code == 404
+                http.get(base + f"/documents/{unknown_id}", headers=session_headers).status_code
+                == 404
             )
             assert (
                 http.post(
                     base + f"/tasks/{task['data']['id']}/documents",
-                    headers=sessions[0],
+                    headers=session_headers,
                     files={"file": ("invalid.pdf", b"invalid")},
                 ).status_code
                 == 400
             )
-            checked("cross-tenant access and invalid file rejection")
+            checked("unknown document and invalid file rejection")
             status, unavailable = cli(
                 ["req", "extract", "--document", document_id, "--wait", "--timeout", "30"]
             )

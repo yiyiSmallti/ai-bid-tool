@@ -5,7 +5,7 @@ PDF failure modes recorded before the isolated renderer implementation:
 - page and raster/output bounds are preserved across the child-process boundary;
 - child deadlines and resource-limit failures cannot publish a DB row or object;
 - the bounded render slot remains held for the complete child operation;
-- archiving or removing a preparing contributor blocks publication after rendering.
+- stale selection or original file prevents publication after rendering.
 """
 
 import asyncio
@@ -13,25 +13,18 @@ import hashlib
 import json
 import sys
 from datetime import UTC
-from pathlib import Path
 from uuid import UUID, uuid4
 
 import pymupdf
 import pytest
 from app.core.errors import ServiceError
 from app.core.security import TokenSigner
-from app.models.entities import AuditLog, EvidenceSource, Membership
+from app.models.entities import AuditLog, EvidenceSource
 from app.schemas.evidence_source_contracts import EvidenceSourceArchive, EvidenceSourcePreview
 from app.services import evidence_sources as services
-from app.services.auth import ROLE_SCOPES
 from app.services.certificate_files import validate_file
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 from test_certificate_files import DATA, select_version, setup, upload
-
-BASELINE = json.loads(
-    (Path(__file__).resolve().parent / "fixtures/phase8-role-baseline.json").read_text()
-)
 
 
 async def source_fixture(api, headers, pdf_bytes):
@@ -56,8 +49,8 @@ async def test_genuine_pixels_dedup_fixed_original_and_explicit_history(
         "responses"
     ]["200"]["content"]
     assert set(spec) == {"image/png"} and spec["image/png"]["schema"]["format"] == "binary"
-    certificate, task, scan, chosen = await source_fixture(api, headers[0], pdf_bytes)
-    first = await add(api, headers[0], task, chosen["id"])
+    certificate, task, scan, chosen = await source_fixture(api, headers, pdf_bytes)
+    first = await add(api, headers, task, chosen["id"])
     assert first.status_code == 200
     source = first.json()["data"]["source"]
     EvidenceSourceArchive.model_validate(source)
@@ -73,13 +66,13 @@ async def test_genuine_pixels_dedup_fixed_original_and_explicit_history(
     )
     assert (
         source["status"] == "unconfirmed_source"
-        and source["confirmed_by"] is None
+        and source["confirmed_at"] is None
         and source["eligible_for_draft_export"] is False
     )
     path = f"/evidence-sources/{source['id']}/preview/download"
-    linked = (await api.get(path + "-link", headers=headers[0])).json()
+    linked = (await api.get(path + "-link", headers=headers)).json()
     assert linked["data"]["expires_in"] == 300 and linked["items"] == [source]
-    downloaded = await api.get(linked["data"]["url"], headers=headers[0])
+    downloaded = await api.get(linked["data"]["url"], headers=headers)
     assert (
         downloaded.status_code == 200
         and downloaded.headers["content-type"] == "image/png"
@@ -100,46 +93,46 @@ async def test_genuine_pixels_dedup_fixed_original_and_explicit_history(
         raise AssertionError("Repeat performed storage work")
 
     application.state.storage.read = application.state.storage.put = forbidden
-    repeated = await add(api, headers[0], task, chosen["id"])
+    repeated = await add(api, headers, task, chosen["id"])
     assert repeated.json()["data"] == {"source": source, "duplicate": True}
     application.state.storage.read, application.state.storage.put = original_read, original_put
-    second = (await add(api, headers[0], task, chosen["id"], 2)).json()["data"]["source"]
+    second = (await add(api, headers, task, chosen["id"], 2)).json()["data"]["source"]
     assert (
         second["id"] != source["id"] and second["preview"]["sha256"] != source["preview"]["sha256"]
     )
     await api.post(
         f"/resources/certificates/{certificate['certificate_id']}/revisions",
-        headers=headers[0],
+        headers=headers,
         json={"expected_revision": 2, "data": {**DATA, "name": "Synthetic metadata change"}},
     )
     listing = f"/tasks/{task}/evidence-sources"
-    assert len((await api.get(listing, headers=headers[0])).json()["items"]) == 2
-    plain = (await select_version(api, headers[0], certificate, task)).json()["data"]
-    assert (await api.get(listing, headers=headers[0])).json()["items"] == []
-    history = (await api.get(listing, headers=headers[0], params={"history": True})).json()
+    assert len((await api.get(listing, headers=headers)).json()["items"]) == 2
+    plain = (await select_version(api, headers, certificate, task)).json()["data"]
+    assert (await api.get(listing, headers=headers)).json()["items"] == []
+    history = (await api.get(listing, headers=headers, params={"history": True})).json()
     assert (
         len(history["items"]) == 2
         and all(not r["active_selection"] for r in history["items"])
         and history["data"]["active_source_ids"] == []
     )
     assert "replaced" in " ".join(history["warnings"])
-    assert (await add(api, headers[0], task, chosen["id"])).status_code == 409
-    assert (await add(api, headers[0], task, plain["id"])).json()["data"]["error"][
+    assert (await add(api, headers, task, chosen["id"])).status_code == 409
+    assert (await add(api, headers, task, plain["id"])).json()["data"]["error"][
         "code"
     ] == "missing_source_original"
-    assert (await api.get(linked["data"]["url"], headers=headers[0])).content == downloaded.content
+    assert (await api.get(linked["data"]["url"], headers=headers)).content == downloaded.content
     with pymupdf.open(stream=pdf_bytes, filetype="pdf") as pdf:
         pdf[0].draw_rect((25, 25, 250, 150), color=(1, 0, 0), fill=(1, 0, 0))
         changed = pdf.tobytes()
-    new_scan = (await upload(api, headers[0], certificate, changed, expected=3)).json()["data"]
-    new_choice = (await select_version(api, headers[0], certificate, task)).json()["data"]
-    new_source = (await add(api, headers[0], task, new_choice["id"])).json()["data"]["source"]
+    new_scan = (await upload(api, headers, certificate, changed, expected=3)).json()["data"]
+    new_choice = (await select_version(api, headers, certificate, task)).json()["data"]
+    new_source = (await add(api, headers, task, new_choice["id"])).json()["data"]["source"]
     assert (
         new_source["id"] != source["id"]
         and new_source["certificate_revision_id"] == new_scan["certificate_revision_id"]
         and new_source["preview"]["sha256"] != source["preview"]["sha256"]
     )
-    async with application.state.db.transaction(UUID(headers[0]["X-Org-Id"])) as session:
+    async with application.state.db.transaction() as session:
         rows = (await session.scalars(select(EvidenceSource))).all()
         events = (
             await session.scalars(
@@ -150,17 +143,17 @@ async def test_genuine_pixels_dedup_fixed_original_and_explicit_history(
             "SYNTHETIC-ONLY" not in json.dumps(e.details) for e in events
         )
         for row in rows:
-            encrypted = application.state.storage.path(row.org_id, row.storage_key).read_bytes()
+            encrypted = application.state.storage.path(row.storage_key).read_bytes()
             assert encrypted.startswith(
                 application.state.storage.cipher.marker
             ) and not encrypted.startswith(b"\x89PNG")
 
 
-async def test_all_four_routes_identity_org_and_foreign_hidden(api, headers, pdf_bytes):
-    _, task, _, choice = await source_fixture(api, headers[1], pdf_bytes)
-    source = (await add(api, headers[1], task, choice["id"])).json()["data"]["source"]
+async def test_all_four_routes_require_identity(api, headers, pdf_bytes):
+    _, task, _, choice = await source_fixture(api, headers, pdf_bytes)
+    source = (await add(api, headers, task, choice["id"])).json()["data"]["source"]
     path = f"/evidence-sources/{source['id']}/preview/download"
-    link = (await api.get(path + "-link", headers=headers[1])).json()["data"]["url"]
+    link = (await api.get(path + "-link", headers=headers)).json()["data"]["url"]
     routes = [
         (
             "POST",
@@ -172,149 +165,7 @@ async def test_all_four_routes_identity_org_and_foreign_hidden(api, headers, pdf
         ("GET", link, {}),
     ]
     for method, path, options in routes:
-        assert (await api.request(method, path, headers=headers[0], **options)).status_code == 404
-        assert (
-            await api.request(method, path, headers={"X-Org-Id": headers[0]["X-Org-Id"]}, **options)
-        ).status_code == 401
-        assert (
-            await api.request(
-                method, path, headers={"Authorization": headers[0]["Authorization"]}, **options
-            )
-        ).status_code == 422
-
-
-@pytest.mark.parametrize("role", ["admin", "bidder", "technical", "viewer"])
-async def test_source_role_matrix_preserves_all_prior_grants(
-    role, api, headers, pdf_bytes, tenants, admin_engine
-):
-    from app.services.auth import HUMAN_ONLY_SCOPES, SCOPES
-
-    attachment_human = {
-        "attachment:write",
-        "attachment:review",
-        "attachment:manage",
-        "attachment:original:read",
-        "attachment:privacy",
-        "task:attachment",
-    }
-    assert ROLE_SCOPES[role] & attachment_human == (
-        attachment_human if role in {"admin", "bidder"} else set()
-    )
-    assert {"attachment:read", "attachment:page:read"} <= ROLE_SCOPES[role]
-    assert attachment_human | {"attachment:page:read"} <= HUMAN_ONLY_SCOPES
-    assert (attachment_human | {"attachment:page:read"}).isdisjoint(SCOPES)
-    assert "attachment:read" in SCOPES
-
-    # U01 permits every human org role to open originals, never API tokens.
-    assert "template:file:read" in ROLE_SCOPES[role]
-    assert "template:file:read" in HUMAN_ONLY_SCOPES
-    assert "template:file:read" not in SCOPES
-
-    # Model metadata is readable by every role and scoped tokens; writes/tests are human-admin.
-    assert "provider:read" in ROLE_SCOPES[role]
-    assert "provider:read" in SCOPES
-    assert "provider:read" not in HUMAN_ONLY_SCOPES
-    assert ("provider:write" in ROLE_SCOPES[role]) == (role == "admin")
-    assert "provider:write" in HUMAN_ONLY_SCOPES
-    assert "provider:write" not in SCOPES
-
-    requirement_scopes = {"req:confirm", "req:manual"}
-    assert ROLE_SCOPES[role] & requirement_scopes == (
-        requirement_scopes if role in {"admin", "bidder", "technical"} else set()
-    )
-    assert requirement_scopes <= HUMAN_ONLY_SCOPES
-    assert requirement_scopes.isdisjoint(SCOPES)
-
-    lifecycle_scopes = {"certificate:lifecycle", "profile:lifecycle"}
-    assert ROLE_SCOPES[role] & lifecycle_scopes == (
-        lifecycle_scopes if role in {"admin", "bidder"} else set()
-    )
-    assert lifecycle_scopes <= HUMAN_ONLY_SCOPES
-    assert lifecycle_scopes.isdisjoint(SCOPES)
-
-    _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
-    source = (await add(api, headers[0], task, choice["id"])).json()["data"]["source"]
-    with Session(admin_engine) as session, session.begin():
-        member = session.scalar(select(Membership).where(Membership.org_id == tenants["orgs"][0]))
-        member.role = role
-    assert (await add(api, headers[0], task, choice["id"], 2)).status_code == (
-        403 if role == "viewer" else 200
-    )
-    assert (await api.get(f"/tasks/{task}/evidence-sources", headers=headers[0])).status_code == 200
-    assert (
-        await api.get(f"/evidence-sources/{source['id']}/preview/download-link", headers=headers[0])
-    ).status_code == 200
-    later = {
-        "attachment:read",
-        "attachment:write",
-        "attachment:review",
-        "attachment:manage",
-        "attachment:original:read",
-        "attachment:page:read",
-        "attachment:privacy",
-        "task:attachment",
-        "template:file:read",
-        "certificate:lifecycle",
-        "profile:lifecycle",
-        "evidence:source:read",
-        "evidence:source:write",
-        "provider:read",
-        "provider:write",
-        "screenshot:read",
-        "screenshot:write",
-        "screenshot:ingest",
-        "confidential:read",
-        "confidential:write",
-        "confidential:reveal",
-        "check:read",
-        "check:run",
-        "check:decide",
-        "score:read",
-        "score:run",
-        "score:rubric:generate",
-        "score:rubric:review",
-        "agent:read",
-        "agent:run",
-        "agent:cancel",
-        "memory:read",
-        "memory:write",
-        "memory:retrieve",
-        "memory:candidate:run",
-        "memory:approve",
-        "memory:manage",
-        "memory:eval:read",
-        "memory:eval:review",
-        "card:read",
-        "card:write",
-        "card:generate",
-        "draft:run",
-        "draft:read",
-        "evidence:confirm",
-        "export",
-        "sandbox:read",
-        "sandbox:render",
-        "sandbox:capture",
-        "req:confirm",
-        "req:manual",
-        "bid-review:classify",
-        "bid-review:decide",
-        "bid-review:evidence:review",
-        "bid-review:original:read",
-        "bid-review:outbound:authorize",
-        "bid-review:prepare",
-        "bid-review:price:release",
-        "bid-review:read",
-        "bid-review:report:download",
-        "bid-review:report:read",
-        "bid-review:report:render",
-        "bid-review:run",
-        "bid-review:source:read",
-        "bid-review:upload",
-        "evidence:annotate",
-    }
-    assert ROLE_SCOPES[role] - later == set(BASELINE[role])
-    # Export is a human bidder responsibility; source-read remains unchanged.
-    assert ("export" in ROLE_SCOPES[role]) == (role == "bidder")
+        assert (await api.request(method, path, headers={}, **options)).status_code == 401
 
 
 @pytest.mark.parametrize(
@@ -366,12 +217,12 @@ async def test_source_role_matrix_preserves_all_prior_grants(
     ],
 )
 async def test_source_token_scope_intersection(scopes, read, write, api, headers, pdf_bytes):
-    _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
-    source = (await add(api, headers[0], task, choice["id"])).json()["data"]["source"]
+    _, task, _, choice = await source_fixture(api, headers, pdf_bytes)
+    source = (await add(api, headers, task, choice["id"])).json()["data"]["source"]
     token = (
         await api.post(
             "/tokens",
-            headers=headers[0],
+            headers=headers,
             json={
                 "name": "Synthetic bounded scopes",
                 "scopes": scopes,
@@ -379,101 +230,86 @@ async def test_source_token_scope_intersection(scopes, read, write, api, headers
             },
         )
     ).json()["data"]["token"]
-    h = {**headers[0], "Authorization": "Bearer " + token}
+    h = {**headers, "Authorization": "Bearer " + token}
     path = f"/evidence-sources/{source['id']}/preview/download"
     assert (await api.get(f"/tasks/{task}/evidence-sources", headers=h)).status_code == (
         200 if read else 403
     )
     assert (await api.get(path + "-link", headers=h)).status_code == (200 if read else 403)
-    linked = (await api.get(path + "-link", headers=headers[0])).json()["data"]["url"]
+    linked = (await api.get(path + "-link", headers=headers)).json()["data"]["url"]
     assert (await api.get(linked, headers=h)).status_code == (200 if read else 403)
     assert (await add(api, h, task, choice["id"], 2)).status_code == (200 if write else 403)
 
 
-async def test_signatures_revoked_member_and_corrupt_preview(
-    api, headers, pdf_bytes, application, admin_engine, tenants
+async def test_signatures_and_corrupt_preview(
+    api, headers, pdf_bytes, application, admin_engine, database
 ):
-    _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
-    source = (await add(api, headers[0], task, choice["id"])).json()["data"]["source"]
+    _, task, _, choice = await source_fixture(api, headers, pdf_bytes)
+    source = (await add(api, headers, task, choice["id"])).json()["data"]["source"]
     path = f"/evidence-sources/{source['id']}/preview/download"
     crypto = TokenSigner.for_tokens(application.state.processor.settings)
-    payload = {
-        "kind": "source-preview",
-        "org_id": headers[0]["X-Org-Id"],
-        "source_id": source["id"],
-    }
+    payload = {"kind": "source-preview", "source_id": source["id"]}
     for changed in [
         {**payload, "kind": "certificate-file-download"},
-        {**payload, "org_id": headers[1]["X-Org-Id"]},
         {**payload, "source_id": str(uuid4())},
     ]:
         assert (
-            await api.get(
-                path, headers=headers[0], params={"signature": crypto.issue(changed, 300)}
-            )
+            await api.get(path, headers=headers, params={"signature": crypto.issue(changed, 300)})
         ).status_code == 404
     for signature in ["invalid", crypto.issue(payload, -1)]:
         assert (
-            await api.get(path, headers=headers[0], params={"signature": signature})
+            await api.get(path, headers=headers, params={"signature": signature})
         ).status_code == 404
     signature = crypto.issue(payload, 300)
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         row = await session.get(EvidenceSource, UUID(source["id"]))
-        application.state.storage.path(row.org_id, row.storage_key).write_bytes(
+        application.state.storage.path(row.storage_key).write_bytes(
             application.state.storage.cipher.encrypt(row.storage_key, b"corrupt")
         )
-    assert (await api.get(path, headers=headers[0], params={"signature": signature})).json()[
-        "data"
-    ]["error"]["code"] == "source_preview_integrity"
-    with Session(admin_engine) as session, session.begin():
-        member = session.scalar(select(Membership).where(Membership.org_id == tenants["orgs"][0]))
-        member.active = False
-    assert (
-        await api.get(path, headers=headers[0], params={"signature": signature})
-    ).status_code == 404
+    assert (await api.get(path, headers=headers, params={"signature": signature})).json()["data"][
+        "error"
+    ]["code"] == "source_preview_integrity"
 
 
 @pytest.mark.parametrize(
-    "body",
+    "body,status,exit_code",
     [
-        {"task_certificate_id": str(uuid4()), "page": 0},
-        {"task_certificate_id": str(uuid4()), "page": 201},
-        {"task_certificate_id": "invalid", "page": 1},
-        {"task_certificate_id": str(uuid4()), "page": 1, "org_id": "synthetic-sensitive"},
+        ({"task_certificate_id": str(uuid4()), "page": 0}, 422, 2),
+        ({"task_certificate_id": str(uuid4()), "page": 201}, 422, 2),
+        ({"task_certificate_id": "invalid", "page": 1}, 422, 2),
+        ({"task_certificate_id": str(uuid4()), "page": 1}, 404, 4),
     ],
 )
-async def test_invalid_source_input_redacted(body, api, headers, pdf_bytes):
-    _, task, _, _ = await source_fixture(api, headers[0], pdf_bytes)
-    response = await api.post(f"/tasks/{task}/evidence-sources", headers=headers[0], json=body)
+async def test_invalid_source_input_redacted(body, status, exit_code, api, headers, pdf_bytes):
+    _, task, _, _ = await source_fixture(api, headers, pdf_bytes)
+    response = await api.post(f"/tasks/{task}/evidence-sources", headers=headers, json=body)
     assert (
-        response.status_code == 422
-        and response.json()["data"]["error"]["exit_code"] == 2
+        response.status_code == status
+        and response.json()["data"]["error"]["exit_code"] == exit_code
         and "synthetic-sensitive" not in response.text
     )
 
 
 async def test_source_missing_wrong_task_and_bounded_chunked_json(api, headers, pdf_bytes):
-    _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
+    _, task, _, choice = await source_fixture(api, headers, pdf_bytes)
     wrong = (
-        await api.post("/tasks", headers=headers[0], json={"name": "Synthetic other task"})
+        await api.post("/tasks", headers=headers, json={"name": "Synthetic other task"})
     ).json()["data"]["id"]
-    assert (await add(api, headers[0], wrong, choice["id"])).status_code == 404
-    assert (await add(api, headers[0], str(uuid4()), choice["id"])).status_code == 404
-    assert (await add(api, headers[0], task, str(uuid4()))).status_code == 404
-    assert (await add(api, headers[0], task, choice["id"], 3)).status_code == 400
+    assert (await add(api, headers, wrong, choice["id"])).status_code == 404
+    assert (await add(api, headers, str(uuid4()), choice["id"])).status_code == 404
+    assert (await add(api, headers, task, str(uuid4()))).status_code == 404
+    assert (await add(api, headers, task, choice["id"], 3)).status_code == 400
 
     async def chunks():
         for _ in range(9):
             yield b" " * (16 * 1024)
 
-    response = await api.post(
-        f"/tasks/{task}/evidence-sources", headers=headers[0], content=chunks()
-    )
+    response = await api.post(f"/tasks/{task}/evidence-sources", headers=headers, content=chunks())
     assert response.status_code == 413 and response.json()["data"]["error"]["exit_code"] == 2
 
 
 async def test_concurrent_sources_store_once(api, headers, pdf_bytes, application, monkeypatch):
-    _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
+    _, task, _, choice = await source_fixture(api, headers, pdf_bytes)
     calls = []
     original = application.state.storage.put
 
@@ -482,7 +318,7 @@ async def test_concurrent_sources_store_once(api, headers, pdf_bytes, applicatio
         await original(*args)
 
     monkeypatch.setattr(application.state.storage, "put", counted)
-    replies = await asyncio.gather(*(add(api, headers[0], task, choice["id"]) for _ in range(2)))
+    replies = await asyncio.gather(*(add(api, headers, task, choice["id"]) for _ in range(2)))
     assert all(r.status_code == 200 for r in replies) and len(calls) == 1
     assert len({r.json()["data"]["source"]["id"] for r in replies}) == 1 and sorted(
         r.json()["data"]["duplicate"] for r in replies
@@ -490,9 +326,9 @@ async def test_concurrent_sources_store_once(api, headers, pdf_bytes, applicatio
 
 
 async def test_render_runs_outside_task_lock_and_rechecks_selection(
-    api, headers, pdf_bytes, application, monkeypatch, tenants
+    api, headers, pdf_bytes, application, monkeypatch, database
 ):
-    certificate, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
+    certificate, task, _, choice = await source_fixture(api, headers, pdf_bytes)
     rendering, release = asyncio.Event(), asyncio.Event()
     original_render = services.render_page_async
 
@@ -502,72 +338,28 @@ async def test_render_runs_outside_task_lock_and_rechecks_selection(
         return await original_render(*args)
 
     monkeypatch.setattr(services, "render_page_async", gated)
-    pending = asyncio.create_task(add(api, headers[0], task, choice["id"]))
+    pending = asyncio.create_task(add(api, headers, task, choice["id"]))
     try:
         await asyncio.wait_for(rendering.wait(), 10)
         # Replacing the selection takes the task lock while the page is still rendering.
-        assert (
-            await upload(api, headers[0], certificate, pdf_bytes, expected=2)
-        ).status_code == 200
-        replaced = await asyncio.wait_for(select_version(api, headers[0], certificate, task), 5)
+        assert (await upload(api, headers, certificate, pdf_bytes, expected=2)).status_code == 200
+        replaced = await asyncio.wait_for(select_version(api, headers, certificate, task), 5)
         assert replaced.status_code == 200, replaced.text
     finally:
         release.set()
     response = await pending
     assert response.status_code == 409
     assert response.json()["data"]["error"]["code"] == "inactive_snapshot"
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
-        assert await session.scalar(select(func.count()).select_from(EvidenceSource)) == 0
-    assert not list(application.state.storage.root.rglob("*.png"))
-
-
-@pytest.mark.parametrize("change", ["archive", "remove_member"])
-async def test_render_rechecks_workflow_authority_before_publication(
-    api, headers, pdf_bytes, application, monkeypatch, tenants, admin_engine, change
-):
-    from task_access_fixtures import add_member, archive_task, person, remove_member
-
-    _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
-    reader = headers[0]
-    contributor = None
-    if change == "remove_member":
-        contributor, reader = await person(api, admin_engine, tenants["orgs"][0])
-        added = await add_member(api, headers[0], task, contributor, 1)
-        assert added.active
-    rendering, release = asyncio.Event(), asyncio.Event()
-    original_render = services.render_page_async
-
-    async def gated(*args):
-        rendering.set()
-        await asyncio.wait_for(release.wait(), 10)
-        return await original_render(*args)
-
-    monkeypatch.setattr(services, "render_page_async", gated)
-    pending = asyncio.create_task(add(api, reader, task, choice["id"]))
-    try:
-        await asyncio.wait_for(rendering.wait(), 10)
-        if change == "archive":
-            await archive_task(api, headers[0], task)
-        else:
-            await remove_member(api, headers[0], task, contributor)
-    finally:
-        release.set()
-    response = await pending
-    expected_status, expected_code = (
-        (409, "task_archived") if change == "archive" else (404, "not_found")
-    )
-    assert response.status_code == expected_status, response.text
-    assert response.json()["data"]["error"]["code"] == expected_code
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(EvidenceSource)) == 0
     assert not list(application.state.storage.root.rglob("*.png"))
 
 
 @pytest.mark.parametrize("failure", ["read", "original_hash", "put", "audit", "timeout", "size"])
 async def test_source_failures_never_commit(
-    failure, api, headers, pdf_bytes, application, monkeypatch, tenants
+    failure, api, headers, pdf_bytes, application, monkeypatch, database
 ):
-    _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
+    _, task, _, choice = await source_fixture(api, headers, pdf_bytes)
     writes = []
     original_put = application.state.storage.put
 
@@ -593,15 +385,9 @@ async def test_source_failures_never_commit(
     elif failure == "audit":
 
         def fail_audit(session, actor, action, object_id, details):
-            session.add(
-                AuditLog(
-                    org_id=actor.org_id,
-                    actor_user_id=uuid4(),
-                    action=action,
-                    object_id=object_id,
-                    details={},
-                )
-            )
+            # Violates the retained audit_object constraint without relying on
+            # removed organization/user columns to make this write fail.
+            session.add(AuditLog(action=action, object_id=object_id, details=[]))
 
         monkeypatch.setattr(services, "audit", fail_audit)
     elif failure == "size":
@@ -613,7 +399,7 @@ async def test_source_failures_never_commit(
 
         monkeypatch.setattr("app.core.pdf_process.child_command", sleeping_child)
         application.state.processor.settings.pdf_timeout_seconds = 0.1
-    response = await add(api, headers[0], task, choice["id"])
+    response = await add(api, headers, task, choice["id"])
     assert (
         response.status_code
         == {
@@ -628,7 +414,7 @@ async def test_source_failures_never_commit(
     if failure == "timeout":
         error = response.json()["data"]["error"]
         assert error["code"] == "pdf_resource_limits" and error["exit_code"] == 4
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(EvidenceSource)) == 0
         assert (
             await session.scalar(
@@ -708,36 +494,6 @@ def test_png_integrity_never_accepts_corruption(failure, pdf_bytes):
     with pytest.raises(ServiceError) as error:
         services.check_png(content, preview)
     assert error.value.code == "source_preview_integrity" and error.value.exit_code == 4
-
-
-async def test_source_token_cannot_exceed_changed_issuer_role(
-    api, headers, pdf_bytes, tenants, admin_engine
-):
-    _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
-    scopes = [
-        "task:read",
-        "certificate:read",
-        "certificate:file:read",
-        "evidence:source:read",
-        "evidence:source:write",
-    ]
-    token = (
-        await api.post(
-            "/tokens",
-            headers=headers[0],
-            json={
-                "name": "Synthetic changed role",
-                "scopes": scopes,
-                "expires_at": "2030-01-01T00:00:00Z",
-            },
-        )
-    ).json()["data"]["token"]
-    scoped = {**headers[0], "Authorization": "Bearer " + token}
-    with Session(admin_engine) as session, session.begin():
-        member = session.scalar(select(Membership).where(Membership.org_id == tenants["orgs"][0]))
-        member.role = "viewer"
-    assert (await add(api, scoped, task, choice["id"])).status_code == 403
-    assert (await api.get(f"/tasks/{task}/evidence-sources", headers=scoped)).status_code == 200
 
 
 @pytest.mark.parametrize("failure", ["damaged", "encrypted", "descriptor"])

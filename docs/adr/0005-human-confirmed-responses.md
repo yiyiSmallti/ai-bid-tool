@@ -22,18 +22,15 @@ Extracted requirements, material declarations, model responses (响应), and hum
 - Model drafting reuses platform-default models, official reasoning levels, and resource admission. Caches bind model catalog, input, and rule versions. Record usage for each call immediately; cancellation or refusal cannot erase recorded resource usage. Org BYOK remains defined by the [provider configuration contract](../plan/provider-config.md) and is not a prerequisite.
 - Drafts perform table assembly (组表) only and copy valid human-confirmed text verbatim without model rewriting. Each requirement enters exactly one main-table row, comply-only record, or gap. Substantive clauses (实质性条款) take precedence; others enter commercial or technical tables by review domain. Negative deviations cannot be hidden. Older drafts retain snapshots and recalculate invalidation when read; a draft is not export authorization.
 
-## Implementation of the co-sign amendment
+## Single-user amendment
 
-The approved amendment is implemented by the input-bound rounds and complete-round
-gates retained in the migration history. [ADR 0012](0012-single-user-installation.md)
-removes their multi-person entry points; schema removal follows its staged plan.
-[Migration 0044](../../server/migrations/versions/0045_team_workflow_cosign.py)
-extends the revision, signature, Evidence and response-item gates together with
-service, draft, export and assessment consumption checks. Existing historical
-single-domain decisions keep their actual human records; they receive no synthetic
-signatures. Tokens, agents, workers and administrators gain no professional signing
-authority. The original decision and its approval history above remain the basis
-for this implementation.
+[ADR 0012](0012-single-user-installation.md) supersedes the multi-person co-sign
+amendment. The single-user baseline replaces the migration chain and removes
+review rounds and signatures between people; it does not convert old org data.
+[`response_revision_gate`, `response_revision_complete` and `response_require_human`](../../server/migrations/baseline/00_functions_response.sql)
+retain direct human confirmation, immutable review revisions, citation checks and
+confirmed-evidence requirements. Tokens, agents and workers cannot exercise human
+confirmation authority. The earlier decision remains a historical record.
 
 ## Tradeoffs and scope
 

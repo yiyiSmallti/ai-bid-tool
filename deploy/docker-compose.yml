@@ -50,10 +50,10 @@ services:
       - "127.0.0.1:8000:8000"
     environment: &runtime
       BID_DATABASE_URL: ${BID_DATABASE_URL:?Set runtime URL for bid_app at postgres/bid}
-      BID_PLATFORM_DATABASE_URL: ${BID_PLATFORM_DATABASE_URL:-}
-      BID_CREDENTIAL_DATABASE_URL: ${BID_CREDENTIAL_DATABASE_URL:-}
+      BID_ACCESS_KEY: ${BID_ACCESS_KEY:?Set the installation access key}
       BID_ENCRYPTION_KEY: ${BID_ENCRYPTION_KEY:?Set encryption key}
       BID_ENCRYPTION_KEY_PREVIOUS: ${BID_ENCRYPTION_KEY_PREVIOUS:-}
+      BID_WEB_DIR: ${BID_WEB_DIR:-}
       BID_TOKEN_KEY: ${BID_TOKEN_KEY:?Set token key}
       BID_SECRETS_KEY: ${BID_SECRETS_KEY:-}
       BID_SECRETS_KEY_PREVIOUS: ${BID_SECRETS_KEY_PREVIOUS:-}
@@ -74,9 +74,6 @@ services:
       BID_LLM_BATCH_CHARS: ${BID_LLM_BATCH_CHARS:-30000}
       BID_SCORE_BATCH_CHARS: ${BID_SCORE_BATCH_CHARS:-64000}
       BID_LLM_MAX_OUTPUT_TOKENS: ${BID_LLM_MAX_OUTPUT_TOKENS:-16000}
-      BID_ORG_SIGNUP_ENABLED: ${BID_ORG_SIGNUP_ENABLED:-false}
-      BID_PLATFORM_ADMIN_EMAILS: ${BID_PLATFORM_ADMIN_EMAILS:-}
-      BID_PLATFORM_TOTP_SECRETS: ${BID_PLATFORM_TOTP_SECRETS:-}
       BID_SEARCH_URL: ${BID_SEARCH_URL:-http://searxng:8080}
       BID_SEARCH_PROVIDER: ${BID_SEARCH_PROVIDER:-disabled}
       BID_CONVERTER_URL: ${BID_CONVERTER_URL:-http://converter:3000}
@@ -94,8 +91,6 @@ services:
     command: python -m app.jobs.worker
     environment:
       <<: *runtime
-      # Workers resolve credentials but cannot use management functions.
-      BID_PLATFORM_DATABASE_URL: ""
     volumes:
       - files:/app/data
     depends_on:

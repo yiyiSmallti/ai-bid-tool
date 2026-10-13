@@ -4,29 +4,21 @@ kind: plan
 
 # Cloud evidence annotation jobs
 
-Status: **Approved; first slice implemented.** Certificate pages are enabled;
-database and browser integration acceptance remains pending. Corresponds to
-[roadmap](roadmap.md) B05 and its B07/F03 dependencies.
-
 The worker-based annotation direction supersedes the earlier, unimplemented
 local-CLI annotation draft; installation scope follows
 [the single-user transition](single-user.md).
 
-The [Pydantic and interface draft](annotation/annotation_contracts.py) and
-[JSON schema inventory](annotation/annotation-schemas.json) retain the approved review contracts;
-[the runtime schemas](../../server/app/schemas/annotation_contracts.py) and
-[mechanism note](../notes/annotation.md) describe the implemented certificate-page
-path. Vendor and profile/contract attachment enablement require their separate
-source acceptance or archive contract.
+The [runtime schemas](../../server/app/schemas/annotation_contracts.py) define
+payloads; the [mechanism note](../notes/annotation.md) defines rendering and recovery.
+Vendor and profile/contract attachment enablement require separate source acceptance.
 
 ## Goal and boundary
 
-A bid specialist (投标专员) or technical contributor selects an authorized archived
+The human selects an authorized archived
 evidence (证据) page for a task (任务), previews a crop and region boxes in the console,
 and submits a background job (后台作业). A server worker uses the existing Rust renderer
 to save an immutable annotated material. A human attaches the exact result to a
-response card (响应卡) and requests human confirmation (人工确认) in the relevant review
-domain (职责). The dashboard (看板) identifies the responsible person, blocker and next
+response card (响应卡) and requests human confirmation (人工确认). The dashboard (看板) identifies the blocker and next
 action. Only current, confirmed evidence can enter a draft (初稿) or export.
 
 Processing, archival, review state and recovery belong to the cloud service. The CLI
@@ -45,7 +37,7 @@ clean-image and human keep/replace policy in [screenshots.md](screenshots.md).
 
 ## Code basis and design differences
 
-These integration requirements are implemented for certificate pages; vendor and
+These integration requirements apply to certificate pages; vendor and
 profile/contract attachment source enablement remains deferred. The
 [mechanism note](../notes/annotation.md) names the runtime ownership and recovery paths.
 
@@ -57,9 +49,9 @@ profile/contract attachment source enablement remains deferred. The
 | `ScreenshotAsset`, `ScreenshotRendition`, `ScreenshotPrivacyReview`, `ScreenshotVendorArchive` in [screenshots.py](../../server/app/models/screenshots.py); `resolve`, `record`, `verify` in [vendor_screenshots.py](../../server/app/services/vendor_screenshots.py) | Reuse source selection/revision, immutable image/plan/hash/mapping, privacy review and vendor capture archives; do not introduce a second image store. |
 | `RenderRequest`, `render`, `draw_inner_border`, `add_markup_footer` in [stamp/src/main.rs](../../stamp/src/main.rs); `ScreenshotRenderer`, `validate_png`, `_validate_rendering` in [screenshot_renderer.py](../../server/app/providers/screenshot_renderer.py) | `bid-screenshot-renderer` already uses framed in-memory input, a fixed font, redaction/crop/boxes and a source footer. B05 confirmation/provenance profiles are new. Extend the same crate and both validators while keeping old profiles byte-compatible. |
 | `render_manifest`, `create_job`, `process_render` in [screenshot_jobs.py](../../server/app/services/screenshot_jobs.py); `JobExecution` in [execution.py](../../server/app/jobs/execution.py) | Reuse input pinning, locking, immutable publication, cleanup, leases and run fencing. Existing screenshot dispatch commits before enqueue; B05 needs transactional enqueue/recovery. Current API cancellation fences publication but does not immediately interrupt Rust. |
-| `build_evidence`, `update_card`, `confirmation_inputs`, `card_action` in [response_cards.py](../../server/app/services/response_cards.py) | Image-region Evidence, immutable card revisions, domain review and confirmation gates already exist. B05 adds no independent material approval authority. |
+| `build_evidence`, `update_card`, `confirmation_inputs`, `card_action` in [response_cards.py](../../server/app/services/response_cards.py) | Image-region Evidence, immutable card revisions, human review and confirmation gates already exist. B05 adds no independent material approval authority. |
 | `require_confirmed`, `fields`, `preparation`, `current_preparation` in [requirement_consumption.py](../../server/app/services/requirement_consumption.py); [B02 contract](requirement-confirmation.md) | Requirement confirmation is independent of evidence confirmation. Material preparation can precede it; evidence acceptance, confirmed release and consumption must recheck it. |
-| `evidence_dependency`, `assemble` in [drafts.py](../../server/app/services/drafts.py); `build_manifest`, `fresh_manifest`, `release`, `download_gate` in [exports.py](../../server/app/services/exports.py); `export_complete_gate` in [0024_export_images.py](../../server/migrations/versions/0024_export_images.py) | Consumers bind canonical Evidence rendition/hash. Confirmed release images need an additional export dependency and DB gate; substituting a PNG silently violates current bindings. |
+| `evidence_dependency`, `assemble` in [drafts.py](../../server/app/services/drafts.py); `build_manifest`, `fresh_manifest`, `release`, `download_gate` in [exports.py](../../server/app/services/exports.py); `export_complete_gate` in [the bid baseline](../../server/migrations/baseline/00_functions_bid.sql) | Consumers bind canonical Evidence rendition/hash. Confirmed release images need an additional export dependency and DB gate; substituting a PNG silently violates current bindings. |
 | `CONTRACT_VERSION`, `Result`, `Cost` in [contracts.py](../../server/app/schemas/contracts.py); `attach` in [preflight.py](../../server/app/services/preflight.py) | Reuse the strict seven-key Result 5.0 and six-field resource contract; dry-run uses shared read-only preflight. |
 
 [build_screenshot_renderer.sh](../../scripts/build_screenshot_renderer.sh) and
@@ -70,9 +62,9 @@ archived PNG inputs, without adding a binary, dependency, font download or host 
 
 ## First vertical slice and source eligibility
 
-The implemented first slice is one **certificate source page → preview → cloud job →
+The first slice requires one **certificate source page → preview → cloud job →
 persisted candidate → human card attachment/review → confirmed release → draft/export**.
-Include console/API/CLI, roles, B02, jobs/events and export binding; an image-only
+Include console/API/CLI, human gates, B02, jobs/events and export binding; an image-only
 endpoint is not completion. One request targets one editable card in an explicit
 extraction scope. The worker does not rewrite card text or attach evidence for a reviewer.
 
@@ -123,7 +115,7 @@ Input changes invalidate the preview.
    binding to the intended task/card. Certificate input may need a new server-bound
    asset; vendor input reuses its asset. Recheck expected card revision at publication;
    never overwrite intervening edits. Candidate view always says `unconfirmed_material`,
-   `confirmed_by=null`, `eligible_for_draft_export=false`.
+   `confirmed_at=null`, `eligible_for_draft_export=false`.
 4. **Review actual pixels and attach.** The human opens the persisted candidate and
    explicitly saves the card via `CardUpdate` + `ImageEvidenceInput`, with a bounded
    content-region and `visual_observation`. Use `document_excerpt` for certificates,
@@ -132,27 +124,25 @@ Input changes invalidate the preview.
    response (响应) text unless edited by the human. `CardAction(action=submit)` starts
    review; annotation never invents an observation from source text.
 5. **Use existing human review.** Review all Evidence IDs, candidate hashes and warnings
-   on the exact revision. B02 must be current/confirmed. Single-domain review uses
+   on the exact revision. B02 must be current/confirmed. Human review uses
    `card_action` and the retained human response-review integration. Existing service
-   and database gates recheck domain, human authority, warnings and source validity.
-   Legacy multi-domain policy remains blocked by the database gates; this slice
-   exposes no co-sign confirmation contract or operation. Ordinary response submission
-   and confirmation also remain blocked by the retained round-required triggers;
-   see [the compatibility defect](roadmap.md#known-defects).
+   and database gates recheck human authority, warnings and source validity.
+
 6. **Produce a confirmed release.** In the final successful confirmation transaction,
    enqueue `annotation_release` per linked B05 candidate. Recheck the exact approval
    binding and generate a new immutable rendition with a fixed `CONFIRMED` footer.
    Its content pixels, including boxes/redactions, equal the candidate's approved
-   content. The worker changes no confirmer, Evidence binding or human decision.
+   content. The worker changes no Evidence binding or human decision.
 
-Confirmation belongs to Evidence in a card/review context, not an asset globally.
+Confirmation belongs to Evidence in a card approval context, not an asset globally.
 `EvidenceSourceArchive` and candidate views remain unconfirmed historical materials;
 the UI separately shows the linked card's current review status. Another card using
 the candidate requires its own confirmation and release. No `annotation confirm` exists.
 
 Approval binds canonical candidate rendition/image/content hashes, Evidence ID,
-confirmed card revision and B02 review revision/hash. The single-user transition
-retains existing database approval checks with the default no-co-sign policy.
+confirmed card revision and B02 review revision/hash. The single-user baseline retains exact human approval and source checks.
+`review_domain` remains nullable content classification in the baseline approval/hash
+binding; it grants no authority and requires no separate reviewer.
 Canonical approval hash and renderer identity select a release; never select
 “latest confirmation” or invent a signature.
 
@@ -182,10 +172,9 @@ integrity failure invalidates dependent usability/releases. Keep historical byte
 plans, human decisions and audits; new material starts a new review.
 
 Card edit/reopen/relink, requirement meaning/citation change or B02 reopen/invalidation,
-human reviewer authority loss or invalidated approval inputs invalidate
-the matching release. A source change during a job prevents publication. Task archival
-stops writes/jobs; history remains under live read grants and existing export archive
-policy. Membership removal denies access immediately, including at signed-link download.
+or invalidated approval inputs invalidate the matching release. A source change
+during a job prevents publication. Every signed-link download rechecks live
+source and approval validity.
 
 Extend the retained database approval-invalidation trigger and current source/requirement checks with
 annotation dependencies. Retain historical decisions; do not clear audit history.
@@ -277,33 +266,31 @@ mapping. Use the real extraction job's `document_id`, including a valid B02 manu
 this is the tender document (招标文件) behind the card, not its certificate. Never invent
 a Document, use `provider_test`, or loosen `Job.job_document_binding` for annotation.
 
-Candidate jobs pin submitting human, org (organization/tenant; 单位), task/card/requirement/
+Candidate jobs pin human actor kind and task/card/requirement/
 extraction, source/selection/revision, privacy input, plan/preview hash and renderer.
 Release jobs pin the exact approval and candidate content. Worker access retains the
 initiator and checks live grants; a restricted execution scope covers only that fixed
 job. Do not grant human-only scopes to workers or forge a session for human card APIs.
 Completed human review authorizes automatic release rendering; retry is a human action.
-The human confirmer can be a task reviewer without annotation write authority. Automatic
-release admission therefore validates the complete human approval, not the candidate
-owner/contributor create gate. Register `annotation_release` with `card:read` plus
+Automatic release admission validates the complete human approval, not the candidate
+human-only create gate. Register `annotation_release` with `card:read` plus
 kind-specific source-read and approval checks; that read scope alone cannot authorize
-publication. Preserve the actual human confirmer's identity and verify the exact approval and
-current review-domain authority without giving the worker `evidence:confirm`. Candidate admission
+publication. Preserve the initiating actor kind and verify the exact human approval without giving the worker `evidence:confirm`. Candidate admission
 uses `evidence:annotate`; its worker rechecks the human initiator's live create ceiling
 through a fixed-job gate, not `Identity.require` on a human-only scope stripped from
-workers. Explicit release retry still needs a human owner/contributor creation grant.
+workers. Explicit release retry still needs a human-only creation grant.
 
 Use `Queue.enqueue_in_transaction`/`ensure_process_delivery` in
 [queue.py](../../server/app/jobs/queue.py), rather than the screenshot route's delivery
 gap. Persist request ID/payload hash; identical replay returns the same job/material,
-different payload with the same ID returns 409. Cache binds org/task/source/card/input/
+different payload with the same ID returns 409. Cache binds task/source/card/input/
 renderer/submitter, not another actor's response or stale approval. Explicit terminal
 retry retains the original manifest. Input change needs a new preview/request.
 
 Heartbeat and `owned_job` fence publication. Acquire task/card locks in established
-order; recheck current membership, source/bytes, requirement binding, archive state,
+order; recheck current actor scopes, source/bytes, requirement binding, archive state,
 run ID and lease. Write a new encrypted object at
-`org/{org_id}/screenshots/{asset_id}/{rendition_id}/{sha256}.png`, then commit material,
+`screenshots/{asset_id}/{rendition_id}/{sha256}.png`, then commit material,
 audit, task event and job success together. On failure/duplicate/cancel, remove only
 attempt-owned objects without committed references. Crash reconciliation applies a
 bounded grace period to unreferenced keys; losing a lease cannot delete retained bytes.
@@ -334,7 +321,7 @@ read-only binary/font installation and process/CPU/RSS limits. Recommended initi
 envelope: 1 CPU, 512 MiB RSS, one live renderer per job, tested with maximum accepted
 images. These OS/container restrictions and cancellation polling are B05 additions,
 not an assertion that the existing adapter provides an OS sandbox. The server reads
-org storage; the renderer receives only selected verified bytes and public provenance.
+installation storage; the renderer receives only selected verified bytes and public provenance.
 
 ## Data model and migration outline
 
@@ -342,64 +329,25 @@ Reuse screenshot assets/renditions/privacy, `Evidence`, `ResponseCard`,
 `ResponseCardRevision`, `CardEvidenceLink`, Job, AuditLog and task events. Add only
 annotation-specific immutable bindings, not a parallel approval machine or PDF store.
 
-Every new table requires `org_id NOT NULL`, `task_id NOT NULL`, UUID primary key,
-`UNIQUE(org_id,id)`, appropriate `UNIQUE(org_id,task_id,id)`, **ENABLE and FORCE RLS**
-and USING/WITH CHECK against transaction `app.current_org`. Missing context denies
-reads/writes. `bid_app` cannot own tables, bypass RLS or update/delete immutable rows.
+The [single-user baseline](../../server/migrations/baseline/10_tables.sql) fixes the
+annotation request/material/release tables. Requests bind exact payload, task,
+card/revision, source, plan, renderer and job. Materials bind the successful run and
+candidate pixels. Releases bind the exact Evidence, card revision, human approval
+hash, renderer and output mapping. Typed source branches and composite parents
+prevent unrelated task, card, source or job references.
 
-| Proposed table | Immutable fields and relational constraints |
-| --- | --- |
-| `annotation_requests` | Human request ID/payload hash, task/extraction/requirement/card/expected revision, typed source refs, normalized plan/hash, input hash, reviewed source hash/attestation and optional inherited privacy review, renderer identity, submitter and job. Unique `(org_id,task_id,actor_user_id,request_id)`; exact replay only. Job owns execution state. |
-| `annotation_materials` | Request, successful job/run, candidate asset/rendition, source manifest/hashes, content hash/mapping, renderer build/profile/font/protocol and creation time. Unique `(org_id,request_id)` and candidate rendition binding. Intended card is provenance, not permission to change a newer card. |
-| `annotation_releases` | Material, canonical Evidence/candidate/hash, confirmed card revision, B02 and exact single-domain human/material approval binding/hash, release job/run/rendition/hash/content mapping/renderer/time. Unique `(org_id,evidence_id,card_revision_id,approval_sha256,renderer_identity)`. Current/stale validity derives from live dependencies, not mutable confirmation flags. |
-
-Typed nullable source columns plus exactly-one-kind CHECK replace unconstrained source
-UUIDs/JSON-only FKs. Certificate references bind full source/task/TaskCertificate/revision/
-file tuple; vendor refs bind asset/parent rendition/task/extraction/product selection/
-revision/archive. Add missing parent unique keys before composite FKs. Requirements
-include extraction/task; card revisions include card/task; renditions include asset/task;
-jobs include task with run fenced by `JobExecution`. Actors use `(org_id,user_id) →
-Membership`. Evidence/release references include the exact card revision link. Privacy,
-signature and B02 review references use org composite keys and exact parent binding.
-Every JSON-manifest reference is checked in addition to these relational constraints.
-
-The migration preserves this ordering:
-
-1. Add parent composite keys, tables, indexes, constraints, RLS and minimal grants.
-   Extend job/profile CHECKs and `screenshot_rendition_gate` from
-   [0023_screenshots.py](../../server/migrations/versions/0023_screenshots.py), preserving
-   old row/profile interpretation. The current rendition uniqueness on asset/parent/
-   plan/profile omits approval and renderer identity: preserve it as a legacy-profile
-   partial unique index, and use a new-profile key including renderer identity and
-   provenance hash. Add those nullable-on-legacy fields with new-profile NOT NULL
-   checks. Different approvals/builds must not collide or reuse different footer bytes.
-   Add server-bound certificate privacy review; never
-   backfill old material as reviewed/confirmed. No global table or content migration.
-2. Ensure tenant RLS/WITH CHECK and nondeferrable composite FKs reject wrong parents
-   before business lookup errors. Follow
-   [0049_product_guard_order.py](../../server/migrations/versions/0049_product_guard_order.py):
-   parent-dependent business checks use ordered AFTER triggers after
-   `RI_ConstraintTrigger_*`; necessary BEFORE lock/shape guards defer tenant mismatch
-   to RLS and avoid parent-dependent disclosure. No BEFORE `NOT EXISTS` FK substitute.
-   Keep task-first archive locks. For cyclic deferred FKs, completeness checks run at
-   transaction end after matching constraints. Test actual ordering; current screenshot
-   BEFORE guards do not establish it for these new tables.
-3. Add immutable-row, human request/privacy, exact source/renderer, worker run/lease and
-   release-content/approval guards. Extend scope/token CHECKs together. Complete
-   single-domain human/material/B02 gates before exposing routes; workers cannot confirm.
-4. Extend export attachments/manifests and DB `export_complete_gate` for B05 releases,
-   keeping non-B05 behavior. Extend invalidation and task-event statement producers,
-   job visibility and batched board metadata without per-row storage reads.
-5. Grant runtime INSERT/SELECT only as needed; enable routes/worker kinds after guards.
-   Quiesce incompatible workers for protocol cutover. Disable B05 writes for rollback,
-   retaining originals/materials/jobs/audits; repair forward, not by dropping history.
+Keep the baseline unchanged. Preserve immutable rows, human request/privacy gates,
+worker lease/run fences, equal-content release checks and complete source bindings.
+Human decisions use timestamps; worker publication cannot create them. Both export
+variants require current annotation releases without weakening non-annotation gates.
+Rollback disables writes/consumption while retaining history and encrypted originals.
 
 ## HTTP, CLI and JSON contract
 
-Use the existing authenticated org transaction dependency and the Result 5.0 unversioned API
+Use the existing authenticated transaction dependency and the Result 5.0 unversioned API
 HTTP prefix for metadata requests. The paths below are relative to that prefix;
 signed binary handlers also retain their authenticated unversioned links. All path/body IDs must
-resolve to one authorized task. No caller-provided org, actor, confirmer, storage key,
+resolve to one authorized task. No caller-provided actor, confirmer, storage key,
 arbitrary provenance, job kind or release status. Models reuse runtime schema types.
 
 | HTTP | CLI (all support `--json`) | Request → `data` / `items` |
@@ -424,12 +372,12 @@ JSON inventory retains the approved contract baseline.
 
 Preflight is metadata/overlay preview. Persisted PNG links use application download
 handlers requiring current identity and underlying task/source access, not public
-bearer URLs. Expiry is 300 seconds, bound to org/object/hash/variant; never persist
+bearer URLs. Expiry is 300 seconds, bound to object/hash/variant; never persist
 links in events, audits or browser storage. Lists default 50, cap 100, stable
-`(created_at,id)` keyset order; cursors bind org/actor/task/card/filter/access epoch.
+`(created_at,id)` keyset order; cursors bind actor/task/card/filter/access epoch.
 Release lists are separate; show never embeds unbounded review history. All object
 paths return identical 404 for missing/inaccessible IDs, including inaccessible
-same-org tasks; denied actions on visible objects use 403, absent authentication 401.
+tasks; denied actions on visible objects use 403, absent authentication 401.
 
 Result 5.0 has exactly `ok`, `command`, `data`, `items`, `warnings`, `cost`, `duration_ms`.
 Illustrative successful admission (no PNG claimed yet):
@@ -465,7 +413,7 @@ succeeded job with a verified material proves publication, not `ok=true` on admi
 | Exit | HTTP/error examples and meaning |
 | --- | --- |
 | 0 | Preflight complete, job accepted, read successful, or candidate/release fully published; preflight blockers still prevent submission |
-| 2 | 400/413/422 invalid plan/limit/source; 409 preview/source/card/approval changed, B02 not confirmed, archived task or request-ID payload conflict; correct input/review before retry |
+| 2 | 400/413/422 invalid plan/limit/source; 409 preview/source/card/approval changed, B02 not confirmed, or request-ID payload conflict; correct input/review before retry |
 | 3 | 503 transient queue/storage/worker failure or retryable timeout; wait timeout retains job ID without cancelling or claiming publication |
 | 4 | 401/403/404 identity/resource denial; integrity failure; missing/untrusted renderer or unsupported deployed protocol; nonretryable resource/process error; terminal cancellation |
 | 5 | Reserved by Result, unused for one atomic image; no partial PNG/material success |
@@ -475,41 +423,25 @@ or submit returns no success material; failed release creates no new human decis
 
 ## Permissions, audit and task events
 
-Add human-only `evidence:annotate` for preflight admission, candidate creation and
-release retry. Role ceiling: org admin, `bidder`, `technical`, intersected with active
-task membership; owner/contributor can create, reviewer/observer cannot. Update
-`auth.HUMAN_ONLY_SCOPES`, live checks and DB token exclusions with all existing
-human-only scopes, `evidence:confirm` and `export`. Tokens/agents never receive it;
-old tokens gain nothing. Workers execute only fixed authorized requests.
+`evidence:annotate` is human-only for preflight, candidate admission and release
+retry. The human can create, attach and review material across all professional
+domains. Tokens and agents cannot annotate, confirm or export. Workers publish
+only the fixed authorized job input and cannot edit human card decisions.
 
-| Actor intersection | Read | Create/attach candidate | Confirm Evidence / response | Retry release / export |
-| --- | --- | --- | --- | --- |
-| Human org admin, task owner/contributor | Existing source/file/screenshot/card scopes | Yes with new scope, existing card write and privacy review | No domain by virtue of admin | Retry yes; export remains existing gate, no override |
-| Human bidder, task owner/contributor | Same scoped reads | Yes | Commercial, when task domain granted | Retry yes; human bidder export gate |
-| Human technical, task owner/contributor if otherwise eligible | Same scoped reads | Yes | Technical, when task domain granted | Retry yes; no export grant |
-| Human task reviewer | Scoped reads | No general material/card writes | Granted professional domain plus matching org role | No material retry; export separately gated |
-| Viewer/observer | Read only | No | No | No |
-| Token/agent | Explicit read scopes intersected with live issuer/task/source grants | No | No | No |
-| Worker | Fixed job input | Authorized immutable publication, not human card edit | Never | Render a fixed approved release; never human export |
-
-Use `task_access.access`/`live_actor` before source reads/writes. B05 requires active
-task membership; admin recovery is not annotation or domain authority. Certificate
-reads additionally need `evidence:source:read`, `task:read`, `certificate:read`,
-`certificate:file:read`; vendor reads use `screenshot:read` and underlying archive/
-product permissions. Card actions retain `card:write`/`evidence:confirm`
-and domain gates. Status/results/cancel use matching task/source access. Cancellation
-is for the initiating human or authorized task owner with the annotation write ceiling,
-never a read-only token. Hidden buttons do not enforce any of these restrictions.
+Use `task_access.access` and `live_actor` before source reads/writes. Retain source,
+certificate, screenshot and card scopes and exact task/source bindings. Cancellation
+and retry require human write authority. Confirmation requires current requirement,
+source, hash and warning acknowledgements; hidden buttons are not authorization.
 
 Audit successful writes atomically with `versioned.audit`: `annotation.submit`,
 `annotation.publish`, `annotation.release.enqueue`, `annotation.release.publish`,
 `annotation.retry`, `annotation.invalidate`, plus existing job/card/privacy/review
-events. Keep actor kind/user, job/run, task/card/source IDs, plan/input/image/approval
+events. Keep actor kind/token/agent session, job/run, task/card/source IDs, plan/input/image/approval
 hashes, profile, reason code and time. Exclude pixels, observation text, arbitrary
 labels, credentials, signed URLs and material text. Rolled-back writes have no success audit.
 
-Use `task_events.append` and statement producers in
-[task_event_sql.py](../../server/app/services/task_event_sql.py) for atomic `board_changed`,
+Use `task_events.append` and the `produce_task_events` statement producer in
+[the core baseline functions](../../server/migrations/baseline/00_functions_core.sql) for atomic `board_changed`,
 `job_progress` and existing `access_changed`; reuse SSE/replay/reset, not a second
 stream. Frames contain IDs/states only, ≤100 targets or `invalidate_all`, ≤4096 bytes.
 Extend hidden-kind/`visible_job` handling for both annotation kinds.
@@ -518,16 +450,15 @@ Extend `task_board_projection.load` using batched metadata. New next actions:
 `inspect_annotated_material` (“核对标注图”), `confirm_annotated_material`
 (“确认标注材料”), `retry_annotation_release` (“重试确认图生成”),
 `replace_annotation_source` (“重新选择来源”). Existing B02 confirmation stays the
-first blocker when needed. The task creator provides the retained owner context;
-the eligible human reviewer comes from live review-domain authority. Render success never marks a requirement
+first blocker when needed. The human performs the indicated review action. Render success never marks a requirement
 complete. `BoardNextAction`/target/schema updates are implementation dependencies.
 
 ## Console outline and bounded reads
 
-Console route: `/app/org/tasks/{task_id}/cards/{card_id}/annotation?job={extraction_job_id}`.
+Console route: `/app/tasks/{task_id}/cards/{card_id}/annotation?job={extraction_job_id}`.
 Enter from a card material panel/dashboard action with explicit extraction scope.
-Show owner, required domain/reviewer, blocker and one primary next action. Keep unsent
-geometry only in current-tab memory; clear material/preview data on org/task switch.
+Show required review, blocker and one primary next action. Keep unsent
+geometry only in current-tab memory; clear material/preview data on task switch.
 
 Reuse [DocumentPreview.vue](../../web/src/components/DocumentPreview.vue) for tender
 citations beside the card and extend its source adapter/dialog with
@@ -540,8 +471,8 @@ come from the worker, never browser canvas export.
 Page sections: paged source picker; page/hash/provenance/warnings; original and proposed/
 actual image; crop/boxes/reset; “预览标注” then “生成标注材料”; job status/cancel.
 After success, show actual candidate before “用于此响应卡”. Existing CardEditor owns
-observation, response, submit and review. Show B02, the required single review domain, material confirmation and release
-generation separately. Show the legacy database compatibility blocker explicitly. Conflicts preserve unsent geometry but require new preview.
+observation, response, submit and review. Show B02, material confirmation and release
+generation separately. Conflicts preserve unsent geometry but require new preview.
 
 Read one source page/candidate at a time, maximum two in-flight image requests, cancel
 stale requests and revoke object URLs on close. Lists use 50/100 pagination; no task-wide
@@ -560,11 +491,11 @@ visible focus and text errors make state understandable without color alone.
 | Crop/box/footer expansion limit | Input error; no scaling, clipping, omitted provenance or watermark removal |
 | Queue interruption, lease takeover, duplicate delivery | Transactional recovery/dedup; one immutable result, stale attempt cannot publish; clean only its unreferenced objects |
 | Cancel/deadline/pipe overflow | Terminate/kill/reap, bounded terminal result, no partial image or automatic cancelled-job restart |
-| Membership/domain loss, archive/withdrawal | Deny writes/consumption; retain authorized history; fence late publication even after object upload |
+| Source or approval invalidation, withdrawal | Deny writes/consumption; retain authorized history; fence late publication even after object upload |
 | B02 incomplete/invalidated, stale human approval, wrong evidence/warnings | Candidate preparation may remain readable; acceptance/release/draft/export blocked by the corresponding gate |
 | Release missing/corrupt/stale/content mismatch | Block export with exact reason/next action; no candidate fallback or worker confirmation |
 | Unsupported/untrusted renderer | Explicit configuration failure; no Python or old-profile fallback |
-| UI read failure/org switch | Cancel old reads, remove stale images, require authorized refresh, retain unsent input only in the active context |
+| UI read failure/task switch | Cancel old reads, remove stale images, require authorized refresh, retain unsent input only in the active context |
 
 Implementation acceptance must prove the full flow. PostgreSQL/API and mocked-browser
 regression cases require rerun after the approval-binding and fixture corrections.
@@ -573,18 +504,18 @@ isolation, publication and browser path.
 
 | Area | Required acceptance and repeatable artifact |
 | --- | --- |
-| Each new table | Two orgs A/B and missing context; runtime SELECT/INSERT/UPDATE/DELETE rejection, FORCE RLS/no bypass, immutability, every source/task/card/Evidence/review/job/actor composite FK. Same-org T1/T2 and mixed parents. Assert RLS/FK before business errors, concurrent/same-statement parents and deferred completeness. |
-| Each route/download/job variant | A cannot list/show/preview/submit/retry/cancel B; uniform missing/unauthorized 404. Signed-link org/object/hash/expiry/tampering/removal, archived tasks, historical source, cursor/filter replay and candidate/release download gates. |
-| Roles and gates | Owner/contributor vs reviewer/observer, admin without domain, bidder commercial, technical technical, inactive/removed member, token/agent/worker. API and DB reject human-only scopes including evidence:confirm/export. Stale human approval/B02, wrong Evidence/hash/warnings/reopen fail; legacy round-required database policy remains an explicit compatibility blocker; worker cannot confirm. |
+| Each table | Human-versus-token/agent gates, immutability, exact source/task/card/Evidence/review/job composite parents, mixed-parent rejection and deferred completeness. |
+| Each route/download/job variant | Uniform missing/unauthorized 404; task/source binding, object/hash/expiry/tampering, historical source, cursor/filter replay and candidate/release download gates. |
+| Human gates | API and database reject token/agent/worker human-only actions; stale human approval, wrong Evidence/hash/warnings and reopened requirements block consumption. Workers cannot confirm. |
 | Real renderer flow | Synthetic pages/archive → API/CLI → real Rust → storage/job → card review → release → draft/export. Artifact includes source/plan/profile hashes, candidate/release PNGs, unchanged original, expected pixels and reversible mapping. Repeat fixed inputs for deterministic bytes and profile changes for cache separation. |
 | Pixel/process limits | No crop/crop/20 boxes, overlap/edge/small boxes, rotation, Chinese source pixels, cropped/redacted parents, bounds/21 boxes/bools/floats/labels, min width/footer overflow, 8192/20M/40MiB/decoded/metadata limits, malformed PNG/receipts. Timeout/cancel/pipe bounds/no-network/CPU-RSS and reap assertions. |
 | Jobs/usage/publication | Transactional enqueue/crash recovery, request replay/conflict, changing input/withdrawal/authority during render, lease takeover, retries/cancel/orphans.
 One verified binding per published object. |
-| Draft/export | Unconfirmed material never reaches rows/files. Current B02 and single-domain human/material decisions admit canonical Evidence only after the legacy database compatibility blocker is resolved; B05 image export additionally requires release. Evidence hash unchanged. Pin replacement/B02 reopen/card relink/reviewer authority loss/tampering block consumption; non-B05/prototype paths unchanged. |
+| Draft/export | Unconfirmed material never reaches rows/files. Current B02 and human/material decisions admit canonical Evidence through the baseline human confirmation gates; B05 image export additionally requires release. Evidence hash unchanged. Pin replacement/B02 reopen/card relink/approval invalidation/tampering block consumption; non-B05/prototype paths unchanged. |
 | CLI/schema | Snapshot every new command and dry-run/queued/succeeded/duplicate/retry/cancel/error/empty/paged result; seven keys, resource counts and exit 0/2/3/4. No false partial image. Client never runs Rust or downloads image for processing. |
-| Browser end to end | Follow [requirement-confirmation.spec.js](../../web/e2e/requirement-confirmation.spec.js) Playwright mocked-API pattern: exact routes/bodies, bounded reads, preview/explicit use/review, role/B02/material and legacy database compatibility blockers, cancellation/failure/retry, conflicts, release stale/wait, org-switch races and keyboard use.
+| Browser end to end | Follow [requirement-confirmation.spec.js](../../web/e2e/requirement-confirmation.spec.js) Playwright mocked-API pattern: exact routes/bodies, bounded reads, preview/explicit use/review, human/B02/material blockers, cancellation/failure/retry, conflicts, release stale/wait, task-switch races and keyboard use.
 Retain screenshots, trace and JSON with seed, request counts and replay command. |
-| Events/board | Correct owner/blocker/next action on publish/review/release/invalidate; no success event after rollback; replay/reset/revocation observes task/org boundaries and frame caps. Board state never authorizes consumption. |
+| Events/board | Correct blocker/next action on publish/review/release/invalidate; no success event after rollback; replay/reset/revocation observes task/source boundaries and frame caps. Board state never authorizes consumption. |
 
 Retain artifacts under ignored `data/work/annotation-acceptance/`: PNGs, hash manifest,
 CLI snapshots, Playwright screenshots/trace/result JSON and DB report, never under
@@ -593,20 +524,9 @@ real-service/renderer acceptance. Synthetic data/Providers only, no external ser
 Define failure scenarios and end-to-end cases first; do not add after-the-fact unit
 tests that merely repeat implementation.
 
-Runtime implementation includes the certificate-page API/service/jobs, migration,
-renderer protocol, CLI/schema and console path. The process launcher supports non-root Linux x86_64/aarch64; the local macOS
-`/usr/bin/sandbox-exec` deny-network probe returns `Operation not permitted`, so
-macOS production rendering is explicitly unsupported rather than an unconfined
-fallback. Raw Rust protocol checks are distinct from Linux process containment.
-Container construction and Linux sandbox execution remain pending.
-Local verification excludes network,
-new dependencies, PostgreSQL, service startup and Chromium execution; those acceptance
-limits do not disable any production gate. Keep pending integrated acceptance distinct
-from DB-free transport, build and test-collection results.
-
 ## Decisions
 
-The owner approved every recommended default; implementation follows these decisions.
+These decisions define the annotation boundary.
 
 | Decision | Approved default | Reason |
 | --- | --- | --- |
@@ -614,11 +534,11 @@ The owner approved every recommended default; implementation follows these decis
 | Profile/contract attachments | Separate immutable archive contract before enablement | Current declarations provide no attachment storage/authorization chain. |
 | Command/renderer | Cloud `bid evidence stamp`, annotation read/recovery commands, extend `stamp/` | Matches product direction and existing CI/service ownership. |
 | Preview | Read-only plan/overlay before job; actual candidate before attach/confirm | Prevents accidental submission while reviews bind real pixels. |
-| Attachment | Explicit human CardUpdate after render | Preserves concurrent edits and human ownership of observation/response. |
+| Attachment | Explicit human CardUpdate after render | Preserves concurrent edits and the humanhip of observation/response. |
 | Confirmed watermark | Immutable UNCONFIRMED candidate plus exact-approval CONFIRMED release | Preserves image/hash/signature history without overwriting files. |
 | Consumption | Confirmed canonical Evidence for draft, current release for all B05 image exports | Retains human gates and prevents stale/unconfirmed labeled attachments. |
-| Reviewer policy | Existing single human review domain/material plus B02 acceptance; legacy database compatibility remains blocked | No competing or weaker approval path. |
-| Creation role | Human-only evidence:annotate, task owner/contributor; existing professional confirmation | Source/privacy/material choices remain attributable team actions. |
+| Reviewer policy | Existing human material review plus B02 acceptance; exact baseline approval checks | No competing or weaker approval path. |
+| Creation authority | Human-only evidence:annotate, human confirmation | Source/privacy/material choices remain explicit human actions. |
 | Pixel semantics | Existing fixed font, 2px boxes, no labels/rescale, versioned profiles | Reuses bounded renderer while keeping deterministic provenance. |
 | Source change | Invalidate on task pin/source/review change, not library edit alone | Preserves task snapshots and requires explicit reconfirmation when inputs change. |
 | Cost | Local rendering makes zero provider calls. Retain resource preflight and measured duration. | Server compute does not need a fictitious model allowance. |

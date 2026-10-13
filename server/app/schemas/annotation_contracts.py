@@ -14,7 +14,7 @@ from app.schemas.contracts import CONTRACT_VERSION, Contract, Cost, Result
 from app.schemas.evidence_source_contracts import EvidenceSourceArchive
 from app.schemas.preflight_contracts import PreflightData
 from app.schemas.requirement_confirmation import ReviewState
-from app.schemas.response_card_contracts import CardAction, ReviewDomain
+from app.schemas.response_card_contracts import CardAction
 from app.schemas.screenshot_contracts import (
     ContentMapping,
     PixelRect,
@@ -99,7 +99,7 @@ AnnotationSource = Annotated[
 
 
 class AnnotationInput(Contract):
-    """The human-authored file has no org, actor, storage key, path or gate flags."""
+    """The human-authored file has no actor, storage key, path or gate flags."""
 
     extraction_job_id: UUID
     card_id: UUID
@@ -177,7 +177,6 @@ class VendorRenditionBinding(Contract):
     """Server-normalized lineage; no raw URLs, storage keys or local paths."""
 
     kind: Literal["vendor_rendition"] = "vendor_rendition"
-    org_id: UUID
     task_id: UUID
     extraction_job_id: UUID
     asset_id: UUID
@@ -238,7 +237,7 @@ class AnnotationRequirementPin(Contract):
 
 
 class AnnotationRendererIdentity(Contract):
-    protocol_version: Literal["annotation-render-v1"] = "annotation-render-v1"
+    protocol_version: Literal["annotation-render-v2"] = "annotation-render-v2"
     profile: Literal["annotation-candidate-v1", "annotation-release-v1"]
     version: str = Field(min_length=1, max_length=100)
     binary_sha256: Sha256
@@ -246,7 +245,6 @@ class AnnotationRendererIdentity(Contract):
 
 
 class AnnotationInputManifest(Contract):
-    org_id: UUID
     task_id: UUID
     target: AnnotationInput
     card_content_sha256: Sha256
@@ -272,13 +270,11 @@ class AnnotationInputManifest(Contract):
         if self.renderer.profile != "annotation-candidate-v1":
             raise ValueError("candidate input requires the candidate renderer profile")
         source = self.source
-        org_id, task_id = (
-            (source.archive.org_id, source.archive.task_id)
-            if isinstance(source, CertificatePageBinding)
-            else (source.org_id, source.task_id)
+        task_id = (
+            source.archive.task_id if isinstance(source, CertificatePageBinding) else source.task_id
         )
-        if (org_id, task_id) != (self.org_id, self.task_id):
-            raise ValueError("source must belong to the request org and task")
+        if task_id != self.task_id:
+            raise ValueError("source must belong to the request task")
         supplied = self.target.source
         if isinstance(supplied, CertificateAnnotationSource):
             if not isinstance(source, CertificatePageBinding) or (
@@ -395,7 +391,6 @@ class AnnotationRendering(Contract):
 
 class AnnotationCandidateView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     job_id: UUID
     input_hash: Sha256
@@ -405,12 +400,12 @@ class AnnotationCandidateView(Contract):
     rendering: AnnotationRendering
     created_at: AwareDatetime
     status: Literal["unconfirmed_material"] = "unconfirmed_material"
-    confirmed_by: Literal[None] = None
+    confirmed_at: Literal[None] = None
     eligible_for_draft_export: Literal[False] = False
 
     @model_validator(mode="after")
     def candidate_scope(self):
-        if (self.org_id, self.task_id) != (self.manifest.org_id, self.manifest.task_id):
+        if self.task_id != self.manifest.task_id:
             raise ValueError("candidate scope differs from normalized manifest")
         if self.input_hash != self.manifest.canonical_sha256():
             raise ValueError("candidate must retain its exact submitted input hash")
@@ -434,7 +429,6 @@ class AnnotationApprovalBinding(Contract):
     card_id: UUID
     card_revision: Revision
     card_revision_id: UUID
-    confirmed_by: UUID
     confirmed_at: AwareDatetime
     candidate_annotation_id: UUID
     candidate_rendition_id: UUID
@@ -445,8 +439,6 @@ class AnnotationApprovalBinding(Contract):
     root_mapping_sha256: Sha256
     reviewed_region: PixelRect
     requirement: AnnotationRequirementPin
-    decision_kind: Literal["single_domain"]
-    review_domain: ReviewDomain
     card_content_sha256: Sha256
     evidence_binding_sha256: Sha256
     approval_binding_sha256: Sha256
@@ -571,7 +563,7 @@ class AnnotationRenderRequest(Contract):
     The original plan is retained solely for hash/provenance validation on release.
     """
 
-    protocol: Literal["annotation-render-v1"] = "annotation-render-v1"
+    protocol: Literal["annotation-render-v2"] = "annotation-render-v2"
     source: AnnotationSourceBinding
     plan: AnnotationPlan
     plan_sha256: Sha256

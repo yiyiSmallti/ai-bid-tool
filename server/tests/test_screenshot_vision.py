@@ -144,11 +144,9 @@ class Accounting:
 
 
 def provider(tmp_path, vendor: Vendor, capability=CAPABILITY, **settings_overrides):
-    options = {
-        "reasoning_effort": "high",
-        "screenshot_vision": capability,
-    }
+    options = {"reasoning_effort": "high", "screenshot_vision": capability}
     settings = Settings(
+        access_key="synthetic-vision-test-access-key",
         database_url="postgresql+psycopg://synthetic:synthetic@localhost/synthetic",
         encryption_key=Fernet.generate_key().decode(),
         token_key=Fernet.generate_key().decode(),
@@ -161,11 +159,7 @@ def provider(tmp_path, vendor: Vendor, capability=CAPABILITY, **settings_overrid
         llm_request_options=json.dumps(options),
         **settings_overrides,
     )
-    return OpenAICompatibleExtractor(
-        settings,
-        vendor.transport(),
-        platform_model_id="catalog-vision",
-    )
+    return OpenAICompatibleExtractor(settings, vendor.transport())
 
 
 async def run(provider, accounting, *, images=None, purposes=None):

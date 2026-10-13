@@ -112,7 +112,7 @@ class PlatformTrustAnchorService:
         return [TrustAnchorView.model_validate(row) for row in rows]
 
     async def add(self, actor: Identity, data: bytes, label: str) -> TrustAnchorAddResult:
-        require_human(actor)
+        require_human(actor, "trust-anchor:manage")
         view, der = await self.parse(data, label)
         params = view.model_dump(exclude={"is_ca"})
         params |= {"der": der}
@@ -128,7 +128,7 @@ class PlatformTrustAnchorService:
         return TrustAnchorAddResult.model_validate(row)
 
     async def disable(self, actor: Identity, anchor_id: UUID) -> TrustAnchorView:
-        require_human(actor)
+        require_human(actor, "trust-anchor:manage")
         async with self.transaction() as session:
             await set_actor_context(session, actor)
             row = await session.scalar(

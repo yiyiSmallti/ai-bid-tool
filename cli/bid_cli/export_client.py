@@ -26,7 +26,7 @@ from docx.opc.exceptions import PackageNotFoundError
 from lxml.etree import XMLSyntaxError
 from pydantic import ValidationError
 
-from bid_cli.client import Client, new_output_path
+from bid_cli.client import Client, credential, new_output_path
 
 MAX_UNPACKED_BYTES = 1024 * 1024 * 1024
 MAX_PACKAGE_MEMBERS = 10_000
@@ -169,7 +169,6 @@ async def download_export(client: Client, export_id: UUID, output: Path) -> dict
             "invalid_output_path", "Export download output must use a .docx name", 400, 2
         )
 
-    saved = client.state.load()
     view_body = await client.request("GET", f"/exports/{export_id}")
     link_body = await client.request("GET", f"/exports/{export_id}/download-link")
     try:
@@ -178,7 +177,6 @@ async def download_export(client: Client, export_id: UUID, output: Path) -> dict
         if (
             view.id != export_id
             or link.export_id != export_id
-            or str(view.org_id) != saved["org_id"]
             or link.file != view.file
             or view.validity != "current"
         ):
@@ -226,8 +224,7 @@ async def save_verified_docx(
     integrity_code: str = "export_file_integrity",
 ) -> None:
     """Persist verified DOCX bytes privately, atomically and without overwriting."""
-    saved = client.state.load()
-    headers = {"Authorization": f"Bearer {saved['session']}", "X-Org-Id": saved["org_id"]}
+    headers = {"Authorization": f"Bearer {credential()}"}
     parent_fd: int | None = None
     temporary_name: str | None = None
     linked = False

@@ -6,7 +6,7 @@ const anchors = ref([]), label = ref(""), selected = ref(null), preview = ref(nu
 const controller = new AbortController();
 const disableOpen = computed({ get: () => !!disabling.value, set: value => { if (!value) disabling.value = null; } });
 let mounted = true, selection = 0;
-const messages = { invalid_input: "证书或标签无效，请选择 64 KiB 以内的 PEM/DER CA 证书", invalid_trust_anchor: "证书不是有效的 PEM/DER CA 证书，请核对原件", trust_store_unavailable: "信任库暂时无法访问，请稍后重试", trust_anchor_capacity: "信任根保留数量已达到上限", trust_anchor_invalid: "无法解析 CA 证书", trust_anchor_not_ca: "此证书没有 CA 属性，不能作为信任根", trust_anchor_limit: "证书超过 64 KiB 上限", not_found: "信任根不可访问，请刷新", forbidden: "当前身份无权维护信任根", invalid_session: "平台登录已失效，请重新登录" };
+const messages = { invalid_input: "证书或标签无效，请选择 64 KiB 以内的 PEM/DER CA 证书", invalid_trust_anchor: "证书不是有效的 PEM/DER CA 证书，请核对原件", trust_store_unavailable: "信任库暂时无法访问，请稍后重试", trust_anchor_capacity: "信任根保留数量已达到上限", trust_anchor_invalid: "无法解析 CA 证书", trust_anchor_not_ca: "此证书没有 CA 属性，不能作为信任根", trust_anchor_limit: "证书超过 64 KiB 上限", not_found: "信任根不可访问，请刷新", forbidden: "当前身份无权维护信任根", invalid_session: "登录已失效，请重新登录" };
 function fail(exc) { error.value = messages[exc.code] ?? "操作未完成，请刷新后再试"; }
 async function load() {
   busy.value = true; error.value = "";
@@ -73,7 +73,7 @@ onBeforeUnmount(() => { mounted = false; controller.abort(); selected.value = nu
     <el-table-column label="证书" min-width="280"><template #default="{ row }"><strong>{{ row.label }}</strong><div class="mono hint">{{ row.fingerprint_sha256 }}</div><p>主体：{{ row.subject }}</p><p>颁发者：{{ row.issuer }}</p></template></el-table-column>
     <el-table-column label="有效期" min-width="220"><template #default="{ row }">{{ formatTime(row.not_before) }} 至 {{ formatTime(row.not_after) }}</template></el-table-column>
     <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '已启用' : '已停用' }}</el-tag></template></el-table-column>
-    <el-table-column label="管理记录" min-width="220"><template #default="{ row }">第 {{ row.revision }} 版 · {{ row.created_by }}<div>{{ formatTime(row.created_at) }}</div><div v-if="row.disabled_at">{{ row.disabled_by }} · {{ formatTime(row.disabled_at) }} 停用</div></template></el-table-column>
+    <el-table-column label="管理记录" min-width="220"><template #default="{ row }">第 {{ row.revision }} 版<div>{{ formatTime(row.created_at) }}</div><div v-if="row.disabled_at">{{ formatTime(row.disabled_at) }} 停用</div></template></el-table-column>
     <el-table-column label="操作" width="110"><template #default="{ row }"><el-button v-if="row.enabled" size="small" :disabled="busy" @click="disabling = row">停用</el-button></template></el-table-column>
   </el-table>
   <el-dialog v-model="disableOpen" title="停用信任根证书" width="480" :close-on-click-modal="false">

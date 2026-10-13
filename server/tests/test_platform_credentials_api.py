@@ -1,25 +1,24 @@
 """Credential workflow through the real API and dedicated PostgreSQL roles.
 
-Failure modes: org/token/TOTP-less authority, stale writes, ciphertext/value disclosure,
+Failure modes: unauthorized token authority, stale writes, ciphertext/value disclosure,
 probe without a persisted authorization, partial imports and resurrection after removal.
 The database suite is run by the owning integration session, never a local service helper.
 """
 
 import json
+import os
 from uuid import uuid4
 
 import httpx
 import pytest
 from app.api.main import create_app
-from app.core.security import TokenSigner
+from app.core.config import Settings
 from app.schemas.platform_credentials import ServiceResolveTarget
 from app.services.platform_credentials import PlatformCredentialResolver
 from conftest import FakeQueue
 from cryptography.fernet import Fernet
 from pydantic import SecretStr
 from sqlalchemy import text
-from test_platform_api import org_header
-from test_platform_auth import OPERATOR, platform_settings, sign_in
 
 KEY = "synthetic-credential-api-first-1234"
 NEW_KEY = "synthetic-credential-api-second-5678"
@@ -34,8 +33,8 @@ BODY = {
 
 
 @pytest.fixture
-async def credential_console(operator, tmp_path, admin_engine):
-    settings = platform_settings(tmp_path).model_copy(
+async def credential_console(database, tmp_path, admin_engine):
+    settings = Settings(data_dir=tmp_path).model_copy(
         update={
             "secrets_key": SecretStr(Fernet.generate_key().decode()),
         }
@@ -48,19 +47,17 @@ async def credential_console(operator, tmp_path, admin_engine):
             base_url="http://test",
         ) as api,
     ):
-        login = await sign_in(api)
-        assert login.status_code == 200
-        api.headers["Authorization"] = "Bearer " + login.json()["data"]["session"]
+        api.headers["Authorization"] = "Bearer " + os.environ["BID_ACCESS_KEY"]
         yield api, settings, app
 
 
 async def test_credential_lifecycle_and_live_resolution(credential_console, admin_engine, caplog):
-    api, settings, _ = credential_console
+    api, settings, app = credential_console
     created = await api.post("/platform/credentials", json=BODY)
     assert created.status_code == 200, created.text
     view = created.json()["data"]["credential"]
     target = ServiceResolveTarget(service="vendor_search", credential_id=view["id"])
-    resolver = PlatformCredentialResolver(settings)
+    resolver = PlatformCredentialResolver(settings, app.state.db)
     assert (await resolver.resolve_for_call(target)).api_key.get_secret_value() == KEY
     path = f"/platform/credentials/{view['id']}"
     replaced = await api.post(
@@ -121,7 +118,7 @@ async def test_credential_lifecycle_and_live_resolution(credential_console, admi
             )
             is None
         )
-        audit = str(connection.execute(text("SELECT details FROM platform_audit_logs")).all())
+        audit = str(connection.execute(text("SELECT details FROM audit_logs")).all())
     output = "".join(
         r.text
         for r in [
@@ -142,29 +139,22 @@ async def test_credential_lifecycle_and_live_resolution(credential_console, admi
     assert shown.headers["Cache-Control"] == "no-store"
 
 
-async def test_all_credential_routes_refuse_orgs_tokens_and_no_totp(credential_console, tenants):
-    api, settings, _ = credential_console
-    credentials = []
-    for i, email in enumerate(("a@example.test", "b@example.test")):
-        header = await org_header(api, tenants["orgs"][i], email)
-        credentials.append(header)
-        token = await api.post(
-            "/tokens",
-            headers=header,
-            json={
-                "name": "credential boundary",
-                "scopes": ["task:read"],
-                "expires_at": "2030-01-01T00:00:00Z",
-            },
-        )
-        credentials.append({"Authorization": "Bearer " + token.json()["data"]["token"]})
-    credentials.append(
-        {
-            "Authorization": "Bearer "
-            + TokenSigner.for_tokens(settings).issue({"kind": "platform", "email": OPERATOR}, 60)
-        }
+async def test_all_credential_routes_refuse_tokens_and_missing_identity(
+    credential_console, database
+):
+    api, settings, app = credential_console
+    token = await api.post(
+        "/tokens",
+        json={
+            "name": "credential boundary",
+            "scopes": ["task:read"],
+            "expires_at": "2030-01-01T00:00:00Z",
+        },
     )
-    credentials.append({"Authorization": ""})
+    credentials = [
+        {"Authorization": "Bearer " + token.json()["data"]["token"]},
+        {"Authorization": ""},
+    ]
     missing = str(uuid4())
     for header in credentials:
         for method, suffix, body in [
@@ -196,8 +186,8 @@ async def test_all_credential_routes_refuse_orgs_tokens_and_no_totp(credential_c
             response = await api.request(
                 method, "/platform/credentials" + suffix, headers=header, json=body
             )
-            assert response.status_code == 401, response.text
-            assert response.json()["data"]["error"]["code"] == "invalid_session"
+            assert response.status_code in {401, 403}, response.text
+            assert response.json()["data"]["error"]["code"] in {"invalid_session", "forbidden"}
 
 
 async def test_import_dry_run_replay_conflict_and_validation_redaction(
@@ -206,11 +196,11 @@ async def test_import_dry_run_replay_conflict_and_validation_redaction(
     api, _, _ = credential_console
     body = {"entries": [{**BODY, "source_env": "BID_PERPLEXITY_API_KEY", "reason": "migration"}]}
     with admin_engine.connect() as connection:
-        initial = connection.scalar(text("SELECT count(*) FROM platform_audit_logs"))
+        initial = connection.scalar(text("SELECT count(*) FROM audit_logs"))
     dry = await api.post("/platform/credentials/import-env", json={**body, "dry_run": True})
     assert dry.status_code == 200 and dry.json()["data"]["would_create"] == 1
     with admin_engine.connect() as connection:
-        assert connection.scalar(text("SELECT count(*) FROM platform_audit_logs")) == initial
+        assert connection.scalar(text("SELECT count(*) FROM audit_logs")) == initial
     first = await api.post("/platform/credentials/import-env", json=body)
     assert first.status_code == 200 and first.json()["data"]["created"] == 1
     replay = await api.post("/platform/credentials/import-env", json=body)

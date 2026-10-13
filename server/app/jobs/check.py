@@ -47,7 +47,7 @@ async def current_snapshot(session, actor, task_id, submitted, storage, settings
 
 
 async def process(execution: JobExecution, storage: Storage) -> None:
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         actor = await check_inputs.access(session, check.worker(job), "check:run")
         submitted = job.result["submission"]
@@ -76,7 +76,7 @@ async def process(execution: JobExecution, storage: Storage) -> None:
     stop_reason = None
     reported_usages = []
     if fixed.manifest["mode"] == "combined" and secret["outbound"]["requirements"]:
-        async with execution.db.transaction(execution.org_id) as session:
+        async with execution.db.transaction() as session:
             job = await execution.owned_job(session)
             llm = await check_semantic.resolve(session, execution.settings, job)
             llm, _, _ = with_reasoning(llm, job.reasoning)
@@ -130,11 +130,11 @@ async def process(execution: JobExecution, storage: Storage) -> None:
         execution.plan(0)
     if execution.stopped is not None and execution.stopped.code not in check_semantic.PARTIAL_STOPS:
         raise execution.stopped
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         await check_inputs.lock_inputs(session, actor, task_id)
         job = await execution.owned_job(session)
         actor = await check_inputs.access(session, check.worker(job), "check:run")
-        # Rebuild under the same locks used by task/card edits, membership changes
+        # Rebuild under the same locks used by task/card edits, authority changes
         # and confidential values. An earlier preview is never a publication permit.
         current = await current_snapshot(
             session, actor, task_id, submitted, storage, execution.settings, job

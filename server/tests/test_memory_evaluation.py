@@ -10,7 +10,7 @@ from uuid import UUID
 from app.schemas.memory_contracts import MemoryEvalCase, MemoryRetrievalRequest
 from test_memory_api import approved_rule
 
-SAMPLE_VERSION = "org-keyword-evaluation-v1"
+SAMPLE_VERSION = "library-keyword-evaluation-v1"
 
 
 def digest(value) -> str:
@@ -24,7 +24,7 @@ async def approved_preference(api, header):
         "/memories",
         headers=header,
         json={
-            "target": {"scope": "org"},
+            "target": {"scope": "library"},
             "content": {
                 "kind": "preference",
                 "conflict_key": "evaluation.default",
@@ -77,21 +77,20 @@ async def register_confidential_value_with_outbound_redaction_off(api, header):
         json={"task_id": task_id, "value": confidential_value},
     )
     assert saved.status_code == 200, saved.text
-    return task_id, confidential_value
+    return (task_id, confidential_value)
 
 
-async def test_memory_synthetic_retrieval_evaluation(api, headers, tenants):
+async def test_memory_synthetic_retrieval_evaluation(api, headers, database):
     started = time.monotonic()
-    exact = await approved_rule(api, headers[0], "evaluation.exact", "交货期", ["delivery"])
+    exact = await approved_rule(api, headers, "evaluation.exact", "交货期", ["delivery"])
     keyword_tag = await approved_rule(
-        api, headers[0], "evaluation.keyword-tag", "交货期由答疑明确", ["delivery"]
+        api, headers, "evaluation.keyword-tag", "交货期由答疑明确", ["delivery"]
     )
-    keyword = await approved_rule(api, headers[0], "evaluation.keyword", "交货期按答疑")
-    tie_a = await approved_rule(api, headers[0], "evaluation.tie-a", "交货期应逐项注明A")
-    tie_b = await approved_rule(api, headers[0], "evaluation.tie-b", "交货期应逐项注明B")
-    normalized = await approved_rule(api, headers[0], "evaluation.normalized", "ＦＯＯ   Bar")
-    preference = await approved_preference(api, headers[0])
-    foreign = await approved_rule(api, headers[1], "evaluation.foreign", "交货期")
+    keyword = await approved_rule(api, headers, "evaluation.keyword", "交货期按答疑")
+    tie_a = await approved_rule(api, headers, "evaluation.tie-a", "交货期应逐项注明A")
+    tie_b = await approved_rule(api, headers, "evaluation.tie-b", "交货期应逐项注明B")
+    normalized = await approved_rule(api, headers, "evaluation.normalized", "ＦＯＯ   Bar")
+    preference = await approved_preference(api, headers)
     ids = {
         name: UUID(memory["id"])
         for name, memory in (
@@ -102,73 +101,46 @@ async def test_memory_synthetic_retrieval_evaluation(api, headers, tenants):
             ("tie_b", tie_b),
             ("normalized", normalized),
             ("preference", preference),
-            ("foreign", foreign),
         )
     }
     ties = sorted([ids["tie_a"], ids["tie_b"]], key=str)
     expected_order = [ids["exact"], ids["keyword_tag"], ids["keyword"], *ties, ids["preference"]]
-    org = tenants["orgs"][0]
     cases = [
         MemoryEvalCase(
             case_id="rules-before-preferences",
             request=MemoryRetrievalRequest(
-                org_id=org, scopes=["org"], query="交货期", keywords=["答疑"], tags=["delivery"]
+                scopes=["library"], query="交货期", keywords=["答疑"], tags=["delivery"]
             ),
             expected_memory_ids=expected_order,
-            forbidden_memory_ids=[ids["foreign"]],
+            forbidden_memory_ids=[],
             expected_order=expected_order,
         ),
         MemoryEvalCase(
             case_id="top-k-priority",
             request=MemoryRetrievalRequest(
-                org_id=org,
-                scopes=["org"],
-                query="交货期",
-                keywords=["答疑"],
-                tags=["delivery"],
-                top_k=3,
+                scopes=["library"], query="交货期", keywords=["答疑"], tags=["delivery"], top_k=3
             ),
             expected_memory_ids=expected_order[:3],
-            forbidden_memory_ids=[ids["foreign"]],
+            forbidden_memory_ids=[],
             expected_order=expected_order[:3],
         ),
         MemoryEvalCase(
             case_id="nfkc-casefold",
-            request=MemoryRetrievalRequest(org_id=org, scopes=["org"], query="foo bar"),
+            request=MemoryRetrievalRequest(scopes=["library"], query="foo bar"),
             expected_memory_ids=[ids["normalized"]],
-            forbidden_memory_ids=[ids["foreign"]],
+            forbidden_memory_ids=[],
             expected_order=[ids["normalized"]],
         ),
         MemoryEvalCase(
             case_id="literal-like-metacharacters",
-            request=MemoryRetrievalRequest(org_id=org, scopes=["org"], query="%_"),
+            request=MemoryRetrievalRequest(scopes=["library"], query="%_"),
             expected_memory_ids=[],
             forbidden_memory_ids=list(ids.values()),
             expected_order=[],
-        ),
-        MemoryEvalCase(
-            case_id="foreign-org-hidden",
-            request=MemoryRetrievalRequest(
-                org_id=tenants["orgs"][1], scopes=["org"], query="交货期"
-            ),
-            expected_memory_ids=[],
-            forbidden_memory_ids=list(ids.values()),
-            expected_order=[],
-            expected_error="not_found",
         ),
         MemoryEvalCase(
             case_id="global-disabled",
-            request=MemoryRetrievalRequest(org_id=org, scopes=["global"], query="交货期"),
-            expected_memory_ids=[],
-            forbidden_memory_ids=list(ids.values()),
-            expected_order=[],
-            expected_error="memory_scope_unavailable",
-        ),
-        MemoryEvalCase(
-            case_id="user-disabled",
-            request=MemoryRetrievalRequest(
-                org_id=org, scopes=["user"], user_id=tenants["users"][0], query="交货期"
-            ),
+            request=MemoryRetrievalRequest(scopes=["global"], query="交货期"),
             expected_memory_ids=[],
             forbidden_memory_ids=list(ids.values()),
             expected_order=[],
@@ -176,9 +148,7 @@ async def test_memory_synthetic_retrieval_evaluation(api, headers, tenants):
         ),
         MemoryEvalCase(
             case_id="project-disabled",
-            request=MemoryRetrievalRequest(
-                org_id=org, scopes=["project"], task_id=UUID(int=1), query="交货期"
-            ),
+            request=MemoryRetrievalRequest(scopes=["project"], task_id=UUID(int=1), query="交货期"),
             expected_memory_ids=[],
             forbidden_memory_ids=list(ids.values()),
             expected_order=[],
@@ -186,9 +156,7 @@ async def test_memory_synthetic_retrieval_evaluation(api, headers, tenants):
         ),
         MemoryEvalCase(
             case_id="vector-unconfigured",
-            request=MemoryRetrievalRequest(
-                org_id=org, scopes=["org"], query="交货期", mode="vector"
-            ),
+            request=MemoryRetrievalRequest(scopes=["library"], query="交货期", mode="vector"),
             expected_memory_ids=[],
             forbidden_memory_ids=list(ids.values()),
             expected_order=[],
@@ -196,9 +164,7 @@ async def test_memory_synthetic_retrieval_evaluation(api, headers, tenants):
         ),
         MemoryEvalCase(
             case_id="hybrid-unconfigured",
-            request=MemoryRetrievalRequest(
-                org_id=org, scopes=["org"], query="交货期", mode="hybrid"
-            ),
+            request=MemoryRetrievalRequest(scopes=["library"], query="交货期", mode="hybrid"),
             expected_memory_ids=[],
             forbidden_memory_ids=list(ids.values()),
             expected_order=[],
@@ -206,13 +172,13 @@ async def test_memory_synthetic_retrieval_evaluation(api, headers, tenants):
         ),
     ]
     results = []
-    recalls, reciprocal_ranks = [], []
+    recalls, reciprocal_ranks = ([], [])
     priority_violations = isolation_violations = 0
     for case in cases:
         case_started = time.monotonic()
         response = await api.post(
             "/memories/retrieve?preview=true",
-            headers=headers[0],
+            headers=headers,
             json=case.request.model_dump(mode="json"),
         )
         output = response.json()
@@ -271,13 +237,13 @@ async def test_memory_synthetic_retrieval_evaluation(api, headers, tenants):
             }
         )
     task_id, confidential_value = await register_confidential_value_with_outbound_redaction_off(
-        api, headers[0]
+        api, headers
     )
     sensitive = await api.post(
         "/memories",
-        headers=headers[0],
+        headers=headers,
         json={
-            "target": {"scope": "org"},
+            "target": {"scope": "library"},
             "content": {
                 "kind": "rule",
                 "conflict_key": "evaluation.protected",

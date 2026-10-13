@@ -64,9 +64,6 @@ async def attach(
                     Job.task_id == task_id,
                     Job.kind == kind,
                     Job.result["submission"]["input_hash"].astext == input_hash,
-                    Job.actor_user_id == actor.user_id
-                    if actor is not None and kind != "draft"
-                    else true(),
                     Job.actor_token_id == actor.token_id
                     if actor is not None and kind != "draft"
                     else true(),

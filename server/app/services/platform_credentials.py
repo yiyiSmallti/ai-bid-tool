@@ -105,7 +105,7 @@ def database_error(exc: SQLAlchemyError) -> ServiceError:
     return credential_error(code if code in ERROR_MESSAGES else "credential_backend_unavailable")
 
 
-def require_human(actor: Identity) -> None:
+def require_human(actor: Identity, scope: str = "credential:manage") -> None:
     if (
         not isinstance(actor, Identity)
         or actor.actor_kind != "session"
@@ -113,6 +113,7 @@ def require_human(actor: Identity) -> None:
         or (actor.session_expires_at is not None and actor.session_expires_at <= datetime.now(UTC))
     ):
         raise credential_error("invalid_session")
+    actor.require(scope)
 
 
 class PlatformCredentialResolver:

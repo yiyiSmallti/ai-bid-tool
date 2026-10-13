@@ -1,15 +1,15 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { orgRequest, formatTime } from "../org.js";
+import { request } from "../api.js";
+import { formatTime } from "../org.js";
 import { reviewError } from "../bid-review.js";
 import JobPanel from "./JobPanel.vue";
 import BidReviewFindings from "./BidReviewFindings.vue";
 import BidPresenceAuthorization from "./BidPresenceAuthorization.vue";
 import BidPresenceLocation from "./BidPresenceLocation.vue";
-const props = defineProps({ taskId: String, submissionId: String, writable: Boolean, prepared: Boolean, authorizationEpoch: Number, authority: Object });
+const props = defineProps({ taskId: String, submissionId: String, prepared: Boolean, authorizationEpoch: Number });
 const asOf = ref(new Date().toISOString().slice(0, 10)), preview = ref(null), consent = ref(false), retry = ref(false), busy = ref(false), error = ref(""), runs = ref([]), nextCursor = ref(null), selected = ref(null), jobId = ref("");
 const clefEnabled = ref(true), presenceOpen = ref(false), presenceAuthorizationId = ref(null);
-const canAuthorizeImages = computed(() => props.authority?.taskState === "active" && props.authority?.owner && ["admin", "bidder"].includes(props.authority?.role));
 const obligations = ref([]), signing = ref([]), obligationCursor = ref(null), signingCursor = ref(null);
 const path = computed(() => `/tasks/${encodeURIComponent(props.taskId)}/bid-reviews`);
 const expired = computed(() => !preview.value || Date.parse(preview.value.expires_at) <= Date.now());
@@ -17,7 +17,7 @@ let generation = 0, selectionGeneration = 0, controller, expiryTimer, requestId 
 function invalidate() { clearTimeout(expiryTimer); preview.value = null; consent.value = false; requestId = crypto.randomUUID(); }
 async function list(more = false) {
   const token = generation, query = new URLSearchParams({ limit: "50" }); if (more && nextCursor.value) query.set("cursor", nextCursor.value);
-  const response = await orgRequest("GET", `${path.value}?${query}`, undefined, { signal: controller?.signal });
+  const response = await request("GET", `${path.value}?${query}`, undefined, { signal: controller?.signal });
   if (token !== generation) return;
   if (response.data.task_id !== props.taskId || response.items.length > 50 || response.items.some(row => row.task_id !== props.taskId)) throw new Error("review list parent mismatch");
   runs.value = more ? [...runs.value, ...response.items] : response.items; nextCursor.value = response.data.next_cursor;
@@ -26,7 +26,7 @@ async function section(id, name, more = false) {
   const token = generation, selectionToken = selectionGeneration, query = new URLSearchParams({ section: name, limit: "50" });
   const cursor = name === "obligations" ? obligationCursor : signingCursor, rows = name === "obligations" ? obligations : signing;
   if (more && cursor.value !== null) query.set("cursor", cursor.value);
-  const response = await orgRequest("GET", `/bid-reviews/${encodeURIComponent(id)}?${query}`, undefined, { signal: controller?.signal });
+  const response = await request("GET", `/bid-reviews/${encodeURIComponent(id)}?${query}`, undefined, { signal: controller?.signal });
   if (token !== generation || selectionToken !== selectionGeneration) return;
   if (response.data.run.id !== id || response.data.run.task_id !== props.taskId || response.data.run.submission_id !== props.submissionId || !Array.isArray(response.data[name]) || response.data[name].length > 50) throw new Error("review parent mismatch");
   selected.value = response.data.run; rows.value = more ? [...rows.value, ...response.data[name]] : response.data[name]; cursor.value = response.data.next_cursor;
@@ -40,7 +40,7 @@ async function show(id) {
 async function inspect() {
   const token = generation; busy.value = true; error.value = ""; invalidate();
   try {
-    const result = await orgRequest("POST", path.value, { request_id: requestId, submission_id: props.submissionId, assessment_date: asOf.value, scope: "uploaded_bid", review_slice: "compliance", clef_enabled: clefEnabled.value, presence_authorization_id: presenceAuthorizationId.value, dry_run: true }, { signal: controller?.signal });
+    const result = await request("POST", path.value, { request_id: requestId, submission_id: props.submissionId, assessment_date: asOf.value, scope: "uploaded_bid", review_slice: "compliance", clef_enabled: clefEnabled.value, presence_authorization_id: presenceAuthorizationId.value, dry_run: true }, { signal: controller?.signal });
     if (token !== generation) return;
     const fixed = result.data;
     if (fixed.input.task_id !== props.taskId || fixed.input.submission_id !== props.submissionId || !/^[a-f0-9]{64}$/.test(fixed.input.input_hash) || fixed.preflight.input_hash !== fixed.input.input_hash || !Number.isFinite(Date.parse(fixed.expires_at))) throw new Error("review preview parent mismatch");
@@ -52,7 +52,7 @@ async function submit() {
   if (!consent.value || expired.value || preview.value.admission_blockers.length) return;
   const token = generation; busy.value = true; error.value = "";
   const body = { request_id: requestId, submission_id: props.submissionId, assessment_date: asOf.value, scope: "uploaded_bid", review_slice: "compliance", clef_enabled: clefEnabled.value, presence_authorization_id: presenceAuthorizationId.value, dry_run: false, retry: retry.value, expected_input_hash: preview.value.input.input_hash, preflight_token: preview.value.preflight_token };
-  try { const result = await orgRequest("POST", path.value, body, { signal: controller?.signal }); if (token !== generation) return; jobId.value = result.data.job_id; invalidate(); await list(); }
+  try { const result = await request("POST", path.value, body, { signal: controller?.signal }); if (token !== generation) return; jobId.value = result.data.job_id; invalidate(); await list(); }
   catch (exc) { if (token === generation && exc.name !== "AbortError") { error.value = reviewError(exc); if (exc.code === "queue_unavailable" && exc.payload?.data?.job_id) jobId.value = exc.payload.data.job_id; if (exc.status === 409 || exc.code?.includes("preflight")) invalidate(); } }
   finally { if (token === generation) busy.value = false; }
 }
@@ -68,7 +68,7 @@ async function load() {
   try { await list(); } catch (exc) { if (exc.name !== "AbortError") error.value = reviewError(exc); }
 }
 watch(() => [props.taskId, props.submissionId], load, { immediate: true });
-watch(() => [props.authorizationEpoch, props.writable, props.prepared, asOf.value, retry.value, clefEnabled.value], invalidate);
+watch(() => [props.authorizationEpoch, props.prepared, asOf.value, retry.value, clefEnabled.value], invalidate);
 onBeforeUnmount(() => { generation++; controller?.abort(); invalidate(); });
 const applicability = { applies: "适用", not_applicable: "不适用", alternative: "存在替代签章方式", unknown: "适用性未确定" };
 const citationPosition = citation => {
@@ -86,7 +86,7 @@ const marks = { company_seal: "单位公章", legal_representative_signature: "�
   <el-card class="section" shadow="never"><template #header><h3>检验运行</h3></template>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
     <p>抽取招标义务、核对已授权文本并形成签章检查清单。检查结论仅供人工审查；签章存在性初筛需逐页图片授权，所有初筛结果需人工确认。</p>
-    <template v-if="writable && prepared">
+    <template v-if="prepared">
       <el-form label-position="top"><el-form-item label="检验基准日期"><el-input v-model="asOf" type="date" aria-label="检验基准日期" :disabled="busy" /></el-form-item></el-form>
       <el-checkbox v-model="clefEnabled" :disabled="busy">使用 Clef 初筛（默认开启）</el-checkbox>
       <el-checkbox v-model="retry" :disabled="busy">明确重试检验运行</el-checkbox>
@@ -102,8 +102,8 @@ const marks = { company_seal: "单位公章", legal_representative_signature: "�
         <div class="actions"><el-button type="primary" :loading="busy" :disabled="!consent || expired || preview.admission_blockers.length > 0" @click="submit">提交检验运行</el-button></div>
       </div>
     </template>
-    <p v-else class="hint">检验运行需要已完成的本地准备与任务商务或技术成员权限。</p>
-    <JobPanel :job-id="jobId" :writable="writable" assessment-mode @finished="finished" />
+    <p v-else class="hint">检验运行需要已完成的本地准备。</p>
+    <JobPanel :job-id="jobId" assessment-mode @finished="finished" />
     <el-table :data="runs.filter(row => row.submission_id === submissionId)" role="table" aria-label="检验运行列表">
       <el-table-column label="运行"><template #default="{ row }"><code>{{ row.id }}</code></template></el-table-column>
       <el-table-column label="状态"><template #default="{ row }">{{ ({ queued: '排队中', running: '运行中', succeeded: '已完成', failed: '失败', cancelled: '已取消' })[row.status] ?? '状态未知' }}</template></el-table-column>
@@ -112,9 +112,9 @@ const marks = { company_seal: "单位公章", legal_representative_signature: "�
     </el-table>
     <el-button v-if="nextCursor" @click="moreRuns">更多检验运行</el-button>
     <template v-if="selected">
-      <el-button v-if="canAuthorizeImages && selected.status === 'succeeded'" :disabled="busy" @click="presenceOpen = !presenceOpen">签章图片外发授权</el-button>
-      <BidPresenceAuthorization v-if="presenceOpen" :task-id="taskId" :submission-id="submissionId" :review-id="selected.id" :allowed="canAuthorizeImages" :authorization-epoch="authorizationEpoch" @changed="imagesChanged" />
-      <BidReviewFindings :key="selected.id" :task-id="taskId" :run="selected" :authority="authority" :authorization-epoch="authorizationEpoch" />
+      <el-button v-if="selected.status === 'succeeded'" :disabled="busy" @click="presenceOpen = !presenceOpen">签章图片外发授权</el-button>
+      <BidPresenceAuthorization v-if="presenceOpen" :task-id="taskId" :submission-id="submissionId" :review-id="selected.id" :authorization-epoch="authorizationEpoch" @changed="imagesChanged" />
+      <BidReviewFindings :key="selected.id" :task-id="taskId" :run="selected" :authorization-epoch="authorizationEpoch" />
       <p role="status">检验结果：{{ selected.completion === 'partial' ? '部分完成' : selected.completion === 'complete' ? '已完成' : '待完成' }} · 仅供辅助审查</p>
       <el-alert v-if="selected.validity === 'stale'" title="此检验结果的输入或授权已变化；请重新预检并运行，当前仅显示安全状态信息。" type="warning" :closable="false" />
       <p v-if="selected.coverage.tender_pages_total !== undefined">招标页面覆盖：已检验 {{ selected.coverage.tender_pages_assessed }} / 共 {{ selected.coverage.tender_pages_total }} 页；已授权 {{ selected.coverage.tender_pages_authorized }} 页</p>

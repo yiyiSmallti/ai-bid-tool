@@ -1,4 +1,4 @@
-"""Owner-only agent session management and encrypted durable history."""
+"""Human-managed agent session management and encrypted durable history."""
 
 import hashlib
 import json
@@ -47,7 +47,7 @@ from app.schemas.agent_contracts import (
 from app.schemas.contracts import Cost, Result
 from app.services import confidential, redaction
 from app.services import preflight as preflight_service
-from app.services.auth import AGENT_SCOPES, ROLE_SCOPES, membership, set_actor_context
+from app.services.auth import AGENT_SCOPES, set_actor_context
 from app.services.response_cards import access, generation_materials_stale, linked_evidence
 from app.services.task_access import access as task_access
 from app.services.versioned import audit
@@ -75,14 +75,13 @@ def digest(value) -> str:
     return hashlib.sha256(canonical(value).encode()).hexdigest()
 
 
-def seal(settings, row_id, org_id, session_id, payload) -> str:
-    """Bind encrypted JSON to its tenant, session and record, preventing substitution."""
+def seal(settings, row_id, session_id, payload) -> str:
+    """Bind encrypted JSON to its session and record, preventing substitution."""
     return Secrets.for_data(settings).encrypt(
         canonical(
             {
                 "v": 1,
                 "row_id": str(row_id),
-                "org_id": str(org_id),
                 "session_id": str(session_id),
                 "payload": payload,
             }
@@ -134,14 +133,14 @@ def current_receipt(payload):
     return cleaned
 
 
-def unseal(settings, row_id, org_id, session_id, ciphertext):
+def unseal(settings, row_id, session_id, ciphertext):
     try:
         envelope = json.loads(Secrets.for_data(settings).decrypt(ciphertext))
         if (
             not isinstance(envelope, dict)
-            or set(envelope) != {"v", "row_id", "org_id", "session_id", "payload"}
-            or (envelope["v"], envelope["row_id"], envelope["org_id"], envelope["session_id"])
-            != (1, str(row_id), str(org_id), str(session_id))
+            or set(envelope) != {"v", "row_id", "session_id", "payload"}
+            or (envelope["v"], envelope["row_id"], envelope["session_id"])
+            != (1, str(row_id), str(session_id))
         ):
             raise ValueError("Invalid binding")
         return current_receipt(envelope["payload"])
@@ -160,7 +159,7 @@ async def now(session):
 
 
 async def human_access(session, identity, scope="agent:read", *, cancellation=False):
-    # Cancellation survives a role downgrade, while membership/user/org checks stay live.
+    # Every management action requires the installation human identity.
     if identity.actor_kind != "session" or identity.token_id is not None:
         raise ServiceError("forbidden", "Human session required", 403, 4)
     live = await access(session, identity, "agent:read" if cancellation else scope)
@@ -168,12 +167,12 @@ async def human_access(session, identity, scope="agent:read", *, cancellation=Fa
     return live
 
 
-async def bind_owner(session, actor, row):
-    """Keep the human executor while indexing the session that caused the action."""
+async def bind_session(session, actor, row):
+    """Keep human authority separate from the controlled agent session."""
     bound = replace(
         actor,
-        principal_id=row.principal_id,
-        session_id=row.id,
+        principal_id=None,
+        session_id=None,
         step_id=None,
         job_id=None,
         run_id=None,
@@ -182,11 +181,9 @@ async def bind_owner(session, actor, row):
     return bound
 
 
-async def owned(session, actor, session_id, *, lock=False):
+async def session_record(session, actor, session_id, *, lock=False):
     query = select(AgentSession).where(
         AgentSession.id == session_id,
-        AgentSession.org_id == actor.org_id,
-        AgentSession.owner_user_id == actor.user_id,
     )
     if lock:
         target = await session.scalar(query)
@@ -243,9 +240,7 @@ async def mutation(session, row, command, *, job_id=None, message_id=None, pendi
 async def replay(session, settings, record, session_id, ciphertext, request_hash, stored_hash):
     if request_hash != stored_hash:
         fail("agent_idempotency_conflict", "Idempotency key was used for different input")
-    result = Result.model_validate(
-        unseal(settings, record.id, record.org_id, session_id, ciphertext)
-    )
+    result = Result.model_validate(unseal(settings, record.id, session_id, ciphertext))
     saved_session = result.data.get("session")
     if isinstance(saved_session, dict):
         from app.services.agent_limits import cost_view
@@ -255,7 +250,7 @@ async def replay(session, settings, record, session_id, ciphertext, request_hash
             if isinstance(record, AgentSession)
             else await session.get(AgentSession, session_id)
         )
-        if row is None or row.org_id != record.org_id:
+        if row is None:
             raise not_found()
         saved_session["cost"] = (await cost_view(session, row)).model_dump(mode="json")
     result.data["deduplicated"] = True
@@ -294,13 +289,11 @@ async def add_message(session, row, role, content, settings, step=None):
     record_id = uuid4()
     message = AgentMessage(
         id=record_id,
-        org_id=row.org_id,
         session_id=row.id,
         ordinal=ordinal,
         role=role,
-        author_user_id=row.owner_user_id if role == "human" else None,
         step_id=step.id if step is not None else None,
-        content_enc=seal(settings, record_id, row.org_id, row.id, {"content": content}),
+        content_enc=seal(settings, record_id, row.id, {"content": content}),
         content=sent,
         content_sha256=hashlib.sha256(sent.encode()).hexdigest(),
         created_at=await now(session),
@@ -424,13 +417,12 @@ async def pause(
     timestamp = await now(session)
     record = AgentPause(
         id=record_id,
-        org_id=row.org_id,
         session_id=row.id,
         step_id=step.id if step is not None else None,
         kind=kind,
         status="pending",
         question=sent,
-        question_enc=seal(settings, record_id, row.org_id, row.id, {"question": question}),
+        question_enc=seal(settings, record_id, row.id, {"question": question}),
         action=action,
         resource_ids=resources,
         input_refs=refs,
@@ -530,7 +522,7 @@ async def resume_preflight(session, row, actor, settings):
             or (last.state == "failed" and last.error_code in CONFIGURATION_STOPS)
         ):
             call = TypeAdapter(ToolCall).validate_python(
-                unseal(settings, last.id, row.org_id, row.id, last.arguments_enc)
+                unseal(settings, last.id, row.id, last.arguments_enc)
             )
             if last.child_job_id is not None and call.command in {"card generate", "draft"}:
                 call = call.model_copy(
@@ -544,7 +536,7 @@ async def resume_preflight(session, row, actor, settings):
                 )
         elif last.kind == "decision" and last.state == "completed":
             decision = AgentDecision.model_validate(
-                unseal(settings, last.id, row.org_id, row.id, last.result_enc)
+                unseal(settings, last.id, row.id, last.result_enc)
             )
             if isinstance(decision.action, ToolDecision):
                 call = decision.action.call
@@ -601,15 +593,12 @@ async def start(session, identity, task_id, body, settings, queue):
     from app.jobs.agent import enqueue_controller
     from app.services.agent_tools import definitions, schema_digest
 
-    task, _, _ = await task_access(
-        session, identity, task_id, scope="agent:run", write=True, require_member=True
-    )
+    task = await task_access(session, identity, task_id, scope="agent:run", write=True)
     actor = await human_access(session, identity, "agent:run")
     request_hash = digest(body.model_dump(mode="json"))
     existing = await session.scalar(
         select(AgentSession).where(
             AgentSession.task_id == task_id,
-            AgentSession.owner_user_id == actor.user_id,
             AgentSession.start_idempotency_key == body.idempotency_key,
         )
     )
@@ -634,22 +623,21 @@ async def start(session, identity, task_id, body, settings, queue):
     if not task.model_redaction_enabled:
         fail("agent_redaction_required", "Agent outbound redaction must be enabled")
     timestamp = await now(session)
-    if actor.session_expires_at is None or actor.session_expires_at <= timestamp:
+    if actor.session_expires_at is not None and actor.session_expires_at <= timestamp:
         raise ServiceError("invalid_token", "A valid human session is required", 401, 4)
-    member = await membership(session, actor.user_id, actor.org_id)
-    initial = actor.scopes & ROLE_SCOPES[member.role]
+    initial = set(actor.scopes)
     scopes = sorted(initial & set(body.requested_scopes) & AGENT_SCOPES)
     if not WORKFLOW_SCOPES <= set(scopes):
         raise ServiceError("forbidden", "The agent workflow permissions are required", 403, 4)
     principal = AgentPrincipal(
         id=uuid4(),
-        org_id=actor.org_id,
-        user_id=actor.user_id,
-        membership_id=member.id,
         initial_grants=sorted(initial),
         scopes=scopes,
         created_at=timestamp,
-        authority_expires_at=min(actor.session_expires_at, timestamp + timedelta(hours=8)),
+        authority_expires_at=min(
+            actor.session_expires_at or timestamp + timedelta(hours=8),
+            timestamp + timedelta(hours=8),
+        ),
     )
     llm = await _provider(session)
     entries = await confidential.task_entries(session, task.id)
@@ -657,12 +645,10 @@ async def start(session, identity, task_id, body, settings, queue):
     model = model_identity(llm)
     row = AgentSession(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=task.id,
         document_id=document.id,
         extraction_job_id=extraction.id,
         principal_id=principal.id,
-        owner_user_id=actor.user_id,
         state="queued",
         revision=1,
         limits=body.limits.model_dump(mode="json"),
@@ -699,7 +685,7 @@ async def start(session, identity, task_id, body, settings, queue):
     await session.flush([principal])
     session.add(row)
     await session.flush()
-    actor = await bind_owner(session, actor, row)
+    actor = await bind_session(session, actor, row)
     first = await add_message(session, row, "human", body.message, settings)
     await session.flush()
     controller = await enqueue_controller(session, row, actor, settings, queue)
@@ -707,7 +693,7 @@ async def start(session, identity, task_id, body, settings, queue):
         result = await mutation(
             session, row, "agent start", job_id=controller.id, message_id=first.id
         )
-        row.start_receipt_enc = seal(settings, row.id, row.org_id, row.id, result)
+        row.start_receipt_enc = seal(settings, row.id, row.id, result)
     audit(session, actor, "agent.session.started", row.id, {"task_id": str(row.task_id)})
     await session.flush()
     return result
@@ -732,9 +718,7 @@ async def list_sessions(session, identity, task_id, request):
         raise not_found()
     rows, cursor = await paginate(
         session,
-        select(AgentSession).where(
-            AgentSession.task_id == task_id, AgentSession.owner_user_id == actor.user_id
-        ),
+        select(AgentSession).where(AgentSession.task_id == task_id),
         AgentSession,
         request,
     )
@@ -750,9 +734,9 @@ async def list_sessions(session, identity, task_id, request):
 
 async def show(session, identity, session_id):
     actor = await human_access(session, identity)
-    row = await owned(session, actor, session_id)
+    row = await session_record(session, actor, session_id)
     await task_access(session, actor, row.task_id, scope="agent:read")
-    actor = await bind_owner(session, actor, row)
+    actor = await bind_session(session, actor, row)
     principal = await session.get(AgentPrincipal, row.principal_id)
     pending = await session.get(AgentPause, row.pause_id) if row.pause_id else None
     view = await session_view(session, row)
@@ -782,9 +766,9 @@ async def show(session, identity, session_id):
 
 async def history(session, identity, session_id, request, settings, model, view, command):
     actor = await human_access(session, identity)
-    row = await owned(session, actor, session_id)
+    row = await session_record(session, actor, session_id)
     await task_access(session, actor, row.task_id, scope="agent:read")
-    actor = await bind_owner(session, actor, row)
+    actor = await bind_session(session, actor, row)
     rows, cursor = await paginate(
         session, select(model).where(model.session_id == row.id), model, request
     )
@@ -825,11 +809,9 @@ async def steps(session, identity, session_id, request, settings):
 
 async def message(session, identity, session_id, body, settings):
     actor = await human_access(session, identity, "agent:run")
-    row = await owned(session, actor, session_id, lock=True)
-    await task_access(
-        session, actor, row.task_id, scope="agent:run", write=True, require_member=True
-    )
-    actor = await bind_owner(session, actor, row)
+    row = await session_record(session, actor, session_id, lock=True)
+    await task_access(session, actor, row.task_id, scope="agent:run", write=True)
+    actor = await bind_session(session, actor, row)
     request_hash = digest(body)
     existing = await session.scalar(
         select(AgentMessage).where(
@@ -856,7 +838,7 @@ async def message(session, identity, session_id, body, settings):
         row.updated_at = await now(session)
         pending = await session.get(AgentPause, row.pause_id)
         result = await mutation(session, row, "agent message", message_id=first.id, pending=pending)
-        first.receipt_enc = seal(settings, first.id, first.org_id, row.id, result)
+        first.receipt_enc = seal(settings, first.id, row.id, result)
     audit(session, actor, "agent.message.added", first.id, {"session_id": str(row.id)})
     await session.flush()
     return result
@@ -866,8 +848,8 @@ async def cancel(session, identity, session_id, body, settings):
     from app.services.agent_limits import active_used
 
     actor = await human_access(session, identity, cancellation=True)
-    row = await owned(session, actor, session_id, lock=True)
-    actor = await bind_owner(session, actor, row)
+    row = await session_record(session, actor, session_id, lock=True)
+    actor = await bind_session(session, actor, row)
     request_hash = digest(body)
     if row.cancel_idempotency_key == body.idempotency_key:
         return await replay(
@@ -911,7 +893,7 @@ async def cancel(session, identity, session_id, body, settings):
         principal = await session.get(AgentPrincipal, row.principal_id)
         principal.revoked_at = timestamp
         result = await mutation(session, row, "agent cancel", pending=pending)
-        row.cancel_receipt_enc = seal(settings, row.id, row.org_id, row.id, result)
+        row.cancel_receipt_enc = seal(settings, row.id, row.id, result)
     audit(session, actor, "agent.session.cancelled", row.id, {"reason": body.reason})
     await session.flush()
     return result
@@ -922,11 +904,9 @@ async def resume(session, identity, session_id, body, settings, queue):
     from app.services.agent_limits import enforce
 
     actor = await human_access(session, identity, "agent:run")
-    row = await owned(session, actor, session_id, lock=True)
-    await task_access(
-        session, actor, row.task_id, scope="agent:run", write=True, require_member=True
-    )
-    actor = await bind_owner(session, actor, row)
+    row = await session_record(session, actor, session_id, lock=True)
+    await task_access(session, actor, row.task_id, scope="agent:run", write=True)
+    actor = await bind_session(session, actor, row)
     request_hash = digest(body)
     previous = await session.scalar(
         select(AgentPause).where(
@@ -956,12 +936,15 @@ async def resume(session, identity, session_id, body, settings, queue):
     timestamp = await now(session)
     if principal.revoked_at is not None:
         fail("agent_authority_revoked", "Agent authority has been revoked")
-    if actor.session_expires_at is None or actor.session_expires_at <= timestamp:
+    if actor.session_expires_at is not None and actor.session_expires_at <= timestamp:
         raise ServiceError("invalid_token", "A valid human session is required", 401, 4)
     principal.scopes = sorted(
         set(principal.scopes) & set(principal.initial_grants) & actor.scopes & AGENT_SCOPES
     )
-    principal.authority_expires_at = min(actor.session_expires_at, timestamp + timedelta(hours=8))
+    principal.authority_expires_at = min(
+        actor.session_expires_at or timestamp + timedelta(hours=8),
+        timestamp + timedelta(hours=8),
+    )
     try:
         admitted = await enforce(session, row, settings)
         await resume_preflight(session, row, admitted, settings)
@@ -986,11 +969,7 @@ async def resume(session, identity, session_id, body, settings, queue):
     else:
         job_id = None
     with session.no_autoflush:
-        pending.status, pending.resolved_by, pending.resolved_at = (
-            "resolved",
-            actor.user_id,
-            timestamp,
-        )
+        pending.status, pending.resolved_at = "resolved", timestamp
         pending.resume_idempotency_key, pending.request_sha256 = body.idempotency_key, request_hash
         row.revision += 1
         row.updated_at = timestamp
@@ -1009,7 +988,7 @@ async def resume(session, identity, session_id, body, settings, queue):
             replacement = None
             row.pause_id, row.active_since, row.state = None, timestamp, "queued"
         result = await mutation(session, row, "agent resume", job_id=job_id, pending=replacement)
-        pending.receipt_enc = seal(settings, pending.id, pending.org_id, row.id, result)
+        pending.receipt_enc = seal(settings, pending.id, row.id, result)
     # The unique pending index and resolution guard require one complete UPDATE
     # before the replacement INSERT; no incomplete receipt ever reaches SQL.
     await session.flush([pending])

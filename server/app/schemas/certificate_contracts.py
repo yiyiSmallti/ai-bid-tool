@@ -45,7 +45,7 @@ class CertificateUpdate(Contract):
 
 class CertificateRevision(Contract):
     id: UUID
-    org_id: UUID
+
     certificate_id: UUID
     revision: int = Field(ge=1)
     data: CertificateData
@@ -59,7 +59,7 @@ class TaskCertificateSelection(Contract):
 
 class TaskCertificateSnapshot(Contract):
     id: UUID
-    org_id: UUID
+
     task_id: UUID
     certificate_revision_id: UUID
     revision: int = Field(ge=1)

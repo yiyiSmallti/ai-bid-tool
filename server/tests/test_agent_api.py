@@ -1,7 +1,7 @@
 """Agent management isolation at the real authenticated PostgreSQL API.
 
-Failure matrix: foreign task/session, same-org nonowner (including admin), API
-tokens, untrusted ownership fields, out-of-range pagination, stale revisions,
+Failure matrix: unknown task/session, API tokens, removed identity fields,
+out-of-range pagination, stale revisions,
 and mutations that would silently resume a paused session.
 """
 
@@ -13,10 +13,8 @@ import httpx
 import pytest
 from app.api.main import create_app
 from app.core.config import Settings
-from app.models.entities import Membership
 from app.schemas.contracts import Result
 from conftest import FakeQueue
-from sqlalchemy.orm import Session
 from test_response_cards import (
     PhaseOneExtraction,
     create_tender,
@@ -43,23 +41,15 @@ def start_input(extraction):
 
 
 @pytest.fixture
-async def agent_case(tenants, admin_engine, tmp_path):
+async def agent_case(database, tmp_path):
     settings = Settings(data_dir=tmp_path)
     queue = FakeQueue()
     app = create_app(settings, llm=PhaseOneExtraction(), queue=queue)
-    # The other tenant's existing identity also joins A as an administrator. Neither
-    # global identity sharing nor the administrator role grants session ownership.
-    with Session(admin_engine) as session, session.begin():
-        session.add(
-            Membership(org_id=tenants["orgs"][0], user_id=tenants["users"][1], role="admin")
-        )
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        owner = await login(api, tenants["orgs"][0], "a")
-        foreign = await login(api, tenants["orgs"][1], "b")
-        nonowner = await login(api, tenants["orgs"][0], "b")
+        owner = await login(api)
         task, document, extraction, _ = await create_tender(
             api, app, owner, tmp_path, suffix="agent"
         )
@@ -72,8 +62,6 @@ async def agent_case(tenants, admin_engine, tmp_path):
             "api": api,
             "app": app,
             "owner": owner,
-            "foreign": foreign,
-            "nonowner": nonowner,
             "task": task,
             "document": document,
             "extraction": extraction,
@@ -117,45 +105,6 @@ def session_routes(case):
     ]
 
 
-@pytest.mark.parametrize("actor", ["foreign", "nonowner"])
-async def test_agent_session_routes_hide_foreign_and_nonowner_resources(agent_case, actor):
-    case = agent_case
-    results = []
-    for method, path, body in session_routes(case):
-        response = await case["api"].request(
-            method, path, headers=case[actor], **({"json": body} if body else {})
-        )
-        assert response.status_code == 404, (method, path, response.text)
-        result = Result.model_validate(response.json())
-        assert not result.ok and result.data["error"]["code"] == "not_found"
-        results.append({"method": method, "path": path, "result": result.model_dump(mode="json")})
-    after = await case["api"].get(
-        f"/v4/agent-sessions/{case['session']['id']}", headers=case["owner"]
-    )
-    assert (
-        after.status_code == 200
-        and after.json()["data"]["session"]["revision"] == case["session"]["revision"]
-    )
-    artifact = case["tmp_path"] / f"agent-isolation-{actor}.json"
-    artifact.write_text(json.dumps(sanitized_artifact(results), ensure_ascii=False, indent=2))
-    assert len(json.loads(artifact.read_text())) == 6
-
-
-async def test_agent_task_routes_are_org_scoped_and_lists_are_owner_scoped(agent_case):
-    case = agent_case
-    path = f"/v4/tasks/{case['task']}/agent-sessions"
-    for method, body in [("GET", None), ("POST", start_input(case["extraction"]))]:
-        response = await case["api"].request(
-            method, path, headers=case["foreign"], **({"json": body} if body else {})
-        )
-        assert response.status_code == 404, response.text
-    owner = await case["api"].get(path, headers=case["owner"])
-    nonowner = await case["api"].get(path, headers=case["nonowner"])
-    assert owner.status_code == nonowner.status_code == 200
-    assert [item["id"] for item in owner.json()["items"]] == [case["session"]["id"]]
-    assert nonowner.json()["items"] == []
-
-
 async def test_agent_token_cannot_manage_sessions(agent_case):
     case = agent_case
     minted = await case["api"].post(
@@ -170,7 +119,6 @@ async def test_agent_token_cannot_manage_sessions(agent_case):
     assert minted.status_code == 200, minted.text
     token = {
         "Authorization": "Bearer " + minted.json()["data"]["token"],
-        "X-Org-Id": case["owner"]["X-Org-Id"],
     }
     routes = session_routes(case) + [
         ("GET", f"/v4/tasks/{case['task']}/agent-sessions", None),

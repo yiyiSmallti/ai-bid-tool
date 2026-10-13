@@ -30,7 +30,8 @@ result remains an unconfirmed material. `card create/update` can link an
 
 `screenshot analyze --dry-run` fixes the selected requirement citations,
 redacted text, image hashes, pixel mappings, model identity and image capability
-revision. A non-dry submission must provide the returned input hash. Its
+revision. The retained `catalog_identity` field records the configured provider
+version or digest; it is not a platform model catalog identifier. A non-dry submission must provide the returned input hash. Its
 suggestions remain unreviewed and cannot populate a legacy exact-text quote.
 
 `ui mock --dry-run` fixes one requirement, one selected feature revision, the
@@ -88,19 +89,17 @@ selections and publishes the asset, first rendition, privacy review and audit
 record together. Attempt-owned unreferenced objects are removed only after a
 database check proves they were not published.
 
-All image keys are server-generated below `org/<org_id>/screenshots/`. A preview
-signature binds organization, rendition, hash and purpose. Actual content access
-still requires a current membership and every underlying material permission,
+All image keys are server-generated below `screenshots/`. A preview
+signature binds rendition, hash and purpose. Actual content access
+still requires an authenticated actor and every underlying material permission,
 returns `Cache-Control: no-store`, and rejects withdrawn assets. CLI downloads
 check the exact same-origin path, forbid redirects and verify bytes before
 publishing a new file.
 
 ### Database and human gates
 
-[`screenshots.py`](../../server/app/models/screenshots.py) defines append-only
-tenant records. Migration
-[`0023_screenshots.py`](../../server/migrations/versions/0023_screenshots.py)
-enables and forces RLS with `WITH CHECK`, adds compound parent relationships and
+[`screenshots.py`](../../server/app/models/screenshots.py) defines append-only installation records. The [single-user baseline](../adr/0012-single-user-installation.md)
+retains compound parent relationships and
 withholds runtime update/delete privileges. Insert triggers validate task and
 successful extraction scope, exclusive source branches, fixed selections,
 parent privacy lineage, pixel bounds and human actor context.
@@ -113,7 +112,7 @@ requires a new asset and review.
 
 `image_region` stores an observation separately from the nullable image-branch
 quote. Other Evidence branches retain their exact-text requirements. Confirmation
-checks the responsible professional role, the complete reviewed Evidence set,
+checks the human session, the complete reviewed Evidence set,
 current source selection, withdrawal state and actual stored image bytes. Draft
 submission, processing and later reads revalidate the same dependencies.
 
@@ -170,7 +169,7 @@ the sandbox receipt (descriptor digest plus artifact hashes, runtime versions,
 issues and metrics). Inputs are rebuilt before the admitted call and again
 before publication, so a replaced feature selection stops the job. An
 unavailable sandbox blocks admission. The source PNG is served only to the same
-organization at `GET /prototype-runs/{id}/source`.
+installation at `GET /prototype-runs/{id}/source`.
 
 ### Vendor captures
 
@@ -188,23 +187,24 @@ The first page of a run creates its `ScreenshotVendorArchive`; later pages of th
 same run reuse it. The record keeps the URL hashes, final origin, the first
 `<title>` of the archived entry page, the proxy's capture time, content and
 archive hashes, and foreign keys to the run, archive artifact and entry receipt.
-Exact URLs stay in the encrypted sandbox records. Migration
-[`0025_vendor_screenshots.py`](../../server/migrations/versions/0025_vendor_screenshots.py)
-rejects an archive whose run, attempt, bytes, storage key or entry response
+Exact URLs stay in the encrypted sandbox records. The baseline
+[`screenshot_vendor_archive_gate` and `screenshot_vendor_asset_gate` functions](../../server/migrations/baseline/00_functions_response.sql)
+reject an archive whose run, attempt, bytes, storage key or entry response
 differ from the capture, and an asset whose page image belongs to another
 attempt or capture format. Vendor images support only `hardware_documentation`,
 and card confirmation must acknowledge `vendor_model_scope` in addition to the
 general image warnings. An archive also records whether its capture was incomplete
 and how many requests the proxy denied; both must match the sandbox receipts, and an
-incomplete capture adds the `vendor_capture_incomplete` warning
-([`0026`](../../server/migrations/versions/0026_vendor_incomplete_captures.py)). Later card and export checks reread the archive bytes;
+incomplete capture adds the `vendor_capture_incomplete` warning. The baseline
+[`screenshot_card_warning_gate` function](../../server/migrations/baseline/00_functions_response.sql)
+requires its human acknowledgment. Later card and export checks reread the archive bytes;
 they do not depend on the node's current fetch policy file.
 
 ### Vendor search
 
 [`vendor_search.py`](../../server/app/services/vendor_search.py) fixes the task,
 extraction, product selection and revision, the queries, the search service identity
-and the vendor domains already recorded on this organization's current product
+and the vendor domains already recorded on the installation's current product
 revisions with the same vendor name. The worker rebuilds those inputs before searching
 and before publishing. [`search.py`](../../server/app/providers/search.py) calls the
 Perplexity Search API when `BID_PERPLEXITY_API_KEY` is set, otherwise the SearXNG JSON

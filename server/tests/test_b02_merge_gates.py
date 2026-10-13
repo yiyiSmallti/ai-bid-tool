@@ -70,28 +70,24 @@ async def review_action(api, header, requirement_id, action):
 
 @pytest.mark.parametrize("cause", ["material", "quote", "citation"])
 async def test_published_gap_orders_requirement_and_specific_response_causes(
-    api, application, headers, tenants, admin_engine, tmp_path, cause
+    api, application, headers, database, admin_engine, tmp_path, cause
 ):
-    scope = await response_scope(api, headers, tenants, admin_engine)
+    scope = await response_scope(api, headers, admin_engine)
     if cause == "material":
-        await attach_material(api, headers[0], scope, tmp_path)
-    await submit(api, headers[0], scope)
+        await attach_material(api, headers, scope, tmp_path)
+    await submit(api, headers, scope)
     confirmed = await confirm(api, scope)
     assert confirmed.status_code == 200, confirmed.text
-    current = await api.get(f"/cards/{scope['card']['id']}", headers=headers[0])
+    current = await api.get(f"/cards/{scope['card']['id']}", headers=headers)
     assert current.status_code == 200, current.text
     scope["card"] = current.json()["data"]
     assert scope["card"]["state"] == "confirmed"
     rid = scope["requirement_ids"][0]
     historical = await publish_draft(
-        api, application, headers[0], str(scope["task_id"]), str(scope["job_id"])
+        api, application, headers, str(scope["task_id"]), str(scope["job_id"])
     )
 
     with Session(admin_engine) as session, session.begin():
-        session.execute(
-            text("SELECT set_config('app.current_org',:org,true)"),
-            {"org": str(scope["org_id"])},
-        )
         if cause == "material":
             changed = session.execute(
                 text(
@@ -111,18 +107,18 @@ async def test_published_gap_orders_requirement_and_specific_response_causes(
                 {"chunk": scope["chunk_id"]},
             )
     if cause == "material":
-        await review_action(api, headers[0], rid, "reopen")
+        await review_action(api, headers, rid, "reopen")
         expected = ["requirement_unconfirmed"]
     else:
         expected = ["requirement_invalidated"]
     if cause == "material":
         expected.append("stale_material")
     elif cause == "quote":
-        expected.append("needs_reconfirmation")
+        expected.append("invalid_citation")
     elif cause == "citation":
         expected.append("invalid_citation")
 
-    historical_read = await api.get(f"/v4/drafts/{historical['draft_id']}", headers=headers[0])
+    historical_read = await api.get(f"/v4/drafts/{historical['draft_id']}", headers=headers)
     assert historical_read.status_code == 200, historical_read.text
     old_view = historical_read.json()["data"]
     assert old_view["validity"] == "stale"
@@ -130,9 +126,9 @@ async def test_published_gap_orders_requirement_and_specific_response_causes(
     assert not any(old_view["tables"].values())
 
     output = await publish_draft(
-        api, application, headers[0], str(scope["task_id"]), str(scope["job_id"])
+        api, application, headers, str(scope["task_id"]), str(scope["job_id"])
     )
-    shown = await api.get(f"/v4/drafts/{output['draft_id']}", headers=headers[0])
+    shown = await api.get(f"/v4/drafts/{output['draft_id']}", headers=headers)
     assert shown.status_code == 200, shown.text
     value = shown.json()["data"]
     assert value["validity"] == "current" and value["completion"] == "partial"
@@ -154,8 +150,8 @@ async def test_published_gap_orders_requirement_and_specific_response_causes(
 
 
 async def confirm_scoring_sources(case):
-    org = case["tenants"]["orgs"][0]
-    async with case["app"].state.db.transaction(org) as session:
+
+    async with case["app"].state.db.transaction() as session:
         ids = list(
             await session.scalars(
                 select(Requirement.id).where(
@@ -166,7 +162,7 @@ async def confirm_scoring_sources(case):
             )
         )
         await confirm_requirements_async(
-            session, org, UUID(case["task"]), ids, settings=case["app"].state.processor.settings
+            session, UUID(case["task"]), ids, settings=case["app"].state.processor.settings
         )
     return ids
 
@@ -179,20 +175,20 @@ async def test_second_section_source_reopen_blocks_whole_review_and_score(rubric
     assert len(sources) == 2 and sources[0]["requirement_id"] != sources[1]["requirement_id"]
     second = sources[1]["requirement_id"]
     rubric_id = UUID(report["rubric"]["id"])
-    org = case["tenants"]["orgs"][0]
+
     await review_action(case["api"], case["header"], second, "reopen")
     first = await review(case["api"], case["header"], sources[0]["requirement_id"])
     assert first["requirement"]["state"] == "confirmed"
-    async with case["app"].state.db.transaction(org) as session:
-        parameters = {"org": org, "rubric": rubric_id}
+    async with case["app"].state.db.transaction() as session:
+        parameters = {"rubric": rubric_id}
         assert await session.scalar(
-            text("SELECT rubric_section_bindings_current(:org,:rubric)"), parameters
+            text("SELECT rubric_section_bindings_current(:rubric)"), parameters
         )
-        assert await session.scalar(text("SELECT rubric_current_inputs(:org,:rubric)"), parameters)
+        assert await session.scalar(text("SELECT rubric_current_inputs(:rubric)"), parameters)
         assert not await session.scalar(
-            text("SELECT requirement_rubric_confirmed(:org,:rubric)"), parameters
+            text("SELECT requirement_rubric_confirmed(:rubric)"), parameters
         )
-        assert not await session.scalar(text("SELECT rubric_complete(:org,:rubric)"), parameters)
+        assert not await session.scalar(text("SELECT rubric_complete(:rubric)"), parameters)
     denied = await case["api"].post(
         "/v4" + base(case) + "/decisions",
         headers=case["header"],
@@ -228,11 +224,10 @@ async def test_second_section_source_reopen_blocks_whole_review_and_score(rubric
     )
     assert score_preview.status_code == 409, score_preview.text
     assert score_preview.json()["data"]["error"]["code"] == "requirement_unconfirmed"
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         assert not await session.scalar(
-            text("SELECT score_inputs_current(:org,:draft,:rubric,:revision)"),
+            text("SELECT score_inputs_current(:draft,:rubric,:revision)"),
             {
-                "org": org,
                 "draft": UUID(output["draft_id"]),
                 "rubric": rubric_id,
                 "revision": current["rubric"]["revision"],
@@ -253,23 +248,21 @@ async def test_section_review_gate_preserves_shared_locator_count(rubric_case):
     report = await rubric_view(case)
     assert len(report["sections"][0]["sources"]) == 2
     rubric_id = UUID(report["rubric"]["id"])
-    parameters = {"org": case["tenants"]["orgs"][0], "rubric": rubric_id}
-    with counted_locator(case["admin_engine"], case["tenants"]) as connection:
-        assert connection.scalar(
-            text("SELECT requirement_rubric_confirmed(:org,:rubric)"), parameters
-        )
+    parameters = {"rubric": rubric_id}
+    with counted_locator(case["admin_engine"], case["database"]) as connection:
+        assert connection.scalar(text("SELECT requirement_rubric_confirmed(:rubric)"), parameters)
         assert connection.scalar(text("SELECT count(*) FROM citation_locator_calls")) == 0
-        assert connection.scalar(text("SELECT rubric_current_inputs(:org,:rubric)"), parameters)
+        assert connection.scalar(text("SELECT rubric_current_inputs(:rubric)"), parameters)
         calls = connection.execute(
             text("SELECT source_text,quote FROM citation_locator_calls")
         ).all()
         expected = set(
             connection.execute(
                 text(
-                    "SELECT DISTINCT c.text,r.quote FROM requirements r JOIN chunks c ON c.org_id=r.org_id AND c.id=r.chunk_id "
-                    "WHERE r.org_id=:org AND r.job_id=:job AND r.category='scoring'"
+                    "SELECT DISTINCT c.text,r.quote FROM requirements r JOIN chunks c ON c.id=r.chunk_id "
+                    "WHERE r.job_id=:job AND r.category='scoring'"
                 ),
-                {"org": parameters["org"], "job": UUID(case["extraction"])},
+                {"job": UUID(case["extraction"])},
             ).all()
         )
         assert set(calls) == expected and len(calls) == len(expected)
@@ -289,8 +282,8 @@ async def test_non_anchor_identity_preserving_drift_is_readable_stale(rubric_cas
     sources = report["sections"][0]["sources"]
     assert len(sources) == 2
     second = sources[1]
-    org = case["tenants"]["orgs"][0]
-    async with case["app"].state.db.transaction(org) as session:
+
+    async with case["app"].state.db.transaction() as session:
         if mutation == "category":
             await session.execute(
                 text("UPDATE requirements SET category='technical' WHERE id=:id"),
@@ -317,10 +310,10 @@ async def test_non_anchor_identity_preserving_drift_is_readable_stale(rubric_cas
     assert denied.json()["data"]["error"]["code"] == (
         "score_rubric_input_integrity" if mutation == "verification" else "rubric_input_changed"
     )
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         assert not await session.scalar(
-            text("SELECT requirement_rubric_confirmed(:org,:rubric)"),
-            {"org": org, "rubric": UUID(report["rubric"]["id"])},
+            text("SELECT requirement_rubric_confirmed(:rubric)"),
+            {"rubric": UUID(report["rubric"]["id"])},
         )
     record(
         f"non-anchor-stale-{mutation}",

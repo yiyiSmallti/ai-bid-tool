@@ -17,7 +17,7 @@ from app.core.security import Secrets
 from app.models.bid_review import BidPreparation, BidSubmission
 from app.providers.converter import MAX_PDF_BYTES
 from app.services import task_access
-from app.services.auth import HUMAN_ONLY_SCOPES, ROLE_SCOPES, Identity, set_actor_context
+from app.services.auth import HUMAN_ONLY_SCOPES, Identity, set_actor_context
 
 PREPARATION_VERSION = "bid-prepare-v2"
 RENDER_PROFILE = "bid-pages-v1"
@@ -67,12 +67,10 @@ def temporary_root(settings: Settings) -> Path:
     return root
 
 
-def seal(settings: Settings, org_id, identifier, value) -> str:
+def seal(settings: Settings, identifier, value) -> str:
     """Bind restricted text/maps to an immutable row, as attachment envelopes do."""
     return Secrets.for_data(settings).encrypt(
-        json.dumps(
-            {"org_id": str(org_id), "id": str(identifier), "value": value}, ensure_ascii=True
-        )
+        json.dumps({"id": str(identifier), "value": value}, ensure_ascii=True)
     )
 
 
@@ -133,36 +131,25 @@ async def worker_access(session, job, *, bind_context=True) -> Identity:
         or job.actor_kind != "session"
         or job.actor_token_id is not None
         or job.agent_principal_id is not None
-        or job.actor_user_id is None
+        or job.agent_session_id is not None
         or job.task_id is None
         or "bid-review:prepare" not in job.actor_scopes
     ):
         raise ServiceError("forbidden", "Preparation requires a fixed human request", 403, 4)
     actor = Identity(
-        job.actor_user_id,
-        job.org_id,
         set(job.actor_scopes) - HUMAN_ONLY_SCOPES,
-        "viewer",
         actor_kind="worker",
         job_id=job.id,
         run_id=job.run_id,
     )
-    _, _, member = await task_access.access(
+    await task_access.access(
         session,
         actor,
         job.task_id,
         scope="task:read",
         write=True,
-        require_member=True,
         bind_context=False,
     )
-    if (
-        actor.role not in {"admin", "bidder"}
-        or "bid-review:prepare" not in ROLE_SCOPES[actor.role]
-        or member is None
-        or member.role not in {"owner", "contributor"}
-    ):
-        raise ServiceError("forbidden", "Preparation authority is no longer valid", 403, 4)
     if bind_context:
         await set_actor_context(session, actor)
     return actor
@@ -176,14 +163,12 @@ async def job_access(session, actor, job, *, cancel=False) -> None:
         raise not_found() from exc
     submission = await session.scalar(
         select(BidSubmission).where(
-            BidSubmission.org_id == actor.org_id,
             BidSubmission.task_id == job.task_id,
             BidSubmission.id == submission_id,
         )
     )
     preparation = await session.scalar(
         select(BidPreparation).where(
-            BidPreparation.org_id == actor.org_id,
             BidPreparation.task_id == job.task_id,
             BidPreparation.submission_id == submission_id,
             BidPreparation.job_id == job.id,
@@ -191,20 +176,17 @@ async def job_access(session, actor, job, *, cancel=False) -> None:
     )
     if submission is None or preparation is None:
         raise not_found()
-    _, _, member = await task_access.access(
+    await task_access.access(
         session,
         actor,
         submission.task_id,
         scope="bid-review:prepare" if cancel else "bid-review:read",
         write=cancel,
-        require_member=cancel,
     )
     if cancel and (
         actor.actor_kind != "session"
         or actor.token_id is not None
-        or actor.role not in {"admin", "bidder"}
-        or member is None
-        or member.role not in {"owner", "contributor"}
+        or actor.principal_id is not None
     ):
         raise ServiceError("forbidden", "Human preparation authority required", 403, 4)
 

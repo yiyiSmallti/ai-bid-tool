@@ -1,4 +1,4 @@
-"""Org resource libraries, task selections, certificate and template files, and
+"""Versioned resource libraries, task selections, certificate and template files, and
 unconfirmed certificate-page sources."""
 
 import asyncio
@@ -430,7 +430,6 @@ def create_router(
                 crypto,
                 f"/resources/certificates/revisions/{revision_id}/file/download",
                 "certificate-file-download",
-                actor.org_id,
                 revision_id=revision_id,
             ),
             warnings=certificate_files.WARNINGS,
@@ -447,9 +446,7 @@ def create_router(
 
         session, actor = ctx
         await certificate_files.require_file(session, actor, revision_id)
-        check_signature(
-            crypto, signature, "certificate-file-download", actor.org_id, revision_id=revision_id
-        )
+        check_signature(crypto, signature, "certificate-file-download", revision_id=revision_id)
         content, descriptor = await certificate_files.read_revision(
             session, actor, revision_id, storage
         )
@@ -582,7 +579,6 @@ def create_router(
                 crypto,
                 f"/resources/templates/revisions/{revision_id}/download",
                 "template-download",
-                actor.org_id,
                 revision_id=revision_id,
             ),
             warnings=TEMPLATE_WARNINGS,
@@ -599,9 +595,7 @@ def create_router(
         session, actor = ctx
         actor.require("template:file:read")
         await templates.require_revision(session, actor, revision_id)
-        check_signature(
-            crypto, signature, "template-download", actor.org_id, revision_id=revision_id
-        )
+        check_signature(crypto, signature, "template-download", revision_id=revision_id)
         content, descriptor = await templates.read_revision(session, actor, revision_id, storage)
         return attachment(content, descriptor.media_type, descriptor.name)
 
@@ -659,7 +653,6 @@ def create_router(
                 crypto,
                 f"/evidence-sources/{source_id}/preview/download",
                 "source-preview",
-                actor.org_id,
                 source_id=source_id,
             ),
             [evidence_sources.source_data(row, snapshot, original)],
@@ -681,7 +674,7 @@ def create_router(
 
         session, actor = ctx
         await evidence_sources.require_source(session, actor, source_id)
-        check_signature(crypto, signature, "source-preview", actor.org_id, source_id=source_id)
+        check_signature(crypto, signature, "source-preview", source_id=source_id)
         content, descriptor = await evidence_sources.read_preview(
             session, actor, source_id, storage
         )

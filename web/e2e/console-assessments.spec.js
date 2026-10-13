@@ -8,12 +8,14 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fixture, ids, seed, hash, uuid, zeroCost } from "./assessment-fixture.js";
 import { rubricFixture, scoreFixture } from "./assessment-rubric-fixture.js";
+import { openConsole } from "./access-key.js";
+import { SESSION_KEY } from "../src/session-storage.js";
 
 const workRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../data/work");
 const output = resolve(process.env.E2E_OUTPUT ?? join(workRoot, "console-assessments-validation/browser"));
 if (relative(workRoot, output).startsWith("..")) throw new Error("E2E_OUTPUT must stay under data/work");
-const workspace = `/app/org/tasks/${ids.task}/checks?job=${ids.extract}&draft=${ids.draft}`;
-const report = `/app/org/tasks/${ids.task}/checks/${ids.report}`;
+const workspace = `/org/tasks/${ids.task}/checks?job=${ids.extract}&draft=${ids.draft}`;
+const report = `/org/tasks/${ids.task}/checks/${ids.report}`;
 const observed = [];
 async function checkControl(control) {
   // Element Plus overlays the native input with its visible indicator. Click the
@@ -79,7 +81,7 @@ test.describe("rules check acceptance", () => {
     } }));
     for (const malformed of malformedCosts) {
       malformedCost = malformed.value;
-      await page.goto(workspace);
+      await openConsole(page, workspace);
       await expect(page.getByRole("alert")).toContainText("invalid_response");
       await expect(page.getByRole("button", { name: "提交检查", exact: true })).toHaveCount(0);
       expect(state.writes).toBe(0);
@@ -88,21 +90,21 @@ test.describe("rules check acceptance", () => {
   });
 
   test("rules task entry carries the selected successful extraction to both assessment workspaces", async ({ page }) => {
-    const state = await fixture(page, { role: "viewer" });
-    await page.goto(`/app/org/tasks/${ids.task}`);
+    const state = await fixture(page);
+    await openConsole(page, `/org/tasks/${ids.task}`);
     const checks = page.getByRole("link", { name: "检查风险", exact: true });
     await expect(checks).toHaveAttribute("href", `/app/org/tasks/${ids.task}/checks?job=${ids.extract}`);
     await expect(page.getByRole("link", { name: "评分预估", exact: true })).toHaveAttribute("href", `/app/org/tasks/${ids.task}/scores?job=${ids.extract}`);
     await checks.focus(); await page.keyboard.press("Enter");
     await expect(page).toHaveURL(new RegExp(`/checks\\?job=${ids.extract}$`));
-    await expect(page.getByRole("button", { name: "预览检查", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "预览检查", exact: true })).toBeEnabled();
     expect(state.writes).toBe(0);
     await artifact(page, state, "rules-task-entry-keyboard");
   });
 
   test("rules preview is read-only; exact hash submission polls and refresh recovers", async ({ page }) => {
     const state = await fixture(page, { published: false });
-    await page.goto(workspace);
+    await openConsole(page, workspace);
     await expect(page.getByRole("heading", { name: "检查风险", exact: true })).toBeVisible();
     await expect(page.getByText(/仅评估已保存初稿/).first()).toBeVisible();
     await expect(page.getByText("尚未运行检查", { exact: true })).toBeVisible();
@@ -126,7 +128,7 @@ test.describe("rules check acceptance", () => {
 
   test("rules report bounded pages, citation windows, text safety and unknown dates", async ({ page }) => {
     const state = await fixture(page);
-    await page.goto(report);
+    await openConsole(page, report);
     await expect(page.getByText("合成风险 1：响应存在负偏离。", { exact: true })).toBeVisible();
     await expect(page.getByText(/废标风险/).first()).toBeVisible();
     await expect(page.getByText(/扣分风险/).first()).toBeVisible();
@@ -162,7 +164,7 @@ test.describe("rules check acceptance", () => {
 
   test("rules responsible human requires reason, dismiss history reopen and CAS", async ({ page }) => {
     const state = await fixture(page);
-    await page.goto(report);
+    await openConsole(page, report);
     const dismiss = page.getByRole("button", { name: "忽略此风险", exact: true });
     await dismiss.click();
     const dialog = page.getByRole("dialog", { name: "风险处理" });
@@ -190,30 +192,13 @@ test.describe("rules check acceptance", () => {
     await artifact(page, state, "rules-decision-cas");
   });
 
-  for (const role of ["admin", "viewer", "bidder"]) {
-    test(`rules stored technical domain denies ${role} human decision`, async ({ page }) => {
-      const state = await fixture(page, { role });
-      await page.goto(report);
-      await expect(page.getByText("合成风险 1：响应存在负偏离。", { exact: true })).toBeVisible();
-      await expect(page.getByRole("button", { name: "忽略此风险", exact: true })).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "重新打开", exact: true })).toHaveCount(0);
-      expect(state.writes).toBe(0);
-      if (role === "viewer") {
-        await page.goto(workspace);
-        await expect(page.getByRole("button", { name: "预览检查", exact: true })).toBeDisabled();
-        await expect(page.getByRole("button", { name: "提交检查", exact: true })).toHaveCount(0);
-      }
-      await artifact(page, state, `rules-role-${role}`);
-    });
-  }
-
   test("rules no draft, partial empty report, stale read and explicit byte failure", async ({ page }) => {
     const state = await fixture(page, { noDraft: true, published: false });
-    await page.goto(`/app/org/tasks/${ids.task}/checks?job=${ids.extract}`);
+    await openConsole(page, `/org/tasks/${ids.task}/checks?job=${ids.extract}`);
     await expect(page.getByText(/尚未生成初稿/)).toBeVisible();
     await expect(page.getByRole("button", { name: "预览检查", exact: true })).toBeDisabled();
     state.noDraft = false; state.partial = true; state.findings = [];
-    await page.goto(report);
+    await openConsole(page, report);
     await expect(page.getByText(/部分内容未完成检查/)).toBeVisible();
     await expect(page.getByText("全部通过", { exact: true })).toHaveCount(0);
     state.stale = true;
@@ -227,10 +212,9 @@ test.describe("rules check acceptance", () => {
     await artifact(page, state, "rules-partial-stale-size-limit");
   });
 
-  test("rules date edit invalidates preview and delayed source is discarded on org exit", async ({ page }) => {
+  test("rules date edit invalidates preview and delayed source is discarded on session reset", async ({ page }) => {
     const state = await fixture(page);
-    await page.goto(workspace);
-    // A fixed starting date makes the later edit a real change on every run day.
+    await openConsole(page, workspace);
     await page.getByLabel("评估日期", { exact: true }).fill("2026-10-05");
     await page.getByRole("button", { name: "预览检查", exact: true }).click();
     await expect(page.getByRole("button", { name: "提交检查", exact: true })).toBeEnabled();
@@ -242,15 +226,15 @@ test.describe("rules check acceptance", () => {
     expect(state.submissions).toBe(0);
     let release;
     state.delayedCitation = new Promise((resolve) => { release = resolve; });
-    await page.goto(report);
+    await openConsole(page, report);
     await page.getByRole("button", { name: "查看引用原文", exact: true }).first().click();
     await expect.poll(() => state.requests.filter((row) => row.path.endsWith("/assessment-citation")).length).toBe(1);
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "退出 / 切换单位", exact: true }).click();
-    await expect(page).toHaveURL(/\/app\/org\/login$/);
+    await page.getByRole("button", { name: "退出", exact: true }).click();
+    await expect(page).toHaveURL(/\/login$/);
     release();
     await expect(page.getByText(/必须提供真实材料/)).toHaveCount(0);
-    await expect.poll(() => page.evaluate(() => sessionStorage.getItem("bid.org.session"))).toBeNull();
+    await expect.poll(() => page.evaluate(key => sessionStorage.getItem(key), SESSION_KEY)).toBeNull();
     const saved = await page.evaluate(() => JSON.stringify({ ...sessionStorage }));
     expect(saved).not.toContain("必须提供真实材料");
     expect(saved).not.toContain("处理理由");
@@ -259,7 +243,7 @@ test.describe("rules check acceptance", () => {
 
   test("rules filter reset drops cursor and distinguishes filtered empty from full-report counts", async ({ page }) => {
     const state = await fixture(page);
-    await page.goto(report);
+    await openConsole(page, report);
     await page.getByRole("button", { name: "下一页", exact: true }).click();
     await choose(page, "处理状态", "已忽略");
     await expect(page.getByRole("status").filter({ hasText: /匹配 0.*全部 3/ })).toBeVisible();
@@ -272,22 +256,18 @@ test.describe("rules check acceptance", () => {
     await artifact(page, state, "rules-filter-cursor-reset");
   });
 
-  test("rules missing extraction has no inferred selection and foreign-org report stays inaccessible", async ({ page }) => {
-    const state = await fixture(page, { org: ids.orgB, role: "viewer" });
-    await page.goto(`/app/org/tasks/${ids.task}/checks`);
+  test("rules missing extraction has no inferred selection", async ({ page }) => {
+    const state = await fixture(page);
+    await openConsole(page, `/org/tasks/${ids.task}/checks`);
     await expect(page.getByRole("alert").first()).toContainText("请先在任务中明确选择成功的提取结果");
     expect(state.requests.some(row => row.path.includes("assessment-inputs"))).toBe(false);
-    await page.goto(report);
-    await expect(page.getByRole("alert").first()).toContainText(/不存在|无权|不可访问/);
-    await expect(page.getByText("机器发现风险（含已忽略）", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("合成风险 1：响应存在负偏离。", { exact: true })).toHaveCount(0);
     expect(state.writes).toBe(0);
-    await artifact(page, state, "rules-foreign-org-no-extraction");
+    await artifact(page, state, "rules-no-extraction");
   });
 
   test("rules running job cancellation is explicit and terminal null error remains readable", async ({ page }) => {
     const state = await fixture(page, { holdJob: true });
-    await page.goto(workspace);
+    await openConsole(page, workspace);
     await page.getByRole("button", { name: "预览检查", exact: true }).click();
     await page.getByRole("button", { name: "提交检查", exact: true }).click();
     await expect(page.getByTestId("job-status")).toContainText("运行中");
@@ -306,7 +286,7 @@ test.describe("rules check acceptance", () => {
 test.describe("combined check acceptance", () => {
   test("combined partial coverage retains no-risk citations and unassessed reasons", async ({ page }) => {
     const state = await fixture(page, { mode: "combined", partial: true });
-    await page.goto(report);
+    await openConsole(page, report);
     await expect(page.getByText("部分内容未完成检查", { exact: true })).toBeVisible();
     await page.getByRole("tab", { name: "覆盖情况", exact: true }).click();
     await expect(page.getByText(/在已评估范围未发现风险/).first()).toBeVisible();
@@ -320,7 +300,7 @@ test.describe("combined check acceptance", () => {
 
   test("combined explicit consent binds the preview and date changes revoke consent", async ({ page }) => {
     const state = await fixture(page, { published: false });
-    await page.goto(workspace);
+    await openConsole(page, workspace);
     await checkControl(page.getByRole("radio", { name: "规则与语义检查", exact: true }));
     await page.getByLabel("评估日期", { exact: true }).fill("2026-10-05");
 
@@ -347,7 +327,7 @@ test.describe("combined check acceptance", () => {
   for (const blocker of ["redaction_required", "provider_unavailable", "context_limit_exceeded"]) {
     test(`combined ${blocker} remains a successful but blocked preview`, async ({ page }) => {
       const state = await fixture(page, { blocker });
-      await page.goto(workspace);
+      await openConsole(page, workspace);
       await checkControl(page.getByRole("radio", { name: "规则与语义检查", exact: true }));
 
       await page.getByRole("button", { name: "预览检查", exact: true }).click();
@@ -363,7 +343,7 @@ test.describe("combined check acceptance", () => {
 
   test("combined queue receipt has explicit idempotent recovery; network failure never auto-submits", async ({ page }) => {
     const state = await fixture(page, { queueError: true });
-    await page.goto(workspace);
+    await openConsole(page, workspace);
     await checkControl(page.getByRole("radio", { name: "规则与语义检查", exact: true }));
 
     await page.getByRole("button", { name: "预览检查", exact: true }).click();
@@ -377,7 +357,7 @@ test.describe("combined check acceptance", () => {
     await expect(page.getByText("已复用相同输入的结果", { exact: true })).toBeVisible();
     const writes = state.requests.filter((row) => row.method === "POST" && row.body?.dry_run === false);
     expect(writes).toHaveLength(2); expect(writes[1].body).toEqual(original); expect(state.writes).toBe(1);
-    await page.goto(workspace);
+    await openConsole(page, workspace);
     state.networkError = true;
     await checkControl(page.getByRole("radio", { name: "规则与语义检查", exact: true }));
 
@@ -392,8 +372,8 @@ test.describe("combined check acceptance", () => {
 });
 
 test.describe("rubric acceptance", () => {
-  const rubricWorkspace = `/app/org/tasks/${ids.task}/score-rubrics?job=${ids.extract}`;
-  const rubricReview = `/app/org/tasks/${ids.task}/score-rubrics/${ids.rubric}`;
+  const rubricWorkspace = `/org/tasks/${ids.task}/score-rubrics?job=${ids.extract}`;
+  const rubricReview = `/org/tasks/${ids.task}/score-rubrics/${ids.rubric}`;
   const strategies = [
     { name: "legacy", progress: [null], labels: ["正在生成评分规则"] },
     { name: "single-pass", progress: [{ scheme: "single_pass", strategy_version: "synthetic-v1", stage: "whole_table", completed_batches: null, total_batches: null, sections_sha256: null }], labels: ["正在分析整张评分表"] },
@@ -407,7 +387,7 @@ test.describe("rubric acceptance", () => {
   for (const strategy of strategies) {
     test(`rubric ${strategy.name} generation displays only observed progress`, async ({ page }) => {
       const state = await rubricFixture(page, { progress: strategy.progress, progressStep: 0, partial: strategy.name === "two-stage" });
-      await page.goto(rubricWorkspace);
+      await openConsole(page, rubricWorkspace);
       await expect(page.getByRole("heading", { name: "评分规则", exact: true })).toBeVisible();
 
       await page.getByRole("button", { name: "预览生成评分规则", exact: true }).click();
@@ -432,7 +412,7 @@ test.describe("rubric acceptance", () => {
 
   test("rubric server checklist prevents whole-set confirmation until coverage and domain reviews finish", async ({ page }) => {
     const state = await rubricFixture(page);
-    await page.goto(rubricReview);
+    await openConsole(page, rubricReview);
     await expect(page.getByRole("heading", { name: "评分规则审阅", exact: true })).toBeVisible();
     const confirmSet = page.getByRole("button", { name: "确认整套评分规则", exact: true });
     await expect(confirmSet).toBeDisabled();
@@ -448,7 +428,7 @@ test.describe("rubric acceptance", () => {
     }
     await expect(confirmSet).toBeDisabled();
     // Coverage is a separate human operation: confirming every visible child alone is insufficient.
-    state.rubricCoverage.forEach((row, index) => { row.disposition = "mapped"; row.rubric_item_ids = [uuid(800 + index)]; row.decided_by = uuid(3); row.decided_at = "2026-10-05T00:00:00Z"; row.revision++; });
+    state.rubricCoverage.forEach((row, index) => { row.disposition = "mapped"; row.rubric_item_ids = [uuid(800 + index)]; row.decided_at = "2026-10-05T00:00:00Z"; row.revision++; });
     state.rubricRevision++;
     await page.reload();
     await expect(confirmSet).toBeEnabled();
@@ -461,21 +441,10 @@ test.describe("rubric acceptance", () => {
     await artifact(page, state, "rubric-whole-set-gates");
   });
 
-  for (const role of ["admin", "technical", "viewer"]) {
-    test(`rubric ${role} cannot confirm commercial domain work`, async ({ page }) => {
-      const state = await rubricFixture(page, { role });
-      await page.goto(rubricReview);
-      await page.getByRole("tab", { name: "审核分节", exact: true }).click();
-      await expect(page.getByRole("button", { name: "确认分节", exact: true })).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "确认整套评分规则", exact: true })).toBeDisabled();
-      expect(state.writes).toBe(0);
-      await artifact(page, state, `rubric-role-${role}`);
-    });
-  }
 
   test("rubric coverage mapping, exclusion, reopening and duplicate canonical source are distinct writes", async ({ page }) => {
     const state = await rubricFixture(page);
-    await page.goto(rubricReview);
+    await openConsole(page, rubricReview);
     await page.getByRole("tab", { name: "核对评分要求覆盖", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "评分规则处理" });
     await page.getByRole("button", { name: "核对覆盖", exact: true }).click();
@@ -515,7 +484,7 @@ test.describe("rubric acceptance", () => {
 
   test("rubric section reviews every source and replacement removes one verified selection", async ({ page }) => {
     const state = await rubricFixture(page, { multipleSectionSources: true });
-    await page.goto(rubricReview);
+    await openConsole(page, rubricReview);
     const section = page.locator('.el-card').filter({ has: page.getByRole('heading', { name: '合成分节 1', exact: true }) });
     await expect(section.getByRole('button', { name: '查看引用原文', exact: true })).toHaveCount(2);
     await section.getByRole('button', { name: '查看引用原文', exact: true }).nth(1).click();
@@ -538,7 +507,7 @@ test.describe("rubric acceptance", () => {
 
   test("rubric full replacement reads every page, preserves graph and resets approvals with new IDs", async ({ page }) => {
     const state = await rubricFixture(page);
-    await page.goto(rubricReview);
+    await openConsole(page, rubricReview);
     await page.getByRole("button", { name: "完整修订评分规则", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "完整修订评分规则" });
     await expect(dialog.getByRole("status")).toContainText("分节 2、条目 2、评分要求 2");
@@ -555,8 +524,8 @@ test.describe("rubric acceptance", () => {
     await expect(page).toHaveURL(new RegExp(`/score-rubrics/${uuid(23)}$`));
     await expect(page.getByText(/第 2 版.*待审核/)).toBeVisible();
     expect(state.replacements).toHaveLength(1); expect(state.replacements[0].sections[1].title).toBe("合成分节 2");
-    expect(state.sections.every(row => row.review_domain === null && row.state === "candidate" && row.confirmed_by === null)).toBe(true);
-    expect(state.rubricCoverage.every(row => row.disposition === "pending" && row.decided_by === null)).toBe(true);
+    expect(state.sections.every(row => row.review_domain === null && row.state === "candidate")).toBe(true);
+    expect(state.rubricCoverage.every(row => row.disposition === "pending" && row.decided_at === null)).toBe(true);
     expect(state.rubricItems.every(row => ![uuid(800), uuid(801)].includes(row.id))).toBe(true);
     await page.getByRole("button", { name: "恢复已保存的覆盖提议", exact: true }).click();
     await page.getByRole("tab", { name: "核对评分要求覆盖", exact: true }).click();
@@ -573,80 +542,11 @@ test.describe("rubric acceptance", () => {
     await artifact(page, state, "rubric-complete-replacement");
   });
 
-  for (const role of ["bidder", "technical"]) {
-    test(`rubric ${role} repairs own entries while preserving another domain's invalid declarations`, async ({ page }) => {
-      const state = await rubricFixture(page, { role });
-      const ownDomain = role === "bidder" ? "commercial" : "technical", otherDomain = role === "bidder" ? "technical" : "commercial";
-      for (const rows of [state.sections, state.rubricItems]) { rows[0].review_domain = ownDomain; rows[1].review_domain = otherDomain; }
-      Object.assign(state.sections[0], { weight: "35", score_range: { minimum: "12", maximum: "10" }, normalization_errors: ["invalid_score_bounds", "invalid_weight"] });
-      Object.assign(state.rubricItems[0], { score_range: null, normalization_errors: ["missing_score_bounds"] });
-      Object.assign(state.sections[1], { weight: "35", cap: "-2.12345678", score_range: { minimum: "12.12345678", maximum: "10.12345678" }, normalization_errors: ["invalid_cap", "invalid_score_bounds", "invalid_weight", "unexpected_cap"] });
-      Object.assign(state.rubricItems[1], { assessment_mode: "model_assessable", score_range: null, weight: "35.12345678", ambiguity_reason: null, normalization_errors: ["invalid_weight", "missing_score_bounds"] });
-      const lockedSection = structuredClone(state.sections[1]), lockedItem = structuredClone(state.rubricItems[1]);
-      state.nextNormalizationErrors = { sections: [[], lockedSection.normalization_errors], items: [[], lockedItem.normalization_errors] };
-      await page.goto(rubricReview);
-      await expect(page.getByTestId("rubric-normalization-errors")).toContainText("invalid_weight");
-      await page.getByRole("button", { name: "完整修订评分规则", exact: true }).click();
-      const dialog = page.getByRole("dialog", { name: "完整修订评分规则" });
-      await expect(dialog.getByRole("status")).toContainText("分节 2、条目 2、评分要求 2");
-      for (const part of ["sections", "items", "coverage"]) expect(state.requests.some(row => row.query.part === part && row.query.cursor === "second-page")).toBe(true);
-      await expect(dialog.getByTestId("replacement-normalization-errors")).toContainText("invalid_score_bounds");
-      await expect(dialog.getByLabel("权重", { exact: true })).toHaveValue("35");
-      await dialog.getByLabel("权重", { exact: true }).fill("");
-      await dialog.getByLabel("最低分", { exact: true }).fill("0");
-      await dialog.getByRole("button", { name: "下一条修订", exact: true }).click();
-      await expect(dialog.getByLabel("标题", { exact: true })).toBeDisabled();
-      await expect(dialog.getByRole("button", { name: "移除当前项", exact: true })).toBeDisabled();
-      await expect(dialog.getByLabel("权重", { exact: true })).toBeDisabled();
-      await expect(dialog.getByLabel("权重", { exact: true })).toHaveValue("35");
-      await expect(dialog.getByLabel("最高分", { exact: true })).toHaveValue(lockedSection.score_range.maximum);
-      await expect(dialog.getByTestId("replacement-normalization-errors")).toContainText("unexpected_cap");
-      await dialog.getByRole("tab", { name: "修订条目", exact: true }).click();
-      await expect(dialog.getByTestId("replacement-normalization-errors")).toContainText("missing_score_bounds");
-      await dialog.getByRole("button", { name: "设置分值范围", exact: true }).click();
-      await dialog.getByLabel("最高分", { exact: true }).fill("10");
-      await dialog.getByRole("button", { name: "下一条修订", exact: true }).click();
-      await expect(dialog.getByLabel("权重", { exact: true })).toBeDisabled();
-      await expect(dialog.getByLabel("权重", { exact: true })).toHaveValue(lockedItem.weight);
-      await expect(dialog.getByRole("button", { name: "设置分值范围", exact: true })).toBeDisabled();
-      await expect(dialog.getByTestId("replacement-normalization-errors")).toContainText("missing_score_bounds");
-      if (role === "technical") {
-        await dialog.getByRole("tab", { name: "修订总分规则", exact: true }).click();
-        await expect(dialog.getByRole("combobox", { name: "总分合计规则", exact: true })).toBeDisabled();
-      }
-      await dialog.getByLabel("完整修订理由", { exact: true }).fill("仅修复当前职责的权重和分值范围，保留其他职责原始声明供后续审核。详细错误由服务器保存后重新核验。");
-      await dialog.getByRole("button", { name: "保存完整修订", exact: true }).click();
-      await expect(page).toHaveURL(new RegExp(`/score-rubrics/${uuid(23)}$`));
-      const replacement = state.replacements[0];
-      expect(replacement.sections[0]).toMatchObject({ weight: null, score_range: { minimum: "0", maximum: "10" } });
-      expect(replacement.items[0].score_range).toEqual({ minimum: "0", maximum: "10" });
-      expect(replacement.sections[1]).toMatchObject({ weight: lockedSection.weight, cap: lockedSection.cap, score_range: lockedSection.score_range });
-      expect(replacement.items[1]).toMatchObject({ weight: lockedItem.weight, score_range: null, ambiguity_reason: null });
-      for (const field of ["key", "title", "order", "aggregation", "aggregation_rule_text", "score_range", "weight", "cap", "included_in_overall_total", "ambiguity_reason"]) expect(replacement.sections[1][field]).toEqual(lockedSection[field]);
-      expect(replacement.sections[1].sources).toEqual(lockedSection.sources.map(({ requirement_id, quote }) => ({ requirement_id, quote })));
-      expect(replacement.sections[1].source_section_id).toBe(lockedSection.id);
-      for (const field of ["requirement_id", "key", "title", "rule_text", "order", "assessment_mode", "score_range", "weight", "ambiguity_reason"]) expect(replacement.items[1][field]).toEqual(lockedItem[field]);
-      expect(replacement.items[1].source_item_id).toBe(lockedItem.id); expect(replacement.items[1].section_key).toBe(lockedSection.key);
-      if (role === "technical") expect(replacement).toMatchObject({ overall_aggregation: "sum", overall_rule_text: null, overall_score_range: { minimum: "0", maximum: "10" }, overall_cap: null });
-      for (const part of ["sections", "items"]) for (const row of replacement[part]) { expect(row).not.toHaveProperty("normalization_errors"); expect(row).not.toHaveProperty("review_domain"); }
-      expect(state.sections[0].normalization_errors).toEqual([]); expect(state.rubricItems[0].normalization_errors).toEqual([]);
-      expect(state.rubricSummary().completeness.normalization_errors).toBeGreaterThan(0);
-      await expect(page.getByTestId("rubric-normalization-errors")).toHaveCount(0);
-      await page.getByRole("button", { name: "下一页", exact: true }).click();
-      await expect(page.getByTestId("rubric-normalization-errors")).toContainText("invalid_score_bounds");
-      await page.getByRole("tab", { name: "审核条目", exact: true }).click();
-      await page.getByRole("button", { name: "下一页", exact: true }).click();
-      await expect(page.getByTestId("rubric-normalization-errors")).toContainText("missing_score_bounds");
-      await expect(page.getByRole("button", { name: "确认整套评分规则", exact: true })).toBeDisabled();
-      expect(state.writes).toBe(1);
-      await artifact(page, state, `rubric-domain-repair-${role}`);
-    });
-  }
 
   for (const problem of ["mixedSnapshot", "missingPage"]) {
     test(`rubric ${problem} disables complete replacement save`, async ({ page }) => {
       const state = await rubricFixture(page, { [problem]: true });
-      await page.goto(rubricReview);
+      await openConsole(page, rubricReview);
       await page.getByRole("button", { name: "完整修订评分规则", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "完整修订评分规则" });
       await expect(dialog.getByRole("alert").first()).toContainText(/快照|变化|assessment_view_changed/);
@@ -658,7 +558,7 @@ test.describe("rubric acceptance", () => {
 
   test("rubric oversized complete replacement cannot submit", async ({ page }) => {
     const state = await rubricFixture(page);
-    await page.goto(rubricReview);
+    await openConsole(page, rubricReview);
     await page.getByRole("button", { name: "完整修订评分规则", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "完整修订评分规则" });
     await expect(dialog.getByRole("status")).toContainText("完整快照");
@@ -673,11 +573,11 @@ test.describe("rubric acceptance", () => {
 });
 
 test.describe("score acceptance", () => {
-  const scoreWorkspace = `/app/org/tasks/${ids.task}/scores?job=${ids.extract}&draft=${ids.draft}&rubric=${ids.rubric}`;
-  const scoreReport = `/app/org/tasks/${ids.task}/scores/${ids.score}`;
+  const scoreWorkspace = `/org/tasks/${ids.task}/scores?job=${ids.extract}&draft=${ids.draft}&rubric=${ids.rubric}`;
+  const scoreReport = `/org/tasks/${ids.task}/scores/${ids.score}`;
   test("score preview submits exact confirmed rubric, draft, date and hash", async ({ page }) => {
     const state = await scoreFixture(page);
-    await page.goto(scoreWorkspace);
+    await openConsole(page, scoreWorkspace);
     await expect(page.getByRole("heading", { name: "评分预估", exact: true })).toBeVisible();
     await page.getByLabel("评估日期", { exact: true }).fill("2026-10-05");
 
@@ -698,7 +598,7 @@ test.describe("score acceptance", () => {
   for (const totalStatus of ["estimated", "range_only", "unavailable"]) {
     test(`score ${totalStatus} preserves zero, null and server-only aggregate semantics`, async ({ page }) => {
       const state = await scoreFixture(page, { totalStatus, stale: totalStatus === "unavailable" });
-      await page.goto(scoreReport);
+      await openConsole(page, scoreReport);
       await expect(page.getByRole("heading", { name: "评分报告", exact: true })).toBeVisible();
       if (totalStatus === "estimated") await expect(page.getByTestId("score-total")).toHaveText("0");
       else {
@@ -710,7 +610,7 @@ test.describe("score acceptance", () => {
       await expect(page.getByText(/已评估的真实零分，缺少条款规定的真实证明。/)).toBeVisible();
       await expect(page.getByText(/条目预估：0/)).toBeVisible();
       await expect(page.getByText("缺少可核验真实材料", { exact: true })).toBeVisible();
-      await expect(page.getByText("补充真实材料并由职责负责人确认", { exact: true })).toBeVisible();
+      await expect(page.getByText("补充真实材料并由人工确认", { exact: true })).toBeVisible();
       await page.getByRole("button", { name: "下一页", exact: true }).click();
       if (totalStatus !== "estimated") {
         await expect(page.getByText(/无法评估/).first()).toBeVisible();
@@ -729,21 +629,17 @@ test.describe("score acceptance", () => {
     });
   }
 
-  test("score unconfirmed rubric blocks preview and viewer cannot submit", async ({ page }) => {
+  test("score unconfirmed rubric blocks preview", async ({ page }) => {
     const state = await scoreFixture(page, { unconfirmedRubric: true });
-    await page.goto(scoreWorkspace);
+    await openConsole(page, scoreWorkspace);
     await expect(page.getByRole("button", { name: "预览评分", exact: true })).toBeDisabled();
     expect(state.previews).toBe(0); expect(state.submissions).toBe(0);
-    state.role = "viewer"; state.unconfirmedRubric = false;
-    await page.reload();
-    await expect(page.getByRole("button", { name: "预览评分", exact: true })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "提交评分", exact: true })).toHaveCount(0);
-    await artifact(page, state, "score-role-rubric-gates");
+    await artifact(page, state, "score-unconfirmed-rubric-blocks");
   });
 
   test("score zero planned calls saves an explicit unavailable report and reads reasons on demand", async ({ page }) => {
     const state = await scoreFixture(page, { noEligible: true });
-    await page.goto(scoreWorkspace);
+    await openConsole(page, scoreWorkspace);
 
     await page.getByRole("button", { name: "预览评分", exact: true }).click();
     await expect(page.getByText("没有可由模型评估的评分项", { exact: true })).toBeVisible();
@@ -762,7 +658,7 @@ test.describe("score acceptance", () => {
 
   test("score verified citations use pinned draft revision and current card deep link", async ({ page }) => {
     const state = await scoreFixture(page);
-    await page.goto(scoreReport);
+    await openConsole(page, scoreReport);
     await page.getByRole("tab", { name: "逐项评分", exact: true }).click();
     await page.getByText("查看保存的原文、响应和证据引用", { exact: true }).click();
     const citations = page.getByRole("button", { name: "查看引用原文", exact: true });

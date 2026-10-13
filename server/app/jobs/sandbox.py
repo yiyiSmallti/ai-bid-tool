@@ -26,7 +26,7 @@ async def watch(execution: JobExecution, run_id: UUID) -> None:
         await asyncio.sleep(1)
         if execution.stopped is not None:
             raise execution.stopped
-        async with execution.db.transaction(execution.org_id) as session:
+        async with execution.db.transaction() as session:
             await execution.owned_job(session)
             run = await session.get(SandboxRun, run_id)
             assert run is not None
@@ -72,7 +72,7 @@ def safe_failure(
         "sandbox_runtime_failure",
         "sandbox_runtime_not_accepted",
         "sandbox_node_capacity",
-        "sandbox_org_capacity",
+        "sandbox_capacity",
         "cleanup_pending",
         "sandbox_node_quarantined",
         "sandbox_metrics_unavailable",
@@ -81,9 +81,9 @@ def safe_failure(
     return code, 3 if exc.code in transient else 4
 
 
-async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
+async def process_if_sandbox(processor, job_id: UUID) -> bool:
     # Existing processors retain their complete claim/usage path for all other job kinds.
-    async with processor.db.transaction(org_id) as session:
+    async with processor.db.transaction() as session:
         job = await session.get(Job, job_id)
         if job is None or job.kind != "sandbox":
             return False
@@ -92,7 +92,7 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
             raise ServiceError("sandbox_run_missing", "Sandbox run is missing", 409, 4)
         task_id, run_id = run.task_id, run.id
     browser = service.browser_for(processor)
-    await service.reconcile_run(processor.db, run_id, org_id, browser)
+    await service.reconcile_run(processor.db, run_id, browser)
     crypto = Secrets.for_data(processor.settings)
     actor = None
     attempt = None
@@ -110,9 +110,9 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
     error_code, exit_code = "sandbox_failed", 4
     cancelled = False
     try:
-        async with processor.db.transaction(org_id) as session:
+        async with processor.db.transaction() as session:
             current = await locked_job(session, job_id)
-            await service.org_lock(session, org_id)
+            await service.installation_lock(session)
             assert current is not None
             if current.status in {"succeeded", "failed", "cancelled"}:
                 return True
@@ -140,9 +140,9 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
             if running is not None and running >= 2:
                 # Queue infrastructure retries dispatch; no new sandbox attempt is consumed.
                 raise ProviderFailure(
-                    "Sandbox organization capacity reached",
+                    "Sandbox installation capacity reached",
                     retryable=True,
-                    code="sandbox_org_capacity",
+                    code="sandbox_capacity",
                 )
             run = await session.get(SandboxRun, run_id)
             assert run is not None
@@ -175,7 +175,6 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
             descriptor = await service.budgeted_descriptor(session, run, row, attempt_id)
             attempt = SandboxAttempt(
                 id=uuid4(),
-                org_id=org_id,
                 sandbox_run_id=run.id,
                 input_id=row.id,
                 task_id=task_id,
@@ -199,13 +198,11 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
                 input_hash=descriptor.input_sha256,
             )
         run_claimed = True
-        execution = JobExecution(processor.settings, processor.db, org_id, job_id, attempt_id)
+        execution = JobExecution(processor.settings, processor.db, job_id, attempt_id)
         async with execution.activate():
             if row.purpose == "prototype_offline":
                 assert row.object_key is not None
-                content = await processor.storage.read_bounded(
-                    org_id, row.object_key, row.size_bytes
-                )
+                content = await processor.storage.read_bounded(row.object_key, row.size_bytes)
                 if len(content) != row.size_bytes or service.sha(content) != row.html_sha256:
                     raise ServiceError(
                         "sandbox_input_changed", "Stored input failed integrity checks", 409, 4
@@ -241,9 +238,9 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
             artifacts, metrics = await service.store_artifacts(
                 processor.storage, run, row, attempt, result, broker, source_url
             )
-            async with processor.db.transaction(org_id) as session:
+            async with processor.db.transaction() as session:
                 current = await execution.owned_job(session)
-                await service.org_lock(session, org_id)
+                await service.installation_lock(session)
                 run = await session.get(SandboxRun, run_id)
                 assert run is not None
                 row = await session.get(SandboxInput, run.input_id)
@@ -356,15 +353,13 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
             if receipt.cleanup_state == "not_started":
                 failure_metrics = {key: 0 for key in service.SandboxMetrics.model_fields}
                 failure_versions = {"accounting": "no_instance_started"}
-    async with processor.db.transaction(org_id) as session:
+    async with processor.db.transaction() as session:
         current = await locked_job(session, job_id)
-        await service.org_lock(session, org_id)
+        await service.installation_lock(session)
         run = await session.get(SandboxRun, run_id)
         assert current is not None and run is not None
-        # Failure audit keeps the initiating identity even when that membership was revoked.
-        audit_actor = Identity(
-            run.requested_by, org_id, set(), "viewer", run.token_id, run.actor_kind
-        )
+        # Failure audit keeps the initiating identity even when its token was revoked.
+        audit_actor = Identity(scopes=set(), token_id=run.token_id, actor_kind=run.actor_kind)
         saved_attempt = await session.get(SandboxAttempt, attempt.id) if attempt else None
         if saved_attempt is not None and saved_attempt.ended_at is None:
             saved_attempt.ended_at = datetime.now(UTC)

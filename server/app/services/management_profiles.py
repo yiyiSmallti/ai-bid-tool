@@ -10,14 +10,14 @@ from uuid import UUID
 
 from cryptography.fernet import InvalidToken
 from pydantic import ValidationError
-from sqlalchemy import String, cast, func, select, text, tuple_
+from sqlalchemy import func, select, text, tuple_
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import ServiceError, not_found
 from app.core.security import TokenSigner
-from app.models.entities import AuditLog, OrgProfile, OrgProfileRevision
+from app.models.entities import OrgProfile, OrgProfileRevision
 from app.models.management import ResourceLifecycleEvent as Event
 from app.schemas.contracts import Contract, Cost, Result
 from app.schemas.management_pages import (
@@ -111,12 +111,9 @@ async def reader(session: AsyncSession, actor: Identity) -> Identity:
 
 def authority(actor: Identity) -> str:
     identity = [
-        str(actor.org_id),
-        str(actor.user_id),
         str(actor.token_id or ""),
         actor.actor_kind,
         str(actor.principal_id or ""),
-        actor.role,
         sorted(actor.scopes),
     ]
     return sha256(json.dumps(identity, separators=(",", ":")).encode()).hexdigest()
@@ -136,7 +133,6 @@ def filters(body: ResourceQuery) -> dict:
 def cursor_binding(actor: Identity, purpose: str, parent: UUID | None, normalized: dict) -> dict:
     return {
         "kind": "management_profile_cursor",
-        "org": str(actor.org_id),
         "authority": authority(actor),
         "purpose": purpose,
         "parent": str(parent or ""),
@@ -208,7 +204,7 @@ def actions(actor: Identity, root: OrgProfile) -> list[ActionHint]:
     lifecycle = write and "profile:lifecycle" in actor.scopes
     human = actor.actor_kind == "session" and actor.token_id is None
     return [
-        ActionHint(action="revise", allowed=write, reason=None if write else "role_required"),
+        ActionHint(action="revise", allowed=write, reason=None if write else "scope_required"),
         ActionHint(
             action="deactivate" if root.lifecycle_state == "active" else "restore",
             allowed=lifecycle and human,
@@ -216,9 +212,9 @@ def actions(actor: Identity, root: OrgProfile) -> list[ActionHint]:
             if lifecycle and human
             else "human_required"
             if not human
-            else "role_required",
+            else "scope_required",
         ),
-        # An org library has no task authority; selection requires a separately authorized task.
+        # The library has no task authority; selection requires a separately authorized task.
         ActionHint(
             action="select",
             allowed=False,
@@ -230,52 +226,8 @@ def actions(actor: Identity, root: OrgProfile) -> list[ActionHint]:
 
 
 def check_revision(actor: Identity, root: OrgProfile, revision: OrgProfileRevision):
-    if (
-        root.org_id != actor.org_id
-        or revision.org_id != actor.org_id
-        or revision.profile_id != root.id
-        or revision.revision > root.current_revision
-    ):
+    if (revision.profile_id != root.id) or (revision.revision > root.current_revision):
         fail("management_integrity_error", "Profile revision identity is invalid", 409, 4)
-
-
-async def authors(session: AsyncSession, actor: Identity, revisions) -> dict[UUID, UUID | None]:
-    if not revisions:
-        return {}
-    ids = [row.id for row in revisions]
-    rows = (
-        await session.execute(
-            select(
-                OrgProfileRevision.id,
-                func.count(AuditLog.id),
-                func.min(cast(AuditLog.actor_user_id, String)),
-            )
-            .join(
-                AuditLog,
-                (AuditLog.org_id == OrgProfileRevision.org_id)
-                & (AuditLog.object_id == OrgProfileRevision.profile_id)
-                & (AuditLog.resource_revision_id_text == cast(OrgProfileRevision.id, String))
-                & (AuditLog.details["revision"] == func.to_jsonb(OrgProfileRevision.revision)),
-            )
-            .where(
-                OrgProfileRevision.org_id == actor.org_id,
-                OrgProfileRevision.id.in_(ids),
-                # Constrain the audit relation itself to this authorized page.
-                # Stored base columns can use the composite index under RLS.
-                AuditLog.org_id == actor.org_id,
-                AuditLog.resource_revision_id_text.in_([str(identifier) for identifier in ids]),
-                # Fixed literals preserve partial-index eligibility for generic
-                # prepared plans as well as custom plans.
-                text("audit_logs.action IN ('resource.profile.create','resource.profile.update')"),
-            )
-            .group_by(OrgProfileRevision.id)
-        )
-    ).all()
-    result: dict[UUID, UUID | None] = {row.id: None for row in revisions}
-    for revision_id, count, user_id in rows:
-        if count == 1 and user_id is not None:
-            result[revision_id] = UUID(user_id)
-    return result
 
 
 def encoded_result(command: str, data: Contract, items: list[Contract], duration_ms=0) -> Result:
@@ -319,7 +271,6 @@ def build_page(session, actor, purpose, parent, normalized, items, anchors, more
             else None
         )
         data = PageData(
-            org_id=actor.org_id,
             as_of=as_of,
             returned=retained,
             next_cursor=continuation,
@@ -335,22 +286,15 @@ def build_page(session, actor, purpose, parent, normalized, items, anchors, more
         retained -= 1
     if items:
         too_large()
-    return Page(
-        data=PageData(org_id=actor.org_id, as_of=as_of, returned=0, has_more=False), items=[]
-    )
+    return Page(data=PageData(as_of=as_of, returned=0, has_more=False), items=[])
 
 
 def browse_statement(actor: Identity, body: ResourceQuery, anchor=None):
     normalized = filters(body)
-    statement = (
-        select(OrgProfile, OrgProfileRevision)
-        .join(
-            OrgProfileRevision,
-            (OrgProfileRevision.org_id == OrgProfile.org_id)
-            & (OrgProfileRevision.profile_id == OrgProfile.id)
-            & (OrgProfileRevision.revision == OrgProfile.current_revision),
-        )
-        .where(OrgProfile.org_id == actor.org_id)
+    statement = select(OrgProfile, OrgProfileRevision).join(
+        OrgProfileRevision,
+        (OrgProfileRevision.profile_id == OrgProfile.id)
+        & (OrgProfileRevision.revision == OrgProfile.current_revision),
     )
     if body.state != "all":
         statement = statement.where(OrgProfile.lifecycle_state == body.state)
@@ -379,13 +323,12 @@ async def query(session: AsyncSession, actor: Identity, body: ResourceQuery) -> 
         anchor = open_cursor(session, actor, body, "browse", None, normalized)
         rows = (await session.execute(browse_statement(actor, body, anchor))).all()
         retained = rows[: body.limit]
-        revision_authors = await authors(session, actor, [row[1] for row in retained])
+
         items, anchors = [], []
         for root, revision in retained:
             check_revision(actor, root, revision)
             items.append(
                 ResourceRow(
-                    org_id=actor.org_id,
                     ref=ref(root.id),
                     name=revision.data["name"],
                     revision_id=revision.id,
@@ -394,7 +337,6 @@ async def query(session: AsyncSession, actor: Identity, body: ResourceQuery) -> 
                     provenance="declared",
                     created_at=root.created_at,
                     revised_at=revision.created_at,
-                    revised_by=revision_authors[revision.id],
                     actions=actions(actor, root),
                 )
             )
@@ -416,9 +358,7 @@ async def root_for(
     session: AsyncSession, actor: Identity, root_id: UUID, *, lock=False
 ) -> OrgProfile:
     statement = (
-        select(OrgProfile)
-        .where(OrgProfile.org_id == actor.org_id, OrgProfile.id == root_id)
-        .execution_options(populate_existing=True)
+        select(OrgProfile).where(OrgProfile.id == root_id).execution_options(populate_existing=True)
     )
     root = await session.scalar(statement.with_for_update() if lock else statement)
     if root is None:
@@ -439,11 +379,10 @@ async def detail(
                 select(OrgProfile, OrgProfileRevision)
                 .join(
                     OrgProfileRevision,
-                    (OrgProfileRevision.org_id == OrgProfile.org_id)
-                    & (OrgProfileRevision.profile_id == OrgProfile.id)
+                    (OrgProfileRevision.profile_id == OrgProfile.id)
                     & (OrgProfileRevision.revision == selected_revision),
                 )
-                .where(OrgProfile.org_id == actor.org_id, OrgProfile.id == root_id)
+                .where(OrgProfile.id == root_id)
                 .execution_options(populate_existing=True)
             )
         ).first()
@@ -451,17 +390,15 @@ async def detail(
             raise not_found()
         root, revision = row
         check_revision(actor, root, revision)
-        revision_authors = await authors(session, actor, [revision])
+
         try:
             value = ResourceDetailData(
-                org_id=actor.org_id,
                 ref=ref(root.id),
                 current_revision=root.current_revision,
                 lifecycle=lifecycle_view(root),
                 provenance="declared",
                 detail=ProfileDetail(revision=RevisionView.model_validate(revision)),
                 revised_at=revision.created_at,
-                revised_by=revision_authors[revision.id],
                 actions=actions(actor, root),
             )
         except ValidationError as error:
@@ -478,9 +415,7 @@ async def history(
     async with read_budget(session, body):
         actor = await reader(session, actor)
         anchor = open_cursor(session, actor, body, "history", root_id, {})
-        relation = (OrgProfileRevision.org_id == OrgProfile.org_id) & (
-            OrgProfileRevision.profile_id == OrgProfile.id
-        )
+        relation = OrgProfileRevision.profile_id == OrgProfile.id
         if anchor:
             relation &= tuple_(OrgProfileRevision.revision, OrgProfileRevision.id) < tuple_(*anchor)
         # A left join retains an authorized root even beyond the last revision, so
@@ -489,7 +424,7 @@ async def history(
             await session.execute(
                 select(OrgProfile, OrgProfileRevision)
                 .outerjoin(OrgProfileRevision, relation)
-                .where(OrgProfile.org_id == actor.org_id, OrgProfile.id == root_id)
+                .where(OrgProfile.id == root_id)
                 .order_by(OrgProfileRevision.revision.desc(), OrgProfileRevision.id.desc())
                 .limit(body.limit + 1)
                 .execution_options(populate_existing=True)
@@ -499,19 +434,17 @@ async def history(
             raise not_found()
         root = records[0][0]
         rows = [record[1] for record in records if record[1] is not None]
-        revision_authors = await authors(session, actor, rows[: body.limit])
+
         items, anchors = [], []
         for revision in rows[: body.limit]:
             check_revision(actor, root, revision)
             items.append(
                 ResourceHistoryRow(
-                    org_id=actor.org_id,
                     ref=ref(root_id),
                     revision_id=revision.id,
                     revision=revision.revision,
                     name=revision.data["name"],
                     created_at=revision.created_at,
-                    created_by=revision_authors[revision.id],
                     current=revision.revision == root.current_revision,
                     has_file=False,
                 )
@@ -531,10 +464,8 @@ async def history(
 
 
 def event_view(row: Event, actor: Identity, root_id: UUID) -> ResourceLifecycleEvent:
-    if (
-        row.org_id != actor.org_id
-        or row.profile_id != root_id
-        or any(
+    if (row.profile_id != root_id) or (
+        any(
             getattr(row, arm) is not None
             for arm in ("product_id", "feature_id", "certificate_id", "profile_id")
             if arm != "profile_id"
@@ -544,14 +475,12 @@ def event_view(row: Event, actor: Identity, root_id: UUID) -> ResourceLifecycleE
     return ResourceLifecycleEvent.model_validate(
         {
             "id": row.id,
-            "org_id": row.org_id,
             "ref": ref(root_id),
             "revision": row.revision,
             "resource_revision": row.resource_revision,
             "before": row.before_state,
             "after": row.after_state,
             "reason_code": row.reason_code,
-            "actor_user_id": row.actor_user_id,
             "actor_kind": row.actor_kind,
             "created_at": row.created_at,
         }
@@ -565,7 +494,7 @@ async def lifecycle_history(
         actor = await reader(session, actor)
         await root_for(session, actor, root_id)
         anchor = open_cursor(session, actor, body, "lifecycle_history", root_id, {})
-        statement = select(Event).where(Event.org_id == actor.org_id, Event.profile_id == root_id)
+        statement = select(Event).where(Event.profile_id == root_id)
         if anchor:
             statement = statement.where(tuple_(Event.revision, Event.id) < tuple_(*anchor))
         rows = (
@@ -612,14 +541,12 @@ async def set_state(
             409,
         )
     event = Event(
-        org_id=actor.org_id,
         profile_id=root.id,
         revision=root.lifecycle_revision + 1,
         resource_revision=root.current_revision,
         before_state=root.lifecycle_state,
         after_state=body.state,
         reason_code=body.reason_code,
-        actor_user_id=actor.user_id,
     )
     session.add(event)
     await session.flush()

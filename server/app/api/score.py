@@ -28,6 +28,13 @@ from app.schemas.score_contracts import (
     RubricSetDecisionRequest,
     ScoreRequest,
 )
+from app.services import (
+    assessment_rubrics,
+    assessment_scores,
+    score,
+    score_execution,
+    score_generation,
+)
 from app.services.assessment_bounds import bounded_result, query_model
 from app.services.auth import set_actor_context
 from app.services.versioned import audit
@@ -87,7 +94,7 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
                 details = dict(details)
                 object_id = UUID(details.pop("object_id"))
                 action = details.pop("action", "score_rubric.decision_denied")
-                async with db.transaction(actor.org_id) as audit_session:
+                async with db.transaction() as audit_session:
                     # SET LOCAL identity was rolled back with the failed request.
                     # Rebind the verified actor before persisting its separate audit.
                     audit_session.info["command"] = session.info.get("command", "")
@@ -105,14 +112,13 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
                 details = dict(details)
                 object_id = UUID(details.pop("object_id"))
                 action = details.pop("action", "score.failed")
-                async with db.transaction(actor.org_id) as audit_session:
+                async with db.transaction() as audit_session:
                     audit_session.info["command"] = session.info.get("command", "")
                     await set_actor_context(audit_session, actor)
                     audit(audit_session, actor, action, object_id, details)
             raise
 
     async def generate(task_id, body, ctx):
-        from app.services import score_generation
 
         session, actor = ctx
         data, job = await invoke(
@@ -123,7 +129,7 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
             # can redispatch without another provider call or submitted audit.
             await session.commit()
             try:
-                queue_id = await queue.enqueue(str(actor.org_id), str(job.id))
+                queue_id = await queue.enqueue(str(job.id))
             except (OSError, ConnectorException, OperationalError):
                 body = Result(
                     ok=False,
@@ -138,14 +144,13 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
                     },
                 )
                 return JSONResponse(status_code=503, content=body.model_dump(mode="json"))
-            async with db.transaction(actor.org_id) as update:
+            async with db.transaction() as update:
                 saved = await update.get(Job, job.id)
                 if saved is not None:
                     saved.queue_id = queue_id
         return result("generate", data)
 
     async def execute(task_id, body, ctx):
-        from app.services import score_execution
 
         session, actor = ctx
         data, job = await invoke_score(
@@ -160,7 +165,7 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         if job is not None and job.status == "queued" and job.queue_id is None:
             await session.commit()
             try:
-                queue_id = await queue.enqueue(str(actor.org_id), str(job.id))
+                queue_id = await queue.enqueue(str(job.id))
             except (OSError, ConnectorException, OperationalError):
                 response = Result(
                     ok=False,
@@ -175,7 +180,7 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
                     },
                 )
                 return JSONResponse(status_code=503, content=response.model_dump(mode="json"))
-            async with db.transaction(actor.org_id) as update:
+            async with db.transaction() as update:
                 saved = await update.get(Job, job.id)
                 if saved is not None:
                     saved.queue_id = queue_id
@@ -211,7 +216,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         extraction_job_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import assessment_scores, score_execution
 
         if view == "console":
             query = query_model(
@@ -263,7 +267,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         entry_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import assessment_scores, score_execution
 
         if view == "console":
             if part is None or part == "summary":
@@ -360,7 +363,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         extraction_job_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import assessment_rubrics, score
 
         if view == "console":
             query = query_model(
@@ -404,7 +406,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         group_id: str | None = None,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import assessment_rubrics, score
 
         if view == "console":
             if part is None or part in {"summary", "replacement"}:
@@ -470,7 +471,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         view: Literal["console"] | None = None,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import score
 
         data = await invoke(
             score.revise_rubric,
@@ -497,7 +497,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         body: RubricClassifyRequest,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import score
 
         data = await invoke(
             score.classify_rubric,
@@ -524,7 +523,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         body: RubricClassifyRequest,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import score
 
         data = await invoke(
             score.classify_rubric,
@@ -551,7 +549,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         body: RubricSectionDecisionRequest,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import score
 
         data = await invoke(
             score.decide_section,
@@ -578,7 +575,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         body: RubricItemDecisionRequest,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import score
 
         data = await invoke(
             score.decide_item, ctx[0], ctx[1], task_id, rubric_id, item_id, body, storage, settings
@@ -597,7 +593,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         body: RubricCoverageDecisionRequest,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import score
 
         data = await invoke(
             score.decide_coverage,
@@ -624,7 +619,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         view: Literal["console"] | None = None,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import score
 
         data = await invoke(
             score.decide_rubric,
@@ -651,7 +645,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         limit: int = Query(50, ge=1, le=200),
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import score
 
         data, items = await score.rubric_history(
             ctx[0], ctx[1], task_id, rubric_id, storage, settings, cursor=cursor, limit=limit

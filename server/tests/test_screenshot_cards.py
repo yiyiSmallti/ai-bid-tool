@@ -12,8 +12,8 @@ Failure modes covered by this module:
 * image evidence fixes the exact asset, rendition, image hash, pixel region,
   claim scope, visual observation, and selected resource revision instead of
   putting an observation into the legacy quote field;
-* tokens, agents, workers, administrators outside the assigned review domain,
-  and reviewers who omit any linked evidence cannot confirm image evidence;
+* tokens, agents, workers and human reviewers who omit any linked evidence
+  cannot confirm image evidence;
 * confirmation revalidates the fixed image and changes only its image review
   state; privacy review never substitutes for the existing per-card human gate;
 * draft preview, submission, background processing, and reading an existing
@@ -24,7 +24,7 @@ Failure modes covered by this module:
   consumed as a response-row attachment;
 * an undecided prototype remains eligible for a draft and does not create a
   gap; prototype keep/replace decisions belong to the later export gate;
-* image views remain tenant-scoped and expose no storage key or long-lived URL.
+* image views remain scope-checked and expose no storage key or long-lived URL.
 
 The database-backed API fixtures are added with the screenshot schema and
 service implementation.  Tests use synthetic local bytes and fake providers;
@@ -42,20 +42,21 @@ from app.schemas.response_card_contracts import CardContent, EvidenceInput, Evid
 from app.schemas.screenshot_contracts import ImagePlan, ScreenshotIngest, UploadSource
 from app.services import screenshots
 from pydantic import TypeAdapter, ValidationError
-from test_response_cards import (  # pyright: ignore[reportMissingImports]
+from test_response_cards import (
     create_card,
     create_tender,
     phase_one_client,
     require_action,
     sanitized_artifact,
-    set_role,
 )
 from test_screenshot_renderer import (  # pyright: ignore[reportMissingImports]
     ScreenshotRenderer,
     _rgb_png,
 )
 
-ARTIFACT_ROOT = Path(__file__).resolve().parents[2] / "data/work/team-workflow-acceptance/cosign"
+ARTIFACT_ROOT = (
+    Path(__file__).resolve().parents[2] / "data/work/team-workflow-acceptance/screenshot-cards"
+)
 
 
 def image_input(**changes):
@@ -109,7 +110,6 @@ def test_image_evidence_view_requires_an_exact_fixed_reference_and_review_state(
     payload = image_input()
     common = {
         "id": str(uuid4()),
-        "org_id": str(uuid4()),
         "task_id": str(uuid4()),
         "card_id": str(uuid4()),
         "input": payload,
@@ -124,12 +124,10 @@ def test_image_evidence_view_requires_an_exact_fixed_reference_and_review_state(
         "region": payload["region"],
         "claim_scope": payload["claim_scope"],
         "visual_observation": payload["visual_observation"],
-        "confirmed_by": None,
         "confirmed_at": None,
         "active_selection": True,
     }
     assert EvidenceView.model_validate(common).quote_check == "unreviewed_image"
-
     for changes in (
         {"image_sha256": "b" * 64},
         {"screenshot_rendition_id": str(uuid4())},
@@ -214,13 +212,11 @@ async def ingest_synthetic_screenshot(api, header, task_id, extraction_id, task_
 
 async def run_draft(api, app, header, task_id, extraction_id):
     submitted = await api.post(
-        f"/tasks/{task_id}/drafts",
-        headers=header,
-        json={"extraction_job_id": extraction_id},
+        f"/tasks/{task_id}/drafts", headers=header, json={"extraction_job_id": extraction_id}
     )
     assert submitted.status_code == 200, submitted.text
     job_id = submitted.json()["data"]["job_id"]
-    await app.state.processor(header["X-Org-Id"], job_id)
+    await app.state.processor(job_id)
     job = await api.get(f"/jobs/{job_id}", headers=header)
     assert job.status_code == 200 and job.json()["data"]["status"] == "succeeded", job.text
     draft = await api.get(f"/drafts/{job.json()['data']['result']['draft_id']}", headers=header)
@@ -229,11 +225,11 @@ async def run_draft(api, app, header, task_id, extraction_id):
 
 
 async def test_image_card_confirmation_draft_and_withdrawal_revalidation(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
     """The real API and processor consume only the fixed, live, human-reviewed rendition."""
-    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
-        header = headers[0]
+    async with phase_one_client(database, tmp_path) as (api, app, headers, _):
+        header = headers
         task_id, _, extraction_id, requirements = await create_tender(
             api, app, header, tmp_path, suffix="screenshot-card", confirmed=True
         )
@@ -289,8 +285,6 @@ async def test_image_card_confirmation_draft_and_withdrawal_revalidation(
         assert linked["claim_scope"] == "functional_observation"
         assert linked["visual_observation"] == evidence_input["visual_observation"]
         assert "storage_key" not in str(linked) and "url" not in str(linked).lower()
-
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
         pending = await require_action(api, header, card, "submit")
         preview = await api.post(
             f"/tasks/{task_id}/drafts",
@@ -302,9 +296,7 @@ async def test_image_card_confirmation_draft_and_withdrawal_revalidation(
         assert preview.json()["data"]["response_requirements"] == 0
         assert "cosign_required" not in preview.json()["data"]["gap_reasons"]
         pending_board = await api.get(
-            f"/tasks/{task_id}/board",
-            headers=header,
-            params={"extraction_job_id": extraction_id},
+            f"/tasks/{task_id}/board", headers=header, params={"extraction_job_id": extraction_id}
         )
         assert pending_board.status_code == 200, pending_board.text
         pending_row = next(
@@ -335,7 +327,6 @@ async def test_image_card_confirmation_draft_and_withdrawal_revalidation(
             reason="Reviewed the synthetic source, test environment and visible scope.",
         )
         assert confirmed["evidence"][0]["quote_check"] == "human_image_review"
-
         first = await run_draft(api, app, header, task_id, extraction_id)
         row = next(
             row
@@ -345,7 +336,6 @@ async def test_image_card_confirmation_draft_and_withdrawal_revalidation(
         )
         assert row["evidence"][0]["image_sha256"] == rendition["image"]["sha256"]
         assert first["validity"] == "current"
-
         withdrawn = await api.post(
             f"/screenshots/{asset['id']}/withdrawals",
             headers=header,
@@ -363,11 +353,8 @@ async def test_image_card_confirmation_draft_and_withdrawal_revalidation(
         )
         assert old_gap["reasons"] == ["stale_material"]
         assert not {"response_text", "deviation_note", "evidence"} & old_gap.keys()
-
         board = await api.get(
-            f"/tasks/{task_id}/board",
-            headers=header,
-            params={"extraction_job_id": extraction_id},
+            f"/tasks/{task_id}/board", headers=header, params={"extraction_job_id": extraction_id}
         )
         assert board.status_code == 200, board.text
         board_row = next(
@@ -379,7 +366,6 @@ async def test_image_card_confirmation_draft_and_withdrawal_revalidation(
         assert "stale_material" in board_row["blockers"]
         assert not {"pending_cosign", "invalidated_cosign"} & set(board_row["blockers"])
         assert [action["code"] for action in board_row["next_actions"]] == ["refresh_material"]
-
         second = await run_draft(api, app, header, task_id, extraction_id)
         gap = next(
             item for item in second["gaps"] if item["requirement_id"] == requirements[2]["id"]

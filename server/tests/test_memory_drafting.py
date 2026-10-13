@@ -24,7 +24,6 @@ from test_response_cards import create_tender
 
 def context(text="Use concise response wording"):
     return MemoryPromptContext(
-        org_id=uuid4(),
         retrieval_id=uuid4(),
         manifest_sha256="a" * 64,
         rules=[
@@ -33,7 +32,7 @@ def context(text="Use concise response wording"):
                     memory_id=uuid4(),
                     revision_id=uuid4(),
                     revision=2,
-                    scope="org",
+                    scope="library",
                     content_sha256="b" * 64,
                     sent_sha256="c" * 64,
                 ),
@@ -74,9 +73,9 @@ def test_memory_is_separate_from_evidence_and_included_in_budget(tmp_path):
     )
 
 
-async def test_candidate_approval_invalidates_empty_cache_and_records_calls(tenants, tmp_path):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        header = headers[0]
+async def test_candidate_approval_invalidates_empty_cache_and_records_calls(database, tmp_path):
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        header = headers
         task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
         first = await submit(api, header, task, extraction)
         await execute(api, app, header, first)
@@ -84,7 +83,7 @@ async def test_candidate_approval_invalidates_empty_cache_and_records_calls(tena
             "/memories",
             headers=header,
             json={
-                "target": {"scope": "org"},
+                "target": {"scope": "library"},
                 "content": {
                     "kind": "rule",
                     "conflict_key": "response.concise",
@@ -112,12 +111,9 @@ async def test_candidate_approval_invalidates_empty_cache_and_records_calls(tena
         calls = used.json()["data"]["calls"]
         assert calls and all(call["state"] == "completed" for call in calls)
         assert all(call["memories"][0]["memory_id"] == memory["id"] for call in calls)
-        foreign = await api.get(f"/jobs/{second['data']['job_id']}/memory", headers=headers[1])
-        assert foreign.status_code == 404
         report = {
             "version": "memory-validation-v1",
             "job_id": second["data"]["job_id"],
-            "org_id": str(UUID(header["X-Org-Id"])),
             "calls": calls,
             "result_sha256": hashlib.sha256(
                 json.dumps(result, sort_keys=True).encode()
@@ -126,7 +122,6 @@ async def test_candidate_approval_invalidates_empty_cache_and_records_calls(tena
                 "candidate_excluded",
                 "empty_cache_invalidated",
                 "calls_bound",
-                "org_isolated",
             ],
         }
         destination = Path("data/work/memory-validation")
@@ -138,7 +133,7 @@ async def test_candidate_approval_invalidates_empty_cache_and_records_calls(tena
 
 @pytest.mark.parametrize("boundary", ["queued", "inflight"])
 async def test_changed_memory_fences_dispatch_or_publication_and_keeps_usage(
-    tenants, tmp_path, boundary
+    database, tmp_path, boundary
 ):
     from app.models.memory import MemoryCallInput
     from app.models.response_cards import CardGenerationRun
@@ -146,8 +141,8 @@ async def test_changed_memory_fences_dispatch_or_publication_and_keeps_usage(
     from test_llm_providers import provider_reply
     from test_memory_api import approved_rule
 
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        header = headers[0]
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        header = headers
         task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
         memory = await approved_rule(
             api, header, "boundary.rule", "Use concise wording", ["drafting"]
@@ -176,7 +171,7 @@ async def test_changed_memory_fences_dispatch_or_publication_and_keeps_usage(
         result = await execute(api, app, header, receipt)
         assert result["data"]["status"] == "failed", result
         assert result["data"]["error"]["code"] == "memory_input_changed"
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             calls = list(
                 await session.scalars(
                     select(MemoryCallInput).where(
@@ -193,50 +188,47 @@ async def test_changed_memory_fences_dispatch_or_publication_and_keeps_usage(
 
 
 async def test_memory_stale_review_gate_preserves_already_confirmed_card(
-    tenants, tmp_path, admin_engine
+    database, tmp_path, admin_engine
 ):
-    from task_fixtures import reviewer_header
+
     from test_card_generation import slots
     from test_memory_api import approved_rule
     from test_response_cards import require_action
 
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, _, _):
+    async with drafting_client(database, tmp_path) as (api, app, headers, _, _):
         task, _, extraction, requirements = await create_tender(
-            api, app, headers[0], tmp_path, confirmed=True
+            api, app, headers, tmp_path, confirmed=True
         )
         memory = await approved_rule(
-            api, headers[0], "review.rule", "Use concise wording", ["drafting"]
+            api, headers, "review.rule", "Use concise wording", ["drafting"]
         )
         receipt = await submit(
             api,
-            headers[0],
+            headers,
             task,
             extraction,
             requirement_ids=[requirements[2]["id"], requirements[3]["id"]],
         )
-        await execute(api, app, headers[0], receipt)
-        current = await slots(api, headers[0], task, extraction)
-        _, human = await reviewer_header(
-            api, admin_engine, tenants["orgs"][0], UUID(task), "technical"
-        )
+        await execute(api, app, headers, receipt)
+        current = await slots(api, headers, task, extraction)
+        human = headers
         pending = await require_action(api, human, current[2]["card"], "submit")
         confirmed = await require_action(api, human, pending, "confirm", reviewed_evidence_ids=[])
         another = await require_action(api, human, current[3]["card"], "submit")
-        admin = headers[0]
         disabled = await api.post(
             f"/memories/{memory['id']}/disable",
-            headers=admin,
+            headers=headers,
             json={"expected_revision": 2, "reason": "Guidance withdrawn"},
         )
         assert disabled.status_code == 200, disabled.text
-        shown = await api.get(f"/cards/{confirmed['id']}", headers=admin)
+        shown = await api.get(f"/cards/{confirmed['id']}", headers=headers)
         assert shown.status_code == 200, shown.text
         assert shown.json()["data"]["state"] == "confirmed"
         assert shown.json()["data"]["eligibility"] == "eligible"
         assert "memory_changed_after_review" in shown.json()["data"]["warning_codes"]
         preview = await api.post(
             f"/tasks/{task}/drafts",
-            headers=admin,
+            headers=headers,
             json={"extraction_job_id": extraction, "dry_run": True},
         )
         assert preview.status_code == 200, preview.text
@@ -254,15 +246,15 @@ async def test_memory_stale_review_gate_preserves_already_confirmed_card(
         assert result.json()["data"]["error"]["code"] == "memory_input_stale"
 
 
-async def test_split_drafting_records_every_admitted_batch_and_success_lineage(tenants, tmp_path):
+async def test_split_drafting_records_every_admitted_batch_and_success_lineage(database, tmp_path):
     from app.models.response_cards import CardGenerationRun
     from sqlalchemy import select
     from test_llm_providers import provider_reply
     from test_memory_api import approved_rule
 
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
-        task, _, extraction, requirements = await create_tender(api, app, headers[0], tmp_path)
-        await approved_rule(api, headers[0], "batch.rule", "Use concise wording", ["drafting"])
+    async with drafting_client(database, tmp_path) as (api, app, headers, vendor, _):
+        task, _, extraction, requirements = await create_tender(api, app, headers, tmp_path)
+        await approved_rule(api, headers, "batch.rule", "Use concise wording", ["drafting"])
 
         async def respond(sent):
             if len(sent["requirements"]) > 1:
@@ -272,20 +264,20 @@ async def test_split_drafting_records_every_admitted_batch_and_success_lineage(t
         vendor.respond = respond
         receipt = await submit(
             api,
-            headers[0],
+            headers,
             task,
             extraction,
             requirement_ids=[requirements[2]["id"], requirements[3]["id"]],
         )
-        terminal = await execute(api, app, headers[0], receipt)
+        terminal = await execute(api, app, headers, receipt)
         assert terminal["data"]["status"] == "succeeded", terminal
-        response = await api.get(f"/jobs/{receipt['data']['job_id']}/memory", headers=headers[0])
+        response = await api.get(f"/jobs/{receipt['data']['job_id']}/memory", headers=headers)
         assert response.status_code == 200, response.text
         calls = response.json()["data"]["calls"]
         assert sorted(len(item["requirement_ids"]) for item in calls) == [1, 1, 2]
         assert len({item["call_id"] for item in calls}) == 3
         assert all(item["state"] == "completed" and item["usage_record_id"] for item in calls)
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        async with app.state.db.transaction() as session:
             run = await session.scalar(
                 select(CardGenerationRun).where(
                     CardGenerationRun.generation_job_id == UUID(receipt["data"]["job_id"])

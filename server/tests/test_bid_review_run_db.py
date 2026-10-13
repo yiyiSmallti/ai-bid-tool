@@ -19,27 +19,16 @@ import pytest
 from app.core.config import Settings
 from app.core.security import TokenSigner
 from app.jobs.execution import JobExecution
-from app.models.bid_review_privacy import (
-    BidOutboundAuthorization,
-    BidOutboundAuthorizedPage,
-    BidRedactedPage,
-    BidRedactionSnapshot,
-    BidReviewNameList,
-)
 from app.models.bid_review_run import (
-    BidReviewObligation,
     BidReviewPublication,
-    BidReviewRequiredLocation,
     BidReviewRun,
-    BidReviewSigningRequirement,
 )
 from app.models.entities import AuditLog, Job, UsageRecord, VendorCall
 from app.providers.base import ProviderFailure
 from app.providers.llm import OpenAICompatibleExtractor
 from app.schemas.bid_review_privacy import SanitizedPageRef, sanitized_context_sha256
 from bid_signature_fixtures import signed_pdf, standard_fixture
-from sqlalchemy import func, select, text
-from task_access_fixtures import add_member, person, workflow
+from sqlalchemy import func, select
 from test_bid_review_upload_db import (
     PDF,
     run,
@@ -55,9 +44,6 @@ from test_bid_review_upload_db import (
 from test_bid_review_upload_db import (
     submit as prepare_submit,
 )
-from test_check_combined import install_resolver
-from test_confidential_values import add_field, set_value
-from test_provider_config import save as save_provider
 
 DATE = "2026-10-08"
 REGISTERED = "SyntheticRegisteredIdentity943817"
@@ -69,6 +55,34 @@ SIGNING = "法定代表人签字并加盖公章，填写日期，每页电子签
 PRIVATE_FILENAME = "SyntheticPrivateFilename837192"
 CERTIFICATE_SUBJECT = "SYNTHETIC Standard Signer"
 SENSITIVE = (REGISTERED, BIDDER, STAFF, PRICE, PRIVATE_FILENAME, CERTIFICATE_SUBJECT)
+
+
+def install_resolver(monkeypatch, llm):
+    async def resolved(session, settings, transport=None, job=None):
+        return llm
+
+    monkeypatch.setattr("app.providers.llm.resolve_llm", resolved)
+
+
+async def add_field(api, header, key, label, kind, scope):
+    response = await api.post(
+        "/confidential-fields",
+        headers=header,
+        json={"key": key, "label": label, "kind": kind, "scope": scope},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
+
+
+async def set_value(api, header, field, value, task=None):
+    response = await api.post(
+        f"/confidential-fields/{field['id']}/values",
+        headers=header,
+        json={"value": value, "task_id": task},
+    )
+    assert response.status_code == 200, response.text
+    assert value not in response.text
+    return response.json()["data"]
 
 
 class ReviewVendor:
@@ -210,22 +224,29 @@ async def review_llm(api, header, tmp_path, vendor):
     existing = (await api.get("/providers", headers=header, params={"history": True})).json()[
         "items"
     ]
-    configured = (
-        existing[0]
-        if existing
-        else await save_provider(
-            api,
-            header,
-            model="synthetic-check-model",
-            base_url="https://semantic.example.test/v1",
-            reasoning=[],
-            default_reasoning=None,
+    if existing:
+        configured = existing[0]
+    else:
+        response = await api.post(
+            "/providers",
+            headers=header,
+            json={
+                "capability": "llm_extract",
+                "provider": "openai",
+                "model": values["llm_model"],
+                "base_url": values["llm_base_url"],
+                "json_mode": "json_object",
+                "api_key": values["llm_api_key"],
+                "reasoning": [],
+                "default_reasoning": None,
+            },
         )
-    )
+        assert response.status_code == 200, response.text
+        assert values["llm_api_key"] not in response.text and "encrypted_key" not in response.text
+        configured = response.json()["data"]
     llm = OpenAICompatibleExtractor(
         Settings(**values),
         httpx.MockTransport(vendor),
-        org_owned=True,
         provider_config_id=UUID(configured["id"]),
     )
     llm.model_revision = configured["revision"]
@@ -245,7 +266,7 @@ def document(lines, *, image=False):
 
 
 def data(response):
-    assert response.active
+    assert response.status_code == 200, response.text
     assert set(response.json()) == {
         "ok",
         "command",
@@ -267,7 +288,6 @@ async def prepared(
     api,
     headers,
     application,
-    tenants,
     *,
     prepare=True,
     pages=1,
@@ -275,9 +295,9 @@ async def prepared(
     signing=True,
     certificate=False,
 ):
-    task_id = await task(api, headers[0])
-    field = await add_field(api, headers[0], "review_identity", "Review identity", "other", "task")
-    await set_value(api, headers[0], field, REGISTERED, task=task_id)
+    task_id = await task(api, headers)
+    field = await add_field(api, headers, "review_identity", "Review identity", "other", "task")
+    await set_value(api, headers, field, REGISTERED, task=task_id)
     # The signer certificate subject reaches the tender text only through the
     # certificate case, which proves it is masked from locally derived names.
     clauses = [SAFE_CLAUSE, *([SIGNING] if signing else [])]
@@ -307,13 +327,11 @@ async def prepared(
                 document(["Native header over a scanned page."], image=True),
             )
         )
-    uploaded = free_result(await upload(api, headers[0], task_id, files))
+    uploaded = free_result(await upload(api, headers, task_id, files))
     if prepare:
-        receipt = free_result(await prepare_preview(api, headers[0], task_id, uploaded["id"]))
-        accepted = free_result(
-            await prepare_submit(api, headers[0], task_id, uploaded["id"], receipt)
-        )
-        await run(application, tenants["orgs"][0], accepted["job_id"])
+        receipt = free_result(await prepare_preview(api, headers, task_id, uploaded["id"]))
+        accepted = free_result(await prepare_submit(api, headers, task_id, uploaded["id"], receipt))
+        await run(application, accepted["job_id"])
     return {"task": task_id, "submission": uploaded["id"], "field": field}
 
 
@@ -422,35 +440,33 @@ async def submit(api, header, case, receipt, **changes):
     )
 
 
-async def terminal(api, header, application, org, accepted):
-    async with application.state.db.transaction(org) as session:
+async def terminal(api, header, application, accepted):
+    async with application.state.db.transaction() as session:
         row = await session.scalar(
             select(BidReviewRun).where(BidReviewRun.job_id == UUID(accepted["job_id"]))
         )
         assert row is not None
         accepted["review_id"] = str(row.id)
-    await run(application, org, accepted["job_id"])
+    await run(application, accepted["job_id"])
     response = await api.get(f"/v4/jobs/{accepted['job_id']}", headers=header)
-    assert response.active
+    assert response.status_code == 200, response.text
     return response.json()["data"]
 
 
-async def counts(application, org):
-    async with application.state.db.transaction(org) as session:
+async def counts(application):
+    async with application.state.db.transaction() as session:
         return {
             model.__tablename__: await session.scalar(select(func.count()).select_from(model))
             for model in (Job, AuditLog, UsageRecord, VendorCall)
         }
 
 
-async def review_case(
-    api, headers, application, tenants, tmp_path, monkeypatch, *, vendor=None, pages=1
-):
+async def review_case(api, headers, application, tmp_path, monkeypatch, *, vendor=None, pages=1):
     vendor = vendor or ReviewVendor()
-    llm = await review_llm(api, headers[0], tmp_path, vendor)
+    llm = await review_llm(api, headers, tmp_path, vendor)
     install_resolver(monkeypatch, llm)
-    case = await prepared(api, headers, application, tenants, pages=pages)
-    cleared, body, grant = await authorize(api, headers[0], case)
+    case = await prepared(api, headers, application, pages=pages)
+    cleared, body, grant = await authorize(api, headers, case)
     case.update(vendor=vendor, llm=llm, cleared=cleared, body=body, grant=grant)
     return case
 
@@ -467,29 +483,29 @@ def artifact(tmp_path: Path, name: str, **payload):
 
 
 async def test_authorized_sanitized_run_preview_worker_citations_and_usage(
-    api, headers, tenants, application, tmp_path, monkeypatch, caplog
+    api, headers, application, tmp_path, monkeypatch, caplog
 ):
-    case = await review_case(api, headers, application, tenants, tmp_path, monkeypatch)
-    before = await counts(application, tenants["orgs"][0])
+    case = await review_case(api, headers, application, tmp_path, monkeypatch)
+    before = await counts(application)
     storage_before = list(application.state.storage.root.rglob("*"))
-    receipt = data(await preview(api, headers[0], case))
+    receipt = data(await preview(api, headers, case))
     assert receipt["admission_blockers"] == []
     assert_private_absent(case["cleared"])
     prices = [row for row in case["cleared"]["pages"] if row["price_page"]]
     assert prices and all(not row["outbound_eligible"] for row in prices)
     assert receipt["preflight"]["planned_calls"] > 0
     assert case["vendor"].requests == []
-    assert await counts(application, tenants["orgs"][0]) == before
+    assert await counts(application) == before
     assert list(application.state.storage.root.rglob("*")) == storage_before
-    accepted = data(await submit(api, headers[0], case, receipt))
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
+    accepted = data(await submit(api, headers, case, receipt))
+    finished = await terminal(api, headers, application, accepted)
     assert finished["status"] == "succeeded", finished
-    shown = data(await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers[0]))
+    shown = data(await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers))
     assert shown["run"]["completion"] == "partial"
     signing = data(
         await api.get(
             f"/v4/bid-reviews/{accepted['review_id']}",
-            headers=headers[0],
+            headers=headers,
             params={"section": "signing_requirements"},
         )
     )["signing_requirements"]
@@ -504,7 +520,7 @@ async def test_authorized_sanitized_run_preview_worker_citations_and_usage(
     assert sent_text and all(any(text in allowed for allowed in allowed_text) for text in sent_text)
     assert_private_absent(case["vendor"].requests)
     assert_private_absent([receipt, accepted, finished, caplog.text])
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         usages = list(
             (
                 await session.scalars(
@@ -532,23 +548,23 @@ async def test_authorized_sanitized_run_preview_worker_citations_and_usage(
 
 @pytest.mark.parametrize("missing", ["preparation", "authorization", "provider"])
 async def test_missing_prerequisites_are_write_free_preview_blockers(
-    missing, api, headers, tenants, application, tmp_path, monkeypatch
+    missing, api, headers, application, tmp_path, monkeypatch
 ):
     vendor = ReviewVendor()
-    install_resolver(monkeypatch, await review_llm(api, headers[0], tmp_path, vendor))
-    case = await prepared(api, headers, application, tenants, prepare=missing != "preparation")
+    install_resolver(monkeypatch, await review_llm(api, headers, tmp_path, vendor))
+    case = await prepared(api, headers, application, prepare=missing != "preparation")
     if missing == "provider":
-        await authorize(api, headers[0], case)
+        await authorize(api, headers, case)
 
         async def unavailable(*args, **kwargs):
             raise ProviderFailure(REGISTERED, code="provider_unavailable")
 
         monkeypatch.setattr("app.providers.llm.resolve_llm", unavailable)
-    before = await counts(application, tenants["orgs"][0])
-    receipt = data(await preview(api, headers[0], case))
+    before = await counts(application)
+    receipt = data(await preview(api, headers, case))
     assert receipt["admission_blockers"]
-    assert vendor.requests == [] and await counts(application, tenants["orgs"][0]) == before
-    rejected = await submit(api, headers[0], case, receipt)
+    assert vendor.requests == [] and await counts(application) == before
+    rejected = await submit(api, headers, case, receipt)
     assert rejected.status_code >= 400
     assert vendor.requests == []
     assert_private_absent([receipt, rejected.json()])
@@ -556,22 +572,22 @@ async def test_missing_prerequisites_are_write_free_preview_blockers(
 
 @pytest.mark.parametrize("mutation", ["revoke", "provider", "confidential", "names"])
 async def test_queued_input_invalidation_blocks_dispatch_and_publication(
-    mutation, api, headers, tenants, application, tmp_path, monkeypatch
+    mutation, api, headers, application, tmp_path, monkeypatch
 ):
-    case = await review_case(api, headers, application, tenants, tmp_path, monkeypatch)
-    receipt = data(await preview(api, headers[0], case))
-    accepted = data(await submit(api, headers[0], case, receipt))
+    case = await review_case(api, headers, application, tmp_path, monkeypatch)
+    receipt = data(await preview(api, headers, case))
+    accepted = data(await submit(api, headers, case, receipt))
     if mutation == "revoke":
-        data(await revoke(api, headers[0], case, case["grant"]))
+        data(await revoke(api, headers, case, case["grant"]))
     elif mutation == "provider":
         case["llm"].model = "synthetic-changed-model"
     elif mutation == "confidential":
-        await set_value(api, headers[0], case["field"], REGISTERED + "Changed", task=case["task"])
+        await set_value(api, headers, case["field"], REGISTERED + "Changed", task=case["task"])
     else:
         data(
             await api.post(
                 f"/v4/bid-submissions/{case['submission']}/redaction/names",
-                headers=headers[0],
+                headers=headers,
                 json={
                     "request_id": str(uuid4()),
                     "expected_revision": 0,
@@ -580,12 +596,12 @@ async def test_queued_input_invalidation_blocks_dispatch_and_publication(
                 },
             )
         )
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
+    finished = await terminal(api, headers, application, accepted)
     assert finished["status"] == "failed", finished
     assert case["vendor"].requests == []
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(BidReviewPublication)) == 0
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         for model in (UsageRecord, VendorCall):
             assert (
                 await session.scalar(
@@ -602,17 +618,15 @@ async def test_queued_input_invalidation_blocks_dispatch_and_publication(
     "attack", ["unsent_ref", "fabricated", "joined", "ambiguous", "placeholder", "duplicate"]
 )
 async def test_unverifiable_provider_citations_never_become_obligations(
-    attack, api, headers, tenants, application, tmp_path, monkeypatch
+    attack, api, headers, application, tmp_path, monkeypatch
 ):
     vendor = ReviewVendor(attack=attack)
-    case = await review_case(
-        api, headers, application, tenants, tmp_path, monkeypatch, vendor=vendor
-    )
-    receipt = data(await preview(api, headers[0], case))
-    accepted = data(await submit(api, headers[0], case, receipt))
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
+    case = await review_case(api, headers, application, tmp_path, monkeypatch, vendor=vendor)
+    receipt = data(await preview(api, headers, case))
+    accepted = data(await submit(api, headers, case, receipt))
+    finished = await terminal(api, headers, application, accepted)
     assert finished["status"] in {"succeeded", "failed"}
-    shown = await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers[0])
+    shown = await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers)
     if shown.status_code == 200:
         report = data(shown)
         assert report["run"]["completion"] == "partial"
@@ -631,23 +645,21 @@ async def test_unverifiable_provider_citations_never_become_obligations(
 
 @pytest.mark.parametrize("failure", ["http_error", "timeout", "refused", "truncated", "malformed"])
 async def test_provider_failure_keeps_usage_or_unknown_holds_without_false_completion(
-    failure, api, headers, tenants, application, tmp_path, monkeypatch, caplog
+    failure, api, headers, application, tmp_path, monkeypatch, caplog
 ):
     vendor = ReviewVendor(failure=failure)
-    case = await review_case(
-        api, headers, application, tenants, tmp_path, monkeypatch, vendor=vendor
-    )
-    receipt = data(await preview(api, headers[0], case))
-    accepted = data(await submit(api, headers[0], case, receipt))
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
+    case = await review_case(api, headers, application, tmp_path, monkeypatch, vendor=vendor)
+    receipt = data(await preview(api, headers, case))
+    accepted = data(await submit(api, headers, case, receipt))
+    finished = await terminal(api, headers, application, accepted)
     assert finished["status"] in {"failed", "succeeded"}
-    shown = await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers[0])
+    shown = await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers)
     if shown.status_code == 200:
         assert data(shown)["run"]["completion"] == "partial"
         assert not data(shown)["obligations"]
     else:
         assert shown.status_code == 404
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         usages = await session.scalar(
             select(func.count())
             .select_from(UsageRecord)
@@ -668,37 +680,34 @@ async def test_provider_failure_keeps_usage_or_unknown_holds_without_false_compl
     )
 
 
-async def test_duplicate_submission_receipt_gates_and_two_org_task_token_projection(
-    api, headers, tenants, application, tmp_path, monkeypatch
+async def test_duplicate_submission_receipt_gates_and_task_token_projection(
+    api, headers, application, tmp_path, monkeypatch
 ):
-    case = await review_case(api, headers, application, tenants, tmp_path, monkeypatch)
-    receipt = data(await preview(api, headers[0], case))
-    other = await task(api, headers[0])
-    before = await counts(application, tenants["orgs"][0])
+    case = await review_case(api, headers, application, tmp_path, monkeypatch)
+    receipt = data(await preview(api, headers, case))
+    other = await task(api, headers)
+    before = await counts(application)
     for changes in ({"expected_input_hash": "0" * 64}, {"preflight_token": "invalid"}):
-        assert (await submit(api, headers[0], case, receipt, **changes)).status_code >= 400
+        assert (await submit(api, headers, case, receipt, **changes)).status_code >= 400
     signer = TokenSigner.for_tokens(application.state.processor.settings)
     opened = signer.open(receipt["preflight_token"])
     expired = signer.issue({key: value for key, value in opened.items() if key != "exp"}, -1)
-    assert (
-        await submit(api, headers[0], case, receipt, preflight_token=expired)
-    ).status_code >= 400
-    assert (await preview(api, headers[0], {**case, "task": other})).status_code == 404
-    assert (await preview(api, headers[1], case)).status_code == 404
-    assert await counts(application, tenants["orgs"][0]) == before
+    assert (await submit(api, headers, case, receipt, preflight_token=expired)).status_code >= 400
+    assert (await preview(api, headers, {**case, "task": other})).status_code == 404
+    assert await counts(application) == before
     request_id = case["request_id"]
-    accepted = data(await submit(api, headers[0], case, receipt, request_id=request_id))
-    replay = data(await submit(api, headers[0], case, receipt, request_id=request_id))
+    accepted = data(await submit(api, headers, case, receipt, request_id=request_id))
+    replay = data(await submit(api, headers, case, receipt, request_id=request_id))
     assert replay["job_id"] == accepted["job_id"] and replay["cached"]
     assert (
         await submit(
-            api, headers[0], case, receipt, request_id=request_id, assessment_date="2026-10-09"
+            api, headers, case, receipt, request_id=request_id, assessment_date="2026-10-09"
         )
     ).status_code == 409
     issued = free_result(
         await api.post(
             "/v4/tokens",
-            headers=headers[0],
+            headers=headers,
             json={
                 "name": "Synthetic review token",
                 "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
@@ -706,7 +715,7 @@ async def test_duplicate_submission_receipt_gates_and_two_org_task_token_project
             },
         )
     )
-    token_header = {**headers[0], "Authorization": "Bearer " + issued["token"]}
+    token_header = {**headers, "Authorization": "Bearer " + issued["token"]}
     assert (
         await api.get(f"/v4/bid-submissions/{case['submission']}/redaction", headers=token_header)
     ).status_code == 403
@@ -717,57 +726,36 @@ async def test_duplicate_submission_receipt_gates_and_two_org_task_token_project
             json=case["body"],
         )
     ).status_code == 403
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
+    finished = await terminal(api, headers, application, accepted)
     token_view = await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=token_header)
     assert token_view.status_code == 200, token_view.text
     assert_private_absent(token_view.json())
     assert SAFE_CLAUSE not in token_view.text and SIGNING not in token_view.text
-    assert (
-        await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers[1])
-    ).status_code == 404
-    assert (
-        await api.get(f"/v4/tasks/{case['task']}/bid-reviews", headers=headers[1])
-    ).status_code == 404
-    async with application.state.db.transaction(tenants["orgs"][1]) as session:
-        assert (
-            await session.scalar(
-                select(func.count()).select_from(Job).where(Job.id == UUID(accepted["job_id"]))
-            )
-            == 0
-        )
-        assert (
-            await session.scalar(
-                select(func.count())
-                .select_from(UsageRecord)
-                .where(UsageRecord.job_id == UUID(accepted["job_id"]))
-            )
-            == 0
-        )
-    artifact(tmp_path, "duplicate-isolation", job=finished, safe_projection=token_view.json())
+    artifact(
+        tmp_path, "duplicate-token-projection", job=finished, safe_projection=token_view.json()
+    )
 
 
 async def test_cancel_after_dispatch_retains_usage_but_publishes_no_review(
-    api, headers, tenants, application, tmp_path, monkeypatch
+    api, headers, application, tmp_path, monkeypatch
 ):
     vendor = ReviewVendor()
     vendor.entered, vendor.release = asyncio.Event(), asyncio.Event()
-    case = await review_case(
-        api, headers, application, tenants, tmp_path, monkeypatch, vendor=vendor
-    )
-    receipt = data(await preview(api, headers[0], case))
-    accepted = data(await submit(api, headers[0], case, receipt))
-    worker = asyncio.create_task(run(application, tenants["orgs"][0], accepted["job_id"]))
+    case = await review_case(api, headers, application, tmp_path, monkeypatch, vendor=vendor)
+    receipt = data(await preview(api, headers, case))
+    accepted = data(await submit(api, headers, case, receipt))
+    worker = asyncio.create_task(run(application, accepted["job_id"]))
     try:
         await asyncio.wait_for(vendor.entered.wait(), 15)
-        data(await api.post(f"/v4/jobs/{accepted['job_id']}/cancel", headers=headers[0]))
+        data(await api.post(f"/v4/jobs/{accepted['job_id']}/cancel", headers=headers))
     finally:
         vendor.release.set()
         await worker
-    finished = data(await api.get(f"/v4/jobs/{accepted['job_id']}", headers=headers[0]))
+    finished = data(await api.get(f"/v4/jobs/{accepted['job_id']}", headers=headers))
     assert finished["status"] == "cancelled"
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(BidReviewPublication)) == 0
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         assert (
             await session.scalar(
                 select(func.count())
@@ -780,15 +768,15 @@ async def test_cancel_after_dispatch_retains_usage_but_publishes_no_review(
 
 
 async def test_shared_call_ceiling_cannot_publish_complete_review(
-    api, headers, tenants, application, tmp_path, monkeypatch
+    api, headers, application, tmp_path, monkeypatch
 ):
     application.state.processor.settings.job_max_vendor_calls = 1
-    case = await review_case(api, headers, application, tenants, tmp_path, monkeypatch, pages=2)
-    receipt = data(await preview(api, headers[0], case))
-    accepted = data(await submit(api, headers[0], case, receipt))
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
+    case = await review_case(api, headers, application, tmp_path, monkeypatch, pages=2)
+    receipt = data(await preview(api, headers, case))
+    accepted = data(await submit(api, headers, case, receipt))
+    finished = await terminal(api, headers, application, accepted)
     assert len(case["vendor"].requests) == 1
-    shown = await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers[0])
+    shown = await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers)
     assert shown.status_code == 404 or data(shown)["run"]["completion"] == "partial"
     assert "limit" in json.dumps(finished)
     artifact(
@@ -800,62 +788,17 @@ async def test_shared_call_ceiling_cannot_publish_complete_review(
     )
 
 
-@pytest.mark.parametrize("role", ["bidder", "technical", "viewer"])
-async def test_nonowner_task_participants_cannot_inspect_or_authorize_text(
-    role, api, headers, tenants, application, tmp_path, monkeypatch, admin_engine
-):
-    case = await review_case(api, headers, application, tenants, tmp_path, monkeypatch)
-    user, participant = await person(api, admin_engine, tenants["orgs"][0], role=role)
-    current = await workflow(api, headers[0], case["task"])
-    response = await add_member(api, headers[0], case["task"], user, current["revision"])
-    assert response.active
-    for method, suffix, body in (
-        ("get", "redaction", None),
-        ("post", "outbound-authorizations", case["body"]),
-        (
-            "post",
-            "redaction/names",
-            {
-                "request_id": str(uuid4()),
-                "expected_revision": 0,
-                "bidder_names": [BIDDER],
-                "staff_names": [],
-            },
-        ),
-        (
-            "post",
-            "outbound-authorizations/revoke",
-            {
-                "request_id": str(uuid4()),
-                "expected_revision": case["grant"]["revision"],
-                "expected_authorization_id": case["grant"]["id"],
-                "reason": "Synthetic unauthorized revocation",
-            },
-        ),
-    ):
-        kwargs = {"json": body} if body is not None else {}
-        rejected = await api.request(
-            method,
-            f"/v4/bid-submissions/{case['submission']}/{suffix}",
-            headers=participant,
-            **kwargs,
-        )
-        assert rejected.status_code == 403, rejected.text
-        assert_private_absent(rejected.json())
-    assert case["vendor"].requests == []
-
-
 async def test_price_page_and_wrong_scope_hash_cannot_be_authorized(
-    api, headers, tenants, application, tmp_path, monkeypatch
+    api, headers, application, tmp_path, monkeypatch
 ):
-    case = await review_case(api, headers, application, tenants, tmp_path, monkeypatch)
-    cleared = await redaction(api, headers[0], case)
+    case = await review_case(api, headers, application, tmp_path, monkeypatch)
+    cleared = await redaction(api, headers, case)
     price = next(row for row in cleared["pages"] if row["price_page"])
     body = authorization_body(cleared, pages=[price])
-    before = await counts(application, tenants["orgs"][0])
+    before = await counts(application)
     rejected = await api.post(
         f"/v4/bid-submissions/{case['submission']}/outbound-authorizations",
-        headers=headers[0],
+        headers=headers,
         json=body,
     )
     assert rejected.status_code == 409, rejected.text
@@ -864,11 +807,11 @@ async def test_price_page_and_wrong_scope_hash_cannot_be_authorized(
     mismatch["authorized_sanitized_context_sha256"] = "0" * 64
     rejected = await api.post(
         f"/v4/bid-submissions/{case['submission']}/outbound-authorizations",
-        headers=headers[0],
+        headers=headers,
         json=mismatch,
     )
     assert rejected.status_code == 409, rejected.text
-    assert await counts(application, tenants["orgs"][0]) == before
+    assert await counts(application) == before
     assert case["vendor"].requests == []
 
 
@@ -889,7 +832,6 @@ async def test_signing_coverage_never_turns_unchecked_locations_into_presence(
     omit_signing,
     api,
     headers,
-    tenants,
     application,
     tmp_path,
     monkeypatch,
@@ -897,16 +839,14 @@ async def test_signing_coverage_never_turns_unchecked_locations_into_presence(
     vendor = ReviewVendor(
         applicability=applicability, location_rule=location_rule, omit_signing=omit_signing
     )
-    case = await review_case(
-        api, headers, application, tenants, tmp_path, monkeypatch, vendor=vendor
-    )
-    receipt = data(await preview(api, headers[0], case))
-    accepted = data(await submit(api, headers[0], case, receipt))
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
+    case = await review_case(api, headers, application, tmp_path, monkeypatch, vendor=vendor)
+    receipt = data(await preview(api, headers, case))
+    accepted = data(await submit(api, headers, case, receipt))
+    finished = await terminal(api, headers, application, accepted)
     report = data(
         await api.get(
             f"/v4/bid-reviews/{accepted['review_id']}",
-            headers=headers[0],
+            headers=headers,
             params={"section": "signing_requirements"},
         )
     )
@@ -937,68 +877,13 @@ async def test_signing_coverage_never_turns_unchecked_locations_into_presence(
     )
 
 
-async def test_all_new_privacy_review_tables_hide_rows_without_org_or_under_org_b(
-    api, headers, tenants, application, tmp_path, monkeypatch
-):
-    vendor = ReviewVendor(applicability="applies")
-    case = await review_case(
-        api, headers, application, tenants, tmp_path, monkeypatch, vendor=vendor
-    )
-    data(
-        await api.post(
-            f"/v4/bid-submissions/{case['submission']}/redaction/names",
-            headers=headers[0],
-            json={
-                "request_id": str(uuid4()),
-                "expected_revision": 0,
-                "bidder_names": [],
-                "staff_names": [],
-            },
-        )
-    )
-    await authorize(api, headers[0], case)
-    receipt = data(await preview(api, headers[0], case))
-    accepted = data(await submit(api, headers[0], case, receipt))
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
-    assert finished["status"] == "succeeded"
-    models = (
-        BidReviewNameList,
-        BidRedactionSnapshot,
-        BidRedactedPage,
-        BidOutboundAuthorization,
-        BidOutboundAuthorizedPage,
-        BidReviewRun,
-        BidReviewObligation,
-        BidReviewSigningRequirement,
-        BidReviewRequiredLocation,
-        BidReviewPublication,
-    )
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
-        for model in models:
-            assert await session.scalar(select(func.count()).select_from(model)) > 0, (
-                model.__tablename__
-            )
-        assert_private_absent((await session.scalars(select(AuditLog.details))).all())
-    for context in (None, tenants["orgs"][1]):
-        async with application.state.db.transaction(context) as session:
-            if context is None:
-                await session.execute(text("SELECT set_config('app.current_org','',true)"))
-            for model in models:
-                assert await session.scalar(select(func.count()).select_from(model)) == 0, (
-                    model.__tablename__
-                )
-    artifact(
-        tmp_path, "table-isolation", job=finished, tables=[model.__tablename__ for model in models]
-    )
-
-
 async def test_native_header_over_scanned_page_does_not_authorize_mixed_pixels(
-    api, headers, tenants, application, tmp_path, monkeypatch
+    api, headers, application, tmp_path, monkeypatch
 ):
     vendor = ReviewVendor()
-    install_resolver(monkeypatch, await review_llm(api, headers[0], tmp_path, vendor))
-    case = await prepared(api, headers, application, tenants, mixed=True)
-    cleared = await redaction(api, headers[0], case)
+    install_resolver(monkeypatch, await review_llm(api, headers, tmp_path, vendor))
+    case = await prepared(api, headers, application, mixed=True)
+    cleared = await redaction(api, headers, case)
     mixed = next(
         row
         for row in cleared["pages"]
@@ -1007,7 +892,7 @@ async def test_native_header_over_scanned_page_does_not_authorize_mixed_pixels(
     assert not mixed["outbound_eligible"]
     rejected = await api.post(
         f"/v4/bid-submissions/{case['submission']}/outbound-authorizations",
-        headers=headers[0],
+        headers=headers,
         json=authorization_body(cleared, pages=[mixed]),
     )
     assert rejected.status_code == 409, rejected.text
@@ -1016,16 +901,16 @@ async def test_native_header_over_scanned_page_does_not_authorize_mixed_pixels(
 
 
 async def test_complete_clause_extraction_retains_excluded_bid_coverage_and_later_stages(
-    api, headers, tenants, application, tmp_path, monkeypatch
+    api, headers, application, tmp_path, monkeypatch
 ):
     vendor = ReviewVendor()
-    install_resolver(monkeypatch, await review_llm(api, headers[0], tmp_path, vendor))
-    case = await prepared(api, headers, application, tenants, signing=False)
-    await authorize(api, headers[0], case)
-    receipt = data(await preview(api, headers[0], case))
-    accepted = data(await submit(api, headers[0], case, receipt))
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
-    report = data(await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers[0]))
+    install_resolver(monkeypatch, await review_llm(api, headers, tmp_path, vendor))
+    case = await prepared(api, headers, application, signing=False)
+    await authorize(api, headers, case)
+    receipt = data(await preview(api, headers, case))
+    accepted = data(await submit(api, headers, case, receipt))
+    finished = await terminal(api, headers, application, accepted)
+    report = data(await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers))
     assert report["run"]["completion"] == "partial"
     assert len(report["obligations"]) == 1
     coverage = report["run"]["coverage"]
@@ -1038,36 +923,36 @@ async def test_complete_clause_extraction_retains_excluded_bid_coverage_and_late
 
 
 async def test_local_signature_subject_is_masked_in_authorized_tender_context(
-    api, headers, tenants, application, tmp_path, monkeypatch
+    api, headers, application, tmp_path, monkeypatch
 ):
     vendor = ReviewVendor()
-    install_resolver(monkeypatch, await review_llm(api, headers[0], tmp_path, vendor))
-    case = await prepared(api, headers, application, tenants, certificate=True)
-    cleared, _, _ = await authorize(api, headers[0], case)
+    install_resolver(monkeypatch, await review_llm(api, headers, tmp_path, vendor))
+    case = await prepared(api, headers, application, certificate=True)
+    cleared, _, _ = await authorize(api, headers, case)
     assert_private_absent(cleared)
     assert any(
         "[REDACTED_NAME]" in row["sanitized_text"]
         for row in cleared["pages"]
         if row["role"] == "tender"
     )
-    receipt = data(await preview(api, headers[0], case))
-    accepted = data(await submit(api, headers[0], case, receipt))
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
+    receipt = data(await preview(api, headers, case))
+    accepted = data(await submit(api, headers, case, receipt))
+    finished = await terminal(api, headers, application, accepted)
     assert finished["status"] == "succeeded"
     assert_private_absent(vendor.requests)
     artifact(tmp_path, "certificate-subject", job=finished, requests=vendor.requests)
 
 
 async def test_token_executes_only_current_human_authorized_snapshot_and_cannot_rebind_receipt(
-    api, headers, tenants, application, tmp_path, monkeypatch
+    api, headers, application, tmp_path, monkeypatch
 ):
     vendor = ReviewVendor()
-    install_resolver(monkeypatch, await review_llm(api, headers[0], tmp_path, vendor))
-    case = await prepared(api, headers, application, tenants)
+    install_resolver(monkeypatch, await review_llm(api, headers, tmp_path, vendor))
+    case = await prepared(api, headers, application)
     issued = free_result(
         await api.post(
             "/v4/tokens",
-            headers=headers[0],
+            headers=headers,
             json={
                 "name": "Synthetic authorized execution token",
                 "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
@@ -1075,21 +960,21 @@ async def test_token_executes_only_current_human_authorized_snapshot_and_cannot_
             },
         )
     )
-    token_header = {**headers[0], "Authorization": "Bearer " + issued["token"]}
+    token_header = {**headers, "Authorization": "Bearer " + issued["token"]}
     unauthorized = data(await preview(api, token_header, case))
     assert "outbound_authorization_required" in unauthorized["admission_blockers"]
     assert (await submit(api, token_header, case, unauthorized)).status_code == 409
     assert vendor.requests == []
-    await authorize(api, headers[0], case)
+    await authorize(api, headers, case)
     human_case = dict(case)
-    human_receipt = data(await preview(api, headers[0], human_case))
+    human_receipt = data(await preview(api, headers, human_case))
     rebound = await submit(api, token_header, human_case, human_receipt)
     assert rebound.status_code == 409
     assert rebound.json()["data"]["error"]["code"] == "bid_preflight_mismatch"
     token_receipt = data(await preview(api, token_header, case))
     assert token_receipt["admission_blockers"] == []
     accepted = data(await submit(api, token_header, case, token_receipt))
-    finished = await terminal(api, token_header, application, tenants["orgs"][0], accepted)
+    finished = await terminal(api, token_header, application, accepted)
     assert finished["status"] == "succeeded", finished
     report = data(await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=token_header))
     assert report["obligations"] == report["signing_requirements"] == []
@@ -1099,11 +984,11 @@ async def test_token_executes_only_current_human_authorized_snapshot_and_cannot_
 
 
 async def test_call_limit_stop_preserves_completed_call_and_partial_coverage(
-    api, headers, tenants, application, tmp_path, monkeypatch
+    api, headers, application, tmp_path, monkeypatch
 ):
-    case = await review_case(api, headers, application, tenants, tmp_path, monkeypatch, pages=2)
-    receipt = data(await preview(api, headers[0], case))
-    accepted = data(await submit(api, headers[0], case, receipt))
+    case = await review_case(api, headers, application, tmp_path, monkeypatch, pages=2)
+    receipt = data(await preview(api, headers, case))
+    accepted = data(await submit(api, headers, case, receipt))
     original = JobExecution.admit
     admissions = 0
 
@@ -1115,9 +1000,9 @@ async def test_call_limit_stop_preserves_completed_call_and_partial_coverage(
         return await original(self, quote)
 
     monkeypatch.setattr(JobExecution, "admit", exhausted)
-    finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
+    finished = await terminal(api, headers, application, accepted)
     assert len(case["vendor"].requests) == 1
-    shown = data(await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers[0]))
+    shown = data(await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers))
     assert shown["run"]["completion"] == "partial" and shown["obligations"]
     assert "job_call_limit_exceeded" in json.dumps(finished)
     artifact(

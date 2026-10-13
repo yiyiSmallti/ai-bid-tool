@@ -37,14 +37,17 @@ access grant. Requirement-review board/progress reads additionally use
 
 ### Task access
 
-[task_access.py](../../server/app/services/task_access.py) refreshes the active
-identity, org membership and current grants before checking the task and stored
-creator membership. Scoped tokens intersect the issuer's live grants and cannot
-receive human-only decisions. Task creation seeds its creator atomically in
-`seed()` in [task_access.py](../../server/app/services/task_access.py), with the
-existing database constraints enforcing the stored relationship. The first single-user slice keeps that schema and
-the default policy without co-sign. Missing and inaccessible objects return the
-same 404; authority checks re-run at write and worker-publication boundaries.
+[task_access.py](../../server/app/services/task_access.py) checks task existence
+and refreshes the caller's live scopes. The installation human uses the scopes
+defined by [auth.py](../../server/app/services/auth.py); tokens and agents retain
+their own identities and cannot acquire human-only scopes. Task creation seeds
+an event head in the same transaction. Authority is checked again at writes and
+worker publication. Missing objects return 404; missing scopes return 403.
+
+Task board and progress responses contain task IDs and event cursors without
+workflow, member, owner or role projections. Next actions are derived from the
+current caller's scopes and human identity. Human decision timestamps identify
+confirmation; there is no person assignment or co-signing.
 
 ### Bounded snapshots
 
@@ -85,7 +88,7 @@ signed downloads. Cursors are encrypted so hidden job activity cannot leak throu
 visible sequence gaps. Board invalidations trigger an authorized refetch; frames
 never directly approve a response.
 
-Streams use authenticated fetch with Bearer and `X-Org-Id`; credentials never
+Streams use authenticated fetch with Bearer; credentials never
 enter URLs. A snapshot supplies the initial event cursor and reconnect supplies
 `Last-Event-ID`. Clients deduplicate repeated event UUIDs. A missing, expired or
 pruned cursor explicitly requests a fresh snapshot. Retention keeps at most seven
@@ -93,8 +96,7 @@ days and 50,000 events per task; it does not delete audit history.
 
 Each replay batch and idle heartbeat rechecks identity, current grants, token
 expiry and job visibility. Stream handlers release database transactions before
-socket writes. Revocation stops delivery; org switch or logout clears the old
-view. Bounded buffers disconnect slow clients so they can resume by cursor.
+socket writes. Revocation stops delivery; logout clears the old view. Bounded buffers disconnect slow clients so they can resume by cursor.
 
 The browser reconnects with bounded backoff and falls back to event polling and
 snapshot reload. It honors `Retry-After`, reduces work in hidden tabs and refreshes
@@ -105,8 +107,6 @@ are a separate transport and do not change CLI JSON output.
 ## Pitfalls
 
 - A board count or event is observation, not human approval or evidence confirmation.
-- Retained legacy workflow rows do not authorize restoring member, assignment,
-  discussion, archival or co-sign operations.
 - A signed download still requires the current authorized session and freshness
   checks; a snapshot cursor cannot authorize another task or actor.
 - Provider failure, incomplete jobs and stale material remain explicit blockers.
@@ -116,7 +116,7 @@ are a separate transport and do not change CLI JSON output.
 
 - [task_board.py schemas](../../server/app/schemas/task_board.py): read projections, bounds and cursors.
 - [task_board.py service](../../server/app/services/task_board.py), [task_board_projection.py](../../server/app/services/task_board_projection.py): snapshots and derived state.
-- [task_events.py](../../server/app/services/task_events.py), [task_event_sql.py](../../server/app/services/task_event_sql.py): replay and transactional event producers.
+- [task_events.py](../../server/app/services/task_events.py), [baseline SQL](../../server/migrations/baseline/00_functions_core.sql): replay and transactional event producers.
 - [task_board.py API](../../server/app/api/task_board.py): snapshot, poll and stream routes.
 - [task_board.py CLI](../../cli/bid_cli/task_board.py): bounded JSON commands.
 - [OrgTaskBoard.vue](../../web/src/views/OrgTaskBoard.vue), [task-live.js](../../web/src/task-live.js): browser board and reconnect behavior.

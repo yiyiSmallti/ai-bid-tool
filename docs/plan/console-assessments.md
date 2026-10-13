@@ -2,7 +2,7 @@
 kind: plan
 ---
 
-# Check and score in the org console
+# Check and score in the single-user console
 
 Status: **Approved, implemented.** Covers the console gaps in
 [roadmap](roadmap.md) B09, B10, U01 and U02.
@@ -17,8 +17,7 @@ in the [console assessment note](../notes/console-assessments.md).
 
 ## Goal, boundary and first vertical slice
 
-Give ordinary bid specialists (投标专员) a structured team workflow in the cloud-hosted
-org (organization/tenant; 单位) console: identify who must act, explain what prevents the
+Give ordinary bid specialists (投标专员) a structured workflow in the single-user console: identify who must act, explain what prevents the
 next step, and return directly to the response card (响应卡) that needs work. A task (任务)
 remains scoped to one explicitly selected successful extraction of tender documents
 (招标文件). Checking and scoring assess the saved, current draft (初稿), not an uploaded
@@ -28,13 +27,12 @@ The scope is preview, explicit submission, background-job (后台作业) recover
 human finding decisions, and scoring-criteria (评分标准) review.
 Reports remain advisory;
 they neither certify compliance nor satisfy human confirmation (人工确认) or export gates.
-Existing domain ownership is the
-responsibility mechanism; there is no persisted named assignee to present as an owner.
+Review domains classify content; the installation human performs all review actions.
 
 The first vertical slice is **rules check**: task/draft entry → read-only preflight →
 submit → recover/poll job → bounded risk/coverage report → responsible human dismiss or
 reopen with a reason → decision history → card correction → reassemble and recheck.
-It must work for two orgs and all four roles, without a model service. The next slice
+It must work for the installation human without a model service. The next slice
 adds combined checking through the same flow. Rubric generation/review is then delivered
 through whole-set confirmation; scoring preview/run/report follows that prerequisite.
 Each slice includes its browser acceptance before the next starts. The implementation
@@ -48,18 +46,18 @@ are fully specified here, not represented by inactive production placeholders.
 | --- | --- |
 | [check API](../../server/app/api/check.py) `create_router`; [check service](../../server/app/services/check.py) `submit_check`, `show_check`, `list_checks`, `decide_finding`, `decision_history`, `validity` | Runs, history, verified findings, staleness and decisions exist. Reuse their behavior; console routes are new. |
 | [check inputs](../../server/app/services/check_inputs.py) `access`, `snapshot`, `require_dependencies`; [semantic checking](../../server/app/services/check_semantic.py) `prepare`, `preview` | Preview validates the complete fixed response/comply-only/gap partition. Combined mode sends only confirmed response text; it does not check an arbitrary whole bid. |
-| [score API](../../server/app/api/score.py) `create_router`; [rubric service](../../server/app/services/score.py) `human_set`, `classify_rubric`, `decide_coverage`, `decide_section`, `decide_item`, `decide_rubric`, `revise_rubric` | Classification, coverage decisions and domain review are different operations. Admin is not a universal reviewer. |
+| [score API](../../server/app/api/score.py) `create_router`; [rubric service](../../server/app/services/score.py) `human_set`, `classify_rubric`, `decide_coverage`, `decide_section`, `decide_item`, `decide_rubric`, `revise_rubric` | Classification, coverage decisions and domain review are different operations. The installation human performs both domain classifications and decisions. |
 | [rubric generation](../../server/app/services/score_generation.py) `submit_rubric`, `preview_cost`, `accept_batches`; [rubric adapter](../../server/app/providers/rubric.py) `HTTPRubricProvider.extract_rubric` | Generation currently makes one complete whole-table request. The planned two-stage generation below is not implemented. |
 | [score execution](../../server/app/services/score_execution.py) `submit_score`, `preview_cost`, `run_view`, `show_score`; [aggregation](../../server/app/services/score_semantic.py) `aggregate` | Estimates are bounded by a confirmed rubric. Unavailable totals remain unavailable even when a subtotal or possible range exists. |
 | [score inputs](../../server/app/services/score_inputs.py) `snapshot`, `source_original`; [score run inputs](../../server/app/services/score_run_inputs.py) `fixed_rows` | Rubric input is the selected extraction's scoring requirements and cited original blocks, not a fresh full-document scan. Scoring uses pinned card-revision text, not the latest editable card text. |
-| [authentication](../../server/app/services/auth.py) `Identity`, `SCOPES`, `ROLE_SCOPES`; [response cards](../../server/app/services/response_cards.py) `access` | Revalidate active membership, token status and role/scope intersection on each operation; browser capability hints do not authorize writes. |
-| [org console reads](../../server/app/api/org_console.py) `task_get`, `task_job_list`; [job service](../../server/app/services/jobs.py) `status`, `cancel` | Task metadata and single-job reads are reused. Task-job discovery additionally accepts `check`, `score_rubric` and `score` while preserving the parse projection. |
-| [router](../../web/src/router.js), [API adapter](../../web/src/api.js) `checkedPath`, `parseResult`, [org helpers](../../web/src/org.js), [JobPanel](../../web/src/components/JobPanel.vue) | Reuse org identity checks, Chinese labels, precise same-origin paths and polling. Assessment paths and partial-result cases must be added explicitly to the adapter during implementation. |
+| [authentication](../../server/app/services/auth.py) `Identity`, `SCOPES`, `HUMAN_SCOPES`; [response cards](../../server/app/services/response_cards.py) `access` | Revalidate token status, human session expiry and delegated scopes on each operation; browser capability hints do not authorize writes. |
+| [console reads](../../server/app/api/org_console.py) `task_get`, `task_job_list`; [job service](../../server/app/services/jobs.py) `status`, `cancel` | Task metadata and single-job reads are reused. Task-job discovery additionally accepts `check`, `score_rubric` and `score` while preserving the parse projection. |
+| [router](../../web/src/router.js), [API adapter](../../web/src/api.js) `checkedPath`, `parseResult`, [console helpers](../../web/src/org.js), [JobPanel](../../web/src/components/JobPanel.vue) | Reuse session identity checks, Chinese labels, precise same-origin paths and polling. Assessment paths and partial-result cases must be added explicitly to the adapter during implementation. |
 | [runtime contracts](../../server/app/schemas/contracts.py) `CONTRACT_VERSION`, `Cost`, `Result` |Console reads and preflight use these runtime types. |
 | [design](../design.md#dashboard-and-agent-design) | Its pending/fixed/ignored risk cards and SSE are not current check behavior. Actual findings have open/dismissed states plus decision history, and jobs are polled. There is no “mark fixed” operation. |
 | [checking plan](check.md), [checking notes](../notes/check.md), [scoring plan](score.md), [scoring notes](../notes/score.md) | Check decision-history reads currently do not attach stale warnings, despite the check plan's wording; obtain current report validity separately. Rules coverage serializes `semantic_outcome:null` and `semantic_citations:[]`, not absent fields. Score schema permits `range_only`, but `aggregate` currently emits `estimated` or `unavailable`. |
 
-The existing [org console contract](org-console.md) excludes checking/scoring and uses
+The existing [console contract](org-console.md) excludes checking/scoring and uses
 full-set reads for response review. This contract extends that scope explicitly and
 requires bounded assessment projections; it does not silently change existing card APIs.
 
@@ -71,14 +69,14 @@ browser routes (the router's `/app/` base is included here):
 
 | Page | Route and primary action |
 | --- | --- |
-| Check workspace/history | `/app/org/tasks/:taskId/checks?job=E&draft=D`; “预览检查” |
-| Saved check report | `/app/org/tasks/:taskId/checks/:reportId`; “查看处理记录” / “前往响应卡修改” |
-| Rubric list/generation | `/app/org/tasks/:taskId/score-rubrics?job=E`; “预览生成评分规则” |
-| Rubric review | `/app/org/tasks/:taskId/score-rubrics/:rubricId`; current-role next action |
-| Score workspace/history | `/app/org/tasks/:taskId/scores?job=E&draft=D&rubric=R`; “预览评分” |
-| Saved score report | `/app/org/tasks/:taskId/scores/:reportId`; “查看失分原因” / “前往响应卡修改” |
+| Check workspace/history | `/app/tasks/:taskId/checks?job=E&draft=D`; “预览检查” |
+| Saved check report | `/app/tasks/:taskId/checks/:reportId`; “查看处理记录” / “前往响应卡修改” |
+| Rubric list/generation | `/app/tasks/:taskId/score-rubrics?job=E`; “预览生成评分规则” |
+| Rubric review | `/app/tasks/:taskId/score-rubrics/:rubricId`; current-state next action |
+| Score workspace/history | `/app/tasks/:taskId/scores?job=E&draft=D&rubric=R`; “预览评分” |
+| Saved score report | `/app/tasks/:taskId/scores/:reportId`; “查看失分原因” / “前往响应卡修改” |
 
-`E/D/R` denote actual IDs, never client-selected org/owner identities. A report deep link
+`E/D/R` denote actual IDs, never client-selected actor identities. A report deep link
 loads its pinned extraction/draft/rubric; a contradictory query selection is rejected or
 replaced visibly, never applied to that report. New-run pages require an explicit
 extraction. The input read identifies the most recent valid draft for that extraction,
@@ -88,15 +86,15 @@ assembly; “初稿已过期，请重新组表” links to the selected extracti
 No draft blocks checking/scoring, but not rubric generation from a successful extraction.
 
 Every page shows task name, extraction, draft/rubric version where applicable, scope
-“仅评估已保存初稿”, and the next responsible role. Use “商务负责人（投标专员）”,
+“仅评估已保存初稿”, and the next human classification. Use “商务负责人（投标专员）”,
 “技术负责人” and “待管理员分配职责”; qualification (资格) work follows the stored commercial
 domain rather than a client-side category guess. Read-only users can inspect these
 instructions but cannot execute them. Do not imply a specific person has been assigned.
 
-Keep only IDs, page size and non-text filters in org-specific session navigation state.
+Keep only IDs, page size and non-text filters in session navigation state.
 Unsaved reasons, responses, source text, replacement forms and signed links stay in
-memory. Warn on leaving unsaved forms; org switching clears them after the existing
-leave guard. Org/session change aborts requests, clears previews and authorizations,
+memory. Warn on leaving unsaved forms; session changes clear them after the existing
+leave guard. Session change aborts requests, clears previews and authorizations,
 and discards late responses by the existing epoch check. Refresh recovers jobs and
 reports from server reads, not local assumptions about a previous submit.
 
@@ -160,7 +158,7 @@ the existing explicit retry after revalidation; it cannot take over an active le
 
 Assessment job discovery must include queued/running/failed/cancelled jobs with no
 published report. A cached receipt reuses the existing job and shows “已复用相同输入的
-结果”; cache keys include initiator identity, so this is not universal task-wide reuse.
+结果”; cache keys bind actor kind and optional token identity as well as the fixed inputs.
 
 The planned generation algorithm is **stage 1: derive sections and the overall rule
 from the whole scoring table; stage 2: generate items in batches against those fixed
@@ -211,15 +209,15 @@ not “全部通过”. Certificate (证照) date status shows the assessment da
 requirements; unknown dates remain unknown rather than valid. Rules-only rows show
 “未请求语义检查” even though semantic fields serialize as null/empty.
 
-Only a human with the stored review domain can use “忽略此风险” or “重新打开”; a required
+Only the installation human can use “忽略此风险” or “重新打开”; a required
 reason dialog shows the finding, action and expected revision. Reopen is a new event,
 not deletion of the dismissal. Submit `FindingDecisionRequest` with the report input
 hash and finding revision. Do not optimistically hide a finding before acceptance.
 After success refresh the row, summary and history. A conflict preserves the typed
 reason, fetches current state, and requires a deliberate new decision.
 
-An unclassified finding offers “请管理员到响应卡分配职责，再重新组表检查”; there is no
-finding-classification endpoint. Admin cannot dismiss it on behalf of a domain.
+An unclassified finding offers “请到响应卡分配职责，再重新组表检查”; there is no
+finding-classification endpoint. Classification remains required before a finding decision.
 “前往响应卡修改” navigates to the existing review route with `job=E&requirement=Q` and
 the current card if present, while the report retains its historical card revision.
 Missing cards open that requirement's review position. Corrections must pass the
@@ -243,19 +241,19 @@ automatically complete set. Rubric versions and `prior_rubric_id` stay visible.
 
 Use a work queue with four explicit steps; each count comes from the whole server set:
 
-1. **“分配审核职责” — administrator.** Show unclassified sections and items, sources and
+1. **“分配审核职责” — human.** Show unclassified sections and items, sources and
    rules. Classify each with a reason. Section classification does not imply its items
    were classified. Changing a domain invalidates the affected confirmation.
-2. **“核对评分要求覆盖” — bid specialist.** Each scoring requirement must map to its own
+2. **“核对评分要求覆盖” — human.** Each scoring requirement must map to its own
    item(s), identify a canonical duplicate, or be explicitly excluded with a reason.
    Display canonical text and target items before accepting; pending/reopened entries
    block completion. No automatic “exclude remaining” or implicit acceptance of model
    mapping. Map/duplicate/exclude all require a recorded human decision.
-3. **“审核分节和条目” — responsible domain.** Review source, rule text, range, weights,
+3. **“审核分节和条目” — human.** Review source, rule text, range, weights,
    caps, assessment mode and ambiguity/unassessable reasons. Section and item decisions
    have separate confirm/reject/reopen controls and reasons; classification is not
-   confirmation. Commercial goes to `bidder`, technical to `technical`.
-4. **“确认整套评分规则” — bid specialist.** Display the overall aggregation rule and the
+   confirmation. Commercial and technical domains are classification metadata.
+4. **“确认整套评分规则” — human.** Display the overall aggregation rule and the
    complete checklist below, then explicitly confirm with reason/revision/hash. This
    does not substitute for any section/item/coverage decision.
 
@@ -265,7 +263,7 @@ Explain `RubricCompletenessView` in these terms, with paged links to affected ob
 | --- | --- |
 | Coverage count, pending requirements | “每条评分要求都要说明如何处理：对应评分项、重复项或有理由地排除。” |
 | Duplicate fingerprints/canonical cycles | “重复评分项或循环指向尚未处理，请先核对，避免重复计分。” |
-| Unconfirmed section/item IDs | “各职责负责人需逐项确认分节规则和评分条目；驳回或待审核项尚未完成。” |
+| Unconfirmed section/item IDs | “需逐项确认分节规则和评分条目；驳回或待审核项尚未完成。” |
 | Section/overall aggregation flags | “分节如何合计、哪些分节进入总分以及总分规则都需确认。” |
 | Normalization errors | “引用、条目归属、顺序、分值范围、权重或封顶值仍有冲突，请按定位提示修订。” |
 
@@ -281,10 +279,9 @@ Retain `source_section_id`/`source_item_id`, keys and pinned requirement identit
 Section `sources` selects verified `{requirement_id, quote}` pairs, retaining at least
 one; the server derives each immutable Source. Items retain one requirement identity.
 Quotations are selected from verified bindings, never edited. Comparison
-shows added/removed/changed content. A technical reviewer may edit only their permitted
-domain and must retain the overall rule and other-domain content exactly; a bid
-specialist has the corresponding commercial boundary and may revise the overall rule.
-Unclassified content follows the actual `revise_rubric` gate, not a client assumption.
+shows added/removed/changed content. The installation human may edit the complete
+candidate across domains and the overall rule. All verified source selectors and
+pinned Requirement identities remain subject to the `revise_rubric` validation gates.
 
 `ConsoleRubricSectionView` inherits the complete ordered `sources` list, with each
 Requirement, original Source and verified quotation, under the
@@ -294,8 +291,8 @@ context; items and coverage retain `origin=source`. Do not infer Requirement IDs
 matching source text: more than one Requirement may cite the same location. Build the current editing baseline from
 this complete same-snapshot section/item/coverage graph and current summary revision,
 hash and overall rule; this works for generated first versions without revision events.
-Other-domain and unclassified existing content must be preserved exactly under
-`revise_rubric`; a disabled edit explains which classification/review is needed first.
+`revise_rubric` creates a new candidate with reset classification and confirmations;
+the complete replacement remains bound to the same pinned requirements and sources.
 
 Save one `RubricReviseRequest`, with all coverage requirement IDs exactly matching the
 fixed scoring set and a required reason. Show “将创建新版本；所有职责分类、条目确认和覆盖
@@ -353,34 +350,7 @@ are independent states. A stale report alone is not a failed read.
 
 ## Data model and migration outline
 
-**No new org business table is needed.** These pages are projections of existing
-assessment state; do not create console report copies, reviewer assignments, saved
-decisions, progress tables or cross-org material caches. The models in the companion
-file describe transport data, not SQLAlchemy persistence.
-
-| Existing tables and source | Preserved relationships and use |
-| --- | --- |
-| `check_runs`, `check_items`, `check_certificates`, `check_certificate_items`, `check_findings`, `check_finding_citations`, `check_decisions`; [check models](../../server/app/models/check.py), [0032](../../server/migrations/versions/0032_check.py), [0033](../../server/migrations/versions/0033_check_semantic.py), [0036](../../server/migrations/versions/0036_check_semantic_scope.py) | Report/job/draft/extraction graph; exhaustive requirement coverage; certificates, findings, verified citations, append-only decisions. |
-| `score_rubric_sets`, `score_rubric_sections`, `score_rubric_items`, `score_rubric_coverage`, `score_rubric_decisions`, `score_rubric_classifications`, `score_rubric_coverage_decisions`, `score_rubric_coverage_items`, `score_rubric_revision_events`; [score models](../../server/app/models/score.py), [0034](../../server/migrations/versions/0034_score_rubric.py) | Versioned rubric graph, domain decisions, coverage mappings and original complete replacement snapshots. |
-| `score_reports`, `score_report_items`, `score_report_item_responses`, `score_item_citations`; [0035](../../server/migrations/versions/0035_score.py) | Report bound to rubric/draft/extraction/document; item support bound to saved response rows/card revisions. |
-| `tasks`, `jobs`, draft/card/requirement/chunk/document/material parents, audit/usage records | Reuse the established task and immutable input graph; private job submission/encrypted input fields are never public progress. |
-
-The assessment tables already have `org_id NOT NULL`, ENABLE and FORCE RLS, with
-USING/WITH CHECK current-org policies. Preserve `(org_id,id)` uniqueness and composite
-FKs including task and parent identity: findings/items/citations/decisions cannot point
-outside their report; rubric children cannot point outside their set; score support
-cannot swap draft/card revisions. No new global-table exception or BYPASSRLS role.
-Referencing a global User ID is not proof of an authorized org reviewer.
-
-Migration outline: first reuse the existing tables and indexes; add read projections
-and SQL keyset queries without data migration or backfill. If query plans require an
-index, propose an additive org/task/report/filter/order index in the implementation
-change after measurement, with no RLS or ownership change. Optional future stage progress
-can be a versioned safe field in existing job result JSON, written only by the current
-run/lease owner; changing the Provider algorithm remains separate. Rollback removes
-new routes/UI use and ignores optional progress without dropping assessment history.
-If later design adds persistence, it must first amend this draft with each table's
-NOT NULL org_id, FORCE RLS, composite keys, least-privilege grants and two-org tests.
+Assessment reads use existing check/rubric/score tables and introduce no persistence. The immutable [single-user baseline](../../server/migrations/versions/0001_single_user_baseline.py) defines task/parent relationships, runtime grants, actor constraints and publication/history triggers. Public projections omit organization/user/role fields and expose confirmation/decision timestamps. Bounded reads retain the same source verification and current-input gates as full reads.
 
 ## HTTP interfaces and bounded reads
 
@@ -424,7 +394,7 @@ reads and opt-in variants used by this console:
 | `GET /tasks/{T}/assessment-citation?...` | `CitationRequest` → `CitationContextData`; traverse an authorized saved parent/entry and source or citation index, returning a bounded original-text window and IDs for the card link. No arbitrary text/file/URL body. |
 
 `ConsoleAssessmentReads` specifies these service methods. They take authenticated
-`Identity`, never a request-supplied role/org/owner. They reuse `get_run`/`get_set`,
+`Identity`, never a request-supplied actor identity. They reuse `get_run`/`get_set`,
 dependency checks, snapshot validity and existing source verification rules. Read
 transactions must not issue a Provider call or write audit/usage/progress. Do not
 implement the new endpoints by calling full `show_check`/`show_rubric`/`show_score`
@@ -441,7 +411,7 @@ Duplicate-group notices bind one subject per row to a stable `group_id` and full
 Counts of groups and counts of member rows are distinct. Do not infer group membership
 from matching text or combine unrelated duplicate errors across pages.
 
-Cursor signatures bind org, authenticated principal, task, parent, part, filters,
+Cursor signatures bind authenticated principal/session, task, parent, part, filters,
 sort and review snapshot, with expiry. Stable child ordering uses saved order/key/ID
 or requirement order/ID, and finding severity/domain/ID; history retains revision order.
 A decision changes the review snapshot: reject old cursors with
@@ -486,7 +456,7 @@ marks a partial text view. There is no random access to unrelated neighboring ch
 For tender context reuse `Source` semantics: PDF page or Word `Location`, never both.
 For draft context load the pinned response text/deviation note using the saved row and
 card revision. For evidence, return only the authorized cited saved text. Verify parent
-task/org, immutable source hash/location and quoted text; unavailable/corrupt sources
+task, immutable source hash/location and quoted text; unavailable/corrupt sources
 produce an explicit error, not `verified=true` on unchecked text. Card fix IDs identify
 the current editable card separately from the historical citation. Readable history
 still depends on source/material access and cannot bypass revocation.
@@ -558,7 +528,7 @@ pair mapped to `Result.data/items`, not a second public envelope.
 | 0 | Valid read, successful preview (including a reported admission blocker), accepted job or complete available result; a stale readable report alone does not imply failure |
 | 2 | Argument/shape/input errors, invalid cursor, stale hash/CAS/review conflicts and projection-size errors; correct input before retry |
 | 3 | Retryable transport/rate-limit/queue failure; retain durable job ID and honor Retry-After |
-| 4 | Human/role denial, terminal non-retryable failure/cancellation, explicit admission rejection or integrity failure; use actual service `data.error.exit_code`, not HTTP status guesses |
+| 4 | Human/scope denial, terminal non-retryable failure/cancellation, explicit admission rejection or integrity failure; use actual service `data.error.exit_code`, not HTTP status guesses |
 | 5 | Check/rubric/score partial completion; score show also when unassessable items exist or total_status is not estimated; preserve useful rows and warnings |
 
 Console summary/page variants inherit their parent report's partial semantics.
@@ -576,35 +546,11 @@ Submission stays in `submit_check`, `submit_rubric`
 and `submit_score`.
 The new read protocol never calls these Providers.
 
-## Permissions, org isolation and audit
+## Permissions, task relationships and audit
 
-| Operation | Human roles and scopes |
-| --- | --- |
-| Read check/score/rubric and inputs | All four org roles; check:read or score:read, task:read, and actual draft/card/material parent-read scopes as applicable. The combined input helper requires both assessment read scopes; it reveals no out-of-scope material. |
-| Check/run, rubric/generate, score/run | admin, bidder, technical; corresponding check:run, score:rubric:generate, score:run plus prerequisite read scopes; viewer cannot run |
-| Finding dismiss/reopen | Human session only, check:decide; commercial→bidder, technical→technical; admin/viewer/token/worker denied |
-| Rubric classification | Human admin with score:rubric:review |
-| Rubric section/item decisions | Human score:rubric:review and stored domain match: commercial→bidder, technical→technical |
-| Coverage decisions and set confirm/reopen | Human bidder with score:rubric:review |
-| Full replacement | Human bidder/technical under cross-domain preservation constraints; overall rule editable by bidder only |
-| Job read/cancel | job:read/job:cancel plus the kind's existing job_access; cancellation additionally requires check:run, score:rubric:generate or score:run respectively, with live dependency access |
+Reads require assessment/task scopes and the scopes of actual draft/card/material dependencies. Run/generate scopes may be delegated to tokens or agents. Finding decisions and every rubric classification, coverage decision, confirmation, reopen or replacement require the installation human session; tokens, agents and workers cannot receive or exercise human-only scopes. Commercial/technical domains classify content rather than granting a different user's authority. Job read/cancel checks the job kind's scopes and live dependency graph.
 
-Responsible human means a live human session in the stored review domain, not necessarily
-the job initiator or the person who last dismissed a finding. API tokens may receive
-explicit existing nonhuman read/run/generate scopes, subject to membership intersection
-and input access. They never receive **any human-only scope**, including check:decide,
-score:rubric:review, evidence:confirm or export; preserve all other existing human-only
-scope exclusions. Browser buttons, a supplied role or use of the CLI cannot bypass this.
-Platform sessions have no org business access through these pages.
-Existing assessment job cancellation is not restricted to the original initiator;
-the UI must reflect the actual scope/dependency gate rather than inventing an owner check.
-
-Every route checks org and same-task/same-parent relationships before returning rows,
-counts, cursors, capability hints or original text. Missing resources and inaccessible
-cross-org IDs return the same 404. Keep 403 for a known authorized object whose human
-operation is forbidden, and 409 for a known state conflict. Bind all child IDs and
-source refs through their actual parent graph rather than authorizing one UUID and
-then trusting its request siblings. No org override query parameter.
+Every route validates task and same-parent relationships before returning rows, counts, cursors, capability hints or original text. Missing or unrelated IDs return 404; a forbidden human operation returns 403 and known state conflicts return 409. Cursors bind principal/session, parent, filters and review snapshot. No organization/user/role fields or overrides enter public views or requests. Cancellation does not invent an initiator-only check.
 
 Reuse existing events, written by the service/DB transaction, not the Vue page:
 
@@ -633,12 +579,12 @@ results say “当前筛选下没有记录” with reset; a genuinely empty hist
 or “尚未运行评分”. Missing source, zero model-assessable items, partial coverage and a
 failed collection read each have distinct states. A failed page does not replace an
 already loaded report with an empty-success table. Historical access can fail after
-dependency permission changes; show “记录不存在或无权查看” without leaking another org.
+dependency permission changes; show “记录不存在或无权查看” without leaking unrelated task data.
 
 | Failure | Required next step |
 | --- | --- |
 | `check_stale_draft`, `score_stale_draft`, `*_input_changed` | Clear preview consent, explain changed input, link to assembly/rubric review, then preview again |
-| `score_rubric_unconfirmed`, `rubric_incomplete`, `unclassified` | Show exact outstanding checklist and responsible role; do not silently switch rubric |
+| `score_rubric_unconfirmed`, `rubric_incomplete`, `unclassified` | Show exact outstanding checklist and human classification; do not silently switch rubric |
 | `revision_conflict`, `rubric_superseded`, `invalid_transition` | Refresh authoritative revision, retain unsaved reason/form, show comparison; require a new explicit action |
 | `queue_unavailable`, transport timeout | Retain the durable job ID and original request identity; show status/recovery without automatic resubmission |
 | Citation mismatch, input integrity, missing material | Do not display an unchecked quote as verified; retain safe error and correction link |
@@ -668,34 +614,14 @@ Implementation acceptance must retain existing check/score gates and add the cas
 is used; mocked browser tests prove UI behavior, while database/API tests prove isolation
 and authorization. Neither substitutes for the other.
 
-### Two-org API and database acceptance
+### Single-user API and database acceptance
 
-Use orgs A/B with admin/bidder/technical/viewer, active/inactive memberships, scoped
-tokens and worker identities. For **each** of the seven check tables, nine rubric tables
-and four score tables listed above, verify NOT NULL org_id, ENABLE/FORCE RLS, missing-org
-denial, A unable to SELECT/INSERT/UPDATE/DELETE B, org/task/parent composite-FK rejection,
-and retained append-only/publication constraints as applicable. Extend the existing
-[check storage](../../server/tests/test_check_storage.py),
-[semantic storage](../../server/tests/test_check_semantic_storage.py) and
-[score storage](../../server/tests/test_score_storage.py) scenarios, rather than inventing
-console-owned persistence. Any later added table requires the same matrix.
-
-Parameterize every existing/new route and each projection part with A→B parent,
-child, draft, extraction, rubric, citation, cursor and same-org/wrong-task IDs. Include
-inputs/job discovery/summary/filtered pages/notices/replacement/source windows/history,
-preview/submit/decisions/job status/cancel. Assert 404 equivalence with missing IDs,
-no B IDs/text/counts in responses, revoked material access invalidating the entire
-authorized graph, no-context denial and platform-session rejection. Cursor changes in
-principal/filter/revision must fail, never reuse a cached org result.
+Use the single installation database fixture, one human access header, scoped tokens and worker/agent identities. Preserve task/parent composite-FK rejection, immutable rows and append-only/publication gates for every check, rubric and score table. Exercise unrelated task/child/draft/extraction/rubric/citation IDs, missing IDs, cursor principal/filter/revision changes and expired/revoked credentials. Verify zero data or counts escape a valid parent graph.
 
 Prove zero writes and zero Provider calls for all three previews (including blockers),
 new reads and context windows. Prove hash/date/model/redaction changes between preview
 and submit require re-preview; confirmed draft/evidence and parent-source gates survive
-all new read paths. Human tests cover token issuance rejecting every human-only scope,
-token/worker/admin wrong-domain finding decisions, rubric classification separation,
-commercial/technical decisions, bidder-only coverage/set confirmation, CAS races,
-cross-domain full replacement, and immutable old reports. Unconfirmed evidence still
-cannot enter draft/export; no advisory action confirms evidence or exports a bid.
+all new read paths. Human tests cover token issuance rejecting every human-only scope, token/worker/agent decision denial, classifications, commercial/technical content, coverage/set confirmation, CAS races, complete replacement and immutable old reports. Unconfirmed evidence cannot enter draft/export; advisory actions never confirm evidence or export a bid.
 
 Current coverage starting points include [test_check.py](../../server/tests/test_check.py),
 [combined checking](../../server/tests/test_check_combined.py),
@@ -711,15 +637,15 @@ publication fencing must preserve the current score-total behavior.
 Snapshot seven-key Result and registered `bid schema` output for every existing command
 used above and every new read command/variant: preview allowed/blocked, accepted,
 cached, complete/partial/stale, unavailable total, empty and multipage read, complete
-replacement, wrong-role human decision and each exit 0/2/3/4/5.
+replacement, nonhuman decision and each exit 0/2/3/4/5.
 Keep old no-option show
 snapshots unchanged.
 
 ### Playwright with a mocked API
 
 Use `web/e2e/console-assessments.spec.js` using the static-built-app interception
-pattern in [platform-credentials.spec.js](../../web/e2e/platform-credentials.spec.js):
-`E2E_STATIC_DIR` serves built assets through page.route; synthetic org sessions and
+pattern in [console-assessments.spec.js](../../web/e2e/console-assessments.spec.js):
+`E2E_STATIC_DIR` serves built assets through page.route; synthetic human sessions and
 stateful route handlers supply exact typed Result envelopes.
 Abort unexpected requests
 and all external origins; no running API/PostgreSQL or model credentials are needed.
@@ -727,20 +653,20 @@ Assert request method/path/body, revisions, hashes and mutation
 counts as well as visible output.
 
 1. Entry from a task/draft, missing extraction/draft, explicit current selection, no
-   reports and filtered-empty states; viewer can read but cannot submit.
+   reports and filtered-empty states; scoped read tokens can read but cannot confirm.
 2. Editing scope/date/mode/cap resets consent; queue and network errors never auto-repeat.
 3. Findings grouped by severity/domain with whole-report counts; PDF and Word context,
    draft revision text, no-risk coverage citations, unknown certificate date, missing
    evidence and card deep links. Assert source text is inert HTML and window continuation
    is visible. No-findings partial is never “全部通过”.
-4. Commercial/technical responsible actions, admin/viewer denial, reason required,
+4. Human actions across commercial/technical domains, token/agent/worker denial, reason required,
    revision conflict, dismiss→history→reopen, stale read-only banner; new report has no
-   inherited dismissal. Switching org while a source response is delayed renders no
-   old-org text and clears preview/reason/forms.
+   inherited dismissal. Switching tasks while a source response is delayed renders no
+   old-task text and clears preview/reason/forms.
 5. Rubric preview/generate, legacy indeterminate progress, single-pass progress and
    optional two-stage fixed-section/batch progress, partial interruption and no fake
    percentages. Whole-set confirmation stays disabled until every server checklist
-   item is satisfied; admin classification cannot confirm domain work.
+   item is satisfied; classification alone cannot confirm section/item work.
 6. Coverage mapped/duplicate/excluded/reopen; canonical conflict; section/item review
    by domain; full replacement across multiple pages, missing-page/conflicting-snapshot
    save disabled, oversize save blocked, reset approvals/new IDs and recovery of saved
@@ -778,7 +704,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=server:cli .venv/bin/python -c 'import impo
 ```
 
 These checks establish a loadable, typed contract only. They do not establish
-runtime authorization, RLS, query performance or UI delivery.
+runtime authorization, publication integrity, query performance or UI delivery.
 
 ## 已定决定
 
@@ -786,15 +712,15 @@ runtime authorization, RLS, query performance or UI delivery.
 | --- | --- | --- |
 | First delivery order | Rules check end to end, then combined, rubric review, score report | Gives ordinary staff a usable path without waiting on a model; preserves prerequisite order. |
 | New persistence | None | Existing jobs/reports/decisions contain the business state; duplicated console state would drift. |
-| Responsible human | Existing stored review domain/role, not a named assignee | Matches enforceable gates and avoids introducing unimplemented task membership. |
+| Responsible human | Installation human | ADR 0012 removes roles and assignees; stored domains remain classification metadata. |
 | Bounded reads | Opt-in console variants plus only input/citation/job discovery reads | Keeps existing CLI JSON compatible and avoids full reports on page mount. |
 | Page limits and pathological single rows | 50 default/100 maximum, 2 MiB encoded Result; fail explicitly on an oversized single row | Provides measurable limits without truncating verified text. If representative data exceeds it, amend to compact row metadata and separately paged narratives before large-data release. |
-| Full replacement editing | Complete same-snapshot form, 512 KiB serialized save limit, recover stored proposal separately | Matches current atomic replacement and CLI limit; visible page edits cannot erase other-domain content. |
+| Full replacement editing | Complete same-snapshot form, 512 KiB serialized save limit, recover stored proposal separately | Matches current atomic replacement and CLI limit; visible page edits cannot erase content from unloaded pages. |
 | Usage contract | Result 5.0; read-only resource preflight and durable job usage | [ADR 0011](../adr/0011-remove-billing.md) owns the decision. |
 | Progress transport | Existing polling, optional observed StageProgress; no SSE prerequisite | Works with current single-pass and later fixed-section two-stage workers without invented percentages. |
 | Unknown/unavailable scores | Preserve backend null/state/reason; no frontend totals | Partial or unsupported calculations cannot become a misleading total. |
 | Human batches and automatic repair | Individual review actions only; explicit whole-set confirmation after server checks | Makes responsibility and reason visible and avoids a second bulk-decision contract. |
-| UI acceptance | Static built Vue with stateful mocked API plus separate two-org API/DB gate suite | Repeatable browser behavior without real provider calls; mocks cannot establish PostgreSQL RLS or server authorization. |
+| UI acceptance | Static built Vue with stateful mocked API plus separate single-user API/DB gate suite | Repeatable browser behavior without real provider calls; mocks cannot establish database publication or server authorization. |
 
 ## Implementation acceptance note
 

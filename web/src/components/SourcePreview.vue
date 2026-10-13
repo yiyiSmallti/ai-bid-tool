@@ -1,6 +1,7 @@
 <script setup>
 import { onBeforeUnmount, ref } from "vue";
-import { errorText, orgRequest } from "../org.js";
+import { request } from "../api.js";
+import { errorText } from "../org.js";
 const props = defineProps({ source: Object });
 const visible = ref(false), image = ref(null), error = ref("");
 let epoch = 0;
@@ -8,8 +9,8 @@ async function open() {
   if (visible.value) return;
   const attempt = ++epoch; error.value = ""; image.value = null; visible.value = true;
   try {
-    const link = await orgRequest("GET", `/evidence-sources/${props.source.id}/preview/download-link`);
-    const blob = await orgRequest("GET", link.data.url, undefined, { binary: true });
+    const link = await request("GET", `/evidence-sources/${props.source.id}/preview/download-link`);
+    const blob = await request("GET", link.data.url, undefined, { binary: true });
     const signature = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
     if (blob.type !== "image/png" || signature.join(",") !== "137,80,78,71,13,10,26,10") throw new Error("预览不是有效 PNG");
     const value = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("读取图片失败")); reader.readAsDataURL(blob); });
@@ -17,8 +18,8 @@ async function open() {
   } catch (exc) { if (exc.name !== "AbortError") error.value = errorText(exc); }
 }
 function close() { epoch++; image.value = null; visible.value = false; }
-window.addEventListener("bid:org-reset", close);
-onBeforeUnmount(() => { close(); window.removeEventListener("bid:org-reset", close); });
+window.addEventListener("bid:session-reset", close);
+onBeforeUnmount(() => { close(); window.removeEventListener("bid:session-reset", close); });
 </script>
 <template>
   <el-button size="small" @click="open">核对材料原页（第 {{ source.page }} 页）</el-button>

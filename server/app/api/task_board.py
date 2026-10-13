@@ -19,13 +19,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import ServiceError
 from app.core.security import TokenSigner
 from app.schemas.contracts import Category, Cost, Result
+from app.schemas.requirement_confirmation import RequirementBoardQuery
 from app.schemas.response_card_contracts import ReviewDomain
 from app.schemas.task_board import (
     BoardQuery,
     EventReplayQuery,
     TaskProgressQuery,
 )
+from app.services import requirement_board, task_board, task_events
 from app.services.auth import authenticate, set_actor_context
+from app.services.task_access import access
 
 MAX_RESULT_BYTES = 1024 * 1024
 MAX_BUFFER_BYTES = 256 * 1024
@@ -221,16 +224,10 @@ def create_router(context, db, storage, queue, settings):
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ):
         async def operation(session, actor):
-            from app.services import task_board
-
             if extraction_job_id is None:
-                from app.services.task_access import access
-
                 await access(session, actor, task_id)
                 raise ServiceError("extraction_required", "Choose an extraction job", 422, 2)
             try:
-                from app.schemas.requirement_confirmation import RequirementBoardQuery
-
                 query_type = RequirementBoardQuery if view == "requirement-review" else BoardQuery
                 query = query_type.model_validate(
                     dict(
@@ -255,8 +252,6 @@ def create_router(context, db, storage, queue, settings):
                         404,
                         4,
                     )
-                from app.services import requirement_board
-
                 data, items = await requirement_board.board(
                     session, actor, task_id, query, storage, settings
                 )
@@ -297,12 +292,7 @@ def create_router(context, db, storage, queue, settings):
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ):
         async def operation(session, actor):
-            from app.services import task_board
-
             if view == "requirement-review":
-                from app.services import requirement_board
-                from app.services.task_access import access
-
                 await access(session, actor, task_id)
                 if request.state.contract_version != "5.0":
                     raise ServiceError(
@@ -351,8 +341,6 @@ def create_router(context, db, storage, queue, settings):
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ):
         async def operation(session, actor):
-            from app.services import task_board
-
             page = await task_board.activity(
                 session, actor, task_id, storage, settings, cursor=cursor, limit=limit
             )
@@ -366,8 +354,6 @@ def create_router(context, db, storage, queue, settings):
 
     async def replay(credentials, task_id, cursor, limit):
         async def operation(session, actor):
-            from app.services import task_events
-
             page = await task_events.replay(
                 session, actor, task_id, settings, storage, cursor=cursor, limit=limit
             )

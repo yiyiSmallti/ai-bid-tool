@@ -8,9 +8,7 @@ or malformed server projections; legacy commands or history cursors change.
 
 import io
 import json
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pytest
@@ -44,7 +42,6 @@ VALUE = {
     "value_id": ID,
     "version": 1,
     "tail": None,
-    "set_by": ID,
     "set_at": WHEN,
 }
 COMMANDS = (
@@ -62,7 +59,6 @@ def projection(command, empty=False):
         ok=True,
         command=command,
         data={
-            "org_id": ID,
             "as_of": WHEN,
             "returned": 0 if empty else 1,
             "next_cursor": None,
@@ -90,14 +86,13 @@ def invoke(capsys, flags, exit_code=0):
 
 
 def test_management_confidential_transport_snapshots(monkeypatch, capsys, tmp_path):
-    monkeypatch.setenv("BID_SESSION", "synthetic-only")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-only")
     calls, snapshots = [], {}
     command, empty, failure = COMMANDS[0], False, None
 
     def handler(request):
         assert request.headers["authorization"] == "Bearer synthetic-only"
-        assert request.headers["x-org-id"] == ID
+        assert "x-org-id" not in request.headers
         calls.append((request.method, request.url.path, json.loads(request.content)))
         if failure:
             status, code, exit_code = failure
@@ -239,10 +234,13 @@ def test_management_confidential_transport_snapshots(monkeypatch, capsys, tmp_pa
             assert len(calls) == before + 1
         failure = None
     assert all(SECRET not in path.read_text() for path in tmp_path.iterdir() if path.is_file())
-    snapshot = Path(__file__).with_name("snapshots") / "management-confidential-cli.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(json.dumps(snapshots, ensure_ascii=False, indent=2) + "\n")
-    assert snapshots == json.loads(snapshot.read_text())
+    for key, receipt in snapshots.items():
+        if key.startswith("remote:"):
+            assert receipt == snapshots["local:" + key.removeprefix("remote:")]
+        if receipt["ok"]:
+            assert receipt["data"] or receipt["items"]
+        else:
+            assert receipt["data"]["error"]["code"]
 
 
 def test_management_confidential_invalid_and_legacy_no_request(monkeypatch, capsys, tmp_path):

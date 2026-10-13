@@ -24,13 +24,10 @@ from app.models.entities import (
     ApiToken,
     Document,
     Job,
-    Membership,
-    Org,
     ProductRevision,
     Task,
     TaskFeature,
     TaskResource,
-    User,
 )
 from app.models.sandbox import (
     SandboxArtifact,
@@ -67,7 +64,7 @@ from app.schemas.sandbox_contracts import (
     SandboxSubmit,
     VendorSpec,
 )
-from app.services.auth import ROLE_SCOPES, SCOPES, Identity, membership
+from app.services.auth import HUMAN_SCOPES, SCOPES, Identity
 from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
@@ -105,7 +102,7 @@ def fetch_error(error: FetchDenied) -> ServiceError:
         "fetch_transport_failed",
         "quota_unavailable",
         "origin_concurrency_limit",
-        "org_rate_limit",
+        "fetch_rate_limit",
     }
     return ServiceError(
         "sandbox_" + error.code,
@@ -141,10 +138,11 @@ def event(session: AsyncSession, actor: Identity, action: str, run: SandboxRun, 
     )
 
 
-async def org_lock(session: AsyncSession, org_id: UUID) -> None:
+async def installation_lock(session: AsyncSession) -> None:
     # Persistent admission is serialized across API and worker processes, not a local semaphore.
     await session.execute(
-        text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"), {"key": f"sandbox:{org_id}"}
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"),
+        {"key": "sandbox:installation"},
     )
 
 
@@ -213,54 +211,20 @@ def spec_of(row: SandboxInput):
 
 
 async def actor_for(session: AsyncSession, run: SandboxRun, *, lock: bool = False) -> Identity:
-    user = await session.get(
-        User, run.requested_by, with_for_update={"read": True} if lock else None
-    )
-    if user is None or not user.active:
-        raise ServiceError("sandbox_actor_inactive", "Sandbox actor is no longer active", 403, 4)
-    member = await membership(session, run.requested_by, run.org_id)
-    if lock:
-        member = await session.scalar(
-            select(Membership)
-            .where(
-                Membership.org_id == run.org_id,
-                Membership.user_id == run.requested_by,
-                Membership.active.is_(True),
-            )
-            .with_for_update(read=True)
-            .execution_options(populate_existing=True)
-        )
-        active_org = await session.scalar(
-            select(Org).where(Org.id == run.org_id, Org.active.is_(True)).with_for_update(read=True)
-        )
-        if member is None or active_org is None:
-            raise ServiceError(
-                "sandbox_actor_inactive", "Sandbox actor is no longer active", 403, 4
-            )
-    scopes = set(run.scope_snapshot) & ROLE_SCOPES[member.role]
+    scopes = set(run.scope_snapshot) & HUMAN_SCOPES
     if run.token_id is not None:
         token = await session.get(
             ApiToken, run.token_id, with_for_update={"read": True} if lock else None
         )
-        if (
-            token is None
-            or token.user_id != run.requested_by
-            or token.revoked
-            or token.expires_at <= datetime.now(UTC)
-        ):
+        if token is None or token.revoked or token.expires_at <= datetime.now(UTC):
             raise ServiceError(
-                "sandbox_actor_inactive", "Sandbox actor is no longer active", 403, 4
+                "sandbox_actor_inactive", "Sandbox token is no longer active", 403, 4
             )
         scopes &= set(token.scopes) & SCOPES
     from app.services.task_access import access as task_access
 
-    actor = Identity(
-        run.requested_by, run.org_id, scopes, member.role, run.token_id, run.actor_kind
-    )
-    worker = Identity(
-        actor.user_id, actor.org_id, actor.scopes, actor.role, actor.token_id, "worker"
-    )
-    await task_access(session, worker, run.task_id, write=True)
+    actor = Identity(scopes=scopes, token_id=run.token_id, actor_kind=run.actor_kind)
+    await task_access(session, replace(actor, actor_kind="worker"), run.task_id, write=True)
     return actor
 
 
@@ -374,7 +338,6 @@ async def show_run(
     return SandboxRunView.model_validate(
         {
             "id": run.id,
-            "org_id": run.org_id,
             "task_id": run.task_id,
             "job_id": run.job_id,
             "purpose": row.purpose,
@@ -408,7 +371,7 @@ async def submit(
     require_access(actor, "sandbox:render" if prototype else "sandbox:capture")
     # Lock order matches worker publication and resource selection before any row is written.
     if not body.dry_run:
-        await org_lock(session, actor.org_id)
+        await installation_lock(session)
         if await session.scalar(select(Task).where(Task.id == task_id).with_for_update()) is None:
             raise not_found()
     document, _, url = await resolve_input(session, actor, task_id, body.spec)
@@ -438,9 +401,7 @@ async def submit(
     request_hash = sha(
         canonical(
             {
-                "org_id": str(actor.org_id),
                 "task_id": str(task_id),
-                "user_id": str(actor.user_id),
                 "actor_kind": actor.actor_kind,
                 "scopes": sorted(actor.scopes),
                 "token_id": str(actor.token_id) if actor.token_id else None,
@@ -530,11 +491,10 @@ async def submit(
         select(func.count()).select_from(Job).where(Job.kind == "sandbox", Job.status == "queued")
     )
     if queued is not None and queued >= 20:
-        raise ServiceError("sandbox_queue_limit", "Organization sandbox queue is full", 503, 3)
+        raise ServiceError("sandbox_queue_limit", "Installation sandbox queue is full", 503, 3)
     input_id, job_id, run_id = uuid4(), uuid4(), uuid4()
     values = {
         "id": input_id,
-        "org_id": actor.org_id,
         "task_id": task_id,
         "document_id": document.id,
         "extraction_job_id": body.spec.extraction_job_id,
@@ -543,8 +503,8 @@ async def submit(
     }
     if isinstance(body.spec, PrototypeSpec):
         assert html is not None
-        key = f"org/{actor.org_id}/sandbox-inputs/{input_id}/{body.spec.html_sha256}"
-        await storage.put(actor.org_id, key, html)
+        key = f"sandbox-inputs/{input_id}/{body.spec.html_sha256}"
+        await storage.put(key, html)
         values.update(
             task_feature_id=body.spec.task_feature_id,
             feature_revision_id=body.spec.expected_feature_revision_id,
@@ -564,7 +524,6 @@ async def submit(
     row = SandboxInput(**values)
     job = Job(
         id=job_id,
-        org_id=actor.org_id,
         task_id=task_id,
         document_id=document.id,
         kind="sandbox",
@@ -576,7 +535,6 @@ async def submit(
     await session.flush()
     run = SandboxRun(
         id=run_id,
-        org_id=actor.org_id,
         input_id=input_id,
         task_id=task_id,
         document_id=document.id,
@@ -586,7 +544,6 @@ async def submit(
         policy_revision=revision,
         policy_sha256=policy_hash,
         runtime_profile_digest=browser.profile_digest,
-        requested_by=actor.user_id,
         actor_kind=actor.actor_kind,
         token_id=actor.token_id,
         scope_snapshot=sorted(actor.scopes & (READ_SCOPES | {"sandbox:render", "sandbox:capture"})),
@@ -660,7 +617,6 @@ async def guard_job(
 def descriptor_for(run: SandboxRun, row: SandboxInput, attempt_id: UUID) -> RunDescriptor:
     spec = spec_of(row)
     return RunDescriptor(
-        org_id=run.org_id,
         job_id=run.job_id,
         attempt_id=attempt_id,
         input_sha256=spec.html_sha256
@@ -684,7 +640,6 @@ def make_fetcher(processor, run: SandboxRun, row: SandboxInput) -> FetchBroker:
     broker = FetchBroker(
         policy_source(),
         run.policy_revision,
-        run.org_id,
         quota=quota_from_env(Path(path)),
         transport=processor.sandbox_fetch_transport,
         resolver=processor.sandbox_resolver or system_resolver,
@@ -829,7 +784,6 @@ async def store_artifacts(
         identifier = uuid4()
         record = SandboxArtifact(
             id=identifier,
-            org_id=run.org_id,
             sandbox_run_id=run.id,
             attempt_record_id=attempt.id,
             input_id=row.id,
@@ -840,7 +794,7 @@ async def store_artifacts(
             plaintext_sha256=sha(payload.data),
             size_bytes=len(payload.data),
             media_type="image/png" if payload.kind in PNG_KINDS else "application/octet-stream",
-            object_key=f"org/{run.org_id}/sandbox-artifacts/{run.id}/{attempt.attempt_id}/{identifier}/{sha(payload.data)}",
+            object_key=f"sandbox-artifacts/{run.id}/{attempt.attempt_id}/{identifier}/{sha(payload.data)}",
             origin=origin,
             width=payload.width,
             height=payload.height,
@@ -874,7 +828,6 @@ async def store_artifacts(
         "generating_model": None,
         "html_sha256": row.html_sha256,
         "render_manifest_sha256": sha(canonical(descriptors)),
-        "org_id": str(run.org_id),
         "task_id": str(run.task_id),
         "document_id": str(run.document_id),
         "extraction_job_id": str(row.extraction_job_id),
@@ -911,7 +864,6 @@ async def store_artifacts(
     records.append(
         SandboxArtifact(
             id=identifier,
-            org_id=run.org_id,
             sandbox_run_id=run.id,
             attempt_record_id=attempt.id,
             input_id=row.id,
@@ -922,7 +874,7 @@ async def store_artifacts(
             size_bytes=len(manifest),
             media_type="application/octet-stream",
             origin=origin,
-            object_key=f"org/{run.org_id}/sandbox-artifacts/{run.id}/{attempt.attempt_id}/{identifier}/{manifest_hash}",
+            object_key=f"sandbox-artifacts/{run.id}/{attempt.attempt_id}/{identifier}/{manifest_hash}",
         )
     )
     if metrics["output_bytes"] > descriptor.output_limit or len(records) > 32:
@@ -936,7 +888,7 @@ async def store_artifacts(
             raise ServiceError(
                 "sandbox_invalid_output", "Sandbox artifact descriptor is invalid", 409, 4
             ) from None
-        await storage.put(run.org_id, record.object_key, content)
+        await storage.put(record.object_key, content)
     return records, metrics
 
 
@@ -971,7 +923,6 @@ async def save_receipts(
         session.add(
             SandboxFetchReceipt(
                 id=identifiers[ordinal],
-                org_id=run.org_id,
                 sandbox_run_id=run.id,
                 attempt_record_id=attempt.id,
                 input_id=row.id,
@@ -1059,11 +1010,11 @@ async def cleanup_confirmed(session: AsyncSession, attempt: SandboxAttempt) -> b
     )
 
 
-async def reconcile_run(db, run_id: UUID, org_id: UUID, browser: BrowserProvider) -> None:
+async def reconcile_run(db, run_id: UUID, browser: BrowserProvider) -> None:
     """Reconcile only an already registered attempt; never authorize or start new execution."""
     if not hasattr(browser, "recover"):
         return
-    async with db.transaction(org_id) as session:
+    async with db.transaction() as session:
         run = await session.get(SandboxRun, run_id)
         if run is None:
             return
@@ -1084,18 +1035,18 @@ async def reconcile_run(db, run_id: UUID, org_id: UUID, browser: BrowserProvider
         "not_started",
     }:
         return
-    async with db.transaction(org_id) as session:
+    async with db.transaction() as session:
         from app.jobs.execution import locked_job
 
         run = await session.get(SandboxRun, run_id)
         assert run is not None
         job = await locked_job(session, run.job_id)
-        await org_lock(session, org_id)
+        await installation_lock(session)
         attempt = await session.get(SandboxAttempt, attempt.id)
         assert attempt is not None and job is not None
         if await cleanup_confirmed(session, attempt):
             return
-        actor = Identity(run.requested_by, org_id, set(), "viewer", run.token_id, run.actor_kind)
+        actor = Identity(scopes=set(), token_id=run.token_id, actor_kind=run.actor_kind)
         if attempt.ended_at is None:
             attempt.ended_at = datetime.now(UTC)
             attempt.cleanup_state, attempt.termination_code = "complete", "sandbox_orphan_reaped"

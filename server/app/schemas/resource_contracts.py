@@ -41,7 +41,7 @@ class ProductUpdate(Contract):
 
 class ProductRevision(Contract):
     id: UUID
-    org_id: UUID
+
     product_id: UUID
     revision: int = Field(ge=1)
     data: ProductData
@@ -55,7 +55,7 @@ class TaskProductSelection(Contract):
 
 class TaskProductSnapshot(Contract):
     id: UUID
-    org_id: UUID
+
     task_id: UUID
     product_revision_id: UUID
     revision: int = Field(ge=1)

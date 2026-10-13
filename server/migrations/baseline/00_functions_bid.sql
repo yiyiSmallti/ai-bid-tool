@@ -164,7 +164,7 @@ CREATE FUNCTION public.annotation_dependency_event() RETURNS trigger
     SET search_path TO 'pg_catalog'
     AS $$
 BEGIN
- PERFORM public.annotation_invalidate_dependencies(to_jsonb(NEW));
+ PERFORM public.annotation_invalidate_dependencies(to_jsonb(CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END));
  RETURN NULL;
 END $$;
 
@@ -410,7 +410,6 @@ BEGIN
   OR r.approval#>>'{requirement,state}' IS DISTINCT FROM 'confirmed'
   OR r.approval#>>'{requirement,source_binding_sha256}' IS NULL
   OR r.approval#>>'{requirement,source_binding_sha256}' IS DISTINCT FROM b.source_pin->>'binding_sha256'
-  OR r.approval->>'review_domain' IS DISTINCT FROM v.review_domain
   OR r.approval_sha256 IS DISTINCT FROM public.annotation_digest(r.approval-'approval_binding_sha256')
   OR r.renderer_identity IS DISTINCT FROM public.annotation_digest(r.renderer)
   OR r.approval->>'card_content_sha256' IS DISTINCT FROM public.annotation_digest(jsonb_build_object(
@@ -440,7 +439,7 @@ BEGIN
  OR a.origin NOT IN ('certificate','vendor') OR r.source_sha256<>a.source_sha256
  OR EXISTS(SELECT 1 FROM public.screenshot_withdrawals WHERE asset_id=a.id)
  OR r.renderer_identity->>'profile' IS DISTINCT FROM r.profile
- OR r.renderer_identity->>'protocol_version' IS DISTINCT FROM 'annotation-render-v1'
+ OR r.renderer_identity->>'protocol_version' IS DISTINCT FROM 'annotation-render-v2'
  OR r.storage_key IS DISTINCT FROM 'screenshots/'||a.id::text||'/'||r.id::text||'/'||r.image_sha256||'.png' THEN
   RAISE EXCEPTION 'Invalid cloud rendition source' USING ERRCODE='23514'; END IF;
  IF r.profile='annotation-candidate-v1' THEN

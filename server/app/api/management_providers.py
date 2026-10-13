@@ -1,4 +1,4 @@
-"""Metadata-only model management reads, available solely in Result 4.0."""
+"""Metadata-only model management reads, available solely in Result 5.0."""
 
 import time
 from uuid import UUID
@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, Request
 from app.core.errors import not_found
 from app.schemas.contracts import Result
 from app.schemas.management_pages import PageQuery
-from app.schemas.management_providers import ProviderCatalogQuery
 
 
 def create_router(context, settings):
@@ -50,16 +49,5 @@ def create_router(context, settings):
         session, actor = ctx
         value = await service.history(session, actor, body)
         return service.page_result(service.COMMANDS["history"], value, elapsed(started))
-
-    @router.post("/catalog/query", name="provider_catalog", response_model=Result)
-    async def catalog(
-        body: ProviderCatalogQuery, ctx=Depends(management_context, scope="function")
-    ):
-        from app.services import management_providers as service
-
-        started = time.monotonic()
-        session, actor = ctx
-        value = await service.catalog(session, actor, body)
-        return service.page_result(service.COMMANDS["catalog"], value, elapsed(started))
 
     return router

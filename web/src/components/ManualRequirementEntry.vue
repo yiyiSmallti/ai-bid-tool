@@ -1,9 +1,10 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
-import { categories, confirmAction, errorText, locationLabel, orgRequest } from "../org.js";
+import { request } from "../api.js";
+import { categories, confirmAction, errorText, locationLabel } from "../org.js";
 import { requirementRequest, checkScope, checkReview } from "../requirement-review.js";
 import DocumentPreview from "./DocumentPreview.vue";
-const props = defineProps({ taskId: String, scope: Object, documents: Array, rejected: Object, writable: Boolean });
+const props = defineProps({ taskId: String, scope: Object, documents: Array, rejected: Object });
 const emit = defineEmits(["created", "dirty", "denied"]);
 const form = reactive({ document: "", target: "current", category: "technical", starred: false, text: "", condition: "{}", quote: "", reason: "" });
 const chunks = ref([]), position = ref(""), preview = ref(null), error = ref(""), busy = ref(false), conflict = ref(false), loading = ref(false);
@@ -18,7 +19,7 @@ watch(() => props.scope?.revision, () => { if (preview.value) { preview.value = 
 async function loadSources() {
   const run = ++sourceGeneration; loading.value = true; chunks.value = []; position.value = ""; preview.value = null; error.value = "";
   if (!form.document) { loading.value = false; return; }
-  try { const result = await orgRequest("GET", `/documents/${form.document}/chunks`); if (run !== sourceGeneration) return; if (result.items.some(item => item.document_id !== form.document)) throw new Error("原文范围不符合契约"); chunks.value = result.items; }
+  try { const result = await request("GET", `/documents/${form.document}/chunks`); if (run !== sourceGeneration) return; if (result.items.some(item => item.document_id !== form.document)) throw new Error("原文范围不符合契约"); chunks.value = result.items; }
   catch (exc) { if (run === sourceGeneration) { error.value = errorText(exc); if ([401,403,404].includes(exc.status)) emit("denied", exc); } }
   finally { if (run === sourceGeneration) loading.value = false; }
 }
@@ -32,14 +33,14 @@ function input() {
   return { extraction_job_id: form.target === "current" ? props.scope.extraction_job_id : null, expected_set_revision: form.target === "current" ? props.scope.revision : null, content: { category: form.category, starred: form.starred, text: form.text, condition, source: { ...chosen.value.source, quote: form.quote } }, rejected_item: props.rejected ? { job_id: props.rejected.job_id, index: props.rejected.index, summary_sha256: props.rejected.summary_sha256 } : null, reason: form.reason };
 }
 async function verify() {
-  if (busy.value || !props.writable) return;
+  if (busy.value) return;
   const run = ++generation; busy.value = true; preview.value = null; error.value = "";
   try { const body = input(), result = await requirementRequest("POST", `/tasks/${props.taskId}/requirements/manual-preview`, body); if (run !== generation) return; if (result.data.task_id !== props.taskId || result.data.extraction_job_id !== body.extraction_job_id || canonical(result.data.verified_source.source) !== canonical(body.content.source)) throw new Error("核验结果与当前输入不一致"); preview.value = result.data; conflict.value = false; }
   catch (exc) { if (run === generation) { error.value = errorText(exc); if ([401,403,404].includes(exc.status)) emit("denied", exc); } }
   finally { busy.value = false; }
 }
 async function save() {
-  if (busy.value || !preview.value || !props.writable || conflict.value || preview.value.duplicate_requirement_id) return;
+  if (busy.value || !preview.value || conflict.value || preview.value.duplicate_requirement_id) return;
   busy.value = true; error.value = "";
   try { const body = { ...input(), expected_preview_hash: preview.value.preview_hash }; const key = canonical(body); if (pendingRequest?.key !== key) pendingRequest = { key, id: crypto.randomUUID() }; const result = await requirementRequest("POST", `/tasks/${props.taskId}/requirements/manual`, { ...body, request_id: pendingRequest.id }); checkScope(result.data.scope, props.taskId); checkReview(result.data.requirement, props.taskId, result.data.scope.extraction_job_id); pendingRequest = null; form.text = ""; form.quote = ""; form.reason = ""; preview.value = null; emit("dirty", false); emit("created", result.data); }
   catch (exc) { preview.value = null; conflict.value = true; error.value = `${errorText(exc)}；输入已保留，未自动重试，请重新核验。`; if ([401,403,404].includes(exc.status)) emit("denied", exc); }
@@ -47,8 +48,8 @@ async function save() {
 }
 async function discard() { return !(form.text || form.quote || form.reason) || await confirmAction("尚有未保存的补录输入，确定离开？"); }
 function clear() { pendingRequest = null; generation++; sourceGeneration++; chunks.value = []; preview.value = null; form.document = ""; form.text = ""; form.quote = ""; form.reason = ""; emit("dirty", false); }
-window.addEventListener("bid:org-reset", clear);
-onBeforeUnmount(() => { generation++; sourceGeneration++; window.removeEventListener("bid:org-reset", clear); });
+window.addEventListener("bid:session-reset", clear);
+onBeforeUnmount(() => { generation++; sourceGeneration++; window.removeEventListener("bid:session-reset", clear); });
 defineExpose({ discard });
 </script>
 <template>
@@ -65,8 +66,8 @@ defineExpose({ discard });
       <el-form-item label="结构条件（JSON 对象）"><el-input v-model="form.condition" type="textarea" maxlength="20000" /></el-form-item>
       <el-form-item label="补录原因" required><el-input v-model="form.reason" aria-label="补录原因" aria-required="true" type="textarea" maxlength="10000" /></el-form-item>
       <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" class="section" />
-      <el-button native-type="submit" :disabled="!writable || busy" :loading="busy">核验补录来源</el-button>
-      <template v-if="preview"><p role="status">{{ preview.creates_manual_scope ? '新建人工补录集' : '追加当前集合' }} · 原文精确跨度 {{ preview.verified_source.start }}–{{ preview.verified_source.end }}</p><blockquote class="quote"><mark>{{ preview.verified_source.source.quote }}</mark></blockquote><p v-if="preview.duplicate_requirement_id" class="warning">此来源位置已有要求 {{ preview.duplicate_requirement_id }}，请打开已有要求。</p><el-button type="primary" :disabled="busy || !writable || Boolean(preview.duplicate_requirement_id)" @click="save">保存待确认要求</el-button></template>
+      <el-button native-type="submit" :disabled="busy" :loading="busy">核验补录来源</el-button>
+      <template v-if="preview"><p role="status">{{ preview.creates_manual_scope ? '新建人工补录集' : '追加当前集合' }} · 原文精确跨度 {{ preview.verified_source.start }}–{{ preview.verified_source.end }}</p><blockquote class="quote"><mark>{{ preview.verified_source.source.quote }}</mark></blockquote><p v-if="preview.duplicate_requirement_id" class="warning">此来源位置已有要求 {{ preview.duplicate_requirement_id }}，请打开已有要求。</p><el-button type="primary" :disabled="busy || Boolean(preview.duplicate_requirement_id)" @click="save">保存待确认要求</el-button></template>
       <p class="hint">保存不会确认要求，也不会确认响应、证据或无遗漏。争议要求保留在集合中，本阶段不提供删除或语义编辑。</p>
     </el-form>
   </el-card>

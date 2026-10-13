@@ -21,34 +21,21 @@ from app.providers.scoring import HTTPScoreProvider
 from app.schemas.score_contracts import ScorePreview, ScoreProviderRequest, ScoreReportData
 from sqlalchemy import select, update
 from sqlalchemy.exc import DBAPIError
-from task_fixtures import confirm_requirements_async, reviewer_header
+from task_fixtures import confirm_requirements_async
 from test_check import publish_draft
 from test_check_combined import semantic_llm
 from test_response_cards import create_card, require_action
-from test_score_api import (
-    finish_rubric,
-    preview_rubric,
-    submit_rubric,
-)
+from test_score_api import finish_rubric, preview_rubric, submit_rubric
 from test_score_api import rubric_input_case as rubric_input_case
-from test_score_review import base, confirm_contents, decision, role, show
-from test_score_run import (
-    ScoreVendor,
-    counts,
-    finish_score,
-    install_score_resolver,
-    submit_score,
-)
+from test_score_review import base, confirm_contents, decision, show
+from test_score_run import ScoreVendor, counts, finish_score, install_score_resolver, submit_score
 
 
 @pytest.fixture
 async def large_score_case(rubric_input_case, monkeypatch):
     case = rubric_input_case
-    org = case["tenants"]["orgs"][0]
     added = []
-    async with case["app"].state.db.transaction(org) as session:
-        # Seed only extracted source rows. Rubric confirmation, card confirmation,
-        # draft construction and score publication still use the actual service flow.
+    async with case["app"].state.db.transaction() as session:
         chunks = []
         for page in range(6, 1547):
             scoring = page < 91
@@ -59,7 +46,6 @@ async def large_score_case(rubric_input_case, monkeypatch):
             )
             chunk = Chunk(
                 id=uuid4(),
-                org_id=org,
                 task_id=UUID(case["task"]),
                 document_id=UUID(case["document"]),
                 page=page,
@@ -70,7 +56,6 @@ async def large_score_case(rubric_input_case, monkeypatch):
             added.append(
                 Requirement(
                     id=uuid4(),
-                    org_id=org,
                     task_id=chunk.task_id,
                     document_id=chunk.document_id,
                     chunk_id=chunk.id,
@@ -88,9 +73,8 @@ async def large_score_case(rubric_input_case, monkeypatch):
         await session.flush()
         session.add_all(added)
         await session.flush()
-        # B02: rubric and score inputs accept only confirmed requirements.
         await confirm_requirements_async(
-            session, org, UUID(case["task"]), settings=case["app"].state.processor.settings
+            session, UUID(case["task"]), settings=case["app"].state.processor.settings
         )
     preview = await preview_rubric(case)
     assert len(preview["scoring_requirement_ids"]) == 86
@@ -115,9 +99,7 @@ async def large_score_case(rubric_input_case, monkeypatch):
     assert confirmed.status_code == 200, confirmed.text
     case["rubric"] = await show(case)
     assert case["rubric"]["rubric"]["state"] == "confirmed"
-    _, technical_header = await reviewer_header(
-        case["api"], case["admin_engine"], org, UUID(case["task"]), "technical"
-    )
+    technical_header = case["header"]
     support = [case["requirements"][2], *({"id": str(row.id)} for row in added[85:100])]
     response_texts = []
     for index, requirement in enumerate(support):
@@ -148,7 +130,7 @@ async def large_score_case(rubric_input_case, monkeypatch):
         case["api"], case["app"], case["header"], case["task"], case["extraction"]
     )
     case["draft_id"] = draft["draft_id"]
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         stored = await session.get(DraftRun, UUID(case["draft_id"]))
         assert stored is not None and stored.completion == "partial"
         rows = list(
@@ -166,9 +148,7 @@ async def large_score_case(rubric_input_case, monkeypatch):
             == 1108
         )
         case["draft_rows"] = rows
-    role(case, "bidder")
     vendor = ScoreVendor()
-    # Keep the new scoring limit at its real default, independent of extraction.
     llm = semantic_llm(case["tmp_path"], vendor, llm_batch_chars=8000)
     install_score_resolver(monkeypatch, llm)
     return {**case, "score_vendor": vendor, "score_llm": llm}
@@ -299,8 +279,7 @@ async def test_large_draft_score_preview_run_scopes_context_and_preserves_report
                 )
                 assert citation["quote"] in getattr(row, citation["field"])
                 assert citation["card_revision_id"] == str(row.card_revision_id)
-    org = case["tenants"]["orgs"][0]
-    async with case["app"].state.db.transaction(org) as session:
+    async with case["app"].state.db.transaction() as session:
         usage = list(
             (
                 await session.scalars(
@@ -310,7 +289,7 @@ async def test_large_draft_score_preview_run_scopes_context_and_preserves_report
         )
         assert len(usage) == len(requests)
     with pytest.raises(DBAPIError):
-        async with case["app"].state.db.transaction(org) as session:
+        async with case["app"].state.db.transaction() as session:
             await session.execute(
                 update(ScoreReport)
                 .where(ScoreReport.id == UUID(result["report_id"]))
@@ -318,7 +297,6 @@ async def test_large_draft_score_preview_run_scopes_context_and_preserves_report
             )
     retained = await case["api"].get(path, headers=case["header"])
     assert retained.json()["data"] == report
-    assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
     artifact = case["tmp_path"] / "score-large-request-scope.json"
     artifact.write_text(
         json.dumps(

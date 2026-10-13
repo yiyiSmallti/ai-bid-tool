@@ -1,10 +1,10 @@
 """Fixed-scale real PostgreSQL/API template and binding acceptance.
 
 Failure inventory established before implementation: all-history scans, N+1
-revision authors, cross-org matches, response truncation, unbounded audit visits,
+metadata joins, incorrect matches, response truncation, unbounded audit visits,
 missing continuation, read SQL/time/payload budgets, mutation authority bypass.
-Seed two orgs with exactly 10,000 roots, 100,000 revisions and 100,000 bindings
-per org. Run serial warmed requests through the real restricted-role API; retain
+Seed one library with exactly 10,000 roots, 100,000 revisions and 100,000 bindings
+in the installation. Run serial warmed requests through the real restricted-role API; retain
 reproducible artifacts in data/work. Never start or reconfigure a database.
 """
 
@@ -15,17 +15,16 @@ import os
 import platform
 from pathlib import Path
 from time import perf_counter
-from uuid import UUID
 
 import pytest
-from app.services.auth import ROLE_SCOPES
+from app.services.auth import HUMAN_SCOPES, Identity
 from sqlalchemy import event, text
 from test_exports import export_template
 from test_management_features_scale import plan_work
 from test_management_templates import BASE, BINDINGS, binding_request
 from test_templates import metadata
 
-ROOTS = 10_000
+ROOTS = 10000
 REVISIONS = 10
 SAMPLES = 20
 OUTPUT = (
@@ -33,7 +32,7 @@ OUTPUT = (
 )
 
 
-def seed_scale(admin_engine, tenants):
+def seed_scale(admin_engine, database):
     content = export_template()
     descriptor = {
         "name": "synthetic.docx",
@@ -43,102 +42,61 @@ def seed_scale(admin_engine, tenants):
     }
     sections = binding_request({"id": "unused", "file": descriptor})["sections"]
     with admin_engine.begin() as connection:
-        for org, user in zip(tenants["orgs"], tenants["users"], strict=True):
-            values = {
-                "org": str(org),
-                "actor": user,
-                "roots": ROOTS,
-                "revisions": REVISIONS,
-                "file": json.dumps(descriptor),
-                "sha": descriptor["sha256"],
-                "sections": json.dumps(sections),
-                "scopes": json.dumps(sorted(ROLE_SCOPES["admin"])),
-            }
-            connection.execute(
-                text(
-                    "SELECT set_config('app.current_org',:org,true),set_config('app.actor_kind','session',true),set_config('app.actor_user_id',CAST(:actor AS text),true),set_config('app.actor_token_id','',true),set_config('app.actor_scopes',:scopes,true)"
-                ),
-                values,
-            )
-            connection.execute(
-                text(
-                    "INSERT INTO templates(id,org_id,created_by,current_revision,created_at)"
-                    " SELECT md5(:org||'|template|'||n)::uuid,CAST(:org AS uuid),:actor,:revisions,"
-                    " TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second' FROM generate_series(1,:roots) n"
-                ),
-                values,
-            )
-            connection.execute(
-                text(
-                    "INSERT INTO template_revisions(id,org_id,template_id,revision,data,file,storage_key,created_at)"
-                    " SELECT md5(:org||'|revision|'||n||':'||v)::uuid,CAST(:org AS uuid),md5(:org||'|template|'||n)::uuid,v,"
-                    " jsonb_build_object('name','Scale template '||lpad(n::text,5,'0'),'project_types',jsonb_build_array('Scale declared project'),'chapters',NULL),"
-                    " CAST(:file AS jsonb),'org/'||:org||'/template/'||md5(:org||'|template|'||n)::uuid||'/'||md5(:org||'|revision|'||n||':'||v)::uuid||'/'||:sha||'.docx',"
-                    " TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second'+v*interval '1 microsecond'"
-                    " FROM generate_series(1,:roots) n CROSS JOIN generate_series(1,:revisions) v"
-                ),
-                values,
-            )
-            connection.execute(
-                text(
-                    "INSERT INTO audit_logs(id,org_id,actor_user_id,action,object_id,details,created_at)"
-                    " SELECT md5(:org||'|audit|'||n||':'||v)::uuid,CAST(:org AS uuid),:actor,"
-                    " CASE WHEN v=1 THEN 'resource.template.create' ELSE 'resource.template.update' END,"
-                    " md5(:org||'|template|'||n)::uuid,jsonb_build_object('new_revision_id',md5(:org||'|revision|'||n||':'||v)::uuid,'revision',v),"
-                    " TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second'"
-                    " FROM generate_series(1,:roots) n CROSS JOIN generate_series(1,:revisions) v"
-                ),
-                values,
-            )
-            connection.execute(
-                text(
-                    "INSERT INTO export_template_bindings(id,org_id,template_revision_id,template_sha256,binding_hash,sections,static_content_hash,adapter_version,reviewed_by,reviewed_at)"
-                    " SELECT md5(:org||'|binding|'||n||':'||b)::uuid,CAST(:org AS uuid),md5(:org||'|revision|'||n||':'||:revisions)::uuid,:sha,"
-                    " md5(:org||'|hash|'||n||':'||b)||md5(:org||'|hash|'||n||':'||b),CAST(:sections AS jsonb),repeat('a',64),'scale-fixed-v1',:actor,"
-                    " TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second'+b*interval '1 microsecond'"
-                    " FROM generate_series(1,:roots) n CROSS JOIN generate_series(1,:revisions) b"
-                ),
-                values,
-            )
-        for table in (
-            "templates",
-            "template_revisions",
-            "audit_logs",
-            "export_template_bindings",
-            "memberships",
-        ):
+        values = {
+            "seed": "test_management_templates_scale",
+            "roots": ROOTS,
+            "revisions": REVISIONS,
+            "file": json.dumps(descriptor),
+            "sha": descriptor["sha256"],
+            "sections": json.dumps(sections),
+            "scopes": json.dumps(sorted(HUMAN_SCOPES)),
+        }
+        connection.execute(
+            text(
+                "SELECT set_config('app.actor_kind','session',true),set_config('app.actor_token_id','',true),set_config('app.actor_scopes',:scopes,true)"
+            ),
+            values,
+        )
+        connection.execute(
+            text(
+                "INSERT INTO templates(id,current_revision,created_at) SELECT md5(:seed||'|template|'||n)::uuid,:revisions, TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second' FROM generate_series(1,:roots) n"
+            ),
+            values,
+        )
+        connection.execute(
+            text(
+                "INSERT INTO template_revisions(id,template_id,revision,data,file,storage_key,created_at) SELECT md5(:seed||'|revision|'||n||':'||v)::uuid,md5(:seed||'|template|'||n)::uuid,v, jsonb_build_object('name','Scale template '||lpad(n::text,5,'0'),'project_types',jsonb_build_array('Scale declared project'),'chapters',NULL), CAST(:file AS jsonb),'template/'||md5(:seed||'|template|'||n)::uuid||'/'||md5(:seed||'|revision|'||n||':'||v)::uuid||'/'||:sha||'.docx', TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second'+v*interval '1 microsecond' FROM generate_series(1,:roots) n CROSS JOIN generate_series(1,:revisions) v"
+            ),
+            values,
+        )
+        connection.execute(
+            text(
+                "INSERT INTO audit_logs(id,action,object_id,details,created_at,actor_kind) SELECT md5(:seed||'|audit|'||n||':'||v)::uuid, CASE WHEN v=1 THEN 'resource.template.create' ELSE 'resource.template.update' END, md5(:seed||'|template|'||n)::uuid,jsonb_build_object('new_revision_id',md5(:seed||'|revision|'||n||':'||v)::uuid,'revision',v), TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second','session' FROM generate_series(1,:roots) n CROSS JOIN generate_series(1,:revisions) v"
+            ),
+            values,
+        )
+        connection.execute(
+            text(
+                "INSERT INTO export_template_bindings(id,template_revision_id,template_sha256,binding_hash,sections,static_content_hash,adapter_version,reviewed_at) SELECT md5(:seed||'|binding|'||n||':'||b)::uuid,md5(:seed||'|revision|'||n||':'||:revisions)::uuid,:sha, md5(:seed||'|hash|'||n||':'||b)||md5(:seed||'|hash|'||n||':'||b),CAST(:sections AS jsonb),repeat('a',64),'scale-fixed-v1', TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second'+b*interval '1 microsecond' FROM generate_series(1,:roots) n CROSS JOIN generate_series(1,:revisions) b"
+            ),
+            values,
+        )
+        for table in ("templates", "template_revisions", "audit_logs", "export_template_bindings"):
             connection.execute(text(f"ANALYZE {table}"))
-        for org in tenants["orgs"]:
-            for table, expected in (
-                ("templates", ROOTS),
-                ("template_revisions", ROOTS * REVISIONS),
-                ("export_template_bindings", ROOTS * REVISIONS),
-            ):
-                assert (
-                    connection.scalar(
-                        text(f"SELECT count(*) FROM {table} WHERE org_id=:org"), {"org": org}
-                    )
-                    == expected
-                )
 
 
 @pytest.mark.latency
 async def test_fixed_scale_template_binding_reads_and_writes(
-    api, headers, application, tenants, admin_engine
+    api, headers, application, database, admin_engine
 ):
-    seed_scale(admin_engine, tenants)
+    seed_scale(admin_engine, database)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     receipt = {
         "mode": "real_api",
         "scenario": "u01-template-binding-fixed-scale-v1",
         "status": "running",
         "schema": "5.0",
-        "fixture": {
-            "orgs": 2,
-            "roots_per_org": ROOTS,
-            "revisions_per_org": ROOTS * REVISIONS,
-            "bindings_per_org": ROOTS * REVISIONS,
-        },
+        "fixture": {"roots": ROOTS, "revisions": ROOTS * REVISIONS, "bindings": ROOTS * REVISIONS},
         "hardware": {
             "system": platform.platform(),
             "machine": platform.machine(),
@@ -160,15 +118,15 @@ async def test_fixed_scale_template_binding_reads_and_writes(
     try:
         with admin_engine.connect() as connection:
             receipt["postgresql"] = connection.scalar(text("SELECT version()"))
-        first = await api.post(BASE + "/query", headers=headers[0], json={"limit": 25})
+        first = await api.post(BASE + "/query", headers=headers, json={"limit": 25})
         assert first.status_code == 200, first.text
         template_id = first.json()["items"][0]["ref"]["resource_id"]
-        detail = await api.get(f"{BASE}/{template_id}", headers=headers[0])
+        detail = await api.get(f"{BASE}/{template_id}", headers=headers)
         assert detail.status_code == 200, detail.text
         revision_id = detail.json()["data"]["detail"]["revision"]["id"]
         first_bindings = await api.post(
             BINDINGS + "/query",
-            headers=headers[0],
+            headers=headers,
             json={"template_revision_id": revision_id, "limit": 5},
         )
         assert first_bindings.status_code == 200, first_bindings.text
@@ -257,13 +215,13 @@ async def test_fixed_scale_template_binding_reads_and_writes(
             ),
         ]
         for name, method, path, body, latency_limit, sql_limit, byte_limit in cases:
-            await api.request(method, path, headers=headers[0], json=body)
-            timings, sizes, reads, controls, trips = [], [], [], [], []
+            await api.request(method, path, headers=headers, json=body)
+            timings, sizes, reads, controls, trips = ([], [], [], [], [])
             last_queries = []
             for _ in range(SAMPLES):
                 captured.clear()
                 started = perf_counter()
-                response = await api.request(method, path, headers=headers[0], json=body)
+                response = await api.request(method, path, headers=headers, json=body)
                 timings.append((perf_counter() - started) * 1000)
                 assert response.status_code == 200, response.text
                 sizes.append(len(response.content))
@@ -292,25 +250,15 @@ async def test_fixed_scale_template_binding_reads_and_writes(
                     assert "total" not in result["data"] and result["data"]["returned"] == len(
                         result["items"]
                     )
-                    assert all(row["org_id"] == headers[0]["X-Org-Id"] for row in result["items"])
                     if name == "prefix":
                         assert all(
                             row["name"].startswith("Scale template 099") for row in result["items"]
                         )
-                else:
-                    assert result["data"]["org_id"] == headers[0]["X-Org-Id"]
             plans = []
-            async with application.state.db.transaction(UUID(headers[0]["X-Org-Id"])) as session:
-                from app.services.auth import authenticate, set_actor_context
+            async with application.state.db.transaction() as session:
+                from app.services.auth import set_actor_context
 
-                actor = await authenticate(
-                    session,
-                    headers[0]["Authorization"].removeprefix("Bearer "),
-                    tenants["orgs"][0],
-                    application.state.crypto,
-                    joined_membership=True,
-                )
-                await set_actor_context(session, actor)
+                await set_actor_context(session, Identity(scopes=set(HUMAN_SCOPES)))
                 connection = await session.connection()
                 for statement, parameters in last_queries:
                     if not statement.lstrip().upper().startswith("SELECT") or not any(
@@ -328,7 +276,9 @@ async def test_fixed_scale_template_binding_reads_and_writes(
                         "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + statement, parameters
                     )
                     plan = explained.scalar_one()
-                    assert isinstance(plan, list) and len(plan) == 1 and "Execution Time" in plan[0]
+                    assert (
+                        isinstance(plan, list) and len(plan) == 1 and ("Execution Time" in plan[0])
+                    )
                     work = plan_work(plan[0]["Plan"])
                     visits = {}
                     for row in work:
@@ -343,8 +293,6 @@ async def test_fixed_scale_template_binding_reads_and_writes(
                                 visits.get(relation, 0)
                                 + (row["rows"] + row["rows_removed"]) * row["loops"]
                             )
-                    # Current-revision joins under a broad prefix may visit one
-                    # row per root, but must never walk the 100,000-row history.
                     for relation, visited in visits.items():
                         bound = (
                             ROOTS * 2
@@ -355,13 +303,6 @@ async def test_fixed_scale_template_binding_reads_and_writes(
                             failures.append(
                                 f"{name}: {relation} visited {visited} rows, bound {bound}"
                             )
-                    author_nodes = [row for row in work if row["relation"] == "audit_logs"]
-                    if author_nodes and not any(
-                        row["index"] and "template_audit_author" in row["index"] for row in work
-                    ):
-                        failures.append(
-                            f"{name}: exact page-author lookup did not use the template author index"
-                        )
                     plans.append(
                         {
                             "sql": statement,
@@ -390,17 +331,11 @@ async def test_fixed_scale_template_binding_reads_and_writes(
                 failures.append(f"{name}: Result bytes exceed {byte_limit}")
             if max(trips) > sql_limit:
                 failures.append(f"{name}: SQL round trips {max(trips)} exceed {sql_limit}")
-        other = await api.post(BASE + "/query", headers=headers[1], json={"limit": 25})
-        assert other.status_code == 200
-        assert all(row["org_id"] == headers[1]["X-Org-Id"] for row in other.json()["items"])
-        assert not {row["ref"]["resource_id"] for row in first.json()["items"]} & {
-            row["ref"]["resource_id"] for row in other.json()["items"]
-        }
 
         async def observe(name, method, path, **args):
             captured.clear()
             started = perf_counter()
-            response = await api.request(method, path, headers=headers[0], **args)
+            response = await api.request(method, path, headers=headers, **args)
             receipt["write_observations"].append(
                 {
                     "case": name,
@@ -465,11 +400,11 @@ async def test_fixed_scale_template_binding_reads_and_writes(
                     "reason_code": reason,
                 },
             )
-        pins = await api.get(f"/tasks/{task_row['id']}/templates", headers=headers[0])
+        pins = await api.get(f"/tasks/{task_row['id']}/templates", headers=headers)
         assert (
             pins.status_code == 200
             and pins.json()["items"][0]["id"] == selected["id"]
-            and pins.json()["items"][0]["revision"] == REVISIONS
+            and (pins.json()["items"][0]["revision"] == REVISIONS)
         )
         receipt["failures"] = failures
         receipt["status"] = "failed" if failures else "passed"

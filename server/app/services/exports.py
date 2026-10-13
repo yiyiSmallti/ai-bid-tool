@@ -23,13 +23,10 @@ from app.core.errors import ServiceError, not_found
 from app.models.entities import (
     CertificateRevision,
     Job,
-    Membership,
-    Org,
     SimulatedResource,
     Task,
     TaskTemplate,
     Template,
-    User,
 )
 from app.models.exports import (
     Export,
@@ -80,21 +77,21 @@ class ExportStorage:
     def __init__(self, storage: Storage):
         self.storage = storage
 
-    async def read(self, org_id: UUID, key: str) -> bytes:
+    async def read(self, key: str) -> bytes:
         try:
-            return await self.storage.read(org_id, key)
+            return await self.storage.read(key)
         except OSError as exc:
             raise self.failure(exc) from exc
 
-    async def read_bounded(self, org_id: UUID, key: str, max_bytes: int) -> bytes:
+    async def read_bounded(self, key: str, max_bytes: int) -> bytes:
         try:
-            return await self.storage.read_bounded(org_id, key, max_bytes)
+            return await self.storage.read_bounded(key, max_bytes)
         except OSError as exc:
             raise self.failure(exc) from exc
 
-    async def put(self, org_id: UUID, key: str, content: bytes) -> None:
+    async def put(self, key: str, content: bytes) -> None:
         try:
-            await self.storage.put(org_id, key, content)
+            await self.storage.put(key, content)
         except OSError as exc:
             raise self.failure(exc) from exc
 
@@ -200,8 +197,7 @@ async def human_access(
 ) -> Identity:
     if actor.actor_kind != "session" or actor.token_id is not None:
         raise ServiceError("forbidden", "Human session required", 403, 4)
-    # Management reads arrive with membership/user/org revalidated together by
-    # the request context. Reuse that one request-local authority snapshot only.
+    # Reuse only the request-local authenticated human snapshot.
     authenticated = (
         session.info.pop("management_authenticated_actor", None) if binding == "read" else None
     )
@@ -214,9 +210,6 @@ async def human_access(
             actor,
             "template:write" if binding == "write" else "template:read" if binding else "export",
         )
-    roles = {"admin"} if binding == "write" else {"admin", "bidder"} if binding else {"bidder"}
-    if actor.role not in roles:
-        raise ServiceError("forbidden", "Current role cannot perform this export action", 403, 4)
     for scope in ("template:read",) if binding else REQUIRED_SCOPES:
         actor.require(scope)
     return actor
@@ -229,7 +222,6 @@ async def worker_access(session: AsyncSession, job: Job, attempt_id: UUID) -> Id
         job.kind != "export_render"
         or job.actor_kind != "session"
         or job.actor_token_id is not None
-        or job.actor_user_id is None
         or job.agent_principal_id is not None
         or job.agent_session_id is not None
         or job.agent_step_id is not None
@@ -247,21 +239,17 @@ async def worker_access(session: AsyncSession, job: Job, attempt_id: UUID) -> Id
             "job_attempt_stopped", "Export render attempt no longer owns this job", 409, 4
         )
     submitted = job.result["submission"]
-    if UUID(submitted["actor_user_id"]) != job.actor_user_id:
-        raise ServiceError("forbidden", "Export submitter does not match job authority", 403, 4)
+    submitted_scopes = set(submitted["scopes"]) & set(job.actor_scopes)
+    if not set(REQUIRED_SCOPES) <= submitted_scopes:
+        raise ServiceError("forbidden", "Export submission lacks required authority", 403, 4)
     actor = Identity(
-        job.actor_user_id,
-        job.org_id,
-        set(submitted["scopes"]) & set(job.actor_scopes),
-        "bidder",
+        scopes=submitted_scopes,
         actor_kind="worker",
         invocation_id=job.invocation_id,
         job_id=job.id,
         run_id=attempt_id,
     )
     actor = await cards.access(session, actor, "card:read")
-    if actor.role != "bidder" or "export" not in actor.scopes:
-        raise ServiceError("forbidden", "Export initiator is no longer authorized", 403, 4)
     for scope in REQUIRED_SCOPES:
         if scope != "export":
             actor.require(scope)
@@ -274,19 +262,15 @@ async def worker_access(session: AsyncSession, job: Job, attempt_id: UUID) -> Id
     run = await session.get(ExportRun, UUID(submitted["export_run_id"]))
     if (
         run is None
-        or run.org_id != job.org_id
         or run.render_job_id != job.id
         or run.task_id != job.task_id
         or run.document_id != job.document_id
-        or run.initiated_by != job.actor_user_id
     ):
         raise not_found()
     return actor
 
 
-async def lock_inputs(
-    session: AsyncSession, actor: Identity, task_id: UUID, *, initiated_by: UUID | None = None
-) -> None:
+async def lock_inputs(session: AsyncSession, actor: Identity, task_id: UUID) -> None:
     session.expire_all()
     await cards.task_lock(session, task_id)
     # Serialize with the same task -> sorted cards order as review/selection changes.
@@ -295,20 +279,6 @@ async def lock_inputs(
         .where(ResponseCard.task_id == task_id)
         .order_by(ResponseCard.id)
         .with_for_update()
-    )
-    # Concurrent disabling or role changes must serialize with final publication.
-    await session.scalar(select(Org).where(Org.id == actor.org_id).with_for_update(read=True))
-    user_ids = sorted(
-        {actor.user_id, initiated_by} if initiated_by is not None else {actor.user_id}
-    )
-    await session.scalars(
-        select(User).where(User.id.in_(user_ids)).order_by(User.id).with_for_update(read=True)
-    )
-    await session.scalars(
-        select(Membership)
-        .where(Membership.org_id == actor.org_id, Membership.user_id.in_(user_ids))
-        .order_by(Membership.user_id)
-        .with_for_update(read=True)
     )
 
 
@@ -384,7 +354,7 @@ async def create_binding(
     # runtime role has no UPDATE privilege on them, which any row lock would require.
     root = await session.scalar(
         select(Template)
-        .where(Template.org_id == actor.org_id, Template.id == revision.template_id)
+        .where(Template.id == revision.template_id)
         .with_for_update()
         .execution_options(populate_existing=True)
     )
@@ -400,14 +370,12 @@ async def create_binding(
         return binding_view(existing)
     row = ExportTemplateBinding(
         id=uuid4(),
-        org_id=actor.org_id,
         template_revision_id=revision.id,
         template_sha256=descriptor.sha256,
         binding_hash=binding_hash,
         sections=sections,
         static_content_hash=report.static_content_hash,
         adapter_version=ADAPTER_VERSION,
-        reviewed_by=actor.user_id,
         reviewed_at=datetime.now(UTC),
     )
     session.add(row)
@@ -537,9 +505,6 @@ async def build_manifest(
     from app.services import requirement_consumption
 
     reviews = await requirement_consumption.effective(session, requirements)
-    approvals = await cards.review_approvals(
-        session, actor.org_id, [row.card_id for row in rows if row.card_id]
-    )
     adapter = TypeAdapter(EvidenceInput)
     items, attachments = [], []
     pages = {}
@@ -569,28 +534,12 @@ async def build_manifest(
             "starred": row.starred,
             "evidence": [],
         }
-        approval = approvals[row.card_id] if row.card_id is not None else None
         review_gap = requirement_consumption.gap_reason(reviews[row.requirement_id])
-        if row.kind != "gap" and (review_gap or approval is not None and not approval["approved"]):
+        if row.kind != "gap" and review_gap:
             issues.append(issue("export_stale_draft", "block", requirements=[row.requirement_id]))
-            if approval is not None and not approval["approved"]:
-                if approval["reason"] == "cosign_required":
-                    issues.append(
-                        issue(
-                            "export_cosign_required",
-                            "block",
-                            requirements=[row.requirement_id],
-                            revision=str(row.card_revision_id),
-                        )
-                    )
             reasons = current_gaps.get(str(row.requirement_id))
             if reasons is None:
-                reasons = cards.approval_gap_reasons(
-                    [review_gap] if review_gap else [],
-                    approval,
-                    state="confirmed",
-                    disposition=None,
-                )
+                reasons = [review_gap]
             entry.update(kind="gap", gap_reasons=reasons)
             items.append(entry)
             continue
@@ -609,21 +558,14 @@ async def build_manifest(
                     "export_confirmation_integrity", "Response revision is missing", 500, 4
                 )
             reviewed = await session.get(ResponseCardRevision, row.card_revision_id)
-            if (
-                reviewed is None
-                or reviewed.state != "confirmed"
-                or reviewed.confirmed_by is None
-                or reviewed.confirmed_at is None
-            ):
+            if reviewed is None or reviewed.state != "confirmed" or reviewed.confirmed_at is None:
                 raise ServiceError(
                     "export_confirmation_integrity", "Response confirmation is incomplete", 500, 4
                 )
             entry |= {
                 "table": row.table,
                 **{key: getattr(row, key) for key in cards.CONTENT_FIELDS},
-                "confirmed_by": str(reviewed.confirmed_by),
                 "confirmed_at": timestamp(reviewed.confirmed_at),
-                "disposition_by": str(reviewed.disposition_by),
                 "disposition_at": timestamp(reviewed.disposition_at),
                 "quote_sha256": reviewed.quote_sha256,
             }
@@ -644,7 +586,7 @@ async def build_manifest(
                     "export_evidence_integrity", "Response evidence links are incomplete", 500, 4
                 )
             for evidence in links:
-                if evidence.confirmed_by is None or evidence.confirmed_at is None:
+                if evidence.confirmed_at is None:
                     raise ServiceError(
                         "export_unconfirmed_evidence", "Response links unconfirmed evidence", 500, 4
                     )
@@ -839,7 +781,6 @@ async def build_manifest(
                 entry["evidence"].append(material)
         elif row.kind == "comply_only":
             entry |= {
-                "disposition_by": str(row.disposition_by),
                 "disposition_at": timestamp(row.disposition_at),
             }
         elif row.kind == "gap":
@@ -870,7 +811,6 @@ async def build_manifest(
         )
     fixed = {
         "version": MANIFEST_VERSION,
-        "org_id": str(actor.org_id),
         "mode": body.mode,
         "renderer_profile": RENDERER_PROFILE if renderer_profile is None else renderer_profile,
         "rule_version": draft.input_manifest["rule_version"],
@@ -1005,24 +945,6 @@ def request_for(run: ExportRun) -> ExportPrepare:
     )
 
 
-async def initiator_active(session: AsyncSession, run: ExportRun) -> bool:
-    return bool(
-        await session.scalar(
-            select(Membership.id)
-            .join(User, User.id == Membership.user_id)
-            .join(Org, Org.id == Membership.org_id)
-            .where(
-                Membership.org_id == run.org_id,
-                Membership.user_id == run.initiated_by,
-                Membership.active.is_(True),
-                Membership.role == "bidder",
-                User.active.is_(True),
-                Org.active.is_(True),
-            )
-        )
-    )
-
-
 async def fresh_manifest(
     session: AsyncSession, actor: Identity, run: ExportRun, storage: Storage, *, verify_files: bool
 ) -> dict:
@@ -1035,7 +957,7 @@ async def fresh_manifest(
         verify_files=verify_files,
         renderer_profile=run.renderer_profile,
     )
-    if digest(fixed) != run.input_hash or not await initiator_active(session, run):
+    if digest(fixed) != run.input_hash:
         raise ServiceError(
             "export_input_changed", "Inputs changed; preview and submit a new export run", 409, 3
         )
@@ -1116,9 +1038,7 @@ async def submit_export(
         )
     input_hash = digest(fixed)
     manifest = {**fixed, "input_hash": input_hash, "acknowledged_issue_ids": expected_ack}
-    cache_key = digest(
-        {"kind": "export_render", "input_hash": input_hash, "actor_user_id": str(actor.user_id)}
-    )
+    cache_key = digest({"kind": "export_render", "input_hash": input_hash})
     job = await session.scalar(select(Job).where(Job.cache_key == cache_key).with_for_update())
     if job is not None:
         run = await session.scalar(select(ExportRun).where(ExportRun.render_job_id == job.id))
@@ -1142,7 +1062,6 @@ async def submit_export(
     run_id, job_id = uuid4(), uuid4()
     job = Job(
         id=job_id,
-        org_id=actor.org_id,
         task_id=task_id,
         document_id=UUID(fixed["draft"]["document_id"]),
         kind="export_render",
@@ -1151,7 +1070,6 @@ async def submit_export(
         result={
             "submission": {
                 "export_run_id": str(run_id),
-                "actor_user_id": str(actor.user_id),
                 "scopes": sorted(actor.scopes),
             },
             "cost": Cost().model_dump(mode="json"),
@@ -1161,7 +1079,6 @@ async def submit_export(
     await session.flush()
     run = ExportRun(
         id=run_id,
-        org_id=actor.org_id,
         task_id=task_id,
         extraction_job_id=UUID(fixed["draft"]["extraction_job_id"]),
         document_id=job.document_id,
@@ -1177,7 +1094,6 @@ async def submit_export(
         manifest=manifest,
         issue_snapshot=fixed["issues"],
         acknowledged_issue_ids=expected_ack,
-        initiated_by=actor.user_id,
         initiated_at=datetime.now(UTC),
     )
     session.add(run)
@@ -1190,7 +1106,6 @@ async def submit_export(
     for item in fixed["items"]:
         stored = ExportRunItem(
             id=uuid4(),
-            org_id=actor.org_id,
             run_id=run.id,
             draft_run_id=run.draft_run_id,
             response_item_id=UUID(item["response_item_id"]),
@@ -1205,7 +1120,6 @@ async def submit_export(
             session.add(
                 ExportRunEvidence(
                     id=uuid4(),
-                    org_id=actor.org_id,
                     run_id=run.id,
                     run_item_id=stored.id,
                     card_revision_id=stored.card_revision_id,
@@ -1245,11 +1159,10 @@ async def current_validity(
         verify_files=False,
         renderer_profile=run.renderer_profile,
     )
-    active = await initiator_active(session, run)
-    if digest(fixed) == run.input_hash and active:
+    if digest(fixed) == run.input_hash:
         return "current", run.issue_snapshot, []
     changed = issue(
-        "export_input_changed" if active else "export_initiator_inactive",
+        "export_input_changed",
         "block",
         revision=run.input_hash,
     )
@@ -1318,7 +1231,6 @@ async def run_view(
     return ExportRunView.model_validate(
         {
             "id": run.id,
-            "org_id": run.org_id,
             "task_id": run.task_id,
             "draft_id": run.draft_run_id,
             "render_job_id": run.render_job_id,
@@ -1363,7 +1275,6 @@ async def export_view(
     return ExportView.model_validate(
         {
             "id": row.id,
-            "org_id": row.org_id,
             "task_id": row.task_id,
             "run_id": run.id,
             "draft_id": run.draft_run_id,
@@ -1376,7 +1287,6 @@ async def export_view(
             "input_hash": row.input_hash,
             "manifest_hash": row.manifest_hash,
             "file": file_view(row),
-            "released_by": row.released_by,
             "released_at": row.released_at,
             "issues": issues,
             "invalidated_requirement_ids": affected,
@@ -1415,9 +1325,7 @@ async def provenance(session: AsyncSession, actor: Identity, export_id: UUID) ->
                 "number": number,
                 "requirement_id": item["requirement_id"],
                 "card_revision_id": item.get("card_revision_id"),
-                "confirmed_by": item.get("confirmed_by"),
                 "confirmed_at": item.get("confirmed_at"),
-                "disposition_by": item.get("disposition_by"),
                 "disposition_at": item.get("disposition_at"),
                 "quote_sha256": item.get("quote_sha256"),
                 "evidence": [
@@ -1429,7 +1337,6 @@ async def provenance(session: AsyncSession, actor: Identity, export_id: UUID) ->
                         "material_kind": evidence["material_kind"],
                         "selection_id": evidence.get("selection_id"),
                         "resource_revision_id": evidence.get("resource_revision_id"),
-                        "confirmed_by": evidence["confirmed_by"],
                         "confirmed_at": evidence["confirmed_at"],
                     }
                     for evidence in item.get("evidence", [])
@@ -1473,7 +1380,6 @@ async def provenance(session: AsyncSession, actor: Identity, export_id: UUID) ->
             "renderer_profile": run.manifest["renderer_profile"],
             "input_hash": row.input_hash,
             "manifest_hash": row.manifest_hash,
-            "released_by": row.released_by,
             "released_at": row.released_at,
             "items": printed,
             "attachments": attachments,
@@ -1484,7 +1390,7 @@ async def provenance(session: AsyncSession, actor: Identity, export_id: UUID) ->
 async def checked_content(
     actor: Identity, key: str, size: int, sha256: str, storage: Storage
 ) -> bytes:
-    content = await storage.read(actor.org_id, key)
+    content = await storage.read(key)
     if len(content) != size or hashlib.sha256(content).hexdigest() != sha256:
         raise ServiceError(
             "export_file_integrity", "Export file failed length or hash verification", 500, 4
@@ -1542,10 +1448,10 @@ async def release(
     )
     existing = await session.scalar(select(Export).where(Export.run_id == run.id))
     export_id = existing.id if existing else uuid4()
-    key = f"org/{actor.org_id}/exports/{export_id}/{candidate.plaintext_sha256}.docx"
+    key = f"exports/{export_id}/{candidate.plaintext_sha256}.docx"
     if existing is None:
-        await storage.put(actor.org_id, key, content)
-    await lock_inputs(session, actor, run.task_id, initiated_by=run.initiated_by)
+        await storage.put(key, content)
+    await lock_inputs(session, actor, run.task_id)
     await session.refresh(run)
     actor = await human_access(session, actor)
     await fresh_manifest(session, actor, run, storage, verify_files=False)
@@ -1569,7 +1475,6 @@ async def release(
         return await export_view(session, actor, existing, storage)
     row = Export(
         id=export_id,
-        org_id=actor.org_id,
         run_id=run.id,
         candidate_id=candidate.id,
         task_id=run.task_id,
@@ -1580,7 +1485,6 @@ async def release(
         size_bytes=candidate.size_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         object_key=key,
-        released_by=actor.user_id,
         released_at=datetime.now(UTC),
     )
     session.add(row)
@@ -1612,7 +1516,7 @@ async def download_gate(session: AsyncSession, actor: Identity, row: Export, sto
         raise not_found()
     await fresh_manifest(session, actor, run, storage, verify_files=True)
     content = await checked_content(actor, row.object_key, row.size_bytes, row.file_sha256, storage)
-    await lock_inputs(session, actor, run.task_id, initiated_by=run.initiated_by)
+    await lock_inputs(session, actor, run.task_id)
     await session.refresh(run)
     actor = await human_access(session, actor)
     await fresh_manifest(session, actor, run, storage, verify_files=False)

@@ -209,7 +209,6 @@ def source(quote):
 def evidence(attachment_ordinal=None):
     value = {
         "id": "00000000-0000-0000-0000-000000000201",
-        "org_id": "00000000-0000-0000-0000-000000000001",
         "task_id": "00000000-0000-0000-0000-000000000002",
         "card_id": "00000000-0000-0000-0000-000000000003",
         "input": {
@@ -221,7 +220,6 @@ def evidence(attachment_ordinal=None):
         "resource_revision_id": "00000000-0000-0000-0000-000000000204",
         "material_kind": "user_supplied_pdf_page",
         "quote_check": "human_page_review",
-        "confirmed_by": "00000000-0000-0000-0000-000000000205",
         "confirmed_at": "2026-09-30T18:01:02Z",
         "active_selection": True,
     }
@@ -270,7 +268,6 @@ def complete_manifest(template, inspection, png, width, height, *, mode="review_
             "category": "qualification",
             "starred": False,
             "evidence": [],
-            "disposition_by": "00000000-0000-0000-0000-000000000301",
             "disposition_at": "2026-09-30T18:03:04Z",
         },
         {
@@ -290,7 +287,6 @@ def complete_manifest(template, inspection, png, width, height, *, mode="review_
     ]
     return {
         "version": "export-manifest-v1",
-        "org_id": "00000000-0000-0000-0000-000000000001",
         "mode": mode,
         "renderer_profile": RENDERER_PROFILE,
         "rule_version": "response-draft-v3",

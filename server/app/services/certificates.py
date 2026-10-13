@@ -28,7 +28,6 @@ def revision_data(row: CertificateRevision) -> dict:
 def snapshot_data(row: TaskCertificate, revision: CertificateRevision) -> dict:
     return TaskCertificateSnapshot(
         id=row.id,
-        org_id=row.org_id,
         task_id=row.task_id,
         certificate_revision_id=revision.id,
         revision=revision.revision,

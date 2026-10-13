@@ -15,7 +15,7 @@ this boundary and the subsequent signature, compliance, report and triage stages
 
 ## Usage
 
-The org task's **标书检验** entry opens the upload wizard and submission list.
+The task's **标书检验** entry opens the upload wizard and submission list.
 Choose tender and bid files with explicit roles and material kinds, preview the
 actual deployment limits, then upload a fixed version. Its detail page offers a
 separate local-preparation preview and explicit submission. It shows job status
@@ -25,7 +25,7 @@ evidence and cited 签章要求候选 (signing-clause candidates).
 The CLI commands and their approved metadata types are defined in the
 [HTTP and CLI contract](../plan/bid-review.md#preflight-http-and-cli):
 `bid review upload`, `bid review prepare`, and `bid review submission list/show`.
-Platform operators use 信任根证书 or `bid platform trust-anchor list/add/disable`
+The human uses 信任根证书 or `bid platform trust-anchor list/add/disable`
 to compare public CA fingerprints and manage the local trust store.
 Prepare submission requires the exact preview hash and signed receipt. Retrying a
 failed or cancelled job requires a fresh request ID, a current preview and explicit
@@ -33,20 +33,18 @@ failed or cancelled job requires a fresh request ID, a current preview and expli
 Result 5.0, and these commands have no legacy Result 3.0 route.
 
 The prepared submission also offers a cleared-text review and a separate review-run
-preflight. A human admin or bidder who owns the task reviews the actual sanitized
+preflight. The human reviews the actual sanitized
 native text, selects exact pages and confirms its external use before submission.
 The review extracts cited tender obligations, classifies signing-clause
 applicability and compares obligations with authorized sanitized bid text.
 The findings section separates 废标风险, 高风险缺陷 and 其他, with risk/disposition
-filters and paged human history. An administrator classifies each finding's
-professional domain before its responsible reviewer records a reasoned decision.
+filters and paged human history. The human classifies each finding's professional domain and records a reasoned decision.
 Runs remain advisory; required visible marks and other unassessed areas stay explicit.
 
 ## How it works
 
-[Upload and admission](../../server/app/services/bid_review.py) checks live org
-Membership and task authority. Human admin/bidder owners or contributors upload
-and prepare; readers receive safe identifiers, hashes, counts and fixed warning
+[Upload and admission](../../server/app/services/bid_review.py) checks human scopes and exact task/source bindings. The human uploads
+and prepares; readers receive safe identifiers, hashes, counts and fixed warning
 codes. Tokens need an explicitly issued `bid-review:read` grant and receive no
 original filenames, text, pixels, storage keys or download links. Original bytes
 are not served by the submission metadata API.
@@ -58,10 +56,10 @@ hash and length must match. The complete file set passes isolated validation bef
 any original object or row is written. Request identity fixes the ordered manifest
 and upload-name hashes; replay rechecks authorization and returns the same receipt.
 Original bytes use the existing encrypted storage provider, and names use encrypted
-org/row-bound database values.
+row-bound database values.
 
 Preparation preflight reads only immutable metadata and current authority/resource limits.
-The signed 15-minute receipt binds actor, org, task, submission and
+The signed 15-minute receipt binds actor, task, submission and
 input hash.
 The input includes file order/hashes, parser/render identities and
 processing limits.
@@ -95,10 +93,10 @@ establish field presence only, including empty fields; separate cryptographic
 observations establish the local digital-signature dimensions. All pages start restricted, with
 uncertain price classification and no outbound clearance.
 
-[Migration 0061](../../server/migrations/versions/0061_bid_review_upload.py) adds
+[single-user baseline](../../server/migrations/baseline/00_functions_bid.sql) adds
 immutable submissions, ordered documents, preparation bindings, prepared-document
-metadata, pages and a unique publication receipt. Each table has org/task composite
-parents, Membership actor references, ENABLE/FORCE RLS and restricted runtime grants.
+metadata, pages and a unique publication receipt. Each table has exact task/source parents and restricted runtime grants.
+Human attribution is implicit; decision timestamps and job/token/agent attribution remain.
 Deferred guards require a complete upload manifest and a complete page publication.
 The worker rechecks live authority, input identity, lease, run ID and cancellation
 before publishing every document/page and the successful job result in one
@@ -116,16 +114,16 @@ certificate period, modification and trust independently. The final revision nev
 inherits validity from an earlier signature. Unsupported formats and time proofs
 stay explicit; claimed signing time is not trusted time, and revocation is unknown.
 
-[Migration 0062](../../server/migrations/versions/0062_bid_signatures.py) adds a
+[single-user baseline](../../server/migrations/baseline/00_functions_bid.sql) adds a
 preparation-bound trust snapshot plus immutable per-document validation and
 page-bound clause candidates. Admission includes the trust-store hash in the
 preview/input identity and serializes snapshot publication with anchor changes.
 Retries retain the admitted snapshot; disabling an anchor affects later
 preparations, never earlier evidence. Snapshot and evidence tables use the same
-org/task/preparation lineage, FORCE RLS and live worker publication fences as the
-page inventory. Ciphertext is org/row-bound and owner-only rotation preserves
-business data. Public CA management uses the fixed functions and global exception
-in [ADR 0010](../adr/0010-offline-signature-trust.md).
+task/preparation lineage and live worker publication fences as the
+page inventory. Ciphertext is row-bound and owner-only rotation preserves
+business data. Public CA management uses local human settings under
+[ADR 0012](../adr/0012-single-user-installation.md).
 
 The [clause scan](../../server/app/services/bid_signing_clauses.py) reads native
 tender page text without OCR or models. Quotes retain Unicode codepoint offsets,
@@ -135,9 +133,8 @@ it does not truncate obligations. Pages without native text remain visible gaps
 in the existing inventory. Candidate reads are paged, with at most 50 per request.
 
 [Read projections](../../server/app/services/bid_signature_views.py) decrypt only
-inside the service and select explicit public fields. Human admin/bidder task
-readers with original-read authority can see certificate names and exact tender
-quotes. Technical/viewer sessions and tokens receive safe status/identity metadata
+inside the service and select explicit public fields. The human with original-read authority can see certificate names and exact tender
+quotes. Tokens receive safe status/identity metadata
 without signer names, field names, serial numbers or quotes. All HTTP responses
 retain the existing no-store policy; jobs/audits contain only fixed metadata.
 
@@ -148,7 +145,7 @@ loads fixed prepared pages, registered confidential-value bindings, task redacti
 settings and pinned model configuration. Registered values become placeholders
 before pattern masking; bidder and staff names derived from labelled bid text,
 local certificate subjects and human additions are also masked. The preview
-returns only the cleared native text to authorized human task owners. Image,
+returns only the cleared native text to the human. Image,
 price, mixed and uncertain pages cannot be authorized for external text calls.
 Original filenames, storage locations, identifiers and pixels are absent from
 provider requests.
@@ -182,11 +179,11 @@ Every-page and seam groups expand against the full prepared bid inventory; each
 required occurrence remains unresolved because mark presence is not checked.
 
 The job's `bid_submission_document_id` binds the real uploaded tender row through
-an org/task foreign key.
+a task foreign key.
 It does not create an ordinary tender `Document` or open
 legacy parsing/download routes.
-[Migration 0063](../../server/migrations/versions/0063_bid_review_privacy.py)
-owns local privacy snapshots and exact grants; [migration 0064](../../server/migrations/versions/0064_bid_review_run.py)
+[single-user baseline](../../server/migrations/baseline/00_functions_bid.sql)
+owns local privacy snapshots and exact grants; [single-user baseline](../../server/migrations/baseline/00_functions_bid.sql)
 owns review inputs, normalized tender-page/signing-location links and atomic
 publication.
 
@@ -249,21 +246,20 @@ and produces an explicit coverage gap, not a fabricated tender citation. An appa
 medium. Responded observations carry no claimed rejection consequence. Model
 confidence is attribution, not calibrated accuracy or evidence confirmation.
 
-[Migration 0065](../../server/migrations/versions/0065_bid_review_findings.py) adds
+[single-user baseline](../../server/migrations/baseline/00_functions_bid.sql) adds
 immutable findings, normalized citation/search/validation links and append-only
-human events. Composite org/task/submission/run/obligation parents and source
-roles prevent unrelated source attachment. Forced RLS, worker publication guards,
-deferred source/count checks and immutable-row triggers preserve the same tenant
-and attempt boundaries as the run. Finding bodies and human reasons are encrypted;
+human events. Composite task/submission/run/obligation parents and source
+roles prevent unrelated source attachment. Worker publication guards, deferred source/count checks and immutable-row
+triggers preserve task/source and attempt boundaries. Finding bodies and human reasons are encrypted;
 owner-only key rotation may rewrap their ciphertext without changing business data.
 
 Classification and dismiss/reopen/confirm share one ordered event stream. Every
 mutation requires a request ID, current input hash, revision, predecessor event ID
 and nonblank reason. Row locks serialize compare-and-swap; request replay returns
-the existing event. A human admin with task management authority classifies only an
-open finding. Commercial decisions require a bidder with task commercial review
-rights; technical decisions require a technical reviewer with technical rights.
-Admin classification confers no decision right. Confirm and dismiss close an open
+the existing event. The human classifies only an open finding and can decide
+commercial or technical findings without a separate domain role.
+
+Confirm and dismiss close an open
 disposition; reopen restores it. Confirmation adds a separate human-reviewed basis
 referencing the event, without changing machine evidence, outcome, severity or scores.
 
@@ -274,10 +270,10 @@ same IDs, optional `--classification`, and the shared `--cursor`/`--limit` pagin
 All support Result 5.0 `--json`; input shapes are in the
 [finding schemas](../../server/app/schemas/bid_review_findings.py).
 
-Protected admin/bidder readers can read original saved excerpts. Other human
-readers use a live privacy-cleared projection; changed privacy blocks that
-projection. Tokens see only fixed metadata and cannot read human history, quotations
-or reasons, classify or decide. Findings and history have bounded encoded responses
+The human can read original saved excerpts and human history. Tokens see only
+fixed metadata and cannot read quotations or reasons, classify or decide.
+
+Findings and history have bounded encoded responses
 and authenticated cursors tied to the current event snapshot. Console text uses
 normal Vue escaping and reasons are never saved in browser persistence.
 
@@ -294,12 +290,12 @@ Each section is bounded and cursor-paginated. Selecting a retained snapshot pins
 its pages; a different current decision hash signals that a new render is needed.
 
 The render preview makes no provider/converter call and writes no object, job,
-audit or usage. Its actor/org/task-bound signed receipt fixes the exact run,
+audit or usage. Its actor/task-bound signed receipt fixes the exact run,
 decisions and renderer input for explicit submission. Admission records the
 snapshot and enqueues `bid_review_report`. Repeated identical input reuses that
 initiator's job; retrying failed work needs a fresh request ID, current preview and
 explicit retry. The worker rechecks its attempt and
-live human task authority. A credential-free child uses local `python-docx`
+live huma task authority. A credential-free child uses local `python-docx`
 rendering and the existing Word serializer profile. The parent enforces the
 configured export deadline, memory and output bounds, terminates lost or cancelled
 attempts and removes private plaintext spools on every exit. The output retains
@@ -309,17 +305,18 @@ advisory statement. Missing bid support remains a documented searched absence,
 never an invented quotation. Price-page assessments, visible marks, scoring and
 claim-to-image evidence verification remain explicitly unassessed.
 
-[Migration 0066](../../server/migrations/versions/0066_bid_review_reports.py) stores
-snapshots and artifact descriptors under forced tenant RLS and composite parent
+[single-user baseline](../../server/migrations/baseline/00_functions_bid.sql) stores
+snapshots and artifact descriptors with exact composite parent
 references. Snapshots and artifact pairs are immutable. A failed render publishes
 no downloadable artifact. The worker verifies both outputs before atomic descriptor
 publication. Storage and PostgreSQL cannot share a transaction: an unsuccessful
 commit may leave encrypted unreferenced objects, retained for reconciliation.
 
 The report page links from the existing review run and exposes a separate preview
-and submit action. Human admin/bidder task readers with original/report authority
-can render and download. Other humans get a purpose-built cleared projection;
-tokens get only safe metadata, with no quotations, human reasons or links. Link
+and submit action. The human with original/report scopes can render and download.
+Tokens get only safe metadata, with no quotations, human reasons or links.
+
+Link
 issuance and byte serving independently repeat current human/task authority and
 verify the artifact hash and size. Signed application links expire quickly and
 return `no-store` bytes with neutral filenames. The report scopes grant no Evidence
@@ -335,7 +332,7 @@ no-redirect and atomic no-overwrite download path. JSON contracts remain Result 
 
 The [presence service](../../server/app/services/bid_review_presence.py) derives
 images only after a published review has established applicable required locations.
-Human task owners explicitly create the derivatives; review preflight remains
+The human explicitly creates the derivatives; review preflight remains
 write-free and never renders pages. Non-price bid pages are selected locally;
 price/mixed/uncertain pages, tender pages and unmapped locations cannot enter the
 image inventory. A later review intersects its new required locations with the
@@ -350,21 +347,22 @@ whole-page scale is derivable from the source and output dimensions; no region i
 cropped. The [blur experiment](../../scripts/check_bid_presence_blur.py) measures
 text-band edge-energy and variance ratios while checking retained red shape pixels.
 It is a regression proxy, not proof that arbitrary text, large glyphs or identity
-features are hidden. Human owners must inspect the actual pixels and refuse any
+features are hidden. The human must inspect the actual pixels and refuse any
 unsafe image; a later mask profile must have a new hash and review.
 
 Image grants have a separate purpose and append-only revision chain. They bind
 submission/preparation/source-review, current redaction/name/confidential settings,
-platform configuration/credential generations, exact derivative hashes and selected
+local configuration/credential generations, exact derivative hashes and selected
 image IDs. Revocation or changed bindings invalidates preflight and subsequent
-admissions. Authenticated JPEG reads require a human admin/bidder task owner,
+admissions. Authenticated JPEG reads require the human,
 return neutral no-store bytes and never expose storage keys or pixels to API tokens.
 The console verifies the returned hash before presenting the grant action.
 
-Platform Clef configuration occupies the reserved vision entry in the existing
-approved model catalog. Dedicated fixed functions isolate management; the existing
-platform credential reader resolves the two purpose-bound encrypted tokens. No
-new global business-data table or org BYOK path is introduced. Settings changes
+Clef configuration and its two purpose-bound encrypted credentials live in the
+runtime database. [platform_clef.py](../../server/app/services/platform_clef.py)
+and `PlatformCredentialResolver` resolve local settings without a model catalog.
+
+Settings changes
 clear the gateway check. The gateway metadata parser requires explicit safe
 properties and rejects unknown/missing fields. Its wire field mapping is defined
 by [the checker](../../server/app/providers/clef_gateway.py); deployment acceptance
@@ -456,7 +454,7 @@ cases have not been validated by the reported seal-presence feasibility experime
 - [Presence persistence](../../server/app/models/bid_review_presence.py),
   [Clef stage](../../server/app/services/bid_review_clef.py),
   [platform configuration](../../server/app/services/platform_clef.py),
-  [migration 0067](../../server/migrations/versions/0067_bid_review_clef.py),
+  [single-user baseline](../../server/migrations/baseline/00_functions_bid.sql),
   [image authorization console](../../web/src/components/BidPresenceAuthorization.vue),
   [Clef HTTP/worker acceptance](../../server/tests/test_bid_review_clef_db.py) and
   [mocked browser acceptance](../../web/e2e/bid-review-clef.spec.js).

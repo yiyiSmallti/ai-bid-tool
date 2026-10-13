@@ -21,7 +21,7 @@ from app.services.response_cards import task_lock
 
 async def process(execution):
     items = []
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         actor = worker(job)
         submission = dict(job.result["submission"])
@@ -37,18 +37,15 @@ async def process(execution):
         prepared = []
         for event, expected in zip(events, submission["event_hashes"], strict=True):
             try:
-                summary = unseal(
-                    execution.settings, event.org_id, event.id, event.encrypted_summary
-                )
+                summary = unseal(execution.settings, event.id, event.encrypted_summary)
                 if digest(summary) != event.sanitized_sha256 or expected != event.sanitized_sha256:
                     raise ServiceError(
                         "memory_feedback_integrity", "Feedback integrity check failed", 500, 4
                     )
                 prepared.append(
                     MemoryCandidateInput(
-                        org_id=execution.org_id,
                         event=MemoryFeedbackView.model_validate(event, from_attributes=True),
-                        target=MemoryTarget(scope="org"),
+                        target=MemoryTarget(scope="library"),
                         sanitized_summary=summary,
                         generator_version=submission["generator_version"],
                     )
@@ -63,7 +60,7 @@ async def process(execution):
     for request in prepared:
         try:
             output = await provider.propose(request)
-            async with execution.db.transaction(execution.org_id) as session:
+            async with execution.db.transaction() as session:
                 await task_lock(session, task_id)
                 job = await execution.owned_job(session)
                 actor, events = await events_access(
@@ -100,8 +97,6 @@ async def process(execution):
                     from app.memory.crud import create_system_candidate
                     from app.memory.safety import reject_sensitive
 
-                    # Sanitized placeholders are allowed, but literals are still
-                    # rejected if confidential values changed after the feedback.
                     await reject_sensitive(
                         session, actor, [output.proposal.content.text], execution.settings
                     )
@@ -127,7 +122,7 @@ async def process(execution):
                     event_id=request.event.id, outcome="failed", error_code=exc.code
                 )
             )
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         await events_access(
             session, worker(job), task_id, [UUID(value) for value in submission["event_ids"]]

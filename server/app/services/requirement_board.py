@@ -19,35 +19,11 @@ from app.schemas.task_board import BoardCounts, BoardData, BoardQuery, TaskProgr
 from app.services import requirement_confirmation, requirement_consumption, task_board
 
 
-def actor_hint(actor, workflow, member, people, citation_valid):
-    available = {
-        person.user_id: person
-        for person in people
-        if person.can_confirm_requirement and (citation_valid or person.role == "admin")
-    }
-    user_id = workflow.owner_user_id
-    basis = "owner" if user_id in available else "owner_recovery"
+def actor_hint(actor, citation_valid):
     action = "confirm_requirement" if citation_valid else "repair_requirement"
-    can_act = (
-        actor.actor_kind == "session"
-        and actor.token_id is None
-        and actor.user_id in available
-        and "req:confirm" in actor.scopes
-        and member is not None
-        and member.role in {"owner", "contributor"}
-    )
-    if basis == "owner_recovery" or workflow.state == "archived":
-        action = "view"
-        can_act = False
-    elif not citation_valid:
-        can_act = (
-            can_act
-            and actor.role == "admin"
-            and {"req:extract", "evidence:confirm"} <= actor.scopes
-        )
-    return RequirementActorHint(
-        user_id=user_id, basis=basis, action=action, can_current_actor_act=can_act
-    )
+    required = {"req:confirm"} if citation_valid else {"req:extract", "evidence:confirm"}
+    can_act = actor.actor_kind == "session" and actor.token_id is None and required <= actor.scopes
+    return RequirementActorHint(action=action, can_current_actor_act=can_act)
 
 
 async def activity(session, actor, task_id, extraction_id):
@@ -60,12 +36,8 @@ async def activity(session, actor, task_id, extraction_id):
     )
     rows = await session.execute(
         select(AuditLog, Requirement.job_id)
-        .join(
-            Requirement,
-            (Requirement.org_id == AuditLog.org_id) & (Requirement.id == AuditLog.object_id),
-        )
+        .join(Requirement, Requirement.id == AuditLog.object_id)
         .where(
-            AuditLog.org_id == actor.org_id,
             Requirement.task_id == task_id,
             Requirement.job_id == extraction_id,
             AuditLog.action.in_(actions),
@@ -76,7 +48,6 @@ async def activity(session, actor, task_id, extraction_id):
     return [
         RequirementActivityView(
             id=row.id,
-            actor_user_id=row.actor_user_id,
             action=row.action,
             requirement_id=row.object_id,
             extraction_job_id=job_id,
@@ -125,7 +96,7 @@ async def board(session, actor, task_id, query, storage, settings):
 
     def matches(row):
         overlay = overlays[row.requirement_id]
-        ordinary = query.model_copy(update={"bucket": None, "blocker": None, "mine": False})
+        ordinary = query.model_copy(update={"bucket": None, "blocker": None})
         return (
             task_board.matches(row, ordinary, actor)
             and (query.bucket is None or overlay.bucket == query.bucket)
@@ -134,24 +105,17 @@ async def board(session, actor, task_id, query, storage, settings):
                 or query.blocker in overlay.blockers
                 or query.blocker in row.blockers
             )
-            and (
-                not query.mine
-                or overlay.next_actor is not None
-                and overlay.next_actor.can_current_actor_act
-                or task_board.matches(row, ordinary.model_copy(update={"mine": True}), actor)
-            )
         )
 
     matching = [row for row in inputs["rows"] if matches(row)]
     digest = task_board.query_hash(query)
-    workflow, watermark = inputs["workflow"], inputs["watermark"]
+    watermark = inputs["watermark"]
     day = legacy.as_of.date().isoformat()
     key = (
         task_board.validate_page(
             query.cursor,
             actor,
             task_id,
-            workflow,
             settings,
             watermark.last_seq,
             purpose="requirement-board",
@@ -169,7 +133,6 @@ async def board(session, actor, task_id, query, storage, settings):
         task_board.page_cursor(
             actor,
             task_id,
-            workflow,
             settings,
             watermark.last_seq,
             purpose="requirement-board",

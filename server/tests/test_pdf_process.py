@@ -388,12 +388,12 @@ async def test_linux_child_observes_configured_memory_limits(tmp_path, monkeypat
     [("timeout", "time.sleep(60)"), ("crash", "os._exit(17)")],
 )
 @pytest.mark.skipif(os.name != "posix", reason="PID reaping assertion requires POSIX")
-async def test_failed_child_fails_one_job_without_harming_other_org(
+async def test_failed_child_fails_one_job_without_harming_other_job(
     api, application, headers, pdf_bytes, tmp_path, monkeypatch, failure, statement
 ):
     # Upload validation must complete before the process fault is introduced.
-    _, failed_document = await create_document(api, headers[0], pdf_bytes)
-    _, healthy_document = await create_document(api, headers[1], pdf_bytes)
+    _, failed_document = await create_document(api, headers, pdf_bytes)
+    _, healthy_document = await create_document(api, headers, pdf_bytes)
     pid_file = tmp_path / f"job-{failure}.pid"
     processor = application.state.processor
     original_settings = processor.settings
@@ -402,24 +402,22 @@ async def test_failed_child_fails_one_job_without_harming_other_org(
         processor.settings = original_settings.model_copy(update={"pdf_timeout_seconds": 0.5})
         with monkeypatch.context() as fault:
             fault.setattr("app.core.pdf_process.child_command", fault_command(pid_file, statement))
-            _, failed = await run_job(api, application, headers[0], failed_document, "parse")
+            _, failed = await run_job(api, application, headers, failed_document, "parse")
     finally:
         processor.settings = original_settings
 
     assert failed["status"] == "failed" and failed["attempts"] == 1
     assert failed["error"]["code"] == "pdf_resource_limits"
     assert failed["error"]["exit_code"] != 3
-    assert (await api.get(f"/documents/{failed_document}/chunks", headers=headers[0])).json()[
+    assert (await api.get(f"/documents/{failed_document}/chunks", headers=headers)).json()[
         "items"
     ] == []
     pid = await recorded_pid(pid_file)
     assert_reaped(pid)
 
-    _, succeeded = await run_job(api, application, headers[1], healthy_document, "parse")
+    _, succeeded = await run_job(api, application, headers, healthy_document, "parse")
     assert succeeded["status"] == "succeeded" and succeeded["attempts"] == 1
-    assert (await api.get(f"/documents/{healthy_document}/chunks", headers=headers[1])).json()[
-        "items"
-    ]
+    assert (await api.get(f"/documents/{healthy_document}/chunks", headers=headers)).json()["items"]
     (tmp_path / f"job-{failure}-result.json").write_text(
         json.dumps(
             {

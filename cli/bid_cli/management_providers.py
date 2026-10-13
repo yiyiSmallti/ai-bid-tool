@@ -1,4 +1,4 @@
-"""Metadata-only provider reads over the authenticated Result 4.0 API."""
+"""Metadata-only provider reads over the authenticated Result 5.0 API."""
 
 from typing import Annotated
 from uuid import UUID
@@ -8,8 +8,6 @@ from app.core.errors import ServiceError
 from app.schemas.contracts import Cost, Result
 from app.schemas.management_pages import Page, PageQuery
 from app.schemas.management_providers import (
-    PlatformModelChoice,
-    ProviderCatalogQuery,
     ProviderRevisionMetadata,
     ProviderSettingsData,
 )
@@ -18,7 +16,6 @@ COMMAND_INPUTS = {
     "provider show": None,
     "provider revision show": None,
     "provider history-page": PageQuery,
-    "provider catalog": ProviderCatalogQuery,
 }
 COMMAND_DATA = {
     "provider show": ProviderSettingsData,
@@ -26,7 +23,6 @@ COMMAND_DATA = {
 }
 COMMAND_ITEMS = {
     "provider history-page": ProviderRevisionMetadata,
-    "provider catalog": PlatformModelChoice,
 }
 
 ERROR_CODES = {
@@ -65,7 +61,7 @@ def safe_failure(exc: ServiceError) -> ServiceError:
     )
 
 
-def validated(body: dict, command: str, org_id: UUID, config_id: UUID | None = None) -> dict:
+def validated(body: dict, command: str, config_id: UUID | None = None) -> dict:
     """Rebuild from allowlisted models; never emit arbitrary warnings or error text."""
     try:
         if set(body) != {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}:
@@ -75,8 +71,8 @@ def validated(body: dict, command: str, org_id: UUID, config_id: UUID | None = N
             raise ValueError("invalid metadata result")
         if command in COMMAND_DATA:
             detail = COMMAND_DATA[command].model_validate(result.data)
-            if detail.org_id != org_id or result.items:
-                raise ValueError("wrong org or detail items")
+            if result.items:
+                raise ValueError("unexpected detail items")
             if isinstance(detail, ProviderRevisionMetadata) and detail.id != config_id:
                 raise ValueError("wrong exact revision")
             result.data = detail.model_dump(mode="json")
@@ -84,8 +80,6 @@ def validated(body: dict, command: str, org_id: UUID, config_id: UUID | None = N
             page = Page[COMMAND_ITEMS[command]].model_validate(
                 {"data": result.data, "items": result.items}
             )
-            if page.data.org_id != org_id:
-                raise ValueError("wrong page org")
             result.data = page.data.model_dump(mode="json")
             result.items = [row.model_dump(mode="json") for row in page.items]
         return result.model_dump(mode="json")
@@ -104,8 +98,7 @@ def register(provider_app: typer.Typer):
 
     def send(method, path, command, json_output, config_id=None, **kwargs):
         try:
-            org_id = UUID(cli.client().state.load()["org_id"])
-            result = validated(cli.call(method, path, **kwargs), command, org_id, config_id)
+            result = validated(cli.call(method, path, **kwargs), command, config_id)
         except ServiceError as exc:
             raise safe_failure(exc) from None
         cli.emit(result, command, json_output)
@@ -132,22 +125,6 @@ def register(provider_app: typer.Typer):
             "POST",
             prefix + "/history/query",
             "provider history-page",
-            json_output,
-            json=query.model_dump(mode="json", exclude_none=True),
-        )
-
-    @provider_app.command("catalog")
-    def catalog(
-        q: Annotated[str | None, typer.Option(help="Catalog ID prefix")] = None,
-        cursor: Annotated[str | None, typer.Option()] = None,
-        limit: Annotated[int, typer.Option(min=1, max=100)] = 25,
-        json_output: cli.JsonOption = False,
-    ):
-        query = ProviderCatalogQuery(q=q, cursor=cursor, limit=limit)
-        send(
-            "POST",
-            prefix + "/catalog/query",
-            "provider catalog",
             json_output,
             json=query.model_dump(mode="json", exclude_none=True),
         )

@@ -6,23 +6,30 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
-## 2026-10-12：单人安装 Phase A 基础层
+## 2026-10-13: Single-user local installation
 
-- ORM 对齐单人 baseline，移除组织、用户、成员和角色模型，补齐 Clef 与凭据探测模型。
-- 使用安装访问密钥、短期控制台会话或受限 API 令牌认证；移除密码登录、组织选择和平台登录、模型目录入口。
-- 数据库事务、队列、工作器、文件存储和密钥轮换移除组织参数；凭据解析和 Clef 使用运行时数据库连接。
-- CLI 支持环境访问密钥、仅属主可读的密钥文件和 API 令牌；令牌创建输出私有文件路径。
-- 更新测试数据库清理、单人认证夹具、运行脚本、CI 环境与[开发步骤](guides/development.md)。领域服务迁移继续按[单人安装计划](plan/single-user.md)推进。
-- 停用凭据启用及已有凭据导入比对需要 baseline 提供受人工身份保护的修订绑定密文读取函数；缺少该能力时返回明确错误。
-
-## 2026-10-12：单人本地安装第一阶段，移除多人功能入口
-
-- 删除单位申请、平台单位管理、运营用量和审计查询、管理员开通、单位成员邀请与管理的 API、CLI 和页面入口。
-- 删除任务成员管理、所有权交接、归档、需求分配、讨论及会签策略和操作入口。
-- 保留任务看板、进度、活动、事件轮询与流，以及响应审阅、人工确认、初稿和导出入口；响应服务改走直接人工审阅路径。
-- 保留单位登录和上下文、API 令牌、平台模型、凭据、Clef 和信任锚管理；平台登录仅使用配置的管理员名单与 TOTP 因子。
-- 按 [ADR 0012](adr/0012-single-user-installation.md) 和[单人安装计划](plan/single-user.md)推进；本阶段保持数据库结构、任务创建者访问和默认无需会签的策略。
-- 既有数据库触发器仍要求审阅轮次，移除轮次服务后普通响应提交与确认仍受阻，数据库兼容问题尚未解决；参见[已知缺陷](plan/roadmap.md#known-defects)。
+- Replace the multi-org migration chain with one baseline revision whose SQL lives in
+  `server/migrations/baseline/`; existing multi-org databases are not converted. Orgs,
+  users, memberships, roles, org row-level security and org composite keys are gone.
+  The database keeps the owner and the runtime `bid_app` role, and human decisions are
+  recorded by timestamp and actor kind.
+- Authenticate with the installation access key (`BID_ACCESS_KEY`): presenting it, or a
+  console session exchanged at `/auth/session`, acts as the human. `bid_` tokens and
+  built-in agents keep their own identity and never receive human-only scopes. Password
+  login, org selection, `X-Org-Id` and the CLI session file are removed.
+- Remove org signup, the platform console, operators and enrollment, org members and
+  invitations, and team collaboration (task members, handover, archival, assignment,
+  discussion, co-sign and review policies). Confirmation, citation and export gates are
+  unchanged.
+- Model configuration uses the user's own provider credentials only; service
+  credentials, Clef and trust anchors are local settings managed in the console.
+  Storage keys drop the org prefix.
+- The annotation renderer protocol becomes `annotation-render-v2` without org, creator,
+  confirmer or co-sign fields. A withdrawn screenshot now removes its rows from stale
+  drafts and reports a `stale_material` gap. Export rendering reads the child's
+  resident memory through `libproc` on macOS.
+- See [ADR 0012](adr/0012-single-user-installation.md) and the
+  [single-user plan](plan/single-user.md).
 
 ## 2026-10-11: Remove billing, prices and task budgets
 
@@ -659,7 +666,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   but the single-Requirement section gate rejected them as `cross_requirement_citation`. Sections
   now preserve and independently verify every citation across pinned scoring Requirements; items
   retain their single-Requirement contract, and joined or unverifiable citations still fail.
-- Add the [section-source migration](../server/migrations/versions/0046_score_section_sources.py)
+- Add the [section-source migration](https://github.com/yiyiSmallti/ai-bid-tool/blob/4bc6d9b00e9d2716dd2c5b82f9af1822684b742b/server/migrations/versions/0046_score_section_sources.py)
   for ordered section sources, retaining legacy single-source reads, existing
   FORCE RLS and immutable history, with database and application checks over every binding. Complete
   human replacement may select/remove only verified pinned citations and cannot rewrite Source.
@@ -875,7 +882,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 ## 2026-10-05: Built-in agent command orchestration
 
-- Chain [agent migration `0042`](../server/migrations/versions/0042_builtin_agent.py) after [team-workflow migration `0041`](../server/migrations/versions/0041_team_workflow.py); add persistent owner-only principals/sessions/messages/steps/pauses/job links, encrypted receipts and history, org-composite constraints and database actor/fence gates.
+- Chain [agent migration `0042`](https://github.com/yiyiSmallti/ai-bid-tool/blob/4bc6d9b00e9d2716dd2c5b82f9af1822684b742b/server/migrations/versions/0042_builtin_agent.py) after [team-workflow migration `0041`](https://github.com/yiyiSmallti/ai-bid-tool/blob/4bc6d9b00e9d2716dd2c5b82f9af1822684b742b/server/migrations/versions/0041_team_workflow.py); add persistent owner-only principals/sessions/messages/steps/pauses/job links, encrypted receipts and history, org-composite constraints and database actor/fence gates.
 - Register authenticated API and CLI session start/list/show/messages/steps/message/resume/cancel commands with shared Result, invocation schemas, revision checks and endpoint-scoped idempotency.
 - Connect the structured decision adapter and seven protected command services to checkpoint controller jobs, transactional child/queue dispatch and durable recovery wakes. Safe retries reuse uniquely proved owned jobs; unknown paid outcomes pause without redispatch.
 - Apply immutable cumulative session limits to decisions and descendants through the existing task-budget, prepaid and per-job admission/settlement boundary. Preserve fixed input/model/redaction checks, original human review/confirmation, no-memory A01 generation and confirmed-only draft assembly.
@@ -1030,7 +1037,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 ## 2026-10-03: Two-org sandbox and lifecycle acceptance
 
-- Added [sandbox_two_org_acceptance.py](../scripts/sandbox_two_org_acceptance.py) using two synthetic orgs/real worker/gVisor node in development. B receives unknown-resource-equivalent 404 for A runs/task lists/artifact links/job status/cancel/submission/signed links. Runtime DB role reads no sandbox rows without org context; B cannot read/update A. RLS/composite FKs reject unauthorized inserts with successful controls. In-flight cancellation/SIGKILL worker publish no artifacts; containers reap in about 1.5 seconds, subsequent rendering succeeds. Lease-expiry takeover/disconnection/storage fault injection remains unrun.
+- Added [sandbox_two_org_acceptance.py](https://github.com/yiyiSmallti/ai-bid-tool/blob/4bc6d9b00e9d2716dd2c5b82f9af1822684b742b/scripts/sandbox_two_org_acceptance.py) using two synthetic orgs/real worker/gVisor node in development. B receives unknown-resource-equivalent 404 for A runs/task lists/artifact links/job status/cancel/submission/signed links. Runtime DB role reads no sandbox rows without org context; B cannot read/update A. RLS/composite FKs reject unauthorized inserts with successful controls. In-flight cancellation/SIGKILL worker publish no artifacts; containers reap in about 1.5 seconds, subsequent rendering succeeds. Lease-expiry takeover/disconnection/storage fault injection remains unrun.
 
 ## 2026-10-03: Word export layout acceptance
 

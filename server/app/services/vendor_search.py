@@ -48,7 +48,7 @@ def registrable(host: str) -> str:
 
 
 async def known_domains(session, vendor: str) -> list[str]:
-    """Domains this organization already recorded for the same vendor's products."""
+    """Domains this installation already recorded for the same vendor's products."""
     rows = (
         await session.scalars(
             select(ProductRevision)
@@ -208,7 +208,7 @@ async def view(session, run: ScreenshotSearchRun) -> dict:
 async def process(execution, provider):
     if provider is None:
         raise ProviderFailure("Vendor search is not configured", code="search_unavailable")
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         actor = await cards.access(session, worker(job), "screenshot:write")
         manifest = await rebuild(session, actor, job, provider)
@@ -221,14 +221,13 @@ async def process(execution, provider):
         unresponsive.update(result.unresponsive_engines)
     candidates = ranked(hits, manifest["known_domains"])
 
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         await cards.task_lock(session, task_id)
         job = await execution.owned_job(session)
         actor = await cards.access(session, worker(job), "screenshot:write")
         await rebuild(session, actor, job, provider)
         run = ScreenshotSearchRun(
             id=uuid4(),
-            org_id=execution.org_id,
             task_id=task_id,
             extraction_job_id=UUID(manifest["extraction_job_id"]),
             task_resource_id=UUID(manifest["task_resource_id"]),
@@ -256,7 +255,6 @@ async def process(execution, provider):
             session.add(
                 ScreenshotSearchCandidate(
                     id=uuid4(),
-                    org_id=execution.org_id,
                     task_id=task_id,
                     extraction_job_id=run.extraction_job_id,
                     search_run_id=run.id,

@@ -110,7 +110,7 @@ class PlatformClefService:
         self.checker = checker
 
     async def show(self, actor: Identity) -> ClefSettingsData:
-        require_human(actor)
+        require_human(actor, "clef:manage")
         async with self.db.transaction() as connection:
             value = await connection.scalar(text("SELECT public.platform_clef_read()"))
         config = None if value is None else ClefPlatformConfig.model_validate(value)
@@ -124,7 +124,7 @@ class PlatformClefService:
         return ClefSettingsData(config=config, blockers=sorted(set(blockers)))
 
     async def _manage(self, actor: Identity, action: str, body: dict) -> ClefPlatformConfig:
-        require_human(actor)
+        require_human(actor, "clef:manage")
         try:
             async with self.db.transaction() as connection:
                 await set_actor_context(connection, actor)

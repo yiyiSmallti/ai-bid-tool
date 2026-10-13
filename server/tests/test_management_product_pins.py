@@ -10,12 +10,9 @@ root after task locks without losing a successful pin. Restoration never re-pins
 """
 
 import asyncio
-from uuid import UUID, uuid4
 
-import pytest
 from app.models.entities import AuditLog, TaskResource
-from sqlalchemy import func, select, text
-from task_access_fixtures import add_member, archive_task, person, workflow
+from sqlalchemy import func, select
 from test_resources import DATA, create, task
 
 
@@ -51,23 +48,23 @@ async def revise(api, auth, product_id):
 
 
 async def test_two_tasks_remain_pinned_until_one_explicitly_replaces(api, headers):
-    product = await create(api, headers[0])
+    product = await create(api, headers)
     product_id = product["product_id"]
-    first_task, second_task = await task(api, headers[0]), await task(api, headers[0])
-    first = await pin(api, headers[0], first_task, product_id)
-    second = await pin(api, headers[0], second_task, product_id)
+    first_task, second_task = (await task(api, headers), await task(api, headers))
+    first = await pin(api, headers, first_task, product_id)
+    second = await pin(api, headers, second_task, product_id)
     assert first.status_code == second.status_code == 200
-    revision = await revise(api, headers[0], product_id)
+    revision = await revise(api, headers, product_id)
     for task_id in (first_task, second_task):
-        selected = await api.get(f"/v4/tasks/{task_id}/products", headers=headers[0])
+        selected = await api.get(f"/v4/tasks/{task_id}/products", headers=headers)
         assert selected.status_code == 200
         assert selected.json()["items"][0]["product_revision_id"] == product["id"]
         assert selected.json()["items"][0]["data"]["model"] == DATA["model"]
-    replaced = await pin(api, headers[0], first_task, product_id, revision=2)
+    replaced = await pin(api, headers, first_task, product_id, revision=2)
     assert replaced.status_code == 200
     assert replaced.json()["data"]["product_revision_id"] == revision["id"]
     assert replaced.json()["data"]["replaced_snapshot_id"] == first.json()["data"]["id"]
-    unchanged = await api.get(f"/v4/tasks/{second_task}/products", headers=headers[0])
+    unchanged = await api.get(f"/v4/tasks/{second_task}/products", headers=headers)
     assert unchanged.json()["items"] == [
         {
             k: v
@@ -80,22 +77,20 @@ async def test_two_tasks_remain_pinned_until_one_explicitly_replaces(api, header
 async def test_inactive_exact_duplicate_only_and_restore_preserves_history(
     api, headers, application
 ):
-    product = await create(api, headers[0])
+    product = await create(api, headers)
     product_id = product["product_id"]
-    kept_task, replaced_task, empty_task = [await task(api, headers[0]) for _ in range(3)]
-    kept = await pin(api, headers[0], kept_task, product_id, lot=" lot-a ")
-    old = await pin(api, headers[0], replaced_task, product_id)
+    kept_task, replaced_task, empty_task = [await task(api, headers) for _ in range(3)]
+    kept = await pin(api, headers, kept_task, product_id, lot=" lot-a ")
+    old = await pin(api, headers, replaced_task, product_id)
     assert kept.status_code == old.status_code == 200
-    await revise(api, headers[0], product_id)
-    replaced = await pin(api, headers[0], replaced_task, product_id, revision=2)
+    await revise(api, headers, product_id)
+    replaced = await pin(api, headers, replaced_task, product_id, revision=2)
     assert replaced.status_code == 200
-    stopped = await lifecycle(api, headers[0], product_id, 2, 0, "inactive")
+    stopped = await lifecycle(api, headers, product_id, 2, 0, "inactive")
     assert stopped.status_code == 200, stopped.text
 
-    org = UUID(headers[0]["X-Org-Id"])
-
     async def write_counts():
-        async with application.state.db.transaction(org) as session:
+        async with application.state.db.transaction() as session:
             return (
                 await session.scalar(select(func.count()).select_from(TaskResource)),
                 await session.scalar(
@@ -106,7 +101,7 @@ async def test_inactive_exact_duplicate_only_and_restore_preserves_history(
             )
 
     before = await write_counts()
-    replay = await pin(api, headers[0], kept_task, product_id, lot="lot-a")
+    replay = await pin(api, headers, kept_task, product_id, lot="lot-a")
     assert replay.status_code == 200, replay.text
     assert replay.json()["data"]["duplicate"] is True
     assert replay.json()["data"]["id"] == kept.json()["data"]["id"]
@@ -118,107 +113,34 @@ async def test_inactive_exact_duplicate_only_and_restore_preserves_history(
         (kept_task, 1, "new-lot"),
         (replaced_task, 1, None),
     ):
-        denied = await pin(api, headers[0], task_id, product_id, revision, lot)
+        denied = await pin(api, headers, task_id, product_id, revision, lot)
         assert denied.status_code == 409, denied.text
         assert denied.json()["data"]["error"]["code"] == "resource_inactive"
         assert denied.json()["data"]["error"]["exit_code"] == 2
     assert await write_counts() == before
-    restored = await lifecycle(api, headers[0], product_id, 2, 1, "active")
+    restored = await lifecycle(api, headers, product_id, 2, 1, "active")
     assert restored.status_code == 200, restored.text
     assert await write_counts() == before
-    restored_pin = await pin(api, headers[0], replaced_task, product_id, revision=1)
+    restored_pin = await pin(api, headers, replaced_task, product_id, revision=1)
     assert restored_pin.status_code == 200
     assert restored_pin.json()["data"]["id"] != old.json()["data"]["id"]
     assert restored_pin.json()["data"]["duplicate"] is False
     history = await api.get(
-        f"/v4/tasks/{replaced_task}/products", headers=headers[0], params={"history": True}
+        f"/v4/tasks/{replaced_task}/products", headers=headers, params={"history": True}
     )
     assert [row["revision"] for row in history.json()["items"]] == [1, 2, 1]
 
 
-@pytest.mark.parametrize(
-    "org_role,task_role,domains,status",
-    [
-        ("technical", "contributor", ["technical"], 200),
-        ("bidder", "contributor", ["commercial"], 200),
-        ("technical", "reviewer", ["technical"], 403),
-        ("bidder", "reviewer", ["commercial"], 403),
-        ("technical", "observer", [], 403),
-        ("viewer", "observer", [], 403),
-        ("admin", None, [], 403),
-        ("technical", None, [], 404),
-    ],
-)
-async def test_library_access_never_grants_task_pinning(
-    api, headers, tenants, admin_engine, org_role, task_role, domains, status
-):
-    product = await create(api, headers[0])
-    task_id = await task(api, headers[0])
-    user, auth = await person(api, admin_engine, tenants["orgs"][0], org_role)
-    if task_role:
-        added = await add_member(api, headers[0], task_id, user, 1, task_role, domains)
-        assert added.active
-    visible = await api.get(
-        f"/v4/management/resources/products/{product['product_id']}", headers=auth
-    )
-    assert visible.status_code == 200
-    response = await pin(api, auth, task_id, product["product_id"])
-    assert response.status_code == status, response.text
-
-
-async def test_archive_denies_even_inactive_duplicate_but_keeps_pin_readable(api, headers):
-    product = await create(api, headers[0])
-    task_id = await task(api, headers[0])
-    selected = await pin(api, headers[0], task_id, product["product_id"])
-    assert selected.status_code == 200
-    stopped = await lifecycle(api, headers[0], product["product_id"], 1, 0, "inactive")
-    assert stopped.status_code == 200
-    await workflow(api, headers[0], task_id)
-    await archive_task(api, headers[0], task_id)
-    denied = await pin(api, headers[0], task_id, product["product_id"])
-    assert denied.status_code == 409
-    assert denied.json()["data"]["error"]["code"] == "task_archived"
-    read = await api.get(f"/v4/tasks/{task_id}/products", headers=headers[0])
-    assert read.status_code == 200
-    assert read.json()["items"][0]["id"] == selected.json()["data"]["id"]
-
-
-async def test_foreign_missing_and_removed_member_pin_masking(api, headers, tenants, admin_engine):
-    own, foreign = await create(api, headers[0]), await create(api, headers[1])
-    own_task, foreign_task = await task(api, headers[0]), await task(api, headers[1])
-    results = []
-    for task_id, product_id in (
-        (own_task, foreign["product_id"]),
-        (foreign_task, own["product_id"]),
-        (str(uuid4()), own["product_id"]),
-        (own_task, str(uuid4())),
-    ):
-        response = await pin(api, headers[0], task_id, product_id)
-        assert response.status_code == 404
-        results.append(response.json()["data"]["error"])
-    user, auth = await person(api, admin_engine, tenants["orgs"][0], "technical")
-    added = await add_member(api, headers[0], own_task, user, 1)
-    assert added.active
-    with admin_engine.begin() as connection:
-        connection.execute(
-            text("UPDATE memberships SET active=false WHERE org_id=:org AND user_id=:user"),
-            {"org": tenants["orgs"][0], "user": user},
-        )
-    removed = await pin(api, auth, own_task, own["product_id"])
-    assert removed.status_code == 404
-    assert all(error == removed.json()["data"]["error"] for error in results)
-
-
 async def test_deactivation_and_pin_serialize_without_lost_selection(api, headers):
-    product = await create(api, headers[0])
-    task_id = await task(api, headers[0])
+    product = await create(api, headers)
+    task_id = await task(api, headers)
     selected, stopped = await asyncio.gather(
-        pin(api, headers[0], task_id, product["product_id"]),
-        lifecycle(api, headers[0], product["product_id"], 1, 0, "inactive"),
+        pin(api, headers, task_id, product["product_id"]),
+        lifecycle(api, headers, product["product_id"], 1, 0, "inactive"),
     )
     assert stopped.status_code == 200, stopped.text
     assert selected.status_code in {200, 409}, selected.text
-    current = await api.get(f"/v4/tasks/{task_id}/products", headers=headers[0])
+    current = await api.get(f"/v4/tasks/{task_id}/products", headers=headers)
     assert len(current.json()["items"]) == (1 if selected.status_code == 200 else 0)
     if selected.status_code == 200:
         assert current.json()["items"][0]["id"] == selected.json()["data"]["id"]

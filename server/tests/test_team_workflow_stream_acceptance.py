@@ -1,7 +1,7 @@
-"""Real PostgreSQL/API acceptance for the pre-recorded team workflow failures.
+"""Real PostgreSQL/API acceptance for the durable task board and event guarantees.
 
 Failure scenarios are inventoried in test_team_board_events.py before the feature
-implementation. These cases use real bid_app transactions, RLS, durable event
+implementation. These cases use real bid_app transactions, durable event
 functions and ASGI endpoints. No test starts a database or calls a vendor.
 Artifacts contain synthetic IDs and query plans only; no bearer or parameters
 from authentication are retained. Run with an explicitly supplied bid_test DB.
@@ -21,10 +21,10 @@ import pytest
 from app.core.security import TokenSigner
 from app.models.entities import Chunk, Document, Job, Requirement
 from app.services import extraction, task_access, task_events
-from app.services.auth import ROLE_SCOPES, authenticate, set_actor_context
+from app.services.auth import HUMAN_SCOPES, authenticate, set_actor_context
 from sqlalchemy import event, insert, text
 from sqlalchemy.orm import Session
-from task_access_fixtures import add_member, new_task, person, remove_member
+from task_access_fixtures import new_task
 from test_citation_batch_equivalence import synthetic_page_sources
 
 ARTIFACTS = Path(__file__).resolve().parents[2] / "data/work/team-workflow-acceptance/stream"
@@ -82,10 +82,9 @@ def artifact(name, value):
     destination.write_text(json.dumps(value, indent=2, default=str) + "\n")
 
 
-async def seed_scope(api, headers, tenants, admin_engine, *, count=0, tenant=0, chunk_count=1):
+async def seed_scope(api, headers, database, admin_engine, *, count=0, chunk_count=1):
     """Create ownership through the API, then persist a synthetic saved extraction."""
-    task_id = UUID(await new_task(api, headers[tenant]))
-    org, user = tenants["orgs"][tenant], tenants["users"][tenant]
+    task_id = UUID(await new_task(api, headers))
     document_id, job_id = uuid4(), uuid4()
     chunk_ids = [uuid4() for _ in range(chunk_count)]
     chunk_id = chunk_ids[0]
@@ -96,22 +95,19 @@ async def seed_scope(api, headers, tenants, admin_engine, *, count=0, tenant=0, 
     with Session(admin_engine) as session, session.begin():
         session.execute(
             text(
-                "SELECT set_config('app.current_org',:org,true),set_config('app.actor_kind','session',true),set_config('app.actor_user_id',:user,true),set_config('app.actor_token_id','',true),set_config('app.actor_scopes',:scopes,true)"
+                "SELECT set_config('app.actor_kind','session',true),set_config('app.actor_token_id','',true),set_config('app.actor_scopes',:scopes,true)"
             ),
             {
-                "org": str(org),
-                "user": str(user),
-                "scopes": json.dumps(sorted(ROLE_SCOPES["admin"])),
+                "scopes": json.dumps(sorted(HUMAN_SCOPES)),
             },
         )
         session.add(
             Document(
                 id=document_id,
-                org_id=org,
                 task_id=task_id,
                 name="Synthetic extraction.pdf",
                 sha256=sha256(str(task_id).encode()).hexdigest(),
-                storage_key=f"org/{org}/synthetic-extraction/{document_id}.pdf",
+                storage_key=f"synthetic-extraction/{document_id}.pdf",
                 media_type="application/pdf",
                 page_count=chunk_count,
                 status="parsed",
@@ -122,7 +118,6 @@ async def seed_scope(api, headers, tenants, admin_engine, *, count=0, tenant=0, 
         session.add_all(
             Chunk(
                 id=source_id,
-                org_id=org,
                 task_id=task_id,
                 document_id=document_id,
                 page=page + 1,
@@ -134,15 +129,13 @@ async def seed_scope(api, headers, tenants, admin_engine, *, count=0, tenant=0, 
         session.add(
             Job(
                 id=job_id,
-                org_id=org,
                 task_id=task_id,
                 document_id=document_id,
                 kind="extract",
                 cache_key=sha256(str(job_id).encode()).hexdigest(),
                 status="succeeded",
-                actor_user_id=user,
                 actor_kind="session",
-                actor_scopes=sorted(ROLE_SCOPES["admin"]),
+                actor_scopes=sorted(HUMAN_SCOPES),
                 result={
                     "warnings": ["synthetic-empty-extraction"] if count == 0 else [],
                     "private_input": PRIVATE_MARKER,
@@ -156,7 +149,6 @@ async def seed_scope(api, headers, tenants, admin_engine, *, count=0, tenant=0, 
                 [
                     {
                         "id": requirement_ids[i],
-                        "org_id": org,
                         "task_id": task_id,
                         "document_id": document_id,
                         "chunk_id": chunk_ids[i % chunk_count],
@@ -173,7 +165,6 @@ async def seed_scope(api, headers, tenants, admin_engine, *, count=0, tenant=0, 
                 ],
             )
     return {
-        "org_id": org,
         "task_id": task_id,
         "document_id": document_id,
         "chunk_id": chunk_id,
@@ -181,7 +172,6 @@ async def seed_scope(api, headers, tenants, admin_engine, *, count=0, tenant=0, 
         "chunk_count": chunk_count,
         "source_characters": sum(map(len, source_pages)),
         "job_id": job_id,
-        "user_id": user,
         "count": count,
         "requirement_ids": requirement_ids,
     }
@@ -194,10 +184,12 @@ async def poll(api, header, task_id, cursor=None, **extra):
 
 @asynccontextmanager
 async def authenticated(application, header):
-    org = UUID(header["X-Org-Id"])
-    async with application.state.db.transaction(org) as session:
+    async with application.state.db.transaction() as session:
         actor = await authenticate(
-            session, header["Authorization"].removeprefix("Bearer "), org, application.state.crypto
+            session,
+            header["Authorization"].removeprefix("Bearer "),
+            application.state.crypto,
+            application.state.processor.settings,
         )
         await set_actor_context(session, actor)
         yield session, actor
@@ -215,7 +207,7 @@ async def append_marker(application, header, task_id, marker=None):
         }
     )
     async with authenticated(application, header) as (session, actor):
-        await task_events.append(session, actor.org_id, task_id, payload)
+        await task_events.append(session, task_id, payload)
 
 
 def is_auth_statement(statement):
@@ -225,12 +217,7 @@ def is_auth_statement(statement):
     return any(
         f"from {table}" in normalized
         for table in (
-            "users",
-            "memberships",
-            "orgs",
             "tasks",
-            "task_accesss",
-            "task_members",
             "api_tokens",
         )
     )
@@ -239,27 +226,27 @@ def is_auth_statement(statement):
 @pytest.mark.latency
 @pytest.mark.parametrize("count", [0, 5000, 5001])
 async def test_board_complete_bounds_and_query_plan(
-    api, headers, tenants, admin_engine, application, count
+    api, headers, database, admin_engine, application, count
 ):
     await assert_board_complete_bounds_and_query_plan(
-        api, headers, tenants, admin_engine, application, count=count
+        api, headers, database, admin_engine, application, count=count
     )
 
 
 @pytest.mark.latency
 async def test_board_5000_requirements_across_300_realistic_page_chunks(
-    api, headers, tenants, admin_engine, application
+    api, headers, database, admin_engine, application
 ):
     await assert_board_complete_bounds_and_query_plan(
-        api, headers, tenants, admin_engine, application, count=5000, chunk_count=300
+        api, headers, database, admin_engine, application, count=5000, chunk_count=300
     )
 
 
 async def assert_board_complete_bounds_and_query_plan(
-    api, headers, tenants, admin_engine, application, *, count, chunk_count=1
+    api, headers, database, admin_engine, application, *, count, chunk_count=1
 ):
     scope = await seed_scope(
-        api, headers, tenants, admin_engine, count=count, chunk_count=chunk_count
+        api, headers, database, admin_engine, count=count, chunk_count=chunk_count
     )
     statements = []
 
@@ -273,7 +260,7 @@ async def assert_board_complete_bounds_and_query_plan(
     try:
         response = await api.get(
             f"/tasks/{scope['task_id']}/board",
-            headers=headers[0],
+            headers=headers,
             params={"extraction_job_id": str(scope["job_id"]), "limit": 100},
         )
     finally:
@@ -320,7 +307,7 @@ async def assert_board_complete_bounds_and_query_plan(
     assert len(projection) <= 20, f"{len(projection)} projection SQL statements"
     invalid = await api.get(
         f"/tasks/{scope['task_id']}/board",
-        headers=headers[0],
+        headers=headers,
         params={
             "extraction_job_id": str(scope["job_id"]),
             "limit": 100,
@@ -332,14 +319,13 @@ async def assert_board_complete_bounds_and_query_plan(
     assert invalid.json()["items"] == []
     plan = None
     if count == 5000:
-        async with authenticated(application, headers[0]) as (session, _):
+        async with authenticated(application, headers) as (session, _):
             plan = (
                 await session.execute(
                     text(
-                        "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT id FROM requirements WHERE org_id=:org AND task_id=:task AND job_id=:job AND document_id=:document ORDER BY id LIMIT 5001"
+                        "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT id FROM requirements WHERE task_id=:task AND job_id=:job AND document_id=:document ORDER BY id LIMIT 5001"
                     ),
                     {
-                        "org": scope["org_id"],
                         "task": scope["task_id"],
                         "job": scope["job_id"],
                         "document": scope["document_id"],
@@ -366,39 +352,39 @@ async def assert_board_complete_bounds_and_query_plan(
 
 
 async def test_board_cursor_binds_filters_day_head_and_exact_extraction(
-    api, headers, tenants, admin_engine, application
+    api, headers, database, admin_engine, application
 ):
-    scope = await seed_scope(api, headers, tenants, admin_engine, count=3)
+    scope = await seed_scope(api, headers, database, admin_engine, count=3)
     path = f"/tasks/{scope['task_id']}/board"
     params = {"extraction_job_id": str(scope["job_id"]), "limit": 1}
-    initial = await api.get(path, headers=headers[0], params=params)
+    initial = await api.get(path, headers=headers, params=params)
     assert initial.status_code == 200, initial.text
     first = initial.json()
     cursor = first["data"]["next_cursor"]
-    second = await api.get(path, headers=headers[0], params={**params, "cursor": cursor})
+    second = await api.get(path, headers=headers, params={**params, "cursor": cursor})
     assert second.status_code == 200
     assert first["items"][0]["requirement_id"] != second.json()["items"][0]["requirement_id"]
     altered = await api.get(
-        path, headers=headers[0], params={**params, "cursor": cursor, "starred": True}
+        path, headers=headers, params={**params, "cursor": cursor, "starred": True}
     )
     assert altered.status_code == 409 and altered.json()["data"]["error"]["code"] == "board_changed"
     signer = TokenSigner.for_tokens(application.state.processor.settings)
     decoded = signer.open(cursor)
     decoded["d"] = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
     prior_day = signer.cipher.encrypt(json.dumps(decoded).encode()).decode()
-    expired_day = await api.get(path, headers=headers[0], params={**params, "cursor": prior_day})
+    expired_day = await api.get(path, headers=headers, params={**params, "cursor": prior_day})
     assert expired_day.status_code == 409
-    await append_marker(application, headers[0], scope["task_id"])
-    head_changed = await api.get(path, headers=headers[0], params={**params, "cursor": cursor})
+    await append_marker(application, headers, scope["task_id"])
+    head_changed = await api.get(path, headers=headers, params={**params, "cursor": cursor})
     assert head_changed.status_code == 409
-    missing = await api.get(path, headers=headers[0])
+    missing = await api.get(path, headers=headers)
     assert (
         missing.status_code == 422
         and missing.json()["data"]["error"]["code"] == "extraction_required"
     )
-    foreign = await seed_scope(api, headers, tenants, admin_engine, count=0, tenant=1)
+    foreign = await seed_scope(api, headers, database, admin_engine, count=0)
     mismatch = await api.get(
-        path, headers=headers[0], params={"extraction_job_id": str(foreign["job_id"])}
+        path, headers=headers, params={"extraction_job_id": str(foreign["job_id"])}
     )
     assert mismatch.status_code == 404
     artifact(
@@ -416,10 +402,10 @@ async def test_board_cursor_binds_filters_day_head_and_exact_extraction(
 
 @pytest.mark.parametrize("rollback_first", [False, True])
 async def test_event_head_serializes_two_real_transactions_without_cursor_holes(
-    api, headers, tenants, admin_engine, application, rollback_first
+    api, headers, database, admin_engine, application, rollback_first
 ):
-    scope = await seed_scope(api, headers, tenants, admin_engine, count=2)
-    initial = await poll(api, headers[0], scope["task_id"])
+    scope = await seed_scope(api, headers, database, admin_engine, count=2)
+    initial = await poll(api, headers, scope["task_id"])
     assert initial.status_code == 200
     baseline = initial.json()["data"]["head_cursor"]
     first_marker, second_marker = scope["requirement_ids"]
@@ -428,12 +414,11 @@ async def test_event_head_serializes_two_real_transactions_without_cursor_holes(
     second_pid = []
 
     async def second_transaction():
-        async with authenticated(application, headers[0]) as (session, actor):
+        async with authenticated(application, headers) as (session, actor):
             second_pid.append(await session.scalar(text("SELECT pg_backend_pid()")))
             started.set()
             await task_events.append(
                 session,
-                actor.org_id,
                 scope["task_id"],
                 {
                     "type": "board_changed",
@@ -445,12 +430,8 @@ async def test_event_head_serializes_two_real_transactions_without_cursor_holes(
 
     async with db.sessions() as first_session:
         first_tx = await first_session.begin()
-        await first_session.execute(
-            text("SELECT set_config('app.current_org',:org,true)"), {"org": str(scope["org_id"])}
-        )
         await task_events.append(
             first_session,
-            scope["org_id"],
             scope["task_id"],
             {
                 "type": "board_changed",
@@ -472,7 +453,7 @@ async def test_event_head_serializes_two_real_transactions_without_cursor_holes(
                     if not blocking:
                         await asyncio.sleep(0.01)
             assert not pending.done()
-            during = await poll(api, headers[0], scope["task_id"], baseline)
+            during = await poll(api, headers, scope["task_id"], baseline)
             assert during.status_code == 200 and during.json()["items"] == []
             if rollback_first:
                 await first_tx.rollback()
@@ -486,11 +467,11 @@ async def test_event_head_serializes_two_real_transactions_without_cursor_holes(
                 pending.cancel()
                 with suppress(asyncio.CancelledError):
                     await pending
-    replay = await poll(api, headers[0], scope["task_id"], baseline)
+    replay = await poll(api, headers, scope["task_id"], baseline)
     assert replay.status_code == 200, replay.text
     markers = [UUID(e["payload"]["requirement_ids"][0]) for e in replay.json()["items"]]
     assert markers == ([second_marker] if rollback_first else [first_marker, second_marker])
-    again = await poll(api, headers[0], scope["task_id"], replay.json()["data"]["next_cursor"])
+    again = await poll(api, headers, scope["task_id"], replay.json()["data"]["next_cursor"])
     assert again.status_code == 200 and again.json()["items"] == []
     artifact(
         f"event-order-{'rollback' if rollback_first else 'commit'}.json",
@@ -526,13 +507,13 @@ def assert_no_private_fields(value):
             assert_no_private_fields(child)
 
 
-async def test_hidden_export_job_events_and_progress_reveal_no_content_to_admin_or_token(
-    api, headers, tenants, admin_engine, application
+async def test_hidden_export_job_events_and_progress_reveal_no_content_to_token(
+    api, headers, database, admin_engine, application
 ):
-    scope = await seed_scope(api, headers, tenants, admin_engine, count=1)
+    scope = await seed_scope(api, headers, database, admin_engine, count=1)
     token = await api.post(
         "/tokens",
-        headers=headers[0],
+        headers=headers,
         json={
             "name": "Synthetic read events",
             "scopes": ["task:read", "card:read", "job:read"],
@@ -540,8 +521,8 @@ async def test_hidden_export_job_events_and_progress_reveal_no_content_to_admin_
         },
     )
     assert token.status_code == 200
-    token_header = {**headers[0], "Authorization": "Bearer " + token.json()["data"]["token"]}
-    readers = [headers[0], token_header]
+    token_header = {**headers, "Authorization": "Bearer " + token.json()["data"]["token"]}
+    readers = [token_header]
     baselines = []
     for reader in readers:
         response = await poll(api, reader, scope["task_id"])
@@ -551,32 +532,28 @@ async def test_hidden_export_job_events_and_progress_reveal_no_content_to_admin_
     with Session(admin_engine) as session, session.begin():
         session.execute(
             text(
-                "SELECT set_config('app.current_org',:org,true),set_config('app.actor_kind','session',true),set_config('app.actor_user_id',:user,true),set_config('app.actor_scopes',:scopes,true)"
+                "SELECT set_config('app.actor_kind','session',true),set_config('app.actor_scopes',:scopes,true)"
             ),
             {
-                "org": str(scope["org_id"]),
-                "user": str(scope["user_id"]),
-                "scopes": json.dumps(sorted(ROLE_SCOPES["admin"])),
+                "scopes": json.dumps(sorted(HUMAN_SCOPES)),
             },
         )
         for job_id, kind in zip(hidden_ids, ("export_render", "export_preview"), strict=True):
             session.add(
                 Job(
                     id=job_id,
-                    org_id=scope["org_id"],
                     task_id=scope["task_id"],
                     document_id=scope["document_id"],
                     kind=kind,
                     status="failed",
                     cache_key=sha256(str(job_id).encode()).hexdigest(),
-                    actor_user_id=scope["user_id"],
                     actor_kind="session",
-                    actor_scopes=sorted(ROLE_SCOPES["admin"]),
+                    actor_scopes=sorted(HUMAN_SCOPES),
                     result={"private_input": PRIVATE_MARKER},
                 )
             )
     marker = scope["requirement_ids"][0]
-    await append_marker(application, headers[0], scope["task_id"], marker)
+    await append_marker(application, headers, scope["task_id"], marker)
     receipts = []
     for reader, baseline in zip(readers, baselines, strict=True):
         response = await poll(api, reader, scope["task_id"], baseline)
@@ -605,29 +582,25 @@ async def test_hidden_export_job_events_and_progress_reveal_no_content_to_admin_
         )
     artifact(
         "hidden-jobs-privacy.json",
-        {"fixture": scope, "readers": ["human_admin", "scoped_token"], "receipts": receipts},
+        {"fixture": scope, "readers": ["scoped_token"], "receipts": receipts},
     )
 
 
 async def test_event_cursor_foreign_future_and_expired_are_explicit(
-    api, headers, tenants, admin_engine, application
+    api, headers, database, admin_engine, application
 ):
-    scope = await seed_scope(api, headers, tenants, admin_engine)
-    foreign = await seed_scope(api, headers, tenants, admin_engine, tenant=1)
-    source = await poll(api, headers[1], foreign["task_id"])
-    wrong = await poll(api, headers[0], scope["task_id"], source.json()["data"]["head_cursor"])
+    scope = await seed_scope(api, headers, database, admin_engine)
+    foreign = await seed_scope(api, headers, database, admin_engine)
+    source = await poll(api, headers, foreign["task_id"])
+    wrong = await poll(api, headers, scope["task_id"], source.json()["data"]["head_cursor"])
     assert wrong.status_code == 404
     settings = application.state.processor.settings
-    async with authenticated(application, headers[0]) as (session, actor):
-        _, workflow, _ = await task_access.access(session, actor, scope["task_id"])
-        head = await task_events.head(session, actor.org_id, scope["task_id"])
-        future = task_events.issue_cursor(
-            actor, scope["task_id"], workflow, settings, seq=head.last_seq + 1
-        )
-        current = task_events.issue_cursor(
-            actor, scope["task_id"], workflow, settings, seq=head.last_seq
-        )
-    invalid = await poll(api, headers[0], scope["task_id"], future)
+    async with authenticated(application, headers) as (session, actor):
+        await task_access.access(session, actor, scope["task_id"])
+        head = await task_events.head(session, scope["task_id"])
+        future = task_events.issue_cursor(actor, scope["task_id"], settings, seq=head.last_seq + 1)
+        current = task_events.issue_cursor(actor, scope["task_id"], settings, seq=head.last_seq)
+    invalid = await poll(api, headers, scope["task_id"], future)
     assert (
         invalid.status_code == 422
         and invalid.json()["data"]["error"]["code"] == "invalid_event_cursor"
@@ -636,7 +609,7 @@ async def test_event_cursor_foreign_future_and_expired_are_explicit(
     value = signer.open(current)
     value["exp"] = 1
     expired_cursor = signer.cipher.encrypt(json.dumps(value).encode()).decode()
-    expired = await poll(api, headers[0], scope["task_id"], expired_cursor)
+    expired = await poll(api, headers, scope["task_id"], expired_cursor)
     assert (
         expired.status_code == 409
         and expired.json()["data"]["error"]["code"] == "event_cursor_expired"
@@ -653,48 +626,40 @@ async def test_event_cursor_foreign_future_and_expired_are_explicit(
 
 
 async def test_durable_retention_prunes_bounded_history_and_forces_refresh(
-    api, headers, tenants, admin_engine, application
+    api, headers, database, admin_engine, application
 ):
-    scope = await seed_scope(api, headers, tenants, admin_engine)
-    initial = await poll(api, headers[0], scope["task_id"])
+    scope = await seed_scope(api, headers, database, admin_engine)
+    initial = await poll(api, headers, scope["task_id"])
     assert initial.status_code == 200
     cursor = initial.json()["data"]["head_cursor"]
     # Seed an actual ordered historical window in one statement using only the
     # dedicated test migration connection. Runtime appending performs retention.
     with admin_engine.begin() as connection:
-        connection.execute(
-            text("SELECT set_config('app.current_org',:org,true)"), {"org": str(scope["org_id"])}
-        )
         head = connection.scalar(
-            text(
-                "SELECT last_seq FROM task_event_heads WHERE org_id=:org AND task_id=:task FOR UPDATE"
-            ),
-            {"org": scope["org_id"], "task": scope["task_id"]},
+            text("SELECT last_seq FROM task_event_heads WHERE task_id=:task FOR UPDATE"),
+            {"task": scope["task_id"]},
         )
         connection.execute(
             text(
-                "INSERT INTO task_events(id,org_id,task_id,seq,event_kind,payload,created_at) SELECT gen_random_uuid(),:org,:task,:head+n,'board_changed',CAST(:payload AS jsonb),clock_timestamp()-interval '8 days' FROM generate_series(1,50000) n"
+                "INSERT INTO task_events(id,task_id,seq,event_kind,payload,created_at) SELECT gen_random_uuid(),:task,:head+n,'board_changed',CAST(:payload AS jsonb),clock_timestamp()-interval '8 days' FROM generate_series(1,50000) n"
             ),
             {
-                "org": scope["org_id"],
                 "task": scope["task_id"],
                 "head": head,
                 "payload": json.dumps(INVALIDATION),
             },
         )
         connection.execute(
-            text(
-                "UPDATE task_event_heads SET last_seq=:head+50000 WHERE org_id=:org AND task_id=:task"
-            ),
-            {"org": scope["org_id"], "task": scope["task_id"], "head": head},
+            text("UPDATE task_event_heads SET last_seq=:head+50000 WHERE task_id=:task"),
+            {"task": scope["task_id"], "head": head},
         )
-    await append_marker(application, headers[0], scope["task_id"])
-    expired = await poll(api, headers[0], scope["task_id"], cursor)
+    await append_marker(application, headers, scope["task_id"])
+    expired = await poll(api, headers, scope["task_id"], cursor)
     assert (
         expired.status_code == 409
         and expired.json()["data"]["error"]["code"] == "event_cursor_expired"
     )
-    async with authenticated(application, headers[0]) as (session, _):
+    async with authenticated(application, headers) as (session, _):
         retained = await session.scalar(
             text("SELECT count(*) FROM task_events WHERE task_id=:task"), {"task": scope["task_id"]}
         )
@@ -704,7 +669,7 @@ async def test_durable_retention_prunes_bounded_history_and_forces_refresh(
         )
     assert retained == 1
     assert floor == head + 50000
-    fresh = await poll(api, headers[0], scope["task_id"])
+    fresh = await poll(api, headers, scope["task_id"])
     assert (
         fresh.status_code == 200
         and fresh.json()["data"]["reset_required"]["reason"] == "initial_snapshot_required"
@@ -775,12 +740,20 @@ class LiveASGIStream:
 
 
 async def test_sse_revocation_closes_connection_before_next_batch(
-    api, headers, tenants, admin_engine, application
+    api, headers, database, admin_engine, application
 ):
-    scope = await seed_scope(api, headers, tenants, admin_engine, count=1)
-    user, reader = await person(api, admin_engine, tenants["orgs"][0], "technical")
-    added = await add_member(api, headers[0], scope["task_id"], user, 1, "observer")
-    assert added.active
+    scope = await seed_scope(api, headers, database, admin_engine, count=1)
+    token = await api.post(
+        "/tokens",
+        headers=headers,
+        json={
+            "name": "Synthetic stream token",
+            "scopes": ["task:read", "card:read", "job:read"],
+            "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+        },
+    )
+    assert token.status_code == 200, token.text
+    reader = {"Authorization": "Bearer " + token.json()["data"]["token"]}
     baseline = await poll(api, reader, scope["task_id"])
     assert baseline.status_code == 200
     marker = scope["requirement_ids"][0]
@@ -790,8 +763,9 @@ async def test_sse_revocation_closes_connection_before_next_batch(
     ) as stream:
         started = await stream.next()
         assert started["type"] == "http.response.start" and started["status"] == 200
-        await remove_member(api, headers[0], scope["task_id"], user)
-        await append_marker(application, headers[0], scope["task_id"], marker)
+        with admin_engine.begin() as connection:
+            connection.execute(text("UPDATE api_tokens SET revoked=true"))
+        await append_marker(application, headers, scope["task_id"], marker)
         assert stream.task is not None
         await asyncio.wait_for(asyncio.shield(stream.task), 5)
         assert str(marker) not in stream.body()
@@ -799,13 +773,12 @@ async def test_sse_revocation_closes_connection_before_next_batch(
         assert stream.messages[-1]["type"] == "http.response.body"
         assert not stream.messages[-1].get("more_body", False)
     denied = await api.get(f"/tasks/{scope['task_id']}/events", headers=reader)
-    assert denied.status_code == 404
+    assert denied.status_code == 401
     artifact(
         "sse-revocation.json",
         {
             "fixture": scope,
             "initial_status": 200,
-            "removed_user_id": user,
             "connection_closed": True,
             "post_revoke_marker_delivered": False,
             "reconnect_status": denied.status_code,
@@ -817,20 +790,20 @@ async def test_sse_revocation_closes_connection_before_next_batch(
     "failure", ["foreign_task", "missing_bearer", "missing_card_scope", "foreign_cursor"]
 )
 async def test_sse_subscription_failures_do_not_start_successful_stream(
-    api, headers, tenants, admin_engine, failure
+    api, headers, database, admin_engine, failure
 ):
-    scope = await seed_scope(api, headers, tenants, admin_engine)
-    reader = dict(headers[0])
+    scope = await seed_scope(api, headers, database, admin_engine)
+    reader = dict(headers)
     expected = 404
     if failure == "foreign_task":
-        reader = headers[1]
+        scope["task_id"] = uuid4()
     elif failure == "missing_bearer":
         reader.pop("Authorization")
         expected = 401
     elif failure == "missing_card_scope":
         token = await api.post(
             "/tokens",
-            headers=headers[0],
+            headers=headers,
             json={
                 "name": "Synthetic incomplete stream token",
                 "scopes": ["task:read", "job:read"],
@@ -841,8 +814,8 @@ async def test_sse_subscription_failures_do_not_start_successful_stream(
         reader["Authorization"] = "Bearer " + token.json()["data"]["token"]
         expected = 403
     else:
-        foreign = await seed_scope(api, headers, tenants, admin_engine, tenant=1)
-        initial = await poll(api, headers[1], foreign["task_id"])
+        foreign = await seed_scope(api, headers, database, admin_engine)
+        initial = await poll(api, headers, foreign["task_id"])
         reader["Last-Event-ID"] = initial.json()["data"]["head_cursor"]
     response = await api.get(f"/tasks/{scope['task_id']}/events", headers=reader)
     assert response.status_code == expected, response.text

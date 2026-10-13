@@ -2,9 +2,7 @@
 
 import hashlib
 import json
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pytest
@@ -22,8 +20,8 @@ NOW = "2026-10-08T00:00:00Z"
 
 
 class InterfaceClient(Client):
-    def __init__(self, mode, server, state, application):
-        super().__init__(mode, server, state)
+    def __init__(self, mode, server, application):
+        super().__init__(mode, server)
         self.application = application
 
     @asynccontextmanager
@@ -45,6 +43,23 @@ def invoke(arguments, capsys):
     return code, body
 
 
+def assert_cli_contracts(actual):
+    """Compare modes and validate the installation contract without tenant fields."""
+    normalized = {}
+    for name, body in actual.items():
+        assert set(body) == {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}
+        serialized = json.dumps(body)
+        for removed in ("org_id", "created_by", "decided_by", "authorized_by"):
+            assert f'"{removed}"' not in serialized
+        mode, command = name.split(": ", 1)
+        normalized[mode, command] = json.loads(
+            serialized.replace(f"<OUTPUT>/{mode}.docx", "<OUTPUT>/report.docx")
+        )
+    for mode, command in normalized:
+        other = "local" if mode == "remote" else "remote"
+        assert normalized[mode, command] == normalized[other, command]
+
+
 def interface():
     application = FastAPI()
     calls, uploaded = [], {}
@@ -53,7 +68,7 @@ def interface():
     @application.api_route("/v4/tasks/{task_id}/bid-submissions", methods=["POST", "GET"])
     async def uploads(request: Request, task_id: str):
         assert task_id == ID
-        assert request.headers["x-org-id"] == ID
+        assert "x-org-id" not in request.headers
         if request.method == "GET":
             calls.append("list")
             assert request.query_params["limit"] == "50"
@@ -87,7 +102,6 @@ def interface():
             ready["prepared"] = False
             uploaded.update(
                 id=SUBMISSION,
-                org_id=ID,
                 task_id=ID,
                 revision=1,
                 manifest_sha256=SHA,
@@ -96,13 +110,11 @@ def interface():
                         **file.model_dump(mode="json"),
                         "id": f"00000000-0000-4000-8000-{index:012}",
                         "file_id": f"00000000-0000-4000-8000-{index + 100:012}",
-                        "org_id": ID,
                         "task_id": ID,
                         "submission_id": SUBMISSION,
                     }
                     for index, file in enumerate(body.files, 10)
                 ],
-                created_by=ID,
                 created_at=NOW,
                 state="uploaded",
             )
@@ -198,10 +210,9 @@ def interface():
 
 def test_bid_review_commands_snapshot_both_modes(monkeypatch, tmp_path, capsys):
     application, calls = interface()
-    monkeypatch.setenv("BID_SESSION", "synthetic-review-session")
-    monkeypatch.setenv("BID_ORG", ID)
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-access-key-synthetic-review-session")
     monkeypatch.setattr(
-        cli, "Client", lambda mode, server, state: InterfaceClient(mode, server, state, application)
+        cli, "Client", lambda mode, server: InterfaceClient(mode, server, application)
     )
     paths, descriptors = [], []
     for name, role, kind in (
@@ -274,12 +285,34 @@ def test_bid_review_commands_snapshot_both_modes(monkeypatch, tmp_path, capsys):
                 "cost",
                 "duration_ms",
             }
-            assert "synthetic-review-session" not in json.dumps(body)
+            assert "synthetic-access-key-synthetic-review-session" not in json.dumps(body)
             actual[f"{mode}: {name}"] = body
-    snapshot = Path(__file__).with_name("snapshots") / "bid-review-cli-v4.json"
-    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
-        snapshot.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n")
-    assert actual == json.loads(snapshot.read_text())
+    assert_cli_contracts(actual)
+    for mode in ("local", "remote"):
+        upload_result = models.BidSubmissionUploaded.model_validate(
+            actual[f"{mode}: review upload"]["data"]
+        )
+        assert str(upload_result.id) == SUBMISSION and str(upload_result.task_id) == ID
+        assert upload_result.manifest_sha256 == SHA
+        assert [
+            file.model_dump(mode="json", include=set(models.BidFileInput.model_fields))
+            for file in upload_result.files
+        ] == descriptors
+        prepared = models.BidPreparePreview.model_validate(
+            actual[f"{mode}: review prepare --dry-run"]["data"]
+        )
+        assert prepared.input_hash == SHA and prepared.local_only
+        assert prepared.preflight.planned_calls == prepared.preflight.maximum_calls == 0
+        detail = models.BidSubmissionDetail.model_validate(
+            actual[f"{mode}: review submission show"]["data"]
+        )
+        assert str(detail.submission.id) == SUBMISSION
+        assert actual[f"{mode}: review prepare"]["data"]["job_id"] == ID
+        completed = models.BidSubmissionView.model_validate(
+            actual[f"{mode}: review prepare --wait"]["data"]
+        )
+        assert completed.state == "prepared" and str(completed.preparation_job_id) == ID
+
     assert (
         calls
         == [

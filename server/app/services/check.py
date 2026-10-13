@@ -56,7 +56,6 @@ def assessment_input(manifest: dict, input_hash: str) -> dict:
             **{
                 key: manifest[key]
                 for key in (
-                    "org_id",
                     "task_id",
                     "draft_id",
                     "extraction_job_id",
@@ -138,7 +137,6 @@ async def submit_check(
                     {
                         "provider_config_id": getattr(llm, "provider_config_id", None),
                         "provider_source": fixed.manifest["provider_source"],
-                        "platform_model_id": fixed.manifest["model"].get("platform_model_id"),
                         "model_revision": fixed.manifest["model"].get("model_revision"),
                         "model": fixed.manifest["model"]["model"],
                         "reasoning": fixed.manifest["reasoning"],
@@ -182,9 +180,7 @@ async def submit_check(
     cache_key = drafts.digest(
         {
             "kind": "check",
-            "org_id": str(actor.org_id),
             "task_id": str(task_id),
-            "actor_user_id": str(actor.user_id),
             "actor_token_id": str(actor.token_id) if actor.token_id else None,
             "actor_kind": actor.actor_kind,
             "input_hash": fixed.input_hash,
@@ -202,7 +198,6 @@ async def submit_check(
             )
         job = Job(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task_id,
             document_id=fixed.extraction.document_id,
             kind="check",
@@ -218,7 +213,6 @@ async def submit_check(
                     "encrypted_input": Secrets.for_data(settings).encrypt(
                         json.dumps(fixed.secret, ensure_ascii=False)
                     ),
-                    "actor_user_id": str(actor.user_id),
                     "actor_token_id": str(actor.token_id) if actor.token_id else None,
                     "actor_kind": actor.actor_kind,
                     "scopes": sorted(actor.scopes),
@@ -266,12 +260,9 @@ async def submit_check(
 def worker(job: Job) -> Identity:
     submission = job.result["submission"]
     return Identity(
-        UUID(submission["actor_user_id"]),
-        job.org_id,
-        set(submission["scopes"]),
-        "viewer",
-        UUID(submission["actor_token_id"]) if submission["actor_token_id"] else None,
-        "worker",
+        scopes=set(submission["scopes"]),
+        token_id=UUID(submission["actor_token_id"]) if submission["actor_token_id"] else None,
+        actor_kind="worker",
     )
 
 
@@ -310,7 +301,6 @@ def store_citation(session, job, run, citation, *, finding_id=None, check_item_i
     session.add(
         CheckFindingCitation(
             id=uuid4(),
-            org_id=job.org_id,
             task_id=job.task_id,
             report_id=run.id,
             finding_id=finding_id,
@@ -338,7 +328,6 @@ async def publish(
     completion = "partial" if unassessed else "complete"
     run = CheckRun(
         id=uuid4(),
-        org_id=job.org_id,
         task_id=job.task_id,
         job_id=job.id,
         run_id=job.run_id,
@@ -361,7 +350,6 @@ async def publish(
             "finding_count": finding_count,
             "unassessed_count": unassessed,
         },
-        actor_user_id=actor.user_id,
         actor_token_id=actor.token_id,
         actor_kind="worker",
     )
@@ -372,7 +360,6 @@ async def publish(
         item = result["item"]
         coverage = CheckItem(
             id=uuid4(),
-            org_id=job.org_id,
             task_id=job.task_id,
             report_id=run.id,
             draft_id=fixed.draft.id,
@@ -393,7 +380,6 @@ async def publish(
         for finding in result["findings"]:
             row = CheckFinding(
                 id=uuid4(),
-                org_id=job.org_id,
                 task_id=job.task_id,
                 report_id=run.id,
                 check_item_id=coverage.id,
@@ -415,7 +401,6 @@ async def publish(
     for item in fixed.secret["certificates"]:
         certificate = CheckCertificate(
             id=uuid4(),
-            org_id=job.org_id,
             task_id=job.task_id,
             report_id=run.id,
             task_certificate_id=UUID(item["task_certificate_id"]),
@@ -428,7 +413,6 @@ async def publish(
         for requirement_id in item["requirement_ids"]:
             session.add(
                 CheckCertificateItem(
-                    org_id=job.org_id,
                     task_id=job.task_id,
                     report_id=run.id,
                     certificate_id=certificate.id,
@@ -548,7 +532,6 @@ async def run_view(
     return CheckRunView.model_validate(
         {
             "id": run.id,
-            "org_id": run.org_id,
             "task_id": run.task_id,
             "job_id": run.job_id,
             "run_id": run.run_id,
@@ -585,10 +568,7 @@ def citation_payload(row: CheckFindingCitation) -> dict:
 def citation_view(row: CheckFindingCitation) -> dict:
     return FindingCitationView.model_validate(
         {
-            **{
-                key: getattr(row, key)
-                for key in ("id", "org_id", "task_id", "report_id", "finding_id")
-            },
+            **{key: getattr(row, key) for key in ("id", "task_id", "report_id", "finding_id")},
             "citation": citation_payload(row),
         }
     ).model_dump(mode="json")
@@ -614,7 +594,6 @@ async def finding_view(session: AsyncSession, finding: CheckFinding) -> dict:
                 key: getattr(finding, key)
                 for key in (
                     "id",
-                    "org_id",
                     "task_id",
                     "report_id",
                     "check_item_id",
@@ -661,7 +640,6 @@ async def show_check(
                     key: getattr(row, key)
                     for key in (
                         "id",
-                        "org_id",
                         "task_id",
                         "report_id",
                         "requirement_id",
@@ -726,7 +704,6 @@ async def show_check(
                         key: getattr(row, key)
                         for key in (
                             "id",
-                            "org_id",
                             "task_id",
                             "report_id",
                             "task_certificate_id",
@@ -756,7 +733,6 @@ def page_cursor(
     return TokenSigner.for_tokens(settings).issue(
         {
             "kind": "check_cursor",
-            "org_id": str(actor.org_id),
             "task_id": str(task_id),
             "finding_id": str(finding_id) if finding_id else None,
             "sort": "revision_asc" if finding_id else "created_at_id_asc",
@@ -777,7 +753,6 @@ def read_cursor(
             payload.get(key) != expected
             for key, expected in {
                 "kind": "check_cursor",
-                "org_id": str(actor.org_id),
                 "task_id": str(task_id),
                 "finding_id": str(finding_id) if finding_id else None,
                 "sort": "revision_asc" if finding_id else "created_at_id_asc",
@@ -897,14 +872,13 @@ async def decide_finding(
     from app.services.task_access import access as task_access
 
     # Resolve the task/report/finding before action errors, then preserve the
-    # specific human-session rejection before checking task write/domain grants.
+    # specific human-session rejection before checking task write scopes.
     await task_access(
         session,
         actor,
         run.task_id,
         scope="check:decide",
         write=True,
-        domain=finding.review_domain,
     )
     actor = await check_inputs.access(session, actor, "check:decide")
     await check_inputs.lock_inputs(session, actor, run.task_id)
@@ -915,8 +889,6 @@ async def decide_finding(
         cards.fail(
             "unclassified", "Assign the card review domain and generate a new current report"
         )
-    if actor.role != {"commercial": "bidder", "technical": "technical"}.get(finding.review_domain):
-        cards.fail("forbidden", "Review role does not match the finding domain", 403, 4)
     if (
         await validity(session, actor, run, storage, settings)
         or body.expected_input_hash != run.input_hash
@@ -935,7 +907,6 @@ async def decide_finding(
         )
     row = CheckDecision(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=run.task_id,
         report_id=run.id,
         finding_id=finding.id,
@@ -944,7 +915,6 @@ async def decide_finding(
         reason=body.reason,
         reason_sha256=cards.quote_hash(body.reason),
         expected_input_hash=body.expected_input_hash,
-        decided_by=actor.user_id,
         actor_kind="session",
     )
     session.add(row)

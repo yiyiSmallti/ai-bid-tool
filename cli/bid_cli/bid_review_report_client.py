@@ -18,7 +18,6 @@ async def download_report_artifact(client: Client, artifact_id: UUID, output: Pa
         raise ServiceError(
             "invalid_output_path", "Report download output must use a .docx name", 400, 2
         )
-    saved = client.state.load()
     result = await client.request("GET", f"/bid-review-artifacts/{artifact_id}/download-link")
     try:
         envelope = Result.model_validate(result)
@@ -29,7 +28,6 @@ async def download_report_artifact(client: Client, artifact_id: UUID, output: Pa
             or envelope.command != "review report download"
             or envelope.items
             or artifact.id != artifact_id
-            or str(artifact.org_id) != saved["org_id"]
             or artifact.format != "docx"
         ):
             raise ValueError("report descriptor scope mismatch")

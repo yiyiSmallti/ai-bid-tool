@@ -25,60 +25,49 @@ from sqlalchemy.orm import Session
 from test_platform_credentials_db import MANAGER, create_payload, manage, role_connection
 
 PLATFORM_KEY = "synthetic-rotation-platform-key-1234"
-ORG_KEY = "synthetic-rotation-org-key-5678"
+PROVIDER_KEY = "synthetic-rotation-local-key-5678"
 
 
-def seed_org_revision(engine, cipher, org, user, revision, *, broken=False):
+def seed_revision(engine, cipher, revision, *, broken=False):
     config_id = uuid4()
     ciphertext = (
-        "synthetic-invalid-ciphertext" if broken else cipher.encrypt(ORG_KEY, org, config_id)
+        "synthetic-invalid-ciphertext" if broken else cipher.encrypt(PROVIDER_KEY, config_id)
     )
     with Session(engine) as session, session.begin():
-        session.execute(text("SELECT set_config('app.current_org', :org, true)"), {"org": str(org)})
         session.execute(
             text(
-                "SELECT set_config('app.actor_kind','session',true), set_config('app.actor_user_id',:user,true), set_config('app.actor_token_id','',true)"
-            ),
-            {"user": str(user)},
+                "SELECT set_config('app.actor_kind','session',true), set_config('app.actor_token_id','',true)"
+            )
         )
         session.add(
             ProviderConfig(
                 id=config_id,
-                org_id=org,
                 capability="llm_extract",
                 revision=revision,
-                source="org",
                 data={"provider": "openai", "model": "synthetic", "json_mode": "json_schema"},
                 encrypted_key=ciphertext,
-                key_last4=ORG_KEY[-4:],
-                updated_by=user,
+                key_last4=PROVIDER_KEY[-4:],
             )
         )
     return config_id, ciphertext
 
 
-def read_org_rows(engine, org):
+def read_rows(engine):
     with Session(engine) as session, session.begin():
-        session.execute(text("SELECT set_config('app.current_org', :org, true)"), {"org": str(org)})
         return [
             dict(
                 id=row.id,
                 revision=row.revision,
                 data=row.data,
-                updated_by=row.updated_by,
                 encrypted_key=row.encrypted_key,
             )
-            for row in session.scalars(
-                select(ProviderConfig)
-                .where(ProviderConfig.org_id == org)
-                .order_by(ProviderConfig.revision)
-            )
+            for row in session.scalars(select(ProviderConfig).order_by(ProviderConfig.revision))
         ]
 
 
-def test_two_org_history_and_platform_rewrap_is_reentrant_and_preserves_values(
+def test_revision_history_and_service_rewrap_is_reentrant_and_preserves_values(
     admin_engine,
-    tenants,
+    database,
     monkeypatch,
     capsys,
     caplog,
@@ -109,11 +98,9 @@ def test_two_org_history_and_platform_rewrap_is_reentrant_and_preserves_values(
             }
         )
     )
-    org_rows = {}
-    for org, user in zip(tenants["orgs"], tenants["users"], strict=True):
-        for revision in (1, 2):
-            seed_org_revision(admin_engine, old_cipher, org, user, revision)
-        org_rows[org] = read_org_rows(admin_engine, org)
+    for revision in range(1, 5):
+        seed_revision(admin_engine, old_cipher, revision)
+    old_rows = read_rows(admin_engine)
     payload = create_payload()
     envelope = PlatformCredentialEnvelope(
         credential_id=UUID(payload["id"]),
@@ -133,29 +120,30 @@ def test_two_org_history_and_platform_rewrap_is_reentrant_and_preserves_values(
         "scope": "provider-secrets",
         "platform_checked": 1,
         "platform_rewritten": 1,
-        "org_revisions_checked": 4,
-        "org_revisions_rewritten": 4,
+        "provider_revisions_checked": 4,
+        "provider_revisions_rewritten": 4,
         "failed": 0,
         "exit_code": 0,
     }
     second = rotate_provider_secrets()
     assert (
-        second["platform_rewritten"] == second["org_revisions_rewritten"] == second["failed"] == 0
+        second["platform_rewritten"]
+        == second["provider_revisions_rewritten"]
+        == second["failed"]
+        == 0
     )
-    assert second["platform_checked"] == 1 and second["org_revisions_checked"] == 4
+    assert second["platform_checked"] == 1 and second["provider_revisions_checked"] == 4
     monkeypatch.delenv("BID_SECRETS_KEY_PREVIOUS")
     only_current = ProviderSecrets(Settings.load())
-    for org, old_rows in org_rows.items():
-        rows = read_org_rows(admin_engine, org)
-        for old, row in zip(old_rows, rows, strict=True):
-            assert {name: row[name] for name in ("id", "revision", "data", "updated_by")} == {
-                name: old[name] for name in ("id", "revision", "data", "updated_by")
-            }
-            assert row["encrypted_key"] != old["encrypted_key"]
-            assert (
-                only_current.decrypt(row["encrypted_key"], org, row["id"]).get_secret_value()
-                == ORG_KEY
-            )
+    rows = read_rows(admin_engine)
+    for old, row in zip(old_rows, rows, strict=True):
+        assert {name: row[name] for name in ("id", "revision", "data")} == {
+            name: old[name] for name in ("id", "revision", "data")
+        }
+        assert row["encrypted_key"] != old["encrypted_key"]
+        assert (
+            only_current.decrypt(row["encrypted_key"], row["id"]).get_secret_value() == PROVIDER_KEY
+        )
     with admin_engine.connect() as connection:
         row = connection.execute(
             text(
@@ -163,9 +151,6 @@ def test_two_org_history_and_platform_rewrap_is_reentrant_and_preserves_values(
             ),
             {"id": payload["id"]},
         ).one()
-        audits = connection.execute(
-            text("SELECT details FROM platform_audit_logs WHERE action='credential.rewrap'")
-        ).all()
     assert (
         row.revision == initial_view["revision"]
         and row.secret_version == initial_view["secret_version"]
@@ -184,40 +169,32 @@ def test_two_org_history_and_platform_rewrap_is_reentrant_and_preserves_values(
         ).get_secret_value()
         == PLATFORM_KEY
     )
-    assert len(audits) == 1
 
-    for org, old_rows in org_rows.items():
-        with pytest.raises(DBAPIError):
-            with role_connection(admin_engine, "bid_app") as connection:
-                connection.execute(
-                    text("SELECT set_config('app.current_org', :org, true)"), {"org": str(org)}
-                )
-                connection.execute(
-                    text("UPDATE provider_configs SET encrypted_key=:value WHERE id=:id"),
-                    {"value": "synthetic-forbidden-replacement", "id": old_rows[0]["id"]},
-                )
-        with pytest.raises(DBAPIError):
-            with role_connection(admin_engine, "bid_app") as connection:
-                connection.execute(
-                    text("SELECT provider_credential_rewrap(:org,:id,:old,:new)"),
-                    {
-                        "org": org,
-                        "id": old_rows[0]["id"],
-                        "old": old_rows[0]["encrypted_key"],
-                        "new": "synthetic-forbidden-replacement",
-                    },
-                )
+    with pytest.raises(DBAPIError):
+        with role_connection(admin_engine, "bid_app") as connection:
+            connection.execute(
+                text("UPDATE provider_configs SET encrypted_key=:value WHERE id=:id"),
+                {"value": "synthetic-forbidden-replacement", "id": old_rows[0]["id"]},
+            )
+    with pytest.raises(DBAPIError):
+        with role_connection(admin_engine, "bid_app") as connection:
+            connection.execute(
+                text("SELECT provider_credential_rewrap(:id,:old,:new)"),
+                {
+                    "id": old_rows[0]["id"],
+                    "old": old_rows[0]["encrypted_key"],
+                    "new": "synthetic-forbidden-replacement",
+                },
+            )
     monkeypatch.setenv("BID_SECRETS_KEY_PREVIOUS", old_key)
-    seed_org_revision(
-        admin_engine, old_cipher, tenants["orgs"][0], tenants["users"][0], 3, broken=True
-    )
+    seed_revision(admin_engine, old_cipher, 5, broken=True)
     partial = rotate_provider_secrets()
     assert partial["failed"] == 1 and partial["exit_code"] == 5
-    assert partial["platform_rewritten"] == partial["org_revisions_rewritten"] == 0
+    assert partial["platform_rewritten"] == partial["provider_revisions_rewritten"] == 0
     outputs = capsys.readouterr()
-    public_output = outputs.out + outputs.err + caplog.text + json.dumps(partial) + str(audits)
+    public_output = outputs.out + outputs.err + caplog.text + json.dumps(partial)
     assert all(
         secret not in public_output
-        for secret in (old_key, current_key, ORG_KEY, PLATFORM_KEY, payload["encrypted_key"])
+        for secret in (old_key, current_key, PROVIDER_KEY, PLATFORM_KEY, payload["encrypted_key"])
     )
     assert "rewrap_failed" in outputs.err

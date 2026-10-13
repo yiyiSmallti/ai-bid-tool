@@ -14,12 +14,19 @@ from app.schemas.export_contracts import (
     ExportPrepare,
     ExportRunView,
 )
-from bid_cli.client import Client, State
+from bid_cli.client import Client
 from bid_cli.export_client import download_export
 from bid_cli.main import main
 from pydantic import ValidationError
 
 IDENTIFIER = "00000000-0000-0000-0000-000000000001"
+
+
+@pytest.fixture(autouse=True)
+def access_key(monkeypatch):
+    monkeypatch.setenv("BID_ACCESS_KEY", "synthetic-only-session")
+
+
 IDENTIFIER_2 = "00000000-0000-0000-0000-000000000002"
 SHA = "a" * 64
 
@@ -30,15 +37,9 @@ def contract_version(request):
     return request.param
 
 
-class SyntheticState(State):
-    def load(self):
-        return {"session": "synthetic-only-session", "org_id": IDENTIFIER}
-
-
-def export_view(content, *, mode="final_section", validity="current", org_id=IDENTIFIER):
+def export_view(content, *, mode="final_section", validity="current"):
     return {
         "id": IDENTIFIER,
-        "org_id": org_id,
         "task_id": IDENTIFIER,
         "run_id": IDENTIFIER,
         "draft_id": IDENTIFIER,
@@ -56,7 +57,6 @@ def export_view(content, *, mode="final_section", validity="current", org_id=IDE
             "size_bytes": len(content),
             "media_type": DOCX_MEDIA_TYPE,
         },
-        "released_by": IDENTIFIER,
         "released_at": "2026-10-02T00:00:00Z",
         "issues": [],
         "invalidated_requirement_ids": [],
@@ -69,7 +69,6 @@ def download_client(
     *,
     mode="final_section",
     validity="current",
-    org_id=IDENTIFIER,
     link=None,
     served=None,
     media_type=DOCX_MEDIA_TYPE,
@@ -79,25 +78,18 @@ def download_client(
     download_error=None,
     contract_version="5.0",
 ):
-    client = Client(
-        "remote",
-        "https://synthetic.example.test",
-        SyntheticState(tmp_path / "unused.enc"),
-        contract_version=contract_version,
-    )
+    client = Client("remote", "https://synthetic.example.test", contract_version=contract_version)
     prefix = "/v4" if contract_version == "5.0" else ""
     path = f"/exports/{IDENTIFIER}/download"
-    view = export_view(content, mode=mode, validity=validity, org_id=org_id)
+    view = export_view(content, mode=mode, validity=validity)
     calls = []
 
     def handler(request):
         calls.append(request.url)
         assert request.headers["Authorization"] == "Bearer synthetic-only-session"
-        assert request.headers["X-Org-Id"] == IDENTIFIER
         if request.url.path == prefix + f"/exports/{IDENTIFIER}":
             return httpx.Response(
-                200,
-                json=Result(ok=True, command="fixture", data=view).model_dump(mode="json"),
+                200, json=Result(ok=True, command="fixture", data=view).model_dump(mode="json")
             )
         if request.url.path == prefix + path + "-link":
             descriptor = deepcopy(view["file"])
@@ -127,9 +119,7 @@ def download_client(
         if redirect:
             return httpx.Response(302, headers={"Location": "https://foreign.example.test/file"})
         return httpx.Response(
-            200,
-            content=content if served is None else served,
-            headers={"Content-Type": media_type},
+            200, content=content if served is None else served, headers={"Content-Type": media_type}
         )
 
     @asynccontextmanager
@@ -140,7 +130,7 @@ def download_client(
             yield http
 
     client.transport = transport
-    return client, calls
+    return (client, calls)
 
 
 @pytest.mark.parametrize(
@@ -189,8 +179,7 @@ async def test_export_download_rejects_external_or_malformed_links(
 
 
 @pytest.mark.parametrize(
-    "failure",
-    ["hash", "short", "long", "redirect", "media_type", "corrupt", "foreign", "stale"],
+    "failure", ["hash", "short", "long", "redirect", "media_type", "corrupt", "stale"]
 )
 async def test_export_download_never_writes_untrusted_or_stale_content(
     contract_version, tmp_path, docx_bytes, failure
@@ -212,7 +201,6 @@ async def test_export_download_never_writes_untrusted_or_stale_content(
         served=served,
         redirect=failure == "redirect",
         media_type="application/octet-stream" if failure == "media_type" else DOCX_MEDIA_TYPE,
-        org_id=IDENTIFIER_2 if failure == "foreign" else IDENTIFIER,
         validity="stale" if failure == "stale" else "current",
         contract_version=contract_version,
     )
@@ -220,7 +208,7 @@ async def test_export_download_never_writes_untrusted_or_stale_content(
     with pytest.raises(ServiceError) as error:
         await download_export(client, UUID(IDENTIFIER), output)
     assert error.value.exit_code == 4
-    assert not output.exists() and not list(tmp_path.glob(".bid-download-*"))
+    assert not output.exists() and (not list(tmp_path.glob(".bid-download-*")))
     assert all(url.host == "synthetic.example.test" for url in calls)
 
 
@@ -389,7 +377,6 @@ def test_prepare_contract_rejects_gate_bypass_inputs(failure):
 def test_invalidated_run_retains_only_existing_export_identifier():
     value = {
         "id": IDENTIFIER,
-        "org_id": IDENTIFIER,
         "task_id": IDENTIFIER,
         "draft_id": IDENTIFIER,
         "render_job_id": IDENTIFIER_2,
@@ -491,8 +478,6 @@ def test_cli_preserves_blocked_dry_run_preview_from_http_400(monkeypatch, tmp_pa
             yield http
 
     monkeypatch.setattr(Client, "transport", transport)
-    monkeypatch.setenv("BID_SESSION", "synthetic-only-session")
-    monkeypatch.setenv("BID_ORG", IDENTIFIER)
     metadata = tmp_path / "preview.json"
     metadata.write_text(
         json.dumps(
@@ -529,7 +514,6 @@ def test_prepare_wait_stops_at_candidate_without_releasing(monkeypatch, tmp_path
     calls = []
     queued = {
         "id": IDENTIFIER,
-        "org_id": IDENTIFIER,
         "task_id": IDENTIFIER,
         "draft_id": IDENTIFIER,
         "render_job_id": IDENTIFIER_2,
@@ -560,18 +544,7 @@ def test_prepare_wait_stops_at_candidate_without_releasing(monkeypatch, tmp_path
             }
         )
     )
-    main(
-        [
-            "export",
-            "prepare",
-            "--task",
-            IDENTIFIER,
-            "--input",
-            str(metadata),
-            "--wait",
-            "--json",
-        ]
-    )
+    main(["export", "prepare", "--task", IDENTIFIER, "--input", str(metadata), "--wait", "--json"])
     body = json.loads(capsys.readouterr().out)
     assert body["ok"] is True and body["data"]["state"] == "awaiting_release"
     assert calls == [

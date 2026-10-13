@@ -185,11 +185,7 @@ def create_router(context, db, storage, queue, crypto, processor):
         session, actor = ctx
         from app.services.task_access import access as task_access
 
-        _, workflow, member = await task_access(session, actor, task_id)
-        if member is None or member.role not in {"owner", "contributor"}:
-            raise ServiceError("forbidden", "Task role does not permit submission", 403, 4)
-        if workflow.state == "archived":
-            raise ServiceError("task_archived", "Task is archived", 409, 2)
+        await task_access(session, actor, task_id)
         body, html = await parse_submission(request)
         if body.retry:
             sandbox.require_access(
@@ -208,9 +204,7 @@ def create_router(context, db, storage, queue, crypto, processor):
 
                 raise not_found()
             if previous is not None:
-                await sandbox.reconcile_run(
-                    db, previous.id, actor.org_id, sandbox.browser_for(processor)
-                )
+                await sandbox.reconcile_run(db, previous.id, sandbox.browser_for(processor))
                 await session.refresh(previous)
         data, job = await sandbox.submit(
             session,
@@ -225,12 +219,12 @@ def create_router(context, db, storage, queue, crypto, processor):
         if job is not None and job.status == "queued" and job.queue_id is None:
             await session.commit()
             try:
-                queue_id = await queue.enqueue_sandbox(str(actor.org_id), str(job.id))
+                queue_id = await queue.enqueue_sandbox(str(job.id))
             except (OSError, ConnectorException, OperationalError) as exc:
                 raise ServiceError(
                     "queue_unavailable", "Job saved; repeat request to schedule it", 503, 3
                 ) from exc
-            async with db.transaction(actor.org_id) as update:
+            async with db.transaction() as update:
                 saved = await update.get(Job, job.id)
                 if saved is not None:
                     saved.queue_id = queue_id
@@ -275,7 +269,6 @@ def create_router(context, db, storage, queue, crypto, processor):
         token = crypto.issue(
             {
                 "kind": "sandbox_artifact",
-                "org_id": str(actor.org_id),
                 "artifact_id": str(artifact.id),
                 "sha256": artifact.plaintext_sha256,
             },
@@ -309,13 +302,12 @@ def create_router(context, db, storage, queue, crypto, processor):
         if any(
             (
                 signed.get("kind") != "sandbox_artifact",
-                signed.get("org_id") != str(actor.org_id),
                 signed.get("artifact_id") != str(artifact.id),
                 signed.get("sha256") != artifact.plaintext_sha256,
             )
         ):
             raise not_found()
-        content = await storage.read_bounded(actor.org_id, artifact.object_key, artifact.size_bytes)
+        content = await storage.read_bounded(artifact.object_key, artifact.size_bytes)
         if len(content) != artifact.size_bytes or sandbox.sha(content) != artifact.plaintext_sha256:
             raise ServiceError(
                 "sandbox_integrity_failed", "Stored artifact failed integrity checks", 409, 4

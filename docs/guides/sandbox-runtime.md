@@ -338,19 +338,14 @@ PYTHONPATH=server .venv/bin/python scripts/sandbox_proxy_acceptance.py
 It exits 1 when any case fails. Kernel-level egress filtering on the proxy node and
 real DNS resolution stay deployment checks.
 
-Check two-org isolation and lifecycle faults on a running development instance with
-two synthetic orgs. Org A needs a task with a succeeded extraction and a selected
-feature; pass their IDs and both orgs' credentials through the environment variables
-listed in [sandbox_two_org_acceptance.py](../../scripts/sandbox_two_org_acceptance.py):
-
-```sh
-PYTHONPATH=server .venv/bin/python scripts/sandbox_two_org_acceptance.py --worker-command data/dev-runtime/run-worker.sh
-```
-
-It renders prototypes as A, probes A's runs, jobs and signed links as B, reads and
-writes across org context with the runtime database role, cancels one run and SIGKILLs
-the worker during another, then restarts the worker. Run it only against a development
-instance.
+The former two-org acceptance driver was removed under
+[ADR 0012](../adr/0012-single-user-installation.md). Do not provision synthetic orgs
+or use the deleted command for single-user acceptance. Rehearse cancellation,
+worker termination/restart, lease expiry, disconnects and storage failure against
+an isolated development installation using the cases in
+[the sandbox acceptance plan](../plan/sandbox.md#end-to-end-acceptance-after-approval).
+The [real pipeline check](#run-the-real-pipeline-check) and proxy check above cover
+their named scenarios only; they do not establish all lifecycle fault outcomes.
 
 ## Submit and inspect a sandbox run
 

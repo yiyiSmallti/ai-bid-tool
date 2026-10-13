@@ -18,7 +18,17 @@ from app.services.auth import Identity
 from app.services.parsing import validate_document_async
 from app.services.task_authorization import task_authorized
 
-TASK_FIELDS = ("id", "name", "model_redaction_enabled", "model_redaction_revision")
+# Task list and create share these fields, so the console can list the tender number
+# and deadline without a per-row detail read, and a human can still read the
+# model-redaction setting revision from the list before another change.
+TASK_FIELDS = (
+    "id",
+    "name",
+    "tender_number",
+    "deadline",
+    "model_redaction_enabled",
+    "model_redaction_revision",
+)
 
 
 async def create_task(session: AsyncSession, identity: Identity, body: TaskCreate) -> Task:

@@ -15,7 +15,7 @@ from app.schemas.sandbox_contracts import (
     VendorSpec,
     Viewport,
 )
-from bid_cli.client import Client, State
+from bid_cli.client import Client
 from bid_cli.main import main
 from bid_cli.sandbox import download_artifact
 from pydantic import ValidationError
@@ -31,11 +31,6 @@ SHA256 = "a" * 64
 def contract_version(request):
     """Version metadata endpoints while preserving signed raw download paths."""
     return request.param
-
-
-class SyntheticState(State):
-    def load(self):
-        return {"session": "synthetic-only-session", "org_id": IDENTIFIER}
 
 
 def prototype_spec(content: bytes = b"<html>synthetic</html>") -> dict:
@@ -85,7 +80,6 @@ def artifact(content: bytes = b"synthetic-artifact") -> dict:
 def run_view() -> dict:
     return {
         "id": RUN_ID,
-        "org_id": IDENTIFIER,
         "task_id": IDENTIFIER,
         "job_id": JOB_ID,
         "purpose": "prototype_offline",
@@ -348,7 +342,6 @@ def sandbox_download_client(tmp_path, content, *, link=None, served=None, contra
     client = Client(
         "remote",
         "https://synthetic.example.test",
-        SyntheticState(tmp_path / "unused.enc"),
         contract_version=contract_version,
     )
     prefix = "/v4" if contract_version == "5.0" else ""
@@ -357,8 +350,10 @@ def sandbox_download_client(tmp_path, content, *, link=None, served=None, contra
 
     def handler(request):
         calls.append(request.url)
-        assert request.headers["Authorization"] == "Bearer synthetic-only-session"
-        assert request.headers["X-Org-Id"] == IDENTIFIER
+        from bid_cli.client import credential
+
+        assert request.headers["Authorization"] == f"Bearer {credential()}"
+        assert "X-Org-Id" not in request.headers
         if request.url.path == prefix + path + "-link":
             return httpx.Response(
                 200,

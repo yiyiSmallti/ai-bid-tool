@@ -19,7 +19,7 @@ onMounted(()=>load());onUnmounted(()=>{stopped=true;generation++;clearTimeout(ti
 <template>
   <fieldset class="feature-product-picker" :disabled="disabled"><legend>{{optional?'按所属产品筛选':'所属产品'}}</legend>
     <p v-if="modelValue" class="hint">{{optional?'筛选产品 ID':'已关联产品 ID'}}：<span class="mono">{{modelValue}}</span> <RouterLink :to="`/org/products/${modelValue}`">查看产品</RouterLink></p>
-    <p v-else class="hint">{{optional?'全部产品':'请选择同单位可用产品。已有的产品关联不会自动替换。'}}</p>
+    <p v-else class="hint">{{optional?'全部产品':'请选择可用产品。已有的产品关联不会自动替换。'}}</p>
     <div class="actions"><el-input v-model="search" maxlength="200" :disabled="disabled" :aria-label="optional?'筛选产品搜索':'关联产品搜索'" placeholder="搜索产品名称、厂家、型号" clearable/><el-button :disabled="disabled||loading" @click="reset">重新读取产品候选</el-button><el-button v-if="optional&&modelValue" :disabled="disabled" @click="emit('update:modelValue','')">全部产品</el-button></div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert"/>
     <p v-if="loading" role="status">正在读取产品候选…</p>

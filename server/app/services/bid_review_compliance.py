@@ -138,7 +138,6 @@ def basis(binding, confidence=None):
             kind="model",
             confidence=confidence,
             provider_config_id=identity.get("provider_config_id"),
-            platform_model_id=identity.get("platform_model_id"),
             provider_revision=identity.get("model_revision"),
             model=identity["model"],
         )

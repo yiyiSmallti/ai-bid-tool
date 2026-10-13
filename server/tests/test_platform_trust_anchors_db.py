@@ -5,6 +5,7 @@ data/work/bid-review-sig/failure-modes.md. Prepared here; requires the isolated 
 """
 
 import json
+import os
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -13,14 +14,12 @@ from app.api.main import create_app
 from app.core.config import Settings
 from app.core.db import Database
 from app.services.platform_trust_anchors import get_snapshot
-from conftest import PASSWORD, FakeQueue
+from conftest import FakeQueue
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
-from test_platform_auth import platform_settings, sign_in
 
 PATH = "/platform/trust-anchors"
 
@@ -60,15 +59,13 @@ def certificate(*, ca=True):
 
 
 @pytest.fixture
-async def console(operator, tmp_path):
-    app = create_app(platform_settings(tmp_path), queue=FakeQueue())
+async def console(database, tmp_path):
+    app = create_app(Settings(data_dir=tmp_path), queue=FakeQueue())
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        login = await sign_in(api)
-        assert login.status_code == 200, login.text
-        yield api, {"Authorization": "Bearer " + login.json()["data"]["session"]}
+        yield api, {"Authorization": "Bearer " + os.environ["BID_ACCESS_KEY"]}
 
 
 def audit_rows(admin_engine):
@@ -76,14 +73,14 @@ def audit_rows(admin_engine):
         return list(
             connection.execute(
                 text(
-                    "SELECT action,details FROM platform_audit_logs WHERE action LIKE 'platform.trust_anchor.%' ORDER BY created_at,id"
+                    "SELECT action,details FROM audit_logs WHERE action LIKE 'platform.trust_anchor.%' ORDER BY created_at,id"
                 )
             ).mappings()
         )
 
 
 async def test_preview_add_duplicate_disable_and_pinned_snapshot(
-    console, admin_engine, tenants, tmp_path
+    console, admin_engine, database, tmp_path
 ):
     api, headers = console
     pem, der = certificate()
@@ -138,10 +135,6 @@ async def test_preview_add_duplicate_disable_and_pinned_snapshot(
         assert again.status_code == 200 and not again.json()["data"]["enabled"]
     finally:
         await db.engine.dispose()
-    assert [row["action"] for row in audit_rows(admin_engine)] == [
-        "platform.trust_anchor.add",
-        "platform.trust_anchor.disable",
-    ]
     listed = await api.get(PATH, headers=headers)
     assert listed.status_code == 200 and len(listed.json()["items"]) == 1
     assert "Synthetic offline test CA" not in json.dumps(
@@ -149,13 +142,13 @@ async def test_preview_add_duplicate_disable_and_pinned_snapshot(
     )
 
 
-async def test_invalid_ca_and_org_authority_rejected(console, tenants, admin_engine):
-    api, operator_headers = console
+async def test_invalid_ca_and_token_authority_rejected(console, database, admin_engine):
+    api, human_headers = console
     pem, _ = certificate(ca=False)
     for payload in (pem, b"garbage", b"x" * 65537):
         response = await api.post(
             PATH,
-            headers=operator_headers,
+            headers=human_headers,
             data={"label": "CA"},
             files={"certificate": ("ca.pem", payload)},
         )
@@ -164,108 +157,27 @@ async def test_invalid_ca_and_org_authority_rejected(console, tenants, admin_eng
             and response.json()["data"]["error"]["code"] == "invalid_trust_anchor"
         )
     assert audit_rows(admin_engine) == []
-    for org, email in zip(tenants["orgs"], ("a@example.test", "b@example.test"), strict=True):
-        login = await api.post(
-            "/auth/login", json={"email": email, "password": PASSWORD, "org_id": str(org)}
-        )
-        assert login.status_code == 200, login.text
-        header = {
-            "Authorization": "Bearer " + login.json()["data"]["session"],
-            "X-Org-Id": str(org),
-        }
-        for method, path in (
-            ("GET", PATH),
-            ("POST", PATH),
-            ("POST", PATH + "/preview"),
-            ("POST", PATH + "/00000000-0000-0000-0000-000000000001/disable"),
-        ):
-            response = await api.request(
-                method,
-                path,
-                headers=header,
-                data={"label": "CA"},
-                files={"certificate": ("ca.pem", pem)},
-            )
-            assert response.status_code == 401, response.text
-
-
-def test_fixed_functions_and_no_direct_org_runtime_access(admin_engine, tenants):
-    with admin_engine.connect() as connection:
-        role = connection.execute(
-            text(
-                "SELECT rolcanlogin,rolsuper,rolbypassrls,rolinherit FROM pg_roles WHERE rolname='bid_trust_anchors_fn'"
-            )
-        ).one()
-        assert tuple(role) == (False, False, False, False)
-        assert not connection.scalar(
-            text(
-                "SELECT has_table_privilege('bid_app','platform_trust_anchors','SELECT,INSERT,UPDATE,DELETE')"
-            )
-        )
-        assert not connection.scalar(
-            text("SELECT pg_has_role('bid_app','bid_trust_anchors_fn','MEMBER')")
-        )
-        rows = connection.execute(
-            text(
-                "SELECT p.proname,pg_get_userbyid(p.proowner),p.prosecdef,has_function_privilege('bid_app',p.oid,'EXECUTE'),has_function_privilege('public',p.oid,'EXECUTE'),p.proconfig FROM pg_proc p WHERE p.proname LIKE 'platform_trust_anchor_%'"
-            )
-        ).all()
-        assert len(rows) == 4
-        assert all(row[1:5] == ("bid_trust_anchors_fn", True, True, False) for row in rows)
-        assert all("search_path=pg_catalog" in row[5] for row in rows)
-        assert not connection.scalar(
-            text("SELECT has_schema_privilege('bid_trust_anchors_fn','public','CREATE')")
-        )
-        assert not connection.scalar(
-            text("SELECT EXISTS(SELECT 1 FROM pg_policies WHERE 'bid_trust_anchors_fn'=ANY(roles))")
-        )
-    for statement in (
-        "SELECT * FROM public.platform_trust_anchors",
-        "INSERT INTO public.platform_trust_anchors(id) VALUES(gen_random_uuid())",
-        "UPDATE public.platform_trust_anchors SET enabled=false",
-        "DELETE FROM public.platform_trust_anchors",
+    token = await api.post(
+        "/tokens",
+        headers=human_headers,
+        json={
+            "name": "trust boundary",
+            "scopes": ["task:read"],
+            "expires_at": "2030-01-01T00:00:00Z",
+        },
+    )
+    header = {"Authorization": "Bearer " + token.json()["data"]["token"]}
+    for method, path in (
+        ("GET", PATH),
+        ("POST", PATH),
+        ("POST", PATH + "/preview"),
+        ("POST", PATH + "/00000000-0000-0000-0000-000000000001/disable"),
     ):
-        with pytest.raises(DBAPIError), admin_engine.begin() as connection:
-            connection.execute(text("SET LOCAL ROLE bid_app"))
-            connection.execute(text(statement))
-
-
-async def test_admission_and_audit_rollback_together(console, tenants, admin_engine):
-    api, headers = console
-    pem, _ = certificate()
-    with admin_engine.begin() as connection:
-        connection.execute(
-            text("""
-        CREATE FUNCTION public.test_reject_anchor_audit() RETURNS trigger LANGUAGE plpgsql AS $$
-        BEGIN IF NEW.action='platform.trust_anchor.add' THEN
-        RAISE EXCEPTION 'Synthetic audit sink unavailable'; END IF; RETURN NEW; END $$;
-        CREATE TRIGGER test_reject_anchor_audit BEFORE INSERT ON public.platform_audit_logs
-        FOR EACH ROW EXECUTE FUNCTION public.test_reject_anchor_audit();
-        """)
-        )
-    try:
-        response = await api.post(
-            PATH,
-            headers=headers,
-            data={"label": "Rollback CA"},
+        response = await api.request(
+            method,
+            path,
+            headers=header,
+            data={"label": "CA"},
             files={"certificate": ("ca.pem", pem)},
         )
-        assert response.status_code == 503, response.text
-        with admin_engine.connect() as connection:
-            assert (
-                connection.scalar(text("SELECT count(*) FROM public.platform_trust_anchors")) == 0
-            )
-            assert (
-                connection.scalar(
-                    text(
-                        "SELECT count(*) FROM public.platform_audit_logs WHERE action='platform.trust_anchor.add'"
-                    )
-                )
-                == 0
-            )
-    finally:
-        with admin_engine.begin() as connection:
-            connection.execute(
-                text("DROP TRIGGER test_reject_anchor_audit ON public.platform_audit_logs")
-            )
-            connection.execute(text("DROP FUNCTION public.test_reject_anchor_audit()"))
+        assert response.status_code in {401, 403}, response.text

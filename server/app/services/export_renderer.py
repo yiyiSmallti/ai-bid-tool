@@ -67,7 +67,6 @@ INDEX_COLUMNS = (("编号", 10), ("材料", 30), ("内容", 35), ("对应条款"
 GAP_LABELS = {
     "requirement_unconfirmed": "招标要求尚未确认",
     "requirement_invalidated": "招标要求确认已失效",
-    "cosign_required": "响应会签尚未完成",
     "missing_card": "缺少响应卡",
     "unconfirmed": "响应尚未确认",
     "rejected": "响应已驳回",
@@ -75,7 +74,6 @@ GAP_LABELS = {
     "unclassified": "响应尚未分类",
     "stale_material": "材料选择已失效",
     "invalid_citation": "招标原文引用失效",
-    "needs_reconfirmation": "引用修复后待重新确认",
 }
 ADAPTER_VERSION = "docx-template-adapter-v1"
 # Page height kept for an attachment caption in the template heading style. Its
@@ -807,7 +805,6 @@ def _validate_manifest(
                 evidence_id = _text(evidence_item.get("id"), "evidence.id")
                 if evidence_id in evidence_bindings:
                     _fail("invalid_export_manifest", "Evidence IDs cannot be repeated across rows")
-                _text(evidence_item.get("confirmed_by"), "evidence.confirmed_by")
                 _text(evidence_item.get("confirmed_at"), "evidence.confirmed_at")
                 material_kind = evidence_item.get("material_kind")
                 attachment_ordinal = evidence_item.get("attachment_ordinal")
@@ -829,7 +826,6 @@ def _validate_manifest(
                     _fail("invalid_export_manifest", "Evidence material kind is unsupported")
                 evidence_bindings[evidence_id] = (str(item["requirement_id"]), attachment_ordinal)
         elif kind == "comply_only":
-            _text(item.get("disposition_by"), "item.disposition_by")
             _text(item.get("disposition_at"), "item.disposition_at")
         else:
             gaps += 1

@@ -10,6 +10,7 @@ from app.core.errors import not_found
 from app.models.entities import Document, Job, Task
 from app.schemas.console_assessments import AssessmentJobQuery, CitationRequest
 from app.schemas.contracts import Result
+from app.services import assessment_reads
 from app.services.assessment_bounds import bounded_result, query_model
 from app.services.task_access import access as task_access
 
@@ -42,15 +43,12 @@ def create_router(
                 task,
                 (
                     "id",
-                    "org_id",
                     "name",
                     "tender_number",
                     "deadline",
-                    "created_by",
                     "created_at",
                     "model_redaction_enabled",
                     "model_redaction_revision",
-                    "model_redaction_by",
                 ),
             ),
         )
@@ -103,8 +101,6 @@ def create_router(
         document: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import assessment_reads
-
         session, actor = ctx
         await task_access(session, actor, task_id)
         if kind in {"annotation_render", "annotation_release"}:
@@ -195,8 +191,6 @@ def create_router(
         "/tasks/{task_id}/assessment-inputs", name="assessment_inputs", response_model=Result
     )
     async def assessment_inputs(task_id: UUID, job: UUID, ctx=Depends(context, scope="function")):
-        from app.services import assessment_reads
-
         data = await assessment_reads.inputs(ctx[0], ctx[1], task_id, job, storage, settings)
         return bounded_result(
             Result(ok=True, command="assessment inputs", data=data.model_dump(mode="json"))
@@ -223,8 +217,6 @@ def create_router(
         limit: int = Query(4000, ge=1, le=8000),
         ctx=Depends(citation_context, scope="function"),
     ):
-        from app.services import assessment_reads
-
         query = query_model(
             CitationRequest,
             parent_kind=parent_kind,

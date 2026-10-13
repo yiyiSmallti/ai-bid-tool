@@ -75,7 +75,7 @@ async def preview(session, actor, task_id, body: PrototypeDecisionPreviewInput, 
                 ResponseCard.task_id == task_id,
                 ResponseCard.extraction_job_id == body.extraction_job_id,
                 ResponseCardRevision.state == "confirmed",
-                Evidence.confirmed_by.is_not(None),
+                Evidence.confirmed_at.is_not(None),
                 ScreenshotAsset.origin == "prototype",
                 ScreenshotAsset.task_feature_id.in_(body.task_feature_ids),
                 Evidence.id.in_(body.evidence_ids) if body.evidence_ids is not None else true(),
@@ -93,7 +93,7 @@ async def preview(session, actor, task_id, body: PrototypeDecisionPreviewInput, 
     for evidence, card, revision, asset in rows:
         if body.evidence_ids is not None and evidence.id not in body.evidence_ids:
             continue
-        cards.human(actor, revision.review_domain)
+        cards.human(actor)
         if revision.quote_sha256 != cards.quote_hash(
             (await session.get(Requirement, card.requirement_id)).quote
         ):
@@ -164,7 +164,7 @@ async def apply(session, actor, task_id, body, storage):
             revision = await session.get(ResponseCardRevision, row.card_revision_id)
             if revision is None:
                 raise not_found()
-            cards.human(actor, revision.review_domain)
+            cards.human(actor)
         return {
             "batch_id": str(existing.id),
             "decisions": [await decision_view(session, actor, row) for row in rows],
@@ -198,7 +198,6 @@ async def apply(session, actor, task_id, body, storage):
         )
     batch = PrototypeDecisionBatch(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=task_id,
         extraction_job_id=body.extraction_job_id,
         module_label=body.module_label,
@@ -207,7 +206,6 @@ async def apply(session, actor, task_id, body, storage):
         input_hash=body.expected_input_hash,
         request_hash=request_hash,
         idempotency_key=body.idempotency_key,
-        decided_by=actor.user_id,
     )
     session.add(batch)
     await session.flush()
@@ -219,7 +217,6 @@ async def apply(session, actor, task_id, body, storage):
         assert asset is not None
         row = PrototypeEvidenceDecision(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task_id,
             extraction_job_id=body.extraction_job_id,
             batch_id=batch.id,
@@ -236,7 +233,6 @@ async def apply(session, actor, task_id, body, storage):
             decision=item.decision,
             keep_basis=item.keep_basis,
             reason=item.reason,
-            decided_by=actor.user_id,
         )
         session.add(row)
         rows.append(row)
@@ -289,7 +285,7 @@ async def decision_view(session, actor, row):
         and prototype is not None
         and revision.state == "confirmed"
         and cards.revision_quote_hash(revision, requirement) == cards.quote_hash(requirement.quote)
-        and evidence.confirmed_by is not None
+        and evidence.confirmed_at is not None
         and (evidence.screenshot_asset_id, evidence.screenshot_rendition_id, evidence.image_sha256)
         == (row.asset_id, row.rendition_id, row.image_sha256)
         and (asset.task_feature_id, asset.feature_revision_id, prototype.html_sha256)
@@ -321,7 +317,6 @@ async def decision_view(session, actor, row):
         },
         "decision": row.decision,
         "keep_basis": row.keep_basis,
-        "decided_by": str(row.decided_by),
         "decided_at": row.created_at.astimezone(UTC).isoformat(),
         "validity": validity,
     }
@@ -336,7 +331,7 @@ async def export_decision_manifest(session, actor, evidence_ids, *, final: bool,
             raise not_found()
         if evidence.kind != "image_region":
             continue
-        if evidence.confirmed_by is None:
+        if evidence.confirmed_at is None:
             issues.append({"evidence_id": str(evidence.id), "code": "unconfirmed_evidence"})
             continue
         await images.validate_image_evidence(session, actor, evidence, storage)

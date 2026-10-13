@@ -13,10 +13,8 @@ Failure modes covered here are intentionally at the public workflow boundary:
   acceptance artifact;
 * cancellation, explicit retry, live and expired leases, input changes and a
   stale attempt cannot publish a report outside the durable job boundary;
-* only the responsible human session may append dismiss/reopen decisions;
-  admins, tokens, workers, stale revisions and stale reports are rejected;
-* every check route, including job status/cancel, hides another organization's
-  resources as not found; and
+* only a human session may append dismiss/reopen decisions;
+  tokens, agents, workers, stale revisions and stale reports are rejected; and
 * both PDF page citations and Word block citations survive API-to-worker
   publication without inventing a page number for Word.
 """
@@ -55,14 +53,13 @@ from app.schemas.check_contracts import FindingDecisionRequest
 from app.schemas.contracts import Category
 from app.services import check as check_service
 from app.services import check_rules, drafts
-from app.services.auth import ROLE_SCOPES, Identity
+from app.services.auth import HUMAN_SCOPES, Identity
 from bid_cli import main as cli
-from bid_cli.client import Client, State
+from bid_cli.client import Client
 from conftest import FakeQueue
 from fakes import FakeLLM
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
-from task_fixtures import reviewer_header
 from test_card_generation import token_header
 from test_docx_extraction import word_tender
 from test_response_cards import (
@@ -73,10 +70,8 @@ from test_response_cards import (
     create_card,
     create_tender,
     labelled_pdf,
-    login,
     require_action,
     run_document_job,
-    set_role,
 )
 
 ASSESSMENT_DATE = "2026-10-04"
@@ -98,25 +93,22 @@ class CheckExtraction(PhaseOneExtraction):
 
 
 @asynccontextmanager
-async def check_client(tenants, tmp_path):
+async def check_client(database, tmp_path):
     provider = CheckExtraction()
     app = create_app(Settings(data_dir=tmp_path), llm=provider, queue=FakeQueue())
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        headers = [
-            await login(api, org, label)
-            for org, label in zip(tenants["orgs"], ("a", "b"), strict=True)
-        ]
-        yield api, app, headers, provider
+        headers = {"Authorization": "Bearer " + os.environ["BID_ACCESS_KEY"]}
+        yield (api, app, headers, provider)
 
 
 class LiveCheckClient(Client):
     """Route either CLI mode label to a fresh app using the real PostgreSQL state."""
 
-    def __init__(self, mode: str, server: str, state: State, settings: Settings):
-        super().__init__(mode, server, state)
+    def __init__(self, mode: str, server: str, settings: Settings):
+        super().__init__(mode, server)
         self.settings = settings
 
     @asynccontextmanager
@@ -140,7 +132,7 @@ def invoke_live_cli(arguments: list[str]) -> tuple[int, dict]:
             cli.main([*arguments, "--json"])
         except SystemExit as exc:
             exit_code = int(exc.code)
-    return exit_code, json.loads(output.getvalue())
+    return (exit_code, json.loads(output.getvalue()))
 
 
 async def select_certificate(
@@ -183,25 +175,23 @@ async def select_certificate(
     assert selected.status_code == 200, selected.text
     selection = selected.json()["data"]
     if not with_page:
-        return selection, None
+        return (selection, None)
     source = await api.post(
         f"/tasks/{task_id}/evidence-sources",
         headers=header,
         json={"task_certificate_id": selection["id"], "page": 1},
     )
     assert source.status_code == 200, source.text
-    return selection, source.json()["data"]["source"]
+    return (selection, source.json()["data"]["source"])
 
 
 async def publish_draft(api, app, header, task_id: str, extraction_id: str) -> dict:
     queued = await api.post(
-        f"/tasks/{task_id}/drafts",
-        headers=header,
-        json={"extraction_job_id": extraction_id},
+        f"/tasks/{task_id}/drafts", headers=header, json={"extraction_job_id": extraction_id}
     )
     assert queued.status_code == 200, queued.text
     job_id = queued.json()["data"]["job_id"]
-    await app.state.processor(header["X-Org-Id"], job_id)
+    await app.state.processor(job_id)
     status = await api.get(f"/jobs/{job_id}", headers=header)
     assert status.status_code == 200, status.text
     result = status.json()["data"]
@@ -209,9 +199,9 @@ async def publish_draft(api, app, header, task_id: str, extraction_id: str) -> d
     return result["result"]
 
 
-async def build_check_case(api, app, headers, provider, tenants, admin_engine, tmp_path):
+async def build_check_case(api, app, headers, provider, database, admin_engine, tmp_path):
     """Create one current draft containing every phase-one rule boundary."""
-    header = headers[0]
+    header = headers
     task, document, extraction, requirements = await create_tender(
         api, app, header, tmp_path, suffix="check", confirmed=True
     )
@@ -272,7 +262,6 @@ async def build_check_case(api, app, headers, provider, tenants, admin_engine, t
     assert mapped_unknown_page is not None
     assert expired_page is not None
     assert future_page is not None
-
     commercial = await create_card(
         api,
         header,
@@ -351,11 +340,7 @@ async def build_check_case(api, app, headers, provider, tenants, admin_engine, t
         },
     )
     assert candidate["state"] == "draft"
-
-    set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
-    _, review_header = await reviewer_header(
-        api, admin_engine, tenants["orgs"][0], UUID(task), "commercial"
-    )
+    review_header = header
     commercial = await require_action(api, review_header, commercial, "submit")
     commercial = await require_action(
         api,
@@ -366,11 +351,7 @@ async def build_check_case(api, app, headers, provider, tenants, admin_engine, t
         reviewed_warning_codes=commercial["warning_codes"],
         reason="The synthetic certificate page was compared with its retained original.",
     )
-
-    set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
-    _, review_header = await reviewer_header(
-        api, admin_engine, tenants["orgs"][0], UUID(task), "technical"
-    )
+    review_header = header
     technical = await require_action(api, review_header, technical, "submit")
     technical = await require_action(
         api, review_header, technical, "confirm", reviewed_evidence_ids=[]
@@ -381,16 +362,11 @@ async def build_check_case(api, app, headers, provider, tenants, admin_engine, t
     )
     repaired_quote = "support team shall provide a named escalation contact."
     assert repaired_quote in TENDER_LINES[4]
-    # Reproduce the persisted outcome of citation repair without repeating that
-    # feature's own API suite: the historical confirmed revision keeps its old
-    # quote hash, while the new exact source remains uniquely locatable.
     with Session(admin_engine) as session, session.begin():
         requirement = session.get(Requirement, UUID(requirements[4]["id"]))
         assert requirement is not None
         requirement.quote = repaired_quote
     requirements[4]["source"]["quote"] = repaired_quote
-
-    set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
     draft = await publish_draft(api, app, header, task, extraction)
     shown = await api.get(f"/drafts/{draft['draft_id']}", headers=header)
     assert shown.status_code == 200, shown.text
@@ -403,7 +379,7 @@ async def build_check_case(api, app, headers, provider, tenants, admin_engine, t
     }
     gap_reasons = {row["requirement_id"]: row["reasons"] for row in draft_view["gaps"]}
     assert "unconfirmed" in gap_reasons[requirements[3]["id"]]
-    assert "needs_reconfirmation" in gap_reasons[requirements[4]["id"]]
+    assert "invalid_citation" in gap_reasons[requirements[4]["id"]]
     assert CANDIDATE_MARKER not in shown.text
     return {
         "api": api,
@@ -429,12 +405,14 @@ async def build_check_case(api, app, headers, provider, tenants, admin_engine, t
 
 
 @pytest.fixture
-async def check_case(tenants, tmp_path, admin_engine):
-    async with check_client(tenants, tmp_path) as (api, app, headers, provider):
-        yield await build_check_case(api, app, headers, provider, tenants, admin_engine, tmp_path)
+async def check_case(database, tmp_path, admin_engine):
+    async with check_client(database, tmp_path) as (api, app, headers, provider):
+        yield (
+            await build_check_case(api, app, headers, provider, database, admin_engine, tmp_path)
+        )
 
 
-async def row_counts(app, org_id: UUID) -> dict[str, int]:
+async def row_counts(app) -> dict[str, int]:
     models = (
         Job,
         UsageRecord,
@@ -447,7 +425,7 @@ async def row_counts(app, org_id: UUID) -> dict[str, int]:
         CheckFindingCitation,
         CheckDecision,
     )
-    async with app.state.db.transaction(org_id) as session:
+    async with app.state.db.transaction() as session:
         return {
             model.__tablename__: await session.scalar(select(func.count()).select_from(model))
             for model in models
@@ -486,7 +464,7 @@ async def submit_check(case, preview: dict, *, retry: bool = False):
 
 async def process_check(case, receipt: dict) -> dict:
     job_id = receipt["job_id"]
-    await case["app"].state.processor(case["header"]["X-Org-Id"], job_id)
+    await case["app"].state.processor(job_id)
     response = await case["api"].get(f"/jobs/{job_id}", headers=case["header"])
     assert response.status_code == 200, response.text
     return response.json()
@@ -519,14 +497,14 @@ def write_acceptance_artifact(tmp_path: Path, manifest: dict, report: dict) -> P
 
 
 async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
-    check_case, tenants, tmp_path, monkeypatch, admin_engine
+    check_case, database, tmp_path, monkeypatch, admin_engine
 ):
     case = check_case
-    before = await row_counts(case["app"], tenants["orgs"][0])
+    before = await row_counts(case["app"])
     queue_calls = len(case["app"].state.queue.calls)
     provider_calls = case["provider"].calls
     preview = await preview_check(case)
-    after = await row_counts(case["app"], tenants["orgs"][0])
+    after = await row_counts(case["app"])
     assert after == before
     assert len(case["app"].state.queue.calls) == queue_calls
     assert case["provider"].calls == provider_calls
@@ -581,7 +559,7 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     )
     assert changed.status_code == 409, changed.text
     assert changed.json()["data"]["error"]["code"] == "check_input_changed"
-    assert await row_counts(case["app"], tenants["orgs"][0]) == before
+    assert await row_counts(case["app"]) == before
     submitted = await submit_check(case, preview)
     assert submitted.status_code == 200, submitted.text
     receipt = submitted.json()["data"]
@@ -705,7 +683,7 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     assert future["requirement_ids"] == [case["requirements"][1]["id"]]
     serialized = json.dumps(payload, ensure_ascii=False)
     assert CANDIDATE_MARKER not in serialized
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         stored_run = await session.get(CheckRun, UUID(result["report_id"]))
         assert stored_run is not None
         fixed_manifest = stored_run.input_manifest
@@ -738,15 +716,12 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     assert case["header"]["Authorization"].removeprefix("Bearer ") not in artifact_text
     assert case["task"] in artifact_text and result["report_id"] in artifact_text
     cli_settings = Settings(data_dir=tmp_path)
-    monkeypatch.setenv("BID_SESSION", case["header"]["Authorization"].removeprefix("Bearer "))
-    monkeypatch.setenv("BID_ORG", case["header"]["X-Org-Id"])
+    monkeypatch.setenv("BID_ACCESS_KEY", case["header"]["Authorization"].removeprefix("Bearer "))
     monkeypatch.setattr(
-        cli,
-        "Client",
-        lambda mode, server, state: LiveCheckClient(mode, server, state, cli_settings),
+        cli, "Client", lambda mode, server: LiveCheckClient(mode, server, cli_settings)
     )
     for mode in ("remote", "local"):
-        common = ["--mode", mode, "--state", str(tmp_path / f"check-{mode}.enc")]
+        common = ["--mode", mode]
         run_code, run_body = await asyncio.to_thread(
             invoke_live_cli,
             [
@@ -779,8 +754,7 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
         for row in payload["items"]
         if row["code"] == "negative_deviation" and row["review_domain"] == "commercial"
     )
-    set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
-    remote = ["--mode", "remote", "--state", str(tmp_path / "check-remote.enc")]
+    remote = ["--mode", "remote"]
     dismiss_code, dismiss_body = await asyncio.to_thread(
         invoke_live_cli,
         [
@@ -817,7 +791,7 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     )
     assert remote_history_code == 0, remote_history
     assert [row["revision"] for row in remote_history["items"]] == [2]
-    local = ["--mode", "local", "--state", str(tmp_path / "check-local.enc")]
+    local = ["--mode", "local"]
     reopen_code, reopen_body = await asyncio.to_thread(
         invoke_live_cli,
         [
@@ -856,8 +830,8 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     assert [row["revision"] for row in local_history["items"]] == [2, 3]
 
 
-async def test_decisions_are_human_domain_cas_stale_safe_and_tenant_isolated(
-    check_case, tenants, admin_engine
+async def test_decisions_are_human_classified_cas_and_stale_safe(
+    check_case, database, admin_engine
 ):
     case = check_case
     preview = await preview_check(case)
@@ -879,7 +853,7 @@ async def test_decisions_are_human_domain_cas_stale_safe_and_tenant_isolated(
     draft_before_decisions = (
         await case["api"].get(f"/drafts/{case['draft']['id']}", headers=case["header"])
     ).json()["data"]
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         gate_rows_before = {
             model.__tablename__: await session.scalar(select(func.count()).select_from(model))
             for model in (DraftRun, ResponseCardRevision, ExportRun)
@@ -890,15 +864,6 @@ async def test_decisions_are_human_domain_cas_stale_safe_and_tenant_isolated(
         "action": "dismiss",
         "reason": "The responsible reviewer checked the synthetic deviation.",
     }
-
-    # An org administrator can run checks but does not inherit either professional domain.
-    admin = await case["api"].post(
-        f"/checks/{report_id}/findings/{technical['id']}/decisions",
-        headers=case["header"],
-        json=decision,
-    )
-    assert admin.status_code == 403, admin.text
-
     for forbidden_scope in ("check:decide", "evidence:confirm", "export"):
         forbidden_token = await case["api"].post(
             "/tokens",
@@ -927,24 +892,12 @@ async def test_decisions_are_human_domain_cas_stale_safe_and_tenant_isolated(
     )
     assert (await case["api"].get(f"/checks/{report_id}", headers=agent)).status_code == 200
     token_decision = await case["api"].post(
-        f"/checks/{report_id}/findings/{technical['id']}/decisions",
-        headers=agent,
-        json=decision,
+        f"/checks/{report_id}/findings/{technical['id']}/decisions", headers=agent, json=decision
     )
     assert token_decision.status_code == 403
     assert token_decision.json()["data"]["error"]["code"] == "human_session_required"
-
-    # The worker snapshot matches a real technical task grant; this assertion
-    # isolates the human-session gate from an unrelated missing domain grant.
-    set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
-    worker = Identity(
-        tenants["users"][0],
-        tenants["orgs"][0],
-        set(ROLE_SCOPES["technical"]),
-        "technical",
-        actor_kind="worker",
-    )
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    worker = Identity(set(HUMAN_SCOPES), actor_kind="worker")
+    async with case["app"].state.db.transaction() as session:
         with pytest.raises(ServiceError) as rejected:
             await check_service.decide_finding(
                 session,
@@ -956,14 +909,6 @@ async def test_decisions_are_human_domain_cas_stale_safe_and_tenant_isolated(
                 case["app"].state.processor.settings,
             )
     assert rejected.value.code == "human_session_required"
-
-    set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
-    wrong_domain = await case["api"].post(
-        f"/checks/{report_id}/findings/{technical['id']}/decisions",
-        headers=case["header"],
-        json=decision,
-    )
-    assert wrong_domain.status_code == 403
     concurrent = await asyncio.gather(
         *[
             case["api"].post(
@@ -981,7 +926,6 @@ async def test_decisions_are_human_domain_cas_stale_safe_and_tenant_isolated(
     assert decided["finding"]["status"] == "dismissed"
     assert decided["decision"]["revision"] == 2
     assert decided["decision"]["actor_kind"] == "session"
-
     conflict = next(response for response in concurrent if response.status_code == 409)
     assert conflict.json()["data"]["error"]["code"] == "revision_conflict"
     reopened_decision = await case["api"].post(
@@ -993,8 +937,7 @@ async def test_decisions_are_human_domain_cas_stale_safe_and_tenant_isolated(
     assert reopened_decision.json()["data"]["finding"]["status"] == "open"
     assert reopened_decision.json()["data"]["decision"]["revision"] == 3
     history = await case["api"].get(
-        f"/checks/{report_id}/findings/{commercial['id']}/decisions",
-        headers=case["header"],
+        f"/checks/{report_id}/findings/{commercial['id']}/decisions", headers=case["header"]
     )
     assert history.status_code == 200
     assert [row["revision"] for row in history.json()["items"]] == [2, 3]
@@ -1002,39 +945,12 @@ async def test_decisions_are_human_domain_cas_stale_safe_and_tenant_isolated(
         await case["api"].get(f"/drafts/{case['draft']['id']}", headers=case["header"])
     ).json()["data"]
     assert draft_after_decisions == draft_before_decisions
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         gate_rows_after = {
             model.__tablename__: await session.scalar(select(func.count()).select_from(model))
             for model in (DraftRun, ResponseCardRevision, ExportRun)
         }
     assert gate_rows_after == gate_rows_before
-
-    other = case["headers"][1]
-    for method, path, body in (
-        (
-            "post",
-            f"/tasks/{case['task']}/checks",
-            {"draft_id": case["draft"]["id"], "assessment_date": ASSESSMENT_DATE, "dry_run": True},
-        ),
-        ("get", f"/tasks/{case['task']}/checks", None),
-        ("get", f"/checks/{report_id}", None),
-        (
-            "post",
-            f"/checks/{report_id}/findings/{commercial['id']}/decisions",
-            {**decision, "expected_revision": 3, "action": "dismiss"},
-        ),
-        ("get", f"/checks/{report_id}/findings/{commercial['id']}/decisions", None),
-        ("get", f"/jobs/{status['id']}", None),
-        ("post", f"/jobs/{status['id']}/cancel", None),
-    ):
-        response = await getattr(case["api"], method)(
-            path, headers=other, **({"json": body} if body is not None else {})
-        )
-        assert response.status_code == 404, (path, response.text)
-
-    # A historical report remains readable after its draft inputs change, but
-    # its findings can no longer receive decisions.
-    set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
     reopened = await card_action(
         case["api"],
         case["header"],
@@ -1057,30 +973,28 @@ async def test_decisions_are_human_domain_cas_stale_safe_and_tenant_isolated(
 
 
 async def test_check_job_cancel_retry_live_lease_takeover_and_changed_input(
-    check_case, tenants, admin_engine
+    check_case, database, admin_engine
 ):
     case = check_case
-
     cancelled_preview = await preview_check(case, "2026-10-05")
     cancelled_response = await submit_check(case, cancelled_preview)
     assert cancelled_response.status_code == 200, cancelled_response.text
     cancelled = cancelled_response.json()["data"]
     cancel = await case["api"].post(f"/jobs/{cancelled['job_id']}/cancel", headers=case["header"])
     assert cancel.status_code == 200 and cancel.json()["data"]["status"] == "cancelled"
-    await case["app"].state.processor(case["header"]["X-Org-Id"], cancelled["job_id"])
+    await case["app"].state.processor(cancelled["job_id"])
     retried_response = await submit_check(case, cancelled_preview, retry=True)
     assert retried_response.status_code == 200, retried_response.text
     retried = retried_response.json()["data"]
     assert retried["job_id"] == cancelled["job_id"] and retried["status"] == "queued"
     terminal = (await process_check(case, retried))["data"]
     assert terminal["status"] == "succeeded"
-
     lease_preview = await preview_check(case, "2026-10-06")
     lease_response = await submit_check(case, lease_preview)
     assert lease_response.status_code == 200, lease_response.text
     lease = lease_response.json()["data"]
     live_run = uuid4()
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         job = await session.get(Job, UUID(lease["job_id"]))
         assert job is not None
         job.status = "running"
@@ -1091,8 +1005,8 @@ async def test_check_job_cancel_retry_live_lease_takeover_and_changed_input(
     assert live_response.status_code == 200, live_response.text
     assert live_response.json()["data"]["status"] == "running"
     assert len(case["app"].state.queue.calls) == queue_calls
-    await case["app"].state.processor(case["header"]["X-Org-Id"], lease["job_id"])
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    await case["app"].state.processor(lease["job_id"])
+    async with case["app"].state.db.transaction() as session:
         assert (
             await session.scalar(
                 select(func.count())
@@ -1110,12 +1024,10 @@ async def test_check_job_cancel_retry_live_lease_takeover_and_changed_input(
     assert takeover["status"] == "queued"
     takeover_terminal = (await process_check(case, takeover))["data"]
     assert takeover_terminal["status"] == "succeeded"
-
     changed_preview = await preview_check(case, "2026-10-07")
     changed_response = await submit_check(case, changed_preview)
     assert changed_response.status_code == 200, changed_response.text
     changed = changed_response.json()["data"]
-    set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
     reopened = await card_action(
         case["api"],
         case["header"],
@@ -1127,7 +1039,7 @@ async def test_check_job_cancel_retry_live_lease_takeover_and_changed_input(
     changed_terminal = (await process_check(case, changed))["data"]
     assert changed_terminal["status"] == "failed"
     assert changed_terminal["error"]["code"] == "check_input_changed"
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         assert (
             await session.scalar(
                 select(func.count())
@@ -1138,11 +1050,11 @@ async def test_check_job_cancel_retry_live_lease_takeover_and_changed_input(
         )
 
 
-async def test_submit_recomputes_a_real_change_after_preview(check_case, tenants):
+async def test_submit_recomputes_a_real_change_after_preview(check_case, database):
     case = check_case
     preview = await preview_check(case, "2026-10-08")
     provider_calls = case["provider"].calls
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         jobs_before = await session.scalar(select(func.count()).select_from(Job))
         reports_before = await session.scalar(select(func.count()).select_from(CheckRun))
     changed = await case["api"].put(
@@ -1154,7 +1066,7 @@ async def test_submit_recomputes_a_real_change_after_preview(check_case, tenants
     stale_submit = await submit_check(case, preview)
     assert stale_submit.status_code == 409, stale_submit.text
     assert stale_submit.json()["data"]["error"]["code"] == "check_input_changed"
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(Job)) == jobs_before
         assert await session.scalar(select(func.count()).select_from(CheckRun)) == reports_before
     assert case["provider"].calls == provider_calls
@@ -1162,12 +1074,12 @@ async def test_submit_recomputes_a_real_change_after_preview(check_case, tenants
 
 @pytest.mark.parametrize("change", ["card", "redaction", "confidential"])
 async def test_worker_rechecks_changes_after_rules_evaluation(
-    check_case, tenants, admin_engine, monkeypatch, change
+    check_case, database, admin_engine, monkeypatch, change
 ):
     case = check_case
     field = None
     if change == "card":
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
+        pass
     elif change == "confidential":
         created = await case["api"].post(
             "/confidential-fields",
@@ -1187,13 +1099,12 @@ async def test_worker_rechecks_changes_after_rules_evaluation(
             json={"value": "SYNTHETIC-FIRST-VALUE", "task_id": case["task"]},
         )
         assert value.status_code == 200, value.text
-
     preview = await preview_check(case, "2026-10-09")
     submitted = await submit_check(case, preview)
     assert submitted.status_code == 200, submitted.text
     receipt = submitted.json()["data"]
     provider_calls = case["provider"].calls
-    entered, release = threading.Event(), threading.Event()
+    entered, release = (threading.Event(), threading.Event())
     original_evaluate = check_rules.evaluate
 
     def pause_after_evaluation(secret, draft_id):
@@ -1203,9 +1114,7 @@ async def test_worker_rechecks_changes_after_rules_evaluation(
         return evaluated
 
     monkeypatch.setattr(check_rules, "evaluate", pause_after_evaluation)
-    running = asyncio.create_task(
-        case["app"].state.processor(case["header"]["X-Org-Id"], receipt["job_id"])
-    )
+    running = asyncio.create_task(case["app"].state.processor(receipt["job_id"]))
     assert await asyncio.to_thread(entered.wait, 10), "worker did not reach rules evaluation"
     try:
         if change == "card":
@@ -1233,12 +1142,11 @@ async def test_worker_rechecks_changes_after_rules_evaluation(
     finally:
         release.set()
     await running
-
     terminal = await case["api"].get(f"/jobs/{receipt['job_id']}", headers=case["header"])
     assert terminal.status_code == 200, terminal.text
     assert terminal.json()["data"]["status"] == "failed"
     assert terminal.json()["data"]["error"]["code"] == "check_input_changed"
-    async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
+    async with case["app"].state.db.transaction() as session:
         assert (
             await session.scalar(
                 select(func.count())
@@ -1259,35 +1167,28 @@ async def test_worker_rechecks_changes_after_rules_evaluation(
 
 
 async def test_unconfirmed_evidence_corruption_is_a_hard_input_failure(
-    check_case, tenants, admin_engine
+    check_case, database, admin_engine
 ):
     case = check_case
     evidence_id = case["commercial_card"]["evidence"][0]["id"]
     with admin_engine.begin() as connection:
-        # Simulate storage corruption that bypasses every gate trigger, including deferred ones.
         connection.execute(text("SET LOCAL session_replication_role = replica"))
         connection.execute(
             text(
-                "UPDATE evidence SET confirmed_by=NULL, confirmed_at=NULL, "
-                "quote_check='unreviewed_page' WHERE id=:id"
+                "UPDATE evidence SET confirmed_at=NULL, quote_check='unreviewed_page' WHERE id=:id"
             ),
             {"id": UUID(evidence_id)},
         )
-
-    before = await row_counts(case["app"], tenants["orgs"][0])
+    before = await row_counts(case["app"])
     provider_calls = case["provider"].calls
     rejected = await case["api"].post(
         f"/tasks/{case['task']}/checks",
         headers=case["header"],
-        json={
-            "draft_id": case["draft"]["id"],
-            "assessment_date": "2026-10-10",
-            "dry_run": True,
-        },
+        json={"draft_id": case["draft"]["id"], "assessment_date": "2026-10-10", "dry_run": True},
     )
     assert rejected.status_code == 409, rejected.text
     assert rejected.json()["data"]["error"]["code"] == "check_input_integrity"
-    assert await row_counts(case["app"], tenants["orgs"][0]) == before
+    assert await row_counts(case["app"]) == before
     assert case["provider"].calls == provider_calls
 
 
@@ -1319,17 +1220,17 @@ async def create_gap_document(api, app, header, tmp_path, *, kind: str):
     ).json()["items"]
     assert requirements
     draft = await publish_draft(api, app, header, task, extraction)
-    return task, requirements[0], draft["draft_id"]
+    return (task, requirements[0], draft["draft_id"])
 
 
-async def test_pdf_and_word_ambiguous_sources_fail_before_report(tenants, tmp_path, admin_engine):
+async def test_pdf_and_word_ambiguous_sources_fail_before_report(database, tmp_path, admin_engine):
     provider = FakeLLM()
     app = create_app(Settings(data_dir=tmp_path), llm=provider, queue=FakeQueue())
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        header = await login(api, tenants["orgs"][0], "a")
+        header = {"Authorization": "Bearer " + os.environ["BID_ACCESS_KEY"]}
         cases = [
             await create_gap_document(api, app, header, tmp_path, kind=kind)
             for kind in ("pdf", "word")
@@ -1352,33 +1253,28 @@ async def test_pdf_and_word_ambiguous_sources_fail_before_report(tenants, tmp_pa
                     )
                     target["text"] = f"{target['text']}\n{requirement.quote}"
                     chunk.blocks = blocks
-
-        before = await row_counts(app, tenants["orgs"][0])
+        before = await row_counts(app)
         provider_calls = provider.calls
         for task, _, draft_id in cases:
             rejected = await api.post(
                 f"/tasks/{task}/checks",
                 headers=header,
-                json={
-                    "draft_id": draft_id,
-                    "assessment_date": ASSESSMENT_DATE,
-                    "dry_run": True,
-                },
+                json={"draft_id": draft_id, "assessment_date": ASSESSMENT_DATE, "dry_run": True},
             )
             assert rejected.status_code == 409, rejected.text
             assert rejected.json()["data"]["error"]["code"] == "invalid_input_citation"
-        assert await row_counts(app, tenants["orgs"][0]) == before
+        assert await row_counts(app) == before
         assert provider.calls == provider_calls
 
 
-async def test_word_tender_findings_keep_block_citations(tenants, tmp_path):
+async def test_word_tender_findings_keep_block_citations(database, tmp_path):
     provider = FakeLLM()
     app = create_app(Settings(data_dir=tmp_path), llm=provider, queue=FakeQueue())
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        header = await login(api, tenants["orgs"][0], "a")
+        header = {"Authorization": "Bearer " + os.environ["BID_ACCESS_KEY"]}
         task = (
             await api.post("/tasks", headers=header, json={"name": "Synthetic Word check"})
         ).json()["data"]["id"]
@@ -1403,7 +1299,6 @@ async def test_word_tender_findings_keep_block_citations(tenants, tmp_path):
         starred = next(row for row in requirements if row["starred"])
         assert starred["source"]["page"] is None
         assert starred["source"]["location"]["kind"] == "cell"
-
         draft = await publish_draft(api, app, header, task, extraction)
         preview_response = await api.post(
             f"/tasks/{task}/checks",
@@ -1427,7 +1322,7 @@ async def test_word_tender_findings_keep_block_citations(tenants, tmp_path):
         )
         assert submitted.status_code == 200, submitted.text
         job_id = submitted.json()["data"]["job_id"]
-        await app.state.processor(header["X-Org-Id"], job_id)
+        await app.state.processor(job_id)
         status = (await api.get(f"/jobs/{job_id}", headers=header)).json()["data"]
         assert status["status"] == "succeeded", status
         shown = await api.get(f"/checks/{status['result']['report_id']}", headers=header)
@@ -1444,4 +1339,4 @@ async def test_word_tender_findings_keep_block_citations(tenants, tmp_path):
         assert citation["citation"]["kind"] == "tender"
         assert citation["citation"]["source"]["page"] is None
         assert citation["citation"]["source"]["location"] == starred["source"]["location"]
-        assert provider.calls == 1  # extraction only; rules check makes no provider call
+        assert provider.calls == 1

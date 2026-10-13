@@ -50,8 +50,6 @@ ReasonCode = Literal[
     "metadata_mismatch",
     "privacy_concern",
     "superseded",
-    "withdrawn_by_org",
-    "reviewer_unavailable",
     "responsibility_changed",
     "declaration_changed",
     "selection_replaced",
@@ -59,7 +57,6 @@ ReasonCode = Literal[
 NextAction = Literal[
     "review_uploaded_file",
     "upload_corrected_revision",
-    "assign_reviewer",
     "link_declaration",
     "select_for_task",
     "archive_page",
@@ -75,12 +72,10 @@ AttachmentBlocker = Literal[
     "archive_review_pending",
     "archive_review_rejected",
     "archive_review_revoked",
-    "reviewer_unavailable",
     "profile_link_missing",
     "profile_link_inactive",
     "profile_selection_changed",
     "attachment_selection_inactive",
-    "task_archived",
     "source_not_archived",
     "source_integrity_failure",
     "privacy_pending",
@@ -122,7 +117,6 @@ class AttachmentMetadata(Contract):
 class AttachmentCreate(Contract):
     request_id: UUID
     metadata: AttachmentMetadata
-    reviewer_user_id: UUID
     parts: list[CertificatePartOptions] = Field(default_factory=list, max_length=MAX_PARTS)
     dry_run: bool = False
 
@@ -131,20 +125,11 @@ class AttachmentRevise(AttachmentCreate):
     expected_state_version: Revision
 
 
-class AttachmentAssignment(Contract):
-    request_id: UUID
-    expected_state_version: Revision
-    custodian_user_id: UUID
-    reviewer_user_id: UUID
-    reason: Literal["reviewer_unavailable", "responsibility_changed"]
-
-
 class AttachmentDeactivate(Contract):
     request_id: UUID
     expected_state_version: Revision
     reason: Literal[
         "superseded",
-        "withdrawn_by_org",
         "privacy_concern",
         "declaration_changed",
         "selection_replaced",
@@ -179,8 +164,8 @@ class PageData(Contract):
 class AttachmentReadiness(Contract):
     blockers: list[AttachmentBlocker] = Field(default_factory=list, max_length=20)
     next_action: NextAction
-    responsible_user_id: UUID | None
     can_annotate: bool = False
+    confirmed_at: Literal[None] = None
     eligible_for_draft_export: Literal[False] = False
 
     @model_validator(mode="after")
@@ -194,16 +179,12 @@ class AttachmentSummary(Contract):
     """Safe metadata projection; no user-entered labels, names or document text."""
 
     id: UUID
-    org_id: UUID
     current_revision_id: UUID
     current_revision: Revision
     state_version: Revision
     kind: AttachmentKind
     active: bool
-    custodian_user_id: UUID
-    reviewer_user_id: UUID
     revised_at: AwareDatetime | None = None
-    revised_by: UUID | None = None
     review_state: ReviewState
     latest_review_id: UUID | None
     created_at: AwareDatetime
@@ -216,7 +197,6 @@ class AttachmentShowData(Contract):
 
 class AttachmentRevisionSummary(Contract):
     id: UUID
-    org_id: UUID
     attachment_id: UUID
     revision: Revision
     file_id: UUID
@@ -226,10 +206,8 @@ class AttachmentRevisionSummary(Contract):
     page_count: PageNumber
     size_bytes: int = Field(strict=True, gt=0, le=FILE_BYTE_LIMIT)
     revised_at: AwareDatetime | None = None
-    revised_by: UUID | None = None
     review_state: ReviewState
     latest_review_id: UUID | None
-    created_by: UUID
     created_at: AwareDatetime
 
 
@@ -303,7 +281,6 @@ class AttachmentReviewInput(Contract):
 
 class AttachmentReviewView(Contract):
     id: UUID
-    org_id: UUID
     attachment_id: UUID
     attachment_revision_id: UUID
     file_id: UUID
@@ -312,7 +289,6 @@ class AttachmentReviewView(Contract):
     prior_review_id: UUID | None
     decision: Literal["approve", "reject", "revoke"]
     reason: ReasonCode
-    reviewed_by: UUID
     reviewed_at: AwareDatetime
 
 
@@ -325,7 +301,6 @@ class ProfileAttachmentLinkInput(Contract):
 
 class ProfileAttachmentLinkView(Contract):
     id: UUID
-    org_id: UUID
     profile_id: UUID
     profile_revision_id: UUID
     field: DeclarationField
@@ -335,7 +310,6 @@ class ProfileAttachmentLinkView(Contract):
     approval_id: UUID
     active: bool
     state_version: Revision
-    created_by: UUID
     created_at: AwareDatetime
 
 
@@ -349,7 +323,6 @@ class TaskAttachmentSelect(Contract):
 
 class TaskAttachmentView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     task_org_profile_id: UUID
     profile_revision_id: UUID
@@ -365,7 +338,6 @@ class TaskAttachmentView(Contract):
     state_version: Revision
     library_updated: bool = False
     current_library_revision: Revision | None = None
-    selected_by: UUID
     selected_at: AwareDatetime
     readiness: AttachmentReadiness
 
@@ -380,18 +352,6 @@ class AttachmentLinkContext(Contract):
 
     @model_validator(mode="after")
     def exact_profile_binding(self):
-        if (
-            len(
-                {
-                    self.profile.org_id,
-                    self.task_profile.org_id,
-                    self.link.org_id,
-                    self.selection.org_id,
-                }
-            )
-            != 1
-        ):
-            raise ValueError("all link parents must belong to one org")
         if (
             self.link.profile_id != self.profile.profile_id
             or self.link.profile_revision_id != self.profile.id
@@ -421,7 +381,6 @@ class AttachmentSourceCreate(Contract):
 
 class AttachmentSourceSummary(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     task_attachment_id: UUID
     attachment_revision_id: UUID
@@ -432,13 +391,11 @@ class AttachmentSourceSummary(Contract):
     rendered_at: AwareDatetime
     active_selection: bool
     latest_privacy_hold_id: UUID | None = None
-    reviewer_user_id: UUID | None = None
-    custodian_user_id: UUID | None = None
     cleared_asset_id: UUID | None = None
     cleared_rendition_id: UUID | None = None
     readiness: AttachmentReadiness
     status: Literal["unconfirmed_source"] = "unconfirmed_source"
-    confirmed_by: Literal[None] = None
+    confirmed_at: Literal[None] = None
     eligible_for_draft_export: Literal[False] = False
 
 
@@ -456,7 +413,6 @@ class AttachmentSourceArchive(AttachmentSourceSummary):
     preview: EvidenceSourcePreview
     render_profile: Literal["pdf-page-preview-v1"] = "pdf-page-preview-v1"
     dpi: Literal[150] = 150
-    created_by: UUID
 
     @model_validator(mode="after")
     def exact_page(self):
@@ -516,35 +472,31 @@ AttachmentPrivacyInput = Annotated[
 
 class AttachmentPrivacyHoldView(Contract):
     id: UUID
-    org_id: UUID
     task_id: UUID
     evidence_source_id: UUID
     source_png_sha256: Sha256
     prior_hold_id: UUID | None
-    reviewed_by: UUID
     reviewed_at: AwareDatetime
     reason: Literal["sensitive_content"] = "sensitive_content"
     state: Literal["needs_redaction"] = "needs_redaction"
     next_action: Literal["redact_page"] = "redact_page"
-    responsible_user_id: UUID
+    confirmed_at: Literal[None] = None
     eligible_for_draft_export: Literal[False] = False
 
 
 class AttachmentPrivacyReceipt(Contract):
-    org_id: UUID
     evidence_source_id: UUID
     task_id: UUID
     extraction_job_id: UUID
     source_png_sha256: Sha256
     rendition: RenditionView
-    reviewed_by: UUID
     reviewed_at: AwareDatetime
     reviewed_upload_sha256: Sha256
     resolved_hold_id: UUID | None
     clearance: Literal["safe_for_task_team"] = "safe_for_task_team"
     duplicate: bool
     status: Literal["unconfirmed_material"] = "unconfirmed_material"
-    confirmed_by: Literal[None] = None
+    confirmed_at: Literal[None] = None
     eligible_for_draft_export: Literal[False] = False
 
     @model_validator(mode="after")
@@ -588,8 +540,7 @@ class AttachmentAnnotationBinding(Contract):
     @model_validator(mode="after")
     def same_source_and_content(self):
         if (
-            self.privacy.org_id != self.archive.org_id
-            or self.privacy.evidence_source_id != self.archive.id
+            self.privacy.evidence_source_id != self.archive.id
             or self.privacy.task_id != self.archive.task_id
             or self.privacy.source_png_sha256 != self.archive.source_png_sha256
             or self.source_time != self.archive.rendered_at
@@ -730,14 +681,6 @@ class AttachmentArchiveService(Protocol):
     async def revision(
         self, session: AsyncSession, actor: Identity, revision_id: UUID
     ) -> AttachmentRevisionView: ...
-
-    async def assign(
-        self,
-        session: AsyncSession,
-        actor: Identity,
-        attachment_id: UUID,
-        body: AttachmentAssignment,
-    ) -> AttachmentShowData: ...
 
     async def review(
         self, session: AsyncSession, actor: Identity, revision_id: UUID, body: AttachmentReviewInput

@@ -52,10 +52,8 @@ def limits(settings) -> dict[Literal["files", "file_bytes", "submission_bytes"],
     }
 
 
-def seal(settings, org_id, identifier, value):
-    return Secrets.for_data(settings).encrypt(
-        json.dumps({"org_id": str(org_id), "id": str(identifier), "value": value})
-    )
+def seal(settings, identifier, value):
+    return Secrets.for_data(settings).encrypt(json.dumps({"id": str(identifier), "value": value}))
 
 
 async def access(session, actor, task_id, scope="bid-review:read", *, write=False, lock=None):
@@ -87,7 +85,6 @@ def uploaded_document(row):
             key: getattr(row, key)
             for key in (
                 "id",
-                "org_id",
                 "task_id",
                 "submission_id",
                 "file_id",
@@ -107,11 +104,9 @@ async def submission_view(session, root):
         key: getattr(root, key)
         for key in (
             "id",
-            "org_id",
             "task_id",
             "revision",
             "manifest_sha256",
-            "created_by",
             "created_at",
         )
     }
@@ -163,7 +158,7 @@ async def submission_view(session, root):
 async def replay_lock(session, actor, operation, request_id):
     await session.execute(
         text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"),
-        {"key": f"{actor.org_id}/{actor.user_id}/bid-review/{operation}/{request_id}"},
+        {"key": f"bid-review/{operation}/{request_id}"},
     )
 
 
@@ -192,7 +187,6 @@ async def upload(session, actor, task_id, body, files, storage, settings):
             fail("bid_upload_limit", "File exceeds its upload bounds", 413)
         await validate_upload(content, expected.media_type, settings)
     manifest = {
-        "org_id": str(actor.org_id),
         "task_id": str(task_id),
         "files": [item.model_dump(mode="json") for item in body.files],
     }
@@ -212,9 +206,7 @@ async def upload(session, actor, task_id, body, files, storage, settings):
         )
     await replay_lock(session, actor, "upload", body.request_id)
     previous = await session.scalar(
-        select(BidSubmission).where(
-            BidSubmission.created_by == actor.user_id, BidSubmission.request_id == body.request_id
-        )
+        select(BidSubmission).where(BidSubmission.request_id == body.request_id)
     )
     if previous is not None:
         if previous.payload_hash != payload_hash:
@@ -225,11 +217,9 @@ async def upload(session, actor, task_id, body, files, storage, settings):
                 key: getattr(previous, key)
                 for key in (
                     "id",
-                    "org_id",
                     "task_id",
                     "revision",
                     "manifest_sha256",
-                    "created_by",
                     "created_at",
                     "state",
                 )
@@ -244,13 +234,11 @@ async def upload(session, actor, task_id, body, files, storage, settings):
     ) + 1
     root = BidSubmission(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=task_id,
         revision=revision,
         manifest_sha256=manifest_hash,
         request_id=body.request_id,
         payload_hash=payload_hash,
-        created_by=actor.user_id,
         state="uploaded",
         file_count=len(files),
         total_bytes=sum(len(content) for _, _, content in files),
@@ -262,18 +250,15 @@ async def upload(session, actor, task_id, body, files, storage, settings):
     ):
         identifier, file_id = uuid4(), uuid4()
         suffix = ".pdf" if expected.media_type == "application/pdf" else ".docx"
-        key = (
-            f"org/{actor.org_id}/bid-review/{root.id}/originals/{file_id}/{expected.sha256}{suffix}"
-        )
+        key = f"bid-review/{root.id}/originals/{file_id}/{expected.sha256}{suffix}"
         logger.info(
-            "bid_review.object_staged org_id=%s submission_id=%s object_id=%s sha256=%s",
-            actor.org_id,
+            "bid_review.object_staged submission_id=%s object_id=%s sha256=%s",
             root.id,
             file_id,
             expected.sha256,
         )
         try:
-            await storage.put(actor.org_id, key, content)
+            await storage.put(key, content)
         except ServiceError:
             raise
         except Exception as exc:
@@ -283,15 +268,13 @@ async def upload(session, actor, task_id, body, files, storage, settings):
         session.add(
             BidSubmissionDocument(
                 id=identifier,
-                org_id=actor.org_id,
                 task_id=task_id,
                 submission_id=root.id,
                 file_id=file_id,
                 ordinal=ordinal,
                 **expected.model_dump(),
                 storage_key=key,
-                upload_name_encrypted=seal(settings, actor.org_id, identifier, name),
-                created_by=actor.user_id,
+                upload_name_encrypted=seal(settings, identifier, name),
             )
         )
     await session.flush()
@@ -316,7 +299,6 @@ def build_manifest(root, documents, settings, trust_store_sha256):
 
     return {
         "preparation_identity": preparation_identity(settings),
-        "org_id": str(root.org_id),
         "task_id": str(root.task_id),
         "submission_id": str(root.id),
         "manifest_sha256": root.manifest_sha256,
@@ -354,8 +336,6 @@ def build_manifest(root, documents, settings, trust_store_sha256):
 def receipt_binding(actor, task_id, submission_id, input_hash):
     return {
         "kind": "bid-review-prepare",
-        "org_id": str(actor.org_id),
-        "actor_user_id": str(actor.user_id),
         "actor_kind": actor.actor_kind,
         "task_id": str(task_id),
         "submission_id": str(submission_id),
@@ -437,7 +417,6 @@ async def prepare(session, actor, task_id, body, queue, settings):
     await replay_lock(session, actor, "prepare", body.request_id)
     prior_receipt = await session.scalar(
         select(AuditLog).where(
-            AuditLog.actor_user_id == actor.user_id,
             AuditLog.action == "bid_review.prepare",
             AuditLog.details["request_id"].astext == str(body.request_id),
         )
@@ -445,9 +424,7 @@ async def prepare(session, actor, task_id, body, queue, settings):
     if prior_receipt is not None and prior_receipt.details.get("payload_hash") != payload_hash:
         fail("idempotency_conflict", "Request ID has different input")
     previous = await session.scalar(
-        select(BidPreparation).where(
-            BidPreparation.created_by == actor.user_id, BidPreparation.request_id == body.request_id
-        )
+        select(BidPreparation).where(BidPreparation.request_id == body.request_id)
     )
     if previous is not None and previous.payload_hash != payload_hash:
         fail("idempotency_conflict", "Request ID has different input")
@@ -467,9 +444,6 @@ async def prepare(session, actor, task_id, body, queue, settings):
                 fail(
                     "bid_retry_not_terminal", "Only failed or cancelled preparation can be retried"
                 )
-            # Keep the original initiator: another authorized user cannot take over its grant.
-            if existing.created_by != actor.user_id:
-                fail("forbidden", "Only the preparation initiator may retry", 403, 4)
             job.status, job.error, job.finished_at = "queued", None, None
             job.run_id, job.lease_until, job.queue_id, job.attempts = None, None, None, 0
         await enqueue(session, queue, job)
@@ -496,7 +470,6 @@ async def prepare(session, actor, task_id, body, queue, settings):
     prep_id = uuid4()
     job = Job(
         id=uuid4(),
-        org_id=actor.org_id,
         task_id=task_id,
         document_id=None,
         kind="bid_review_prepare",
@@ -504,7 +477,6 @@ async def prepare(session, actor, task_id, body, queue, settings):
             {"kind": "bid_review_prepare", "submission_id": str(root.id), "input_hash": input_hash}
         ),
         status="queued",
-        actor_user_id=actor.user_id,
         actor_kind="session",
         actor_scopes=sorted(actor.scopes),
         result={
@@ -522,25 +494,21 @@ async def prepare(session, actor, task_id, body, queue, settings):
     session.add(
         BidPreparation(
             id=prep_id,
-            org_id=actor.org_id,
             task_id=task_id,
             submission_id=root.id,
             job_id=job.id,
             request_id=body.request_id,
             payload_hash=payload_hash,
             input_hash=input_hash,
-            created_by=actor.user_id,
         )
     )
     await session.flush()
     session.add(
         BidPreparationTrust(
             id=uuid4(),
-            org_id=actor.org_id,
             task_id=task_id,
             submission_id=root.id,
             preparation_id=prep_id,
-            created_by=actor.user_id,
             trust_store_sha256=trust["sha256"],
             anchors=trust["anchors"],
         )
@@ -577,7 +545,7 @@ async def prepare(session, actor, task_id, body, queue, settings):
 async def enqueue(session, queue, job):
     if job.status == "queued" and job.queue_id is None:
         try:
-            job.queue_id = await queue.enqueue_in_transaction(session, str(job.org_id), str(job.id))
+            job.queue_id = await queue.enqueue_in_transaction(session, str(job.id))
         except Exception as exc:
             raise ServiceError(
                 "queue_unavailable", "Preparation could not be queued; retry the request", 503, 3
@@ -646,24 +614,14 @@ async def show(session, actor, submission_id, settings):
 
 
 async def list_submissions(session, actor, task_id, query, settings):
-    _, workflow, member = await access(session, actor, task_id)
+    await access(session, actor, task_id)
     binding = {
         "kind": "bid-review-list",
-        "org_id": str(actor.org_id),
-        "actor": str(actor.user_id),
+        "actor_kind": actor.actor_kind,
         "token": str(actor.token_id) if actor.token_id else None,
         "task_id": str(task_id),
         "limit": query.limit,
-        "authority": digest(
-            {
-                "scopes": sorted(actor.scopes),
-                "role": actor.role,
-                "workflow": workflow.revision,
-                "epoch": workflow.access_epoch,
-                "member": str(member.id) if member else None,
-                "member_revision": member.revision if member else None,
-            }
-        ),
+        "authority": digest({"scopes": sorted(actor.scopes)}),
     }
     selector = select(BidSubmission).where(BidSubmission.task_id == task_id)
     signer = TokenSigner.for_tokens(settings)

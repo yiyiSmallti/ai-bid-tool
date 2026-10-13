@@ -56,9 +56,9 @@ def item(ref, quote, category="technical", starred=False):
     }
 
 
-async def test_word_tender_parses_into_located_chunks(tenants, tmp_path):
+async def test_word_tender_parses_into_located_chunks(database, tmp_path):
     app = create_app(Settings(data_dir=tmp_path), llm=FakeLLM(), queue=FakeQueue())
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         _, document = await upload_word(api, header)
         _, status = await run_job(api, app, header, document, "parse")
         assert status["status"] == "succeeded", status
@@ -79,7 +79,7 @@ async def test_word_tender_parses_into_located_chunks(tenants, tmp_path):
         assert extracted["status"] == "succeeded", extracted
 
 
-async def test_word_extraction_cites_blocks_and_adds_starred_cells(tenants, tmp_path):
+async def test_word_extraction_cites_blocks_and_adds_starred_cells(database, tmp_path):
     vendor = Vendor(
         anthropic_reply([item("p2", "投标人须具备有效的营业执照。", "qualification")]),
         anthropic_reply(
@@ -94,7 +94,7 @@ async def test_word_extraction_cites_blocks_and_adds_starred_cells(tenants, tmp_
         llm=AnthropicExtractor(tiny, transport=vendor.transport()),
         queue=FakeQueue(),
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         task, document = await upload_word(api, header)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
@@ -136,7 +136,7 @@ async def test_word_extraction_cites_blocks_and_adds_starred_cells(tenants, tmp_
         ),  # unknown block
     ],
 )
-async def test_word_citations_must_sit_inside_the_cited_block(items, code, tenants, tmp_path):
+async def test_word_citations_must_sit_inside_the_cited_block(items, code, database, tmp_path):
     vendor = Vendor(
         anthropic_reply(items),
         *([anthropic_reply([])] if code == "invalid_citation" else []),
@@ -145,7 +145,7 @@ async def test_word_citations_must_sit_inside_the_cited_block(items, code, tenan
     app = await credential_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         task, document = await upload_word(api, header)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
@@ -161,18 +161,17 @@ async def test_word_citations_must_sit_inside_the_cited_block(items, code, tenan
             ]
 
 
-async def test_reparse_replaces_the_old_unverified_word_chunk(tenants, tmp_path, admin_engine):
+async def test_reparse_replaces_the_old_unverified_word_chunk(database, tmp_path, admin_engine):
     app = create_app(Settings(data_dir=tmp_path), llm=FakeLLM(), queue=FakeQueue())
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         task, document = await upload_word(api, header)
-        org = tenants["orgs"][0]
         with Session(admin_engine) as session, session.begin():
             session.execute(
                 text(
-                    "INSERT INTO chunks (id, org_id, task_id, document_id, page, seq, text, ocr, citation_verified) "
-                    "VALUES (gen_random_uuid(), :o, :t, :d, 1, 1, 'legacy flat text', false, false)"
+                    "INSERT INTO chunks (id, task_id, document_id, page, seq, text, ocr, citation_verified) "
+                    "VALUES (gen_random_uuid(), :t, :d, 1, 1, 'legacy flat text', false, false)"
                 ),
-                {"o": org, "t": task, "d": document},
+                {"t": task, "d": document},
             )
         await run_job(api, app, header, document, "parse")
         chunks = (await api.get(f"/documents/{document}/chunks", headers=header)).json()["items"]
@@ -180,7 +179,7 @@ async def test_reparse_replaces_the_old_unverified_word_chunk(tenants, tmp_path,
         assert all(c["blocks"] and c["page"] is None for c in chunks)
 
 
-async def test_straight_quotes_match_curly_source_quotes(tenants, tmp_path):
+async def test_straight_quotes_match_curly_source_quotes(database, tmp_path):
     model_quote = '投标文件须注明"响应内容"及具体数值。'
     source_quote = "投标文件须注明“响应内容”及具体数值。"
     vendor = Vendor(
@@ -191,7 +190,7 @@ async def test_straight_quotes_match_curly_source_quotes(tenants, tmp_path):
     app = await credential_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         task, document = await upload_word(api, header)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
@@ -207,7 +206,7 @@ async def test_straight_quotes_match_curly_source_quotes(tenants, tmp_path):
         assert rows[0]["model_quote"] is None  # source rule, not model output
 
 
-async def test_unknown_word_ref_is_rejected_without_discarding_a_verified_item(tenants, tmp_path):
+async def test_unknown_word_ref_is_rejected_without_discarding_a_verified_item(database, tmp_path):
     vendor = Vendor(
         anthropic_reply(
             [
@@ -221,7 +220,7 @@ async def test_unknown_word_ref_is_rejected_without_discarding_a_verified_item(t
     app = await credential_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         task, document = await upload_word(api, header)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
@@ -239,7 +238,7 @@ async def test_unknown_word_ref_is_rejected_without_discarding_a_verified_item(t
 
 
 async def test_star_markers_apply_per_segment_and_rule_add_only_missing_starred_segments(
-    tenants, tmp_path
+    database, tmp_path
 ):
     cell_text = (
         "★内存：≥16 GB，支持 ECC；容量：≥512 GB；★功率：≤100 W\n"
@@ -269,7 +268,7 @@ async def test_star_markers_apply_per_segment_and_rule_add_only_missing_starred_
     app = await credential_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         task = (await api.post("/tasks", headers=header, json={"name": "Star segments"})).json()[
             "data"
         ]["id"]
@@ -302,7 +301,7 @@ async def test_star_markers_apply_per_segment_and_rule_add_only_missing_starred_
     assert all("合同的终止" not in row["text"] for row in rows)
 
 
-async def test_uncited_items_are_dropped_and_reported_while_the_rest_are_saved(tenants, tmp_path):
+async def test_uncited_items_are_dropped_and_reported_while_the_rest_are_saved(database, tmp_path):
     vendor = Vendor(
         anthropic_reply(
             [
@@ -316,7 +315,7 @@ async def test_uncited_items_are_dropped_and_reported_while_the_rest_are_saved(t
     app = await credential_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         task, document = await upload_word(api, header)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
@@ -335,7 +334,7 @@ async def test_uncited_items_are_dropped_and_reported_while_the_rest_are_saved(t
     assert any("1 extracted requirements were not saved" in w for w in status["result"]["warnings"])
 
 
-async def test_truncated_word_batches_are_halved_until_the_output_fits(tenants, tmp_path):
+async def test_truncated_word_batches_are_halved_until_the_output_fits(database, tmp_path):
     answers = {
         "p2": item("p2", "投标人须具备有效的营业执照。", "qualification"),
         "p4": item("p4", "服务器内存不低于 64GB。"),
@@ -358,7 +357,7 @@ async def test_truncated_word_batches_are_halved_until_the_output_fits(tenants, 
         llm=AnthropicExtractor(settings, transport=httpx.MockTransport(vendor)),
         queue=FakeQueue(),
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         task, document = await upload_word(api, header)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
@@ -373,7 +372,7 @@ async def test_truncated_word_batches_are_halved_until_the_output_fits(tenants, 
     assert status["result"]["rejected"] == []
 
 
-async def test_a_long_cell_is_split_by_lines_and_cited_as_the_whole_cell(tenants, tmp_path):
+async def test_a_long_cell_is_split_by_lines_and_cited_as_the_whole_cell(database, tmp_path):
     lines = [f"{n}.功能项 {n} 须支持在线办理。" for n in range(1, 7)]
     document = Document()
     document.add_heading("第三章 采购需求", level=1)
@@ -398,7 +397,7 @@ async def test_a_long_cell_is_split_by_lines_and_cited_as_the_whole_cell(tenants
         llm=AnthropicExtractor(settings, transport=httpx.MockTransport(vendor)),
         queue=FakeQueue(),
     )
-    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+    async with app.router.lifespan_context(app), session_for(app, database) as (api, header):
         task = (await api.post("/tasks", headers=header, json={"name": "Long cell"})).json()[
             "data"
         ]["id"]

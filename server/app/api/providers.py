@@ -1,4 +1,4 @@
-"""Provider configuration API, mounted on the shared tenant authentication context."""
+"""Provider configuration API, mounted on the shared installation authentication context."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -54,8 +54,8 @@ def create_router(context, db, settings, llm, resolve, processor, transport=None
         await session.commit()
         # The response waits for the same processor used by queued extraction/drafting.
         # No transaction/connection is held while the vendor request is in flight.
-        await processor(str(actor.org_id), str(job.id))
-        async with db.transaction(actor.org_id) as read:
+        await processor(str(job.id))
+        async with db.transaction() as read:
             saved = await read.get(Job, job.id)
             assert saved is not None
             recorded = await read.scalar(select(UsageRecord).where(UsageRecord.job_id == job.id))

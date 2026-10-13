@@ -1,12 +1,12 @@
 """Attachment first-slice acceptance specified before runtime implementation.
 
 Failure inventory: implicit file inheritance or latest-revision retargeting; invalid
-review transitions, forged file/hash/prior decision or stale state; departed assignee
-silently approving; blank/foreign/mismatched declaration links; wrong task profile;
-raw bytes or labels reaching tokens or human team readers; clearance leaking across
+review transitions, forged file/hash/prior decision or stale state;
+blank/foreign/mismatched declaration links; wrong task profile;
+raw bytes or labels reaching tokens; clearance leaking across
 pages or extraction runs; privacy hold reusing old clearance; forged/expired links;
 archive/link/selection revival; competing writes publishing partial state; storage
-failure reporting success; committed immutable parents accepting later files; RLS,
+failure reporting success; committed immutable parents accepting later files; runtime grants,
 composite FK or CHECK rejection being replaced by parent-dependent trigger errors.
 
 All workflows use synthetic files and PostgreSQL-backed HTTP/services. No external
@@ -18,16 +18,15 @@ import asyncio
 import hashlib
 import json
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 import pymupdf
 import pytest
 from app.core.security import TokenSigner
-from app.models.entities import AuditLog, Membership, UsageRecord, User
-from app.services.auth import AGENT_SCOPES, HUMAN_ONLY_SCOPES, ROLE_SCOPES, SCOPES
-from conftest import PASSWORD, PASSWORD_HASH
+from app.models.entities import AuditLog, UsageRecord
+from app.services.auth import AGENT_SCOPES, HUMAN_ONLY_SCOPES, HUMAN_SCOPES, SCOPES
 from sqlalchemy import func, select, text
-from sqlalchemy.orm import Session
 from test_profiles import metadata, profile, task
 from test_response_cards import create_tender, phase_one_client, sanitized_artifact
 from test_screenshot_renderer import renderer as renderer  # noqa: F401 -- real renderer dependency
@@ -89,20 +88,19 @@ def error_code(response):
     return data.get("code") or data.get("error", {}).get("code")
 
 
-def upload_body(user, **changes):
+def upload_body(**changes):
     return {
         "request_id": str(uuid4()),
         "metadata": {"kind": "contract", "label": "Synthetic confidential archive label"},
-        "reviewer_user_id": str(user),
         **changes,
     }
 
 
-async def upload(api, header, user, pdf, *, body=None, root=None):
+async def upload(api, header, pdf, *, body=None, root=None):
     return await api.post(
         BASE if root is None else f"{BASE}/{root}/revisions",
         headers=header,
-        data={"metadata": json.dumps(body or upload_body(user))},
+        data={"metadata": json.dumps(body or upload_body())},
         files=[("files", ("synthetic-private-contract.pdf", pdf, "application/pdf"))],
     )
 
@@ -132,8 +130,8 @@ async def review(api, header, written, *, decision="approve", reason=None, reque
     return await api.post(f"{BASE}/revisions/{fixed['id']}/reviews", headers=header, json=body)
 
 
-async def archive_fixture(api, header, user, pdf, *, task_id=None):
-    written = result(await upload(api, header, user, pdf))
+async def archive_fixture(api, header, pdf, *, task_id=None):
+    written = result(await upload(api, header, pdf))
     approved = result(await review(api, header, written))
     declared = await profile(api, header)
     task_id = task_id or await task(api, header)
@@ -204,41 +202,55 @@ async def token(api, header, scopes):
 
 
 async def test_exact_pdf_review_link_task_source_and_encrypted_history(
-    api, headers, tenants, pdf_bytes, application
+    api, headers, database, pdf_bytes, application
 ):
     from app.schemas.attachment_contracts import AttachmentRevisionView, AttachmentSourceArchive
 
-    chain = await archive_fixture(api, headers[0], tenants["users"][0], pdf_bytes)
+    chain = await archive_fixture(api, headers, pdf_bytes)
     written = chain["written"]
-    fixed = await revision(api, headers[0], written["revision_id"])
+    fixed = await revision(api, headers, written["revision_id"])
     AttachmentRevisionView.model_validate(fixed)
     assert fixed["revised_at"] == fixed["created_at"]
-    assert fixed["revised_by"] == str(tenants["users"][0])
+    assert "revised_by" not in fixed
     assert fixed["original_sha256"] == hashlib.sha256(pdf_bytes).hexdigest()
     assert fixed["parts"] == [] and fixed["original"]["page_count"] == 2
-    root = await show(api, headers[0], written["attachment_id"])
-    assert root["custodian_user_id"] == root["reviewer_user_id"] == str(tenants["users"][0])
+    root = await show(api, headers, written["attachment_id"])
+    assert "custodian_user_id" not in root and "reviewer_user_id" not in root
     assert root["revised_at"] == fixed["created_at"]
-    assert root["revised_by"] == str(tenants["users"][0])
-    assert chain["approved"]["reviewed_by"] == str(tenants["users"][0])
+    assert "revised_by" not in root
+    assert "reviewed_by" not in chain["approved"]
     original = result(
-        await api.get(f"{BASE}/revisions/{fixed['id']}/file/download-link", headers=headers[0])
+        await api.get(f"{BASE}/revisions/{fixed['id']}/file/download-link", headers=headers)
     )
-    downloaded = await api.get(original["url"], headers=headers[0])
+    downloaded = await api.get(original["url"], headers=headers)
     assert downloaded.content == pdf_bytes
     assert downloaded.headers["cache-control"] == "no-store"
     assert downloaded.headers["x-content-type-options"] == "nosniff"
     assert "attachment" in downloaded.headers["content-disposition"]
+    signer = TokenSigner.for_tokens(application.state.processor.settings)
+    current = signer.open(parse_qs(urlsplit(original["url"]).query)["signature"][0])
+    for payload, ttl in (
+        (current, -1),
+        ({**current, "kind": "certificate-file-download"}, 300),
+        ({**current, "id": str(uuid4())}, 300),
+    ):
+        assert (
+            await api.get(
+                f"{BASE}/revisions/{fixed['id']}/file/download",
+                headers=headers,
+                params={"signature": signer.issue(payload, ttl)},
+            )
+        ).status_code == 404
     request_id = str(uuid4())
-    archived = result(await source(api, headers[0], chain, request_id=request_id))
+    archived = result(await source(api, headers, chain, request_id=request_id))
     actual = AttachmentSourceArchive.model_validate(archived["source"])
     assert actual.dpi == 150 and actual.render_profile == "pdf-page-preview-v1"
-    assert actual.confirmed_by is None and actual.eligible_for_draft_export is False
+    assert actual.confirmed_at is None and actual.eligible_for_draft_export is False
     assert {"privacy_pending", "extraction_required"} <= set(actual.readiness.blockers)
     raw_link = result(
-        await api.get(f"/attachment-sources/{actual.id}/preview/download-link", headers=headers[0])
+        await api.get(f"/attachment-sources/{actual.id}/preview/download-link", headers=headers)
     )
-    raw = await api.get(raw_link["url"], headers=headers[0])
+    raw = await api.get(raw_link["url"], headers=headers)
     pixels = pymupdf.Pixmap(raw.content)
     with pymupdf.open(stream=pdf_bytes, filetype="pdf") as document:
         expected = document[0].get_pixmap(dpi=150, colorspace=pymupdf.csRGB, alpha=False)
@@ -248,29 +260,28 @@ async def test_exact_pdf_review_link_task_source_and_encrypted_history(
             expected.samples,
         )
     assert hashlib.sha256(raw.content).hexdigest() == actual.source_png_sha256
-    repeat = result(await source(api, headers[0], chain, request_id=request_id))
+    repeat = result(await source(api, headers, chain, request_id=request_id))
     assert repeat["duplicate"] and repeat["source"]["id"] == str(actual.id)
     updated = result(
         await upload(
             api,
-            headers[0],
-            tenants["users"][0],
+            headers,
             pdf_bytes,
             root=written["attachment_id"],
-            body=upload_body(tenants["users"][0], expected_state_version=root["state_version"]),
+            body=upload_body(expected_state_version=root["state_version"]),
         )
     )
     assert updated["revision"] == 2
-    chosen = result(await api.get(f"/tasks/{chain['task']}/attachments", headers=headers[0]))
+    chosen = result(await api.get(f"/tasks/{chain['task']}/attachments", headers=headers))
     assert chosen is not None
-    assert (await api.get(f"/tasks/{chain['task']}/attachments", headers=headers[0])).json()[
-        "items"
-    ][0]["attachment_revision_id"] == written["revision_id"]
-    pinned = (await api.get(f"/tasks/{chain['task']}/attachments", headers=headers[0])).json()[
+    assert (await api.get(f"/tasks/{chain['task']}/attachments", headers=headers)).json()["items"][
+        0
+    ]["attachment_revision_id"] == written["revision_id"]
+    pinned = (await api.get(f"/tasks/{chain['task']}/attachments", headers=headers)).json()[
         "items"
     ][0]
     assert pinned["library_updated"] is True and pinned["current_library_revision"] == 2
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         assert await session.scalar(select(func.count()).select_from(UsageRecord)) == 0
         events = list(
             (
@@ -293,7 +304,7 @@ async def test_exact_pdf_review_link_task_source_and_encrypted_history(
         )
         assert len(keys) == 3
         for key in keys:
-            encrypted = application.state.storage.path(tenants["orgs"][0], key).read_bytes()
+            encrypted = application.state.storage.path(key).read_bytes()
             assert encrypted.startswith(application.state.storage.cipher.marker)
             assert pdf_bytes not in encrypted
     artifact(
@@ -304,28 +315,25 @@ async def test_exact_pdf_review_link_task_source_and_encrypted_history(
             "fixture_pdf_sha256": hashlib.sha256(pdf_bytes).hexdigest(),
             "source_png_sha256": actual.source_png_sha256,
             "selection": chain["selection"],
-            "reviewed_by": chain["approved"]["reviewed_by"],
             "result": archived,
         },
     )
 
 
-async def test_review_transitions_replay_hashes_and_stale_state(api, headers, tenants, pdf_bytes):
-    written = result(await upload(api, headers[0], tenants["users"][0], pdf_bytes))
-    rejected = result(await review(api, headers[0], written, decision="reject"))
+async def test_review_transitions_replay_hashes_and_stale_state(api, headers, database, pdf_bytes):
+    written = result(await upload(api, headers, pdf_bytes))
+    rejected = result(await review(api, headers, written, decision="reject"))
     assert rejected["decision"] == "reject"
-    assert (await review(api, headers[0], written, decision="reject")).status_code == 409
-    approved = result(await review(api, headers[0], written))
+    assert (await review(api, headers, written, decision="reject")).status_code == 409
+    approved = result(await review(api, headers, written))
     assert approved["prior_review_id"] == rejected["id"]
-    assert (await review(api, headers[0], written, decision="reject")).status_code == 409
-    revoked = result(
-        await review(api, headers[0], written, decision="revoke", reason="withdrawn_by_org")
-    )
+    assert (await review(api, headers, written, decision="reject")).status_code == 409
+    revoked = result(await review(api, headers, written, decision="revoke", reason="superseded"))
     assert revoked["prior_review_id"] == approved["id"]
-    again = result(await review(api, headers[0], written))
+    again = result(await review(api, headers, written))
     assert again["id"] != approved["id"] and again["prior_review_id"] == revoked["id"]
-    root = await show(api, headers[0], written["attachment_id"])
-    fixed = await revision(api, headers[0], written["revision_id"])
+    root = await show(api, headers, written["attachment_id"])
+    fixed = await revision(api, headers, written["revision_id"])
     for patch in (
         {"expected_state_version": 1},
         {"original_sha256": "f" * 64},
@@ -341,16 +349,16 @@ async def test_review_transitions_replay_hashes_and_stale_state(api, headers, te
             "original_sha256": fixed["original_sha256"],
             "metadata_sha256": fixed["metadata_sha256"],
             "decision": "revoke",
-            "reason": "withdrawn_by_org",
+            "reason": "superseded",
             **patch,
         }
         denied = await api.post(
-            f"{BASE}/revisions/{fixed['id']}/reviews", headers=headers[0], json=body
+            f"{BASE}/revisions/{fixed['id']}/reviews", headers=headers, json=body
         )
         assert denied.status_code in {404, 409}, denied.text
     history = (
         await api.get(
-            f"{BASE}/revisions/{fixed['id']}/reviews", headers=headers[0], params={"limit": 2}
+            f"{BASE}/revisions/{fixed['id']}/reviews", headers=headers, params={"limit": 2}
         )
     ).json()
     assert len(history["items"]) == 2 and history["data"]["next_cursor"]
@@ -358,7 +366,7 @@ async def test_review_transitions_replay_hashes_and_stale_state(api, headers, te
     following = (
         await api.get(
             f"{BASE}/revisions/{fixed['id']}/reviews",
-            headers=headers[0],
+            headers=headers,
             params={"limit": 2, "cursor": cursor},
         )
     ).json()
@@ -368,32 +376,25 @@ async def test_review_transitions_replay_hashes_and_stale_state(api, headers, te
 
 
 async def test_upload_replay_dry_run_and_concurrent_revisions(
-    api, headers, tenants, pdf_bytes, application
+    api, headers, database, pdf_bytes, application
 ):
-    body = upload_body(tenants["users"][0])
-    dry = result(
-        await upload(
-            api, headers[0], tenants["users"][0], pdf_bytes, body={**body, "dry_run": True}
-        )
-    )
+    body = upload_body()
+    dry = result(await upload(api, headers, pdf_bytes, body={**body, "dry_run": True}))
     assert dry["dry_run"] and dry["enabled_upload_mode"] == "single_pdf"
-    assert (await api.get(BASE, headers=headers[0])).json()["items"] == []
-    written = result(await upload(api, headers[0], tenants["users"][0], pdf_bytes, body=body))
-    repeat = result(await upload(api, headers[0], tenants["users"][0], pdf_bytes, body=body))
+    assert (await api.get(BASE, headers=headers)).json()["items"] == []
+    written = result(await upload(api, headers, pdf_bytes, body=body))
+    repeat = result(await upload(api, headers, pdf_bytes, body=body))
     assert repeat["duplicate"] and repeat["revision_id"] == written["revision_id"]
     altered = {**body, "metadata": {**body["metadata"], "kind": "performance_record"}}
-    assert (
-        await upload(api, headers[0], tenants["users"][0], pdf_bytes, body=altered)
-    ).status_code == 409
+    assert (await upload(api, headers, pdf_bytes, body=altered)).status_code == 409
     competitors = await asyncio.gather(
         *(
             upload(
                 api,
-                headers[0],
-                tenants["users"][0],
+                headers,
                 pdf_bytes,
                 root=written["attachment_id"],
-                body=upload_body(tenants["users"][0], expected_state_version=1),
+                body=upload_body(expected_state_version=1),
             )
             for _ in range(2)
         )
@@ -401,89 +402,19 @@ async def test_upload_replay_dry_run_and_concurrent_revisions(
     assert sorted(item.status_code for item in competitors) == [200, 409]
     assert (
         len(
-            (
-                await api.get(f"{BASE}/{written['attachment_id']}/revisions", headers=headers[0])
-            ).json()["items"]
+            (await api.get(f"{BASE}/{written['attachment_id']}/revisions", headers=headers)).json()[
+                "items"
+            ]
         )
         == 2
     )
     assert application.state.queue.calls == []
 
 
-async def test_departed_reviewer_requires_versioned_reassignment_and_retains_approval(
-    api, headers, tenants, admin_engine, pdf_bytes
-):
-    reviewer = uuid4()
-    with Session(admin_engine) as session, session.begin():
-        session.add(
-            User(id=reviewer, email="attachment-reviewer@example.test", password_hash=PASSWORD_HASH)
-        )
-        session.flush()
-        session.add(Membership(org_id=tenants["orgs"][0], user_id=reviewer, role="bidder"))
-    login = await api.post(
-        "/auth/login",
-        json={
-            "email": "attachment-reviewer@example.test",
-            "password": PASSWORD,
-            "org_id": str(tenants["orgs"][0]),
-        },
-    )
-    reviewer_header = {**headers[0], "Authorization": "Bearer " + login.json()["data"]["session"]}
-    written = result(await upload(api, headers[0], reviewer, pdf_bytes))
-    assert (await review(api, headers[0], written)).status_code == 403
-    approved = result(await review(api, reviewer_header, written))
-    root = await show(api, headers[0], written["attachment_id"])
-    next_revision = result(
-        await upload(
-            api,
-            headers[0],
-            reviewer,
-            pdf_bytes,
-            root=written["attachment_id"],
-            body=upload_body(reviewer, expected_state_version=root["state_version"]),
-        )
-    )
-    with Session(admin_engine) as session, session.begin():
-        member = session.scalar(
-            select(Membership).where(
-                Membership.org_id == tenants["orgs"][0], Membership.user_id == reviewer
-            )
-        )
-        member.active = False
-    root = await show(api, headers[0], written["attachment_id"])
-    assert "reviewer_unavailable" in root["readiness"]["blockers"]
-    assert root["readiness"]["next_action"] == "assign_reviewer"
-    old = await revision(api, headers[0], written["revision_id"])
-    assert old["review_state"] == "approved" and old["latest_review_id"] == approved["id"]
-    assignment = {
-        "request_id": str(uuid4()),
-        "expected_state_version": root["state_version"],
-        "custodian_user_id": str(tenants["users"][0]),
-        "reviewer_user_id": str(tenants["users"][0]),
-        "reason": "reviewer_unavailable",
-    }
-    assigned = result(
-        await api.post(
-            f"{BASE}/{written['attachment_id']}/assignment", headers=headers[0], json=assignment
-        )
-    )
-    assert assigned["attachment"]["state_version"] == root["state_version"] + 1
-    assert (
-        await api.post(
-            f"{BASE}/{written['attachment_id']}/assignment",
-            headers=headers[0],
-            json={**assignment, "request_id": str(uuid4())},
-        )
-    ).status_code == 409
-    assert result(await review(api, headers[0], next_revision))["reviewed_by"] == str(
-        tenants["users"][0]
-    )
-
-
 async def test_nonempty_exact_declaration_and_active_exact_profile_selection(
-    api, headers, tenants, pdf_bytes
+    api, headers, database, pdf_bytes
 ):
-    chain = await archive_fixture(api, headers[0], tenants["users"][0], pdf_bytes)
+    chain = await archive_fixture(api, headers, pdf_bytes)
     linked_body = {
         "request_id": str(uuid4()),
         "field": "registration_details",
@@ -492,14 +423,14 @@ async def test_nonempty_exact_declaration_and_active_exact_profile_selection(
     }
     empty = await api.post(
         f"/resources/profiles/revisions/{chain['profile']['id']}/attachments",
-        headers=headers[0],
+        headers=headers,
         json=linked_body,
     )
     assert empty.status_code == 409
     changed = result(
         await api.post(
             f"/resources/profiles/{chain['profile']['profile_id']}/revisions",
-            headers=headers[0],
+            headers=headers,
             json={
                 "expected_revision": 1,
                 "data": metadata(performance_summary="Synthetic changed declaration"),
@@ -509,7 +440,7 @@ async def test_nonempty_exact_declaration_and_active_exact_profile_selection(
     new_profile = result(
         await api.post(
             f"/tasks/{chain['task']}/profiles",
-            headers=headers[0],
+            headers=headers,
             json={
                 "profile_id": chain["profile"]["profile_id"],
                 "revision": 2,
@@ -518,10 +449,10 @@ async def test_nonempty_exact_declaration_and_active_exact_profile_selection(
         )
     )
     assert changed["id"] == new_profile["profile_revision_id"]
-    assert (await source(api, headers[0], chain)).status_code == 409
+    assert (await source(api, headers, chain)).status_code == 409
     mismatched = await api.post(
         f"/tasks/{chain['task']}/attachments",
-        headers=headers[0],
+        headers=headers,
         json={
             "request_id": str(uuid4()),
             "task_org_profile_id": new_profile["id"],
@@ -532,7 +463,7 @@ async def test_nonempty_exact_declaration_and_active_exact_profile_selection(
     assert mismatched.status_code == 404 and error_code(mismatched) == "not_found"
     old = (
         await api.get(
-            f"/tasks/{chain['task']}/attachments", headers=headers[0], params={"history": True}
+            f"/tasks/{chain['task']}/attachments", headers=headers, params={"history": True}
         )
     ).json()["items"]
     assert old[0]["attachment_revision_id"] == chain["written"]["revision_id"]
@@ -540,7 +471,7 @@ async def test_nonempty_exact_declaration_and_active_exact_profile_selection(
 
 @pytest.mark.parametrize("scope", sorted(HUMAN_ATTACHMENT_SCOPES | {"evidence:confirm", "export"}))
 async def test_token_scope_issuance_rejects_atomically(scope, api, headers):
-    response = await token(api, headers[0], ["attachment:read", scope])
+    response = await token(api, headers, ["attachment:read", scope])
     assert response.status_code in {400, 403}, response.text
     assert response.json()["ok"] is False
 
@@ -549,62 +480,18 @@ def test_attachment_scope_matrix_and_unchanged_agent_defaults():
     assert HUMAN_ATTACHMENT_SCOPES <= HUMAN_ONLY_SCOPES
     assert HUMAN_ATTACHMENT_SCOPES.isdisjoint(SCOPES)
     assert "attachment:read" in SCOPES and "attachment:read" not in AGENT_SCOPES
-    for role in ROLE_SCOPES:
-        allowed = {"attachment:read", "attachment:page:read"}
-        if role in {"admin", "bidder"}:
-            allowed |= HUMAN_ATTACHMENT_SCOPES
-        assert ROLE_SCOPES[role] & (HUMAN_ATTACHMENT_SCOPES | {"attachment:read"}) == allowed
-
-
-@pytest.mark.parametrize("role", ["admin", "bidder", "technical", "viewer"])
-async def test_human_original_and_safe_metadata_read_boundary(
-    role, api, headers, tenants, admin_engine, pdf_bytes
-):
-    chain = await archive_fixture(api, headers[0], tenants["users"][0], pdf_bytes)
-    archived = result(await source(api, headers[0], chain))["source"]
-    link = result(
-        await api.get(
-            f"/attachment-sources/{archived['id']}/preview/download-link", headers=headers[0]
-        )
-    )
-    with Session(admin_engine) as session, session.begin():
-        member = session.scalar(
-            select(Membership).where(
-                Membership.org_id == tenants["orgs"][0], Membership.user_id == tenants["users"][0]
-            )
-        )
-        member.role = role
-    for path in (
-        BASE,
-        f"{BASE}/{chain['written']['attachment_id']}",
-        f"/attachment-sources/{archived['id']}",
-    ):
-        response = await api.get(path, headers=headers[0])
-        assert response.status_code == 200
-        assert (
-            "confidential archive label" not in response.text
-            and "synthetic-private-contract" not in response.text
-        )
-    expected = 200 if role in {"admin", "bidder"} else 403
-    for path in (
-        f"{BASE}/revisions/{chain['written']['revision_id']}",
-        f"{BASE}/revisions/{chain['written']['revision_id']}/file/download-link",
-        f"/attachment-sources/{archived['id']}/preview/download-link",
-        link["url"],
-    ):
-        response = await api.get(path, headers=headers[0])
-        assert response.status_code == expected, (path, response.text)
+    assert HUMAN_ATTACHMENT_SCOPES <= HUMAN_SCOPES
 
 
 async def test_explicit_token_metadata_scope_cannot_read_labels_or_any_raw_route(
-    api, headers, tenants, pdf_bytes
+    api, headers, database, pdf_bytes
 ):
-    chain = await archive_fixture(api, headers[0], tenants["users"][0], pdf_bytes)
-    archived = result(await source(api, headers[0], chain))["source"]
+    chain = await archive_fixture(api, headers, pdf_bytes)
+    archived = result(await source(api, headers, chain))["source"]
     minted = result(
         await token(
             api,
-            headers[0],
+            headers,
             [
                 "attachment:read",
                 "task:read",
@@ -617,7 +504,7 @@ async def test_explicit_token_metadata_scope_cannot_read_labels_or_any_raw_route
             ],
         )
     )
-    automated = {**headers[0], "Authorization": "Bearer " + minted["token"]}
+    automated = {**headers, "Authorization": "Bearer " + minted["token"]}
     for path in (
         BASE,
         f"{BASE}/{chain['written']['attachment_id']}",
@@ -638,109 +525,17 @@ async def test_explicit_token_metadata_scope_cannot_read_labels_or_any_raw_route
         assert response.status_code in {403, 404}, (path, response.text)
 
 
-async def test_two_org_route_inventory_foreign_absent_and_signature_boundaries(
-    api, headers, tenants, pdf_bytes, application
-):
-    chain = await archive_fixture(api, headers[1], tenants["users"][1], pdf_bytes)
-    archived = result(await source(api, headers[1], chain))["source"]
-    root, fixed, task_id = (
-        chain["written"]["attachment_id"],
-        chain["written"]["revision_id"],
-        chain["task"],
-    )
-    review_body = {
-        "request_id": str(uuid4()),
-        "expected_state_version": 2,
-        "expected_review_id": chain["approved"]["id"],
-        "file_id": chain["written"]["file_id"],
-        "original_sha256": archived["original_sha256"],
-        "metadata_sha256": "a" * 64,
-        "decision": "revoke",
-        "reason": "withdrawn_by_org",
-    }
-    deactivate = {
-        "request_id": str(uuid4()),
-        "expected_state_version": 1,
-        "reason": "withdrawn_by_org",
-    }
-    routes = [
-        ("GET", f"{BASE}/{root}", None),
-        ("GET", f"{BASE}/{root}/revisions", None),
-        ("GET", f"{BASE}/revisions/{fixed}", None),
-        ("GET", f"{BASE}/revisions/{fixed}/reviews", None),
-        ("POST", f"{BASE}/revisions/{fixed}/reviews", review_body),
-        ("POST", f"{BASE}/{root}/deactivate", deactivate),
-        ("GET", f"/resources/profiles/revisions/{chain['profile']['id']}/attachments", None),
-        ("POST", f"/profile-attachment-links/{chain['link']['id']}/deactivate", deactivate),
-        ("GET", f"/tasks/{task_id}/attachments", None),
-        ("POST", f"/task-attachments/{chain['selection']['id']}/deactivate", deactivate),
-        ("GET", f"/tasks/{task_id}/attachment-sources", None),
-        ("GET", f"/attachment-sources/{archived['id']}", None),
-        ("GET", f"/attachment-sources/{archived['id']}/preview/download-link", None),
-        ("GET", f"{BASE}/revisions/{fixed}/file/download-link", None),
-        ("GET", f"{BASE}/revisions/{fixed}/parts/1/download-link", None),
-        ("GET", f"{BASE}/revisions/{fixed}/pages/1/preview-link", None),
-    ]
-    for method, path, body in routes:
-        foreign = await api.request(method, path, headers=headers[0], json=body)
-        assert foreign.status_code == 404, (path, foreign.text)
-        absent_path = path
-        for identifier in (
-            root,
-            fixed,
-            task_id,
-            chain["profile"]["id"],
-            chain["link"]["id"],
-            chain["selection"]["id"],
-            archived["id"],
-        ):
-            absent_path = absent_path.replace(identifier, str(uuid4()))
-        absent = await api.request(method, absent_path, headers=headers[0], json=body)
-        assert absent.status_code == foreign.status_code and error_code(absent) == error_code(
-            foreign
-        )
-    path = f"{BASE}/revisions/{fixed}/file/download"
-    from urllib.parse import parse_qs, urlsplit
-
-    signer = TokenSigner.for_tokens(application.state.processor.settings)
-    issued = result(
-        await api.get(f"{BASE}/revisions/{fixed}/file/download-link", headers=headers[1])
-    )
-    current = signer.open(parse_qs(urlsplit(issued["url"]).query)["signature"][0])
-    for payload, ttl in (
-        (current, -1),
-        ({**current, "kind": "certificate-file-download"}, 300),
-        ({**current, "org_id": headers[0]["X-Org-Id"]}, 300),
-        ({**current, "id": str(uuid4())}, 300),
-    ):
-        assert (
-            await api.get(
-                path, headers=headers[1], params={"signature": signer.issue(payload, ttl)}
-            )
-        ).status_code == 404
-    artifact(
-        "two-org-route-inventory",
-        {
-            "scenario": "foreign-equals-absent",
-            "expected_gate": "404",
-            "routes": [{"method": method, "path": path} for method, path, _ in routes],
-        },
-    )
-
-
 async def test_privacy_is_exact_page_rendition_hold_and_legacy_read_boundary(
-    tenants, tmp_path, admin_engine, pdf_bytes, renderer
+    database, tmp_path, admin_engine, pdf_bytes, renderer
 ):
-    async with phase_one_client(tenants, tmp_path) as (legacy_api, app, headers, _):
+    async with phase_one_client(database, tmp_path) as (legacy_api, app, headers, _):
         api = V4API(legacy_api)
         task_id, _, extraction, _ = await create_tender(
-            api, app, headers[0], tmp_path, suffix="attachment-privacy"
+            api, app, headers, tmp_path, suffix="attachment-privacy"
         )
-        chain = await archive_fixture(
-            api, headers[0], tenants["users"][0], pdf_bytes, task_id=task_id
-        )
-        first = result(await source(api, headers[0], chain, 1))["source"]
-        second = result(await source(api, headers[0], chain, 2))["source"]
+        chain = await archive_fixture(api, headers, pdf_bytes, task_id=task_id)
+        first = result(await source(api, headers, chain, 1))["source"]
+        second = result(await source(api, headers, chain, 2))["source"]
         body = {
             "mode": "clear",
             "request_id": str(uuid4()),
@@ -750,27 +545,23 @@ async def test_privacy_is_exact_page_rendition_hold_and_legacy_read_boundary(
             "expected_hold_id": None,
         }
         cleared = result(
-            await api.post(
-                f"/attachment-sources/{first['id']}/privacy", headers=headers[0], json=body
-            )
+            await api.post(f"/attachment-sources/{first['id']}/privacy", headers=headers, json=body)
         )
-        assert cleared["reviewed_by"] == str(tenants["users"][0])
+        assert "reviewed_by" not in cleared
         assert cleared["rendition"]["profile"] == "screenshot-markup-v1"
-        assert cleared["confirmed_by"] is None and not cleared["eligible_for_draft_export"]
+        assert cleared["confirmed_at"] is None and not cleared["eligible_for_draft_export"]
         repeat = result(
-            await api.post(
-                f"/attachment-sources/{first['id']}/privacy", headers=headers[0], json=body
-            )
+            await api.post(f"/attachment-sources/{first['id']}/privacy", headers=headers, json=body)
         )
         assert repeat["duplicate"] and repeat["rendition"]["id"] == cleared["rendition"]["id"]
         wrong_page = await api.post(
             f"/attachment-sources/{second['id']}/privacy",
-            headers=headers[0],
+            headers=headers,
             json={**body, "request_id": str(uuid4())},
         )
         assert wrong_page.status_code == 409
         cleared_source = result(
-            await api.get(f"/attachment-sources/{first['id']}", headers=headers[0])
+            await api.get(f"/attachment-sources/{first['id']}", headers=headers)
         )
         readiness = cleared_source["readiness"]
         assert cleared_source["cleared_asset_id"] == cleared["rendition"]["asset_id"]
@@ -781,23 +572,24 @@ async def test_privacy_is_exact_page_rendition_hold_and_legacy_read_boundary(
         )
         assert (
             "privacy_pending"
-            in result(await api.get(f"/attachment-sources/{second['id']}", headers=headers[0]))[
+            in result(await api.get(f"/attachment-sources/{second['id']}", headers=headers))[
                 "readiness"
             ]["blockers"]
         )
         rendition = cleared["rendition"]["id"]
         preview = result(
-            await api.post(f"/screenshot-renditions/{rendition}/preview-link", headers=headers[0])
+            await api.post(f"/screenshot-renditions/{rendition}/preview-link", headers=headers)
         )
-        team_png = await api.get(preview["url"], headers=headers[0])
-        assert team_png.status_code == 200
+        reviewed_png = await api.get(preview["url"], headers=headers)
+        assert reviewed_png.status_code == 200
         assert (
-            hashlib.sha256(team_png.content).hexdigest() == cleared["rendition"]["image"]["sha256"]
+            hashlib.sha256(reviewed_png.content).hexdigest()
+            == cleared["rendition"]["image"]["sha256"]
         )
         minted = result(
             await token(
                 api,
-                headers[0],
+                headers,
                 [
                     "attachment:read",
                     "task:read",
@@ -810,7 +602,7 @@ async def test_privacy_is_exact_page_rendition_hold_and_legacy_read_boundary(
                 ],
             )
         )
-        automated = {**headers[0], "Authorization": "Bearer " + minted["token"]}
+        automated = {**headers, "Authorization": "Bearer " + minted["token"]}
         assert (await api.get(preview["url"], headers=automated)).status_code == 403
         for method, path, payload in (
             ("GET", f"/screenshots/{cleared['rendition']['asset_id']}", None),
@@ -829,32 +621,11 @@ async def test_privacy_is_exact_page_rendition_hold_and_legacy_read_boundary(
         ):
             denied = await api.request(method, path, headers=automated, json=payload)
             assert denied.status_code in {403, 404}, (path, denied.text)
-        with Session(admin_engine) as session, session.begin():
-            member = session.scalar(
-                select(Membership).where(
-                    Membership.org_id == tenants["orgs"][0],
-                    Membership.user_id == tenants["users"][0],
-                )
-            )
-            member.role = "viewer"
-        assert (await api.get(preview["url"], headers=headers[0])).status_code == 200
-        assert (
-            await api.get(
-                f"/attachment-sources/{first['id']}/preview/download-link", headers=headers[0]
-            )
-        ).status_code == 403
-        with Session(admin_engine) as session, session.begin():
-            member = session.scalar(
-                select(Membership).where(
-                    Membership.org_id == tenants["orgs"][0],
-                    Membership.user_id == tenants["users"][0],
-                )
-            )
-            member.role = "admin"
+        assert (await api.get(preview["url"], headers=headers)).status_code == 200
         held = result(
             await api.post(
                 f"/attachment-sources/{first['id']}/privacy",
-                headers=headers[0],
+                headers=headers,
                 json={
                     "mode": "needs_redaction",
                     "request_id": str(uuid4()),
@@ -867,20 +638,18 @@ async def test_privacy_is_exact_page_rendition_hold_and_legacy_read_boundary(
         assert (
             await api.post(
                 f"/attachment-sources/{first['id']}/privacy",
-                headers=headers[0],
+                headers=headers,
                 json={**body, "request_id": str(uuid4())},
             )
         ).status_code == 409
-        assert (await api.get(preview["url"], headers=headers[0])).status_code in {403, 409}
-        held_source = result(
-            await api.get(f"/attachment-sources/{first['id']}", headers=headers[0])
-        )
+        assert (await api.get(preview["url"], headers=headers)).status_code in {403, 409}
+        held_source = result(await api.get(f"/attachment-sources/{first['id']}", headers=headers))
         assert (
             held_source["cleared_asset_id"] is None and held_source["cleared_rendition_id"] is None
         )
         assert (
             "needs_redaction"
-            in result(await api.get(f"/attachment-sources/{first['id']}", headers=headers[0]))[
+            in result(await api.get(f"/attachment-sources/{first['id']}", headers=headers))[
                 "readiness"
             ]["blockers"]
         )
@@ -891,7 +660,7 @@ async def test_privacy_is_exact_page_rendition_hold_and_legacy_read_boundary(
                 "expected_gate": "needs_redaction",
                 "page_one_hash": first["source_png_sha256"],
                 "page_two_hash": second["source_png_sha256"],
-                "rendition_sha256": hashlib.sha256(team_png.content).hexdigest(),
+                "rendition_sha256": hashlib.sha256(reviewed_png.content).hexdigest(),
                 "privacy_receipt": cleared,
                 "hold": held,
             },
@@ -900,9 +669,9 @@ async def test_privacy_is_exact_page_rendition_hold_and_legacy_read_boundary(
 
 @pytest.mark.parametrize("mode", ["multipart", "image", "rotation"])
 async def test_disabled_upload_modes_fail_without_write(
-    mode, api, headers, tenants, pdf_bytes, application
+    mode, api, headers, database, pdf_bytes, application
 ):
-    body = upload_body(tenants["users"][0])
+    body = upload_body()
     files = [("files", ("first.pdf", pdf_bytes, "application/pdf"))]
     if mode == "multipart":
         files.append(("files", ("second.pdf", pdf_bytes, "application/pdf")))
@@ -911,35 +680,31 @@ async def test_disabled_upload_modes_fail_without_write(
     else:
         body["parts"] = [{"rotation": 90}]
     response = await api.post(
-        BASE, headers=headers[0], data={"metadata": json.dumps(body)}, files=files
+        BASE, headers=headers, data={"metadata": json.dumps(body)}, files=files
     )
     assert response.status_code in {400, 409, 422}
     assert error_code(response) == "attachment_upload_mode_not_enabled"
-    assert (await api.get(BASE, headers=headers[0])).json()["items"] == []
+    assert (await api.get(BASE, headers=headers)).json()["items"] == []
     assert application.state.queue.calls == []
 
 
 async def test_review_revocation_and_reapproval_never_revives_exact_old_pin(
-    api, headers, tenants, pdf_bytes
+    api, headers, database, pdf_bytes
 ):
-    chain = await archive_fixture(api, headers[0], tenants["users"][0], pdf_bytes)
-    archived = result(await source(api, headers[0], chain))["source"]
-    result(
-        await review(
-            api, headers[0], chain["written"], decision="revoke", reason="withdrawn_by_org"
-        )
-    )
-    revoked = result(await api.get(f"/attachment-sources/{archived['id']}", headers=headers[0]))
+    chain = await archive_fixture(api, headers, pdf_bytes)
+    archived = result(await source(api, headers, chain))["source"]
+    result(await review(api, headers, chain["written"], decision="revoke", reason="superseded"))
+    revoked = result(await api.get(f"/attachment-sources/{archived['id']}", headers=headers))
     assert "archive_review_revoked" in revoked["readiness"]["blockers"]
-    next_approval = result(await review(api, headers[0], chain["written"]))
+    next_approval = result(await review(api, headers, chain["written"]))
     assert next_approval["id"] != chain["approved"]["id"]
-    still_old = result(await api.get(f"/attachment-sources/{archived['id']}", headers=headers[0]))
+    still_old = result(await api.get(f"/attachment-sources/{archived['id']}", headers=headers))
     assert "archive_review_revoked" in still_old["readiness"]["blockers"]
-    assert (await source(api, headers[0], chain)).status_code == 409
+    assert (await source(api, headers, chain)).status_code == 409
     result(
         await api.post(
             f"/profile-attachment-links/{chain['link']['id']}/deactivate",
-            headers=headers[0],
+            headers=headers,
             json={
                 "request_id": str(uuid4()),
                 "expected_state_version": chain["link"]["state_version"],
@@ -950,7 +715,7 @@ async def test_review_revocation_and_reapproval_never_revives_exact_old_pin(
     linked = result(
         await api.post(
             f"/resources/profiles/revisions/{chain['profile']['id']}/attachments",
-            headers=headers[0],
+            headers=headers,
             json={
                 "request_id": str(uuid4()),
                 "field": "performance_summary",
@@ -962,7 +727,7 @@ async def test_review_revocation_and_reapproval_never_revives_exact_old_pin(
     chosen = result(
         await api.post(
             f"/tasks/{chain['task']}/attachments",
-            headers=headers[0],
+            headers=headers,
             json={
                 "request_id": str(uuid4()),
                 "task_org_profile_id": chain["task_profile"]["id"],
@@ -972,7 +737,7 @@ async def test_review_revocation_and_reapproval_never_revives_exact_old_pin(
         )
     )
     assert chosen["id"] != chain["selection"]["id"] and chosen["approval_id"] == next_approval["id"]
-    fresh = result(await source(api, headers[0], {**chain, "selection": chosen}))["source"]
+    fresh = result(await source(api, headers, {**chain, "selection": chosen}))["source"]
     assert fresh["id"] != archived["id"] and "privacy_pending" in fresh["readiness"]["blockers"]
     artifact(
         "revocation-reapproval",
@@ -989,11 +754,11 @@ async def test_review_revocation_and_reapproval_never_revives_exact_old_pin(
 
 @pytest.mark.parametrize("target", ["archive", "link", "selection"])
 async def test_deactivation_is_one_way_history_retained_and_replay_bound(
-    target, api, headers, tenants, pdf_bytes
+    target, api, headers, database, pdf_bytes
 ):
-    chain = await archive_fixture(api, headers[0], tenants["users"][0], pdf_bytes)
-    archived = result(await source(api, headers[0], chain))["source"]
-    root = await show(api, headers[0], chain["written"]["attachment_id"])
+    chain = await archive_fixture(api, headers, pdf_bytes)
+    archived = result(await source(api, headers, chain))["source"]
+    root = await show(api, headers, chain["written"]["attachment_id"])
     paths = {
         "archive": (f"{BASE}/{root['id']}/deactivate", root["state_version"]),
         "link": (
@@ -1009,22 +774,22 @@ async def test_deactivation_is_one_way_history_retained_and_replay_bound(
     body = {
         "request_id": str(uuid4()),
         "expected_state_version": version,
-        "reason": "withdrawn_by_org",
+        "reason": "superseded",
     }
-    result(await api.post(path, headers=headers[0], json=body))
-    result(await api.post(path, headers=headers[0], json=body))
+    result(await api.post(path, headers=headers, json=body))
+    result(await api.post(path, headers=headers, json=body))
     assert (
         await api.post(
             path,
-            headers=headers[0],
+            headers=headers,
             json={**body, "request_id": str(uuid4()), "expected_state_version": version + 1},
         )
     ).status_code == 409
-    assert (await source(api, headers[0], chain)).status_code == 409
-    historical = await revision(api, headers[0], chain["written"]["revision_id"])
+    assert (await source(api, headers, chain)).status_code == 409
+    historical = await revision(api, headers, chain["written"]["revision_id"])
     assert historical["original_sha256"] == hashlib.sha256(pdf_bytes).hexdigest()
     history = await api.get(
-        f"/tasks/{chain['task']}/attachment-sources", headers=headers[0], params={"history": True}
+        f"/tasks/{chain['task']}/attachment-sources", headers=headers, params={"history": True}
     )
     assert any(row["id"] == archived["id"] for row in history.json()["items"])
 
@@ -1034,9 +799,9 @@ async def test_deactivation_is_one_way_history_retained_and_replay_bound(
     ["malformed_pdf", "encrypted_pdf", "too_many_pages", "label_control", "metadata_oversized"],
 )
 async def test_invalid_input_bounds_leave_no_archive_and_never_echo_sensitive_input(
-    bad, api, headers, tenants, pdf_bytes, application, monkeypatch
+    bad, api, headers, database, pdf_bytes, application, monkeypatch
 ):
-    body = upload_body(tenants["users"][0])
+    body = upload_body()
     content = pdf_bytes
     secret = "SYNTHETIC-MUST-NOT-ECHO"
     if bad == "malformed_pdf":
@@ -1062,46 +827,38 @@ async def test_invalid_input_bounds_leave_no_archive_and_never_echo_sensitive_in
         raise AssertionError("invalid upload wrote ciphertext")
 
     monkeypatch.setattr(application.state.storage, "put", no_put)
-    response = await upload(api, headers[0], tenants["users"][0], content, body=body)
+    response = await upload(api, headers, content, body=body)
     assert response.status_code in {400, 413, 422}, response.text
     assert secret not in response.text and "synthetic-private-contract" not in response.text
-    assert (await api.get(BASE, headers=headers[0])).json()["items"] == []
+    assert (await api.get(BASE, headers=headers)).json()["items"] == []
 
 
-async def test_cursor_binds_actor_org_limit_filters_and_current_live_role(
-    api, headers, tenants, pdf_bytes, admin_engine
+async def test_cursor_binds_actor_limit_and_filters(
+    api, headers, database, pdf_bytes, admin_engine
 ):
     for _ in range(3):
-        result(await upload(api, headers[0], tenants["users"][0], pdf_bytes))
-    first = await api.get(BASE, headers=headers[0], params={"limit": 1})
+        result(await upload(api, headers, pdf_bytes))
+    first = await api.get(BASE, headers=headers, params={"limit": 1})
     cursor = first.json()["data"]["next_cursor"]
     assert cursor and len(first.json()["items"]) == 1
+    issued = result(await token(api, headers, ["attachment:read"]))
+    automated = {"Authorization": "Bearer " + issued["token"]}
     for params, header in (
-        ({"limit": 1, "cursor": cursor, "kind": "contract"}, headers[0]),
-        ({"limit": 2, "cursor": cursor}, headers[0]),
-        ({"limit": 1, "cursor": cursor}, headers[1]),
-        ({"limit": 1, "cursor": "forged"}, headers[0]),
+        ({"limit": 1, "cursor": cursor, "kind": "contract"}, headers),
+        ({"limit": 2, "cursor": cursor}, headers),
+        ({"limit": 1, "cursor": cursor}, automated),
+        ({"limit": 1, "cursor": "forged"}, headers),
     ):
         denied = await api.get(BASE, headers=header, params=params)
         assert denied.status_code in {404, 409}, denied.text
-    with Session(admin_engine) as session, session.begin():
-        member = session.scalar(
-            select(Membership).where(
-                Membership.org_id == tenants["orgs"][0], Membership.user_id == tenants["users"][0]
-            )
-        )
-        member.role = "bidder"
-    assert (
-        await api.get(BASE, headers=headers[0], params={"limit": 1, "cursor": cursor})
-    ).status_code == 409
 
 
 async def test_selection_changed_while_rendering_cannot_publish_source(
-    api, headers, tenants, pdf_bytes, application, monkeypatch
+    api, headers, database, pdf_bytes, application, monkeypatch
 ):
     from app.services import evidence_sources
 
-    chain = await archive_fixture(api, headers[0], tenants["users"][0], pdf_bytes)
+    chain = await archive_fixture(api, headers, pdf_bytes)
     rendered, resume = asyncio.Event(), asyncio.Event()
     original = evidence_sources.bounded_render_async
 
@@ -1112,13 +869,13 @@ async def test_selection_changed_while_rendering_cannot_publish_source(
         return actual
 
     monkeypatch.setattr(evidence_sources, "bounded_render_async", paused)
-    preparing = asyncio.create_task(source(api, headers[0], chain))
+    preparing = asyncio.create_task(source(api, headers, chain))
     try:
         await asyncio.wait_for(rendered.wait(), timeout=30)
         result(
             await api.post(
                 f"/task-attachments/{chain['selection']['id']}/deactivate",
-                headers=headers[0],
+                headers=headers,
                 json={
                     "request_id": str(uuid4()),
                     "expected_state_version": chain["selection"]["state_version"],
@@ -1132,7 +889,7 @@ async def test_selection_changed_while_rendering_cannot_publish_source(
     assert rejected.status_code == 409, rejected.text
     from sqlalchemy import text
 
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+    async with application.state.db.transaction() as session:
         assert (
             await session.scalar(
                 text(
@@ -1155,29 +912,3 @@ async def test_selection_changed_while_rendering_cannot_publish_source(
             "result_code": error_code(rejected),
         },
     )
-
-
-async def test_signed_original_issued_before_member_departure_has_no_bearer_authority(
-    api, headers, tenants, pdf_bytes, admin_engine
-):
-    chain = await archive_fixture(api, headers[0], tenants["users"][0], pdf_bytes)
-    linked = result(
-        await api.get(
-            f"{BASE}/revisions/{chain['written']['revision_id']}/file/download-link",
-            headers=headers[0],
-        )
-    )
-    assert (await api.get(linked["url"], headers=headers[0])).status_code == 200
-    assert (
-        await api.get(linked["url"], headers={"X-Org-Id": headers[0]["X-Org-Id"]})
-    ).status_code == 401
-    with Session(admin_engine) as session, session.begin():
-        member = session.scalar(
-            select(Membership).where(
-                Membership.org_id == tenants["orgs"][0], Membership.user_id == tenants["users"][0]
-            )
-        )
-        member.active = False
-    denied = await api.get(linked["url"], headers=headers[0])
-    assert denied.status_code == 404
-    assert "confidential archive label" not in denied.text

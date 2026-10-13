@@ -2,10 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-import { useTaskAuthority } from "../task-authority.js";
 import TaskNavigation from "../components/TaskNavigation.vue";
 import JobPanel from "../components/JobPanel.vue";
-import { categories, deviations, display, errorText, formatTime, label, locationLabel, orgAccess, orgRequest, responseKinds, warningText } from "../org.js";
+import { request } from "../api.js";
+import { categories, deviations, display, errorText, formatTime, label, locationLabel, responseKinds, warningText } from "../org.js";
 
 const route = useRoute(), router = useRouter();
 
@@ -32,9 +32,6 @@ const jobId = computed(() => {
   const value = route.query.job;
   return Array.isArray(value) ? String(value[0] ?? "") : String(value ?? "");
 });
-let accessLost = false;
-const authority = useTaskAuthority(taskId.value, (exc) => { accessLost = true; loadSequence++; detailSequence++; drafts.value = []; selectedDraft.value = null; extraction.value = null; taskName.value = ""; preview.value = null; query.value = ""; error.value = errorText(exc); });
-const canWrite = computed(() => authority.canWrite.value && ["admin", "bidder", "technical"].includes(orgAccess.role));
 const jobReady = computed(() => extraction.value?.status === "succeeded");
 const negativeRows = computed(() => {
   if (!selectedDraft.value) return [];
@@ -129,7 +126,6 @@ let loadSequence = 0;
 // The draft the user last asked for; a background reload must not override that choice.
 let wantedDraftId = null;
 async function loadPage() {
-  if (accessLost) return;
   const sequence = ++loadSequence;
   error.value = "";
   extraction.value = null;
@@ -144,15 +140,15 @@ async function loadPage() {
 
   loading.value = true;
   try {
-    orgRequest("GET", `/tasks/${encodeURIComponent(taskId.value)}`).then((result) => { if (sequence === loadSequence) taskName.value = result.data.name; }).catch(() => {});
-    const history = await orgRequest(
+    request("GET", `/tasks/${encodeURIComponent(taskId.value)}`).then((result) => { if (sequence === loadSequence) taskName.value = result.data.name; }).catch(() => {});
+    const history = await request(
       "GET",
       `/tasks/${encodeURIComponent(taskId.value)}/extractions`,
     );
     if (sequence !== loadSequence) return;
     extraction.value = (history.items ?? []).find((item) => item.job_id === jobId.value) ?? null;
     if (!extraction.value) {
-      error.value = "所选抽取 job 不属于当前任务，或当前单位无权读取。";
+      error.value = "所选抽取 job 不属于当前任务，或不可读取。";
       return;
     }
     if (!jobReady.value) {
@@ -168,7 +164,7 @@ async function loadPage() {
 }
 
 async function loadDrafts(sequence = loadSequence) {
-  const result = await orgRequest(
+  const result = await request(
     "GET",
     `/tasks/${encodeURIComponent(taskId.value)}/drafts?job=${encodeURIComponent(jobId.value)}`,
   );
@@ -188,7 +184,7 @@ async function showDraft(id, sequence = loadSequence) {
   wantedDraftId = id;
   const detailRequest = ++detailSequence;
   try {
-    const result = await orgRequest("GET", `/drafts/${encodeURIComponent(id)}`);
+    const result = await request("GET", `/drafts/${encodeURIComponent(id)}`);
     if (sequence !== loadSequence || detailRequest !== detailSequence) return;
     if (result.data.task_id !== taskId.value || result.data.extraction_job_id !== jobId.value) throw new Error("初稿不属于当前任务与抽取");
     selectedDraft.value = result.data;
@@ -202,12 +198,12 @@ async function showDraft(id, sequence = loadSequence) {
 }
 
 async function previewDraft() {
-  if (!jobReady.value || !canWrite.value) return;
+  if (!jobReady.value) return;
   error.value = "";
   preview.value = null;
   previewing.value = true;
   try {
-    const result = await orgRequest("POST", `/tasks/${encodeURIComponent(taskId.value)}/drafts`, {
+    const result = await request("POST", `/tasks/${encodeURIComponent(taskId.value)}/drafts`, {
       extraction_job_id: jobId.value,
       dry_run: true,
     });
@@ -220,11 +216,11 @@ async function previewDraft() {
 }
 
 async function submitDraft() {
-  if (!preview.value || !jobReady.value || !canWrite.value) return;
+  if (!preview.value || !jobReady.value) return;
   error.value = "";
   submitting.value = true;
   try {
-    const result = await orgRequest("POST", `/tasks/${encodeURIComponent(taskId.value)}/drafts`, {
+    const result = await request("POST", `/tasks/${encodeURIComponent(taskId.value)}/drafts`, {
       extraction_job_id: jobId.value,
       dry_run: false,
       retry: retry.value,
@@ -276,7 +272,6 @@ onBeforeUnmount(() => {
 
 <template>
   <TaskNavigation :task-id="taskId" />
-  <el-alert v-if="authority.access.value?.workflow.state === 'archived'" title="任务已归档，只能查看已有初稿。" type="info" :closable="false" class="section" />
   <div class="draft-page">
     <nav class="breadcrumb" aria-label="位置"><RouterLink to="/org/tasks">招标任务</RouterLink><span>/</span><RouterLink :to="`/org/tasks/${taskId}`">{{ taskName || "任务" }}</RouterLink><span>/</span><span>响应表初稿</span></nav>
     <header class="page-header">
@@ -295,8 +290,7 @@ onBeforeUnmount(() => {
       <template #header>
         <div class="section-title">
           <div><h3 id="assemble-title">组表</h3><p class="hint">组表只复制已经人工确认的内容，不调用模型或 OCR。</p></div>
-          <el-button v-if="canWrite" type="primary" plain :loading="previewing" :disabled="submitting" @click="previewDraft">预检组表</el-button>
-          <span v-else class="hint">当前角色只读</span>
+          <el-button type="primary" plain :loading="previewing" :disabled="submitting" @click="previewDraft">预检组表</el-button>
         </div>
       </template>
       <div v-if="preview" class="draft-preview">
@@ -313,7 +307,7 @@ onBeforeUnmount(() => {
         </details>
         <p class="hint">本次预检为确定性组表，不调用模型。</p>
         <p class="hint">输入标识 <code>{{ preview.input_hash }}</code> · 预计时长 {{ preview.estimated_duration_ms == null ? "未知" : `${preview.estimated_duration_ms} ms` }}</p>
-        <div class="actions"><label class="check"><input v-model="retry" type="checkbox" />显式重试已失败或取消的组表作业</label><el-button type="primary" :loading="submitting" :disabled="!canWrite" @click="submitDraft">确认生成初稿</el-button></div>
+        <div class="actions"><label class="check"><input v-model="retry" type="checkbox" />显式重试已失败或取消的组表作业</label><el-button type="primary" :loading="submitting" @click="submitDraft">确认生成初稿</el-button></div>
       </div>
       <p v-else class="hint">先预检，核对响应行、须遵守、缺口和负偏离数量后再生成。</p>
     </el-card>
@@ -337,7 +331,7 @@ onBeforeUnmount(() => {
     </el-card>
 
     </div>
-    <JobPanel v-if="draftJobId" :job-id="draftJobId" :writable="canWrite" @finished="onDraftFinished" />
+    <JobPanel v-if="draftJobId" :job-id="draftJobId" @finished="onDraftFinished" />
     <p v-for="warning in resultWarnings" :key="warning" class="notice warning">{{ warningText(warning) }}</p>
     <el-card v-if="selectedDraft" class="section draft-detail" shadow="never">
       <template #header>

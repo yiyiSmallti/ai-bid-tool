@@ -34,8 +34,7 @@ def create_router(context, db, queue, settings, storage):
 
     @router.get("/memories", name="memory_list", response_model=Result)
     async def listing(
-        scope: Literal["global", "org", "user", "project"] = Query(...),
-        user_id: UUID | None = None,
+        scope: Literal["global", "library", "project"] = Query(...),
         task_id: UUID | None = None,
         status: Literal["candidate", "active", "disabled"] | None = None,
         include_deleted: bool = False,
@@ -47,19 +46,18 @@ def create_router(context, db, queue, settings, storage):
 
         try:
             request = MemoryListRequest(
-                target=MemoryTarget(scope=scope, user_id=user_id, task_id=task_id),
+                target=MemoryTarget(scope=scope, task_id=task_id),
                 status=status,
                 include_deleted=include_deleted,
                 cursor=cursor,
                 limit=limit,
-            )  # pyright: ignore[reportArgumentType]
+            )
         except ValueError:
             raise ServiceError(
                 "invalid_input", "Memory target does not match its scope", 422, 2
             ) from None
         return await crud.list_memories(ctx[0], ctx[1], request, settings)
 
-    # Register static retrieval before the UUID resource route.
     @router.post("/memories/retrieve", name="memory_retrieve", response_model=Result)
     async def retrieve(
         body: MemoryRetrievalRequest, preview: bool = False, ctx=Depends(context, scope="function")
@@ -150,7 +148,7 @@ def create_router(context, db, queue, settings, storage):
         output, job = await candidates.submit_candidates(session, actor, task_id, body, settings)
         if job is not None:
             await session.commit()
-            warnings = await candidates.dispatch(db, queue, actor.org_id, job)
+            warnings = await candidates.dispatch(db, queue, job)
             output.warnings.extend(warnings)
             if warnings:
                 failed = Result(
@@ -193,9 +191,7 @@ def create_router(context, db, queue, settings, storage):
                 ctx[0], ctx[1], task_id, PageQuery(cursor=cursor, limit=limit or 25), settings
             )
             return management.page_result(
-                "memory feedback list",
-                page,
-                round((time.monotonic() - started) * 1000),
+                "memory feedback list", page, round((time.monotonic() - started) * 1000)
             )
         return await feedback.list_feedback(
             ctx[0], ctx[1], task_id, cursor=cursor, limit=limit or 50

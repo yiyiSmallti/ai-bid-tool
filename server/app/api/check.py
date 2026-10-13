@@ -8,10 +8,12 @@ from fastapi.responses import JSONResponse
 from procrastinate.exceptions import ConnectorException
 from psycopg import OperationalError
 
+from app.core.errors import ServiceError
 from app.models.entities import Job
 from app.schemas.check_contracts import CheckRequest, FindingDecisionRequest
 from app.schemas.console_assessments import AssessmentHistoryQuery, CheckPageRequest
 from app.schemas.contracts import Result
+from app.services import assessment_reads, check
 from app.services.assessment_bounds import bounded_result, query_model
 
 
@@ -34,7 +36,7 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         # The submission and its authorization snapshot are durable before queue I/O.
         await session.commit()
         try:
-            queue_id = await queue.enqueue(str(actor.org_id), str(job.id))
+            queue_id = await queue.enqueue(str(job.id))
         except (OSError, ConnectorException, OperationalError):
             body = Result(
                 ok=False,
@@ -49,7 +51,7 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
                 },
             )
             return JSONResponse(status_code=503, content=body.model_dump(mode="json"))
-        async with db.transaction(actor.org_id) as update:
+        async with db.transaction() as update:
             saved = await update.get(Job, job.id)
             if saved is not None:
                 saved.queue_id = queue_id
@@ -57,7 +59,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
 
     @router.post("/tasks/{task_id}/checks", name="check_run", response_model=Result)
     async def check_run(task_id: UUID, body: CheckRequest, ctx=Depends(context, scope="function")):
-        from app.services import check
 
         session, actor = ctx
         data, job = await check.submit_check(session, actor, task_id, body, storage, settings)
@@ -76,7 +77,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         extraction_job_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import assessment_reads, check
 
         if view == "console":
             query = query_model(
@@ -96,8 +96,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
                 console=True,
             )
         if extraction_job_id is not None:
-            from app.core.errors import ServiceError
-
             raise ServiceError("invalid_input", "Extraction filter requires view=console", 400, 2)
         data, items = await check.list_checks(
             ctx[0], ctx[1], task_id, storage, settings, cursor=cursor, limit=limit
@@ -123,7 +121,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         entry_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import assessment_reads, check
 
         if view == "console":
             if part is None or part == "summary":
@@ -131,8 +128,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
                     value is not None
                     for value in (cursor, severity, domain, status, requirement_id, entry_id)
                 ):
-                    from app.core.errors import ServiceError
-
                     raise ServiceError(
                         "invalid_input", "Summary does not accept page filters", 400, 2
                     )
@@ -173,8 +168,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
             value is not None
             for value in (cursor, severity, domain, status, requirement_id, entry_id)
         ):
-            from app.core.errors import ServiceError
-
             raise ServiceError("invalid_input", "Projection options require view=console", 400, 2)
         data, items = await check.show_check(ctx[0], ctx[1], report_id, storage, settings)
         report = data["report"]
@@ -201,7 +194,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         body: FindingDecisionRequest,
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import check
 
         data = await check.decide_finding(
             ctx[0], ctx[1], report_id, finding_id, body, storage, settings
@@ -220,7 +212,6 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         limit: int = Query(50, ge=1, le=200),
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import check
 
         data, items = await check.decision_history(
             ctx[0],

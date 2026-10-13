@@ -30,9 +30,8 @@ type GapReason = Literal[
     "unclassified",
     "stale_material",
     "invalid_citation",
-    # The reviewed inputs or single-domain approval require renewed human review.
     "needs_reconfirmation",
-    "cosign_required",
+    # Requirement source confirmation remains independent of response review.
     "requirement_unconfirmed",
     "requirement_invalidated",
 ]
@@ -185,7 +184,6 @@ class TaskRedactionView(_TimestampContract):
     task_id: UUID
     revision: int = Field(ge=1)
     model_redaction_enabled: bool
-    changed_by: UUID
 
 
 class ModelEvidenceRef(_TrimmedContract):
@@ -227,7 +225,7 @@ class CardGeneratePreview(_TrimmedContract):
     selected_requirements: list[UUID]
     skipped: dict[UUID, str]
     input_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    platform_model_id: str | None = None
+
     model_revision: int | None = Field(default=None, ge=1)
     model: str
     reasoning: str | None = None
@@ -267,7 +265,7 @@ class CardGenerateResult(_TrimmedContract):
 class EvidenceView(_TimestampContract):
     image_rendition: RenditionView | AnnotationEvidenceRendition | None = None
     id: UUID
-    org_id: UUID
+
     task_id: UUID
     card_id: UUID
     input: EvidenceInput
@@ -306,7 +304,7 @@ class EvidenceView(_TimestampContract):
         | None
     ) = None
     visual_observation: str | None = Field(default=None, min_length=1, max_length=4000)
-    confirmed_by: UUID | None = None
+
     confirmed_at: datetime | None = None
     active_selection: bool
 
@@ -369,20 +367,18 @@ class EvidenceView(_TimestampContract):
             raise ValueError("certificate page evidence requires a page review state")
         elif not is_page and self.quote_check != "exact_field_match":
             raise ValueError("resource evidence requires an exact field quote check")
-        if self.confirmed_by is None and self.quote_check in {
+        if self.confirmed_at is None and self.quote_check in {
             "human_page_review",
             "human_image_review",
         }:
             raise ValueError("unconfirmed evidence cannot claim human review")
-        if (self.confirmed_by is None) != (self.confirmed_at is None):
-            raise ValueError("evidence confirmation actor and time must be set together")
         return self
 
 
 class CardView(_TimestampContract):
     agent_provenance: AgentProvenance | None = None
     id: UUID
-    org_id: UUID
+
     task_id: UUID
     extraction_job_id: UUID
     requirement_id: UUID
@@ -391,7 +387,7 @@ class CardView(_TimestampContract):
     state: CardState
     review_domain: ReviewDomain | None = None
     disposition: Disposition | None = None
-    disposition_by: UUID | None = None
+
     disposition_at: datetime | None = None
     suggested_disposition: Disposition | None = None
     origin: Literal["human", "agent", "model"]
@@ -401,7 +397,7 @@ class CardView(_TimestampContract):
     source: Source
     content: CardContent
     evidence: list[EvidenceView]
-    confirmed_by: UUID | None = None
+
     confirmed_at: datetime | None = None
     reason: str | None = Field(default=None, min_length=1, max_length=10000)
     reviewed_warning_codes: list[str] = Field(default_factory=list, max_length=100)
@@ -414,20 +410,15 @@ class CardView(_TimestampContract):
         "unclassified",
         "stale_material",
         "invalid_citation",
-        "needs_reconfirmation",
         "requirement_unconfirmed",
         "requirement_invalidated",
     ]
 
     @model_validator(mode="after")
     def decision_metadata_is_consistent(self):
-        if (self.disposition is None) != (self.disposition_by is None) or (
-            self.disposition is None
-        ) != (self.disposition_at is None):
-            raise ValueError("disposition actor and time must accompany a disposition")
-        if (self.confirmed_by is None) != (self.confirmed_at is None):
-            raise ValueError("card confirmation actor and time must be set together")
-        if (self.state == "confirmed") != (self.confirmed_by is not None):
+        if (self.disposition is None) != (self.disposition_at is None):
+            raise ValueError("disposition time must accompany a disposition")
+        if (self.state == "confirmed") != (self.confirmed_at is not None):
             raise ValueError("only the confirmed state may carry current confirmation metadata")
         if self.disposition == "comply_only" and self.state == "confirmed":
             raise ValueError("comply-only decisions do not confirm a response")
@@ -518,7 +509,7 @@ class ResponseRow(_TrimmedContract):
             raise ValueError("evidence response rows require evidence")
         if self.response_kind == "commitment" and self.evidence:
             raise ValueError("commitment response rows cannot contain evidence")
-        if any(item.confirmed_by is None for item in self.evidence):
+        if any(item.confirmed_at is None for item in self.evidence):
             raise ValueError("response row evidence must be human-confirmed")
         if any(item.card_id != self.card_id for item in self.evidence):
             raise ValueError("response row evidence must belong to its card")
@@ -533,7 +524,7 @@ class ComplyOnlyEntry(_TimestampContract):
     card_revision_id: UUID
     tender_clause: Source
     location_label: str = Field(min_length=1)
-    disposition_by: UUID
+
     disposition_at: datetime
 
 
@@ -559,7 +550,7 @@ class DraftGap(_TrimmedContract):
 class DraftView(_TrimmedContract):
     agent_provenance: AgentProvenance | None = None
     id: UUID
-    org_id: UUID
+
     task_id: UUID
     extraction_job_id: UUID
     generation_job_id: UUID

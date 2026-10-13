@@ -29,7 +29,7 @@ async def _put_staged(execution, storage, queue, key, output):
     # Some storage SDKs perform blocking I/O in a thread. Keep that coroutine
     # alive after the attempt is cancelled so a late object gets a fresh durable
     # cleanup delivery after its real completion, in addition to the crash grace.
-    upload = asyncio.create_task(storage.put(execution.org_id, key, output))
+    upload = asyncio.create_task(storage.put(key, output))
     _PENDING_UPLOADS.add(upload)
     upload.add_done_callback(_PENDING_UPLOADS.discard)
     try:
@@ -42,9 +42,9 @@ async def _put_staged(execution, storage, queue, key, output):
             except Exception as exc:
                 log_unexpected(_LOGGER, "Cancelled annotation upload finished with an error", exc)
             try:
-                async with execution.db.transaction(execution.org_id) as session:
+                async with execution.db.transaction() as session:
                     await queue.enqueue_annotation_cleanup_in_transaction(
-                        session, str(execution.org_id), str(execution.job_id), delay=300
+                        session, str(execution.job_id), delay=300
                     )
             except Exception as exc:
                 # The upload already has a committed cleanup ledger and delivery;
@@ -60,7 +60,7 @@ async def _put_staged(execution, storage, queue, key, output):
 async def _monitor(execution):
     while True:
         await asyncio.sleep(CANCEL_POLL_SECONDS)
-        async with execution.db.transaction(execution.org_id) as session:
+        async with execution.db.transaction() as session:
             observed = await locked_job(session, execution.job_id)
             if (
                 observed is not None
@@ -114,7 +114,7 @@ async def process(execution, storage, renderer=None, queue=None):
 
 
 async def _attempt(execution, storage, renderer, queue):
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         actor = await service.worker_access(session, job)
         submitted = job.result["submission"]
@@ -174,8 +174,7 @@ async def _attempt(execution, storage, renderer, queue):
         request_id = request_row.id
         task_id = job.task_id
         job_id = job.id
-        created_by = job.actor_user_id
-        assert task_id is not None and created_by is not None
+        assert task_id is not None
         card_id = approval.card_id if approval else request_row.card_id
         requirement_id = (
             approval.requirement.requirement_id if approval else request_row.requirement_id
@@ -183,7 +182,6 @@ async def _attempt(execution, storage, renderer, queue):
         extraction_id = manifest.target.extraction_job_id
     # The job transaction is closed during storage I/O and renderer execution.
     content = await storage.read_bounded(
-        execution.org_id,
         input_key,
         min(schema.PNG_BYTE_LIMIT, execution.settings.max_upload_bytes, descriptor.size_bytes),
     )
@@ -227,12 +225,10 @@ async def _attempt(execution, storage, renderer, queue):
         service.fail(
             "release_binding_changed", "Release changed approved pixels or source mapping", 409, 4
         )
-    key = (
-        f"org/{execution.org_id}/screenshots/{asset_id}/{rendition_id}/{rendering.image.sha256}.png"
-    )
+    key = f"screenshots/{asset_id}/{rendition_id}/{rendering.image.sha256}.png"
     from app.services.annotation_objects import stage
 
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         owned = await execution.owned_job(session)
         await stage(
             session,
@@ -249,7 +245,6 @@ async def _attempt(execution, storage, renderer, queue):
         # Immutable source bytes are independently checked again before publication.
         if approval is None:
             verified = await storage.read_bounded(
-                execution.org_id,
                 input_key,
                 min(
                     schema.PNG_BYTE_LIMIT,
@@ -261,7 +256,7 @@ async def _attempt(execution, storage, renderer, queue):
                 service.fail(
                     "source_integrity_failure", "Archived source changed during render", 409, 4
                 )
-        async with execution.db.transaction(execution.org_id) as session:
+        async with execution.db.transaction() as session:
             job = await execution.owned_job(session)
             actor = await service.worker_access(session, job)
             if not release:
@@ -284,7 +279,6 @@ async def _attempt(execution, storage, renderer, queue):
                     assert isinstance(source, schema.CertificatePageBinding)
                     asset = ScreenshotAsset(
                         id=asset_id,
-                        org_id=execution.org_id,
                         task_id=task_id,
                         extraction_job_id=extraction_id,
                         source_kind="certificate_page",
@@ -300,7 +294,6 @@ async def _attempt(execution, storage, renderer, queue):
                             "evidence_source_id": str(source.archive.id),
                             "annotation_request_id": str(request_id),
                         },
-                        received_by=created_by,
                         received_at=datetime.now(UTC),
                         idempotency_key=request_id,
                         request_hash=manifest.canonical_sha256(),
@@ -316,7 +309,6 @@ async def _attempt(execution, storage, renderer, queue):
                             asset_id,
                             rendition_id,
                             review_id,
-                            created_by,
                             parent_id,
                         )
                     )
@@ -324,14 +316,12 @@ async def _attempt(execution, storage, renderer, queue):
                     session.add(
                         ScreenshotPrivacyReview(
                             id=review_id,
-                            org_id=execution.org_id,
                             task_id=task_id,
                             extraction_job_id=extraction_id,
                             asset_id=asset_id,
                             rendition_id=rendition_id,
                             reviewed_upload_sha256=source_sha256,
                             stored_image_sha256=rendering.image.sha256,
-                            reviewed_by=created_by,
                             rule_version="annotation-certificate-privacy-v1",
                             annotation_request_id=request_id,
                         )
@@ -339,7 +329,6 @@ async def _attempt(execution, storage, renderer, queue):
                     await session.flush()
                     existing = AnnotationMaterial(
                         id=material_id,
-                        org_id=execution.org_id,
                         task_id=task_id,
                         extraction_job_id=extraction_id,
                         requirement_id=requirement_id,
@@ -385,14 +374,12 @@ async def _attempt(execution, storage, renderer, queue):
                         asset_id,
                         rendition_id,
                         review_id,
-                        created_by,
                         parent_id,
                     )
                 )
                 await session.flush()
                 released = AnnotationRelease(
                     id=uuid4(),
-                    org_id=execution.org_id,
                     task_id=task_id,
                     extraction_job_id=extraction_id,
                     requirement_id=requirement_id,
@@ -410,10 +397,6 @@ async def _attempt(execution, storage, renderer, queue):
                     approval=approval.model_dump(mode="json"),
                     renderer=identity.model_dump(mode="json"),
                     renderer_identity=service.digest(identity.model_dump(mode="json")),
-                    confirmed_by=approval.confirmed_by,
-                    review_round_id=None,
-                    commercial_signature_id=None,
-                    technical_signature_id=None,
                     rendering=rendering.model_dump(mode="json"),
                     content_pixel_sha256=rendering.content_pixel_sha256,
                     root_mapping_sha256=rendering.root_mapping_sha256,
@@ -452,22 +435,19 @@ async def _attempt(execution, storage, renderer, queue):
         # Only this attempt's fresh key is considered. A lost lease cannot delete
         # bytes retained by any committed rendition, even after duplicate delivery.
         async def cleanup():
-            async with execution.db.transaction(execution.org_id) as session:
+            async with execution.db.transaction() as session:
                 retained = await session.scalar(
                     select(ScreenshotRendition.id).where(ScreenshotRendition.storage_key == key)
                 )
             if retained is None:
-                await discard(storage, execution.org_id, key)
+                await discard(storage, key)
 
         await asyncio.shield(cleanup())
 
 
-def _rendition(
-    execution, manifest, rendering, key, asset_id, rendition_id, review_id, actor_id, parent_id
-):
+def _rendition(execution, manifest, rendering, key, asset_id, rendition_id, review_id, parent_id):
     return ScreenshotRendition(
         id=rendition_id,
-        org_id=execution.org_id,
         task_id=manifest.task_id,
         extraction_job_id=manifest.target.extraction_job_id,
         asset_id=asset_id,
@@ -483,7 +463,6 @@ def _rendition(
         profile=rendering.renderer.profile,
         storage_key=key,
         generation_job_id=execution.job_id,
-        actor_user_id=actor_id,
         renderer_identity=rendering.renderer.model_dump(mode="json"),
         provenance_sha256=rendering.provenance_sha256,
     )

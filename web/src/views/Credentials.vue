@@ -4,17 +4,17 @@ import { Plus, Refresh } from "@element-plus/icons-vue";
 import { request } from "../api.js";
 import { formatTime } from "../ui.js";
 
-const purposes = { catalog_llm: "目录模型", standalone_llm: "Standalone / Eval", vendor_search: "厂商搜索", clef_workers_ai: "Clef Workers AI 模型令牌", clef_gateway: "Clef 网关令牌" };
+const purposes = { standalone_llm: "Standalone / Eval", vendor_search: "厂商搜索", clef_workers_ai: "Clef Workers AI 模型令牌", clef_gateway: "Clef 网关令牌" };
 const providers = { anthropic: "Anthropic", openai: "OpenAI 兼容", perplexity: "Perplexity", cloudflare: "Cloudflare" };
 const states = { active: "已启用", disabled: "已停用", removed: "已移除" };
 const reasons = { setup: "初始配置", scheduled_rotation: "定期轮换", vendor_revoked: "厂商已吊销", incident: "事件处理", retired: "停止使用", migration: "迁移" };
 const outcomes = { passed: "认证通过", auth_failed: "认证失败", unsupported: "不支持认证探针", timeout: "认证超时", rate_limited: "测试次数超限", unavailable: "认证服务不可用", interrupted: "测试中断，结果未知" };
 const failures = {
-  revision_conflict: "凭据已被他人修改，请刷新后重新打开操作。",
-  invalid_session: "平台登录已失效，请重新登录。",
+  revision_conflict: "凭据修订已变化，请刷新后重新打开操作。",
+  invalid_session: "登录已失效，请重新登录。",
   invalid_input: "凭据参数无效，请检查填写内容。",
   credential_name_conflict: "凭据名称已存在，已移除的名称也不能复用。",
-  credential_purpose_conflict: "该平台服务已有凭据，请先处理现有凭据。",
+  credential_purpose_conflict: "该服务已有凭据，请先处理现有凭据。",
   credential_removed: "凭据已移除，不能再替换、启用或测试。",
   credential_unreadable: "凭据无法解密，请检查加密根或重新提交密钥。",
   credential_backend_unavailable: "凭据数据库暂不可用，请稍后重试。",
@@ -47,7 +47,7 @@ function pageBack() { cursors.value.pop(); load(); }
 function cancel() { if (form.value) form.value.api_key = ""; form.value = null; }
 function create() {
   cancel(); error.value = ""; notice.value = "";
-  form.value = { action: "create", name: "", purpose: "catalog_llm", provider: "anthropic", endpoint: "https://api.anthropic.com", api_key: "", active: false, reason: "setup" };
+  form.value = { action: "create", name: "", purpose: "standalone_llm", provider: "anthropic", endpoint: "https://api.anthropic.com", api_key: "", active: false, reason: "setup" };
 }
 const isClef = value => ["clef_workers_ai", "clef_gateway"].includes(value);
 function choosePurpose() {
@@ -109,13 +109,13 @@ async function test(row) {
   } finally { busy.value = false; }
 }
 const actionTitle = (value) => value === "replace" ? "替换密钥" : value === "remove" ? "移除凭据" : "修改启用状态";
-const consumerText = (consumer) => consumer.kind === "catalog_model" ? `目录模型 ${consumer.model_id} · 第 ${consumer.model_revision} 版${consumer.default ? " · 默认" : ""}${consumer.enabled ? "" : " · 已停用"}` : `${purposes[consumer.service]}${consumer.selected ? " · 已选用" : " · 未选用"}`;
+const consumerText = (consumer) => `${purposes[consumer.service]}${consumer.selected ? " · 已选用" : " · 未选用"}`;
 onMounted(() => load());
 onBeforeUnmount(cancel);
 </script>
 
 <template>
-  <div class="page-header"><div><h2>服务凭据</h2><p class="subtitle">管理平台出站服务凭据，密钥只在提交时传送，保存后仅显示指纹与末四位。</p></div><div class="actions"><el-button :icon="Refresh" :disabled="loading || busy" @click="load()">刷新</el-button><el-button type="primary" :icon="Plus" :disabled="busy" @click="create">添加凭据</el-button></div></div>
+  <div class="page-header"><div><h2>服务凭据</h2><p class="subtitle">管理出站服务凭据，密钥只在提交时传送，保存后仅显示指纹与末四位。</p></div><div class="actions"><el-button :icon="Refresh" :disabled="loading || busy" @click="load()">刷新</el-button><el-button type="primary" :icon="Plus" :disabled="busy" @click="create">添加凭据</el-button></div></div>
   <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
   <el-alert v-if="notice" :title="notice" type="success" :closable="false" role="status" class="section" />
   <el-card v-if="form" shadow="never" class="section">
@@ -133,7 +133,7 @@ onBeforeUnmount(cancel);
       <p v-if="form.action === 'replace'" class="hint">替换后下一次外发请求使用新密钥；已开始的请求仍可能使用旧值。原密钥无法恢复。</p>
       <div v-if="form.action === 'set-active' || form.action === 'remove'" data-testid="credential-impact">
         <p class="notice">{{ form.action === 'remove' ? '移除会清空在线密钥，名称不能复用；引用它的后续调用将失败。' : form.active ? '启用后，引用它的消费对象可发起新请求。' : '停用后，引用它的下一次请求将失败。' }}</p>
-        <p>影响的消费对象：</p><ul v-if="form.credential.consumers.length"><li v-for="consumer in form.credential.consumers" :key="consumer.model_id ?? consumer.service">{{ consumerText(consumer) }}</li></ul><p v-else class="hint">当前没有消费对象。</p>
+        <p>影响的消费对象：</p><ul v-if="form.credential.consumers.length"><li v-for="consumer in form.credential.consumers" :key="consumer.service">{{ consumerText(consumer) }}</li></ul><p v-else class="hint">当前没有消费对象。</p>
       </div>
       <el-form-item label="原因"><el-select v-model="form.reason" name="credential-reason"><el-option v-for="(text, value) in reasons" v-show="form.action !== 'remove' || ['vendor_revoked', 'incident', 'retired'].includes(value)" :key="value" :value="value" :label="text" /></el-select></el-form-item>
       <div class="actions"><el-button :type="form.action === 'remove' ? 'danger' : 'primary'" native-type="submit" :loading="busy">{{ form.action === 'create' ? '保存凭据' : form.action === 'remove' ? '确认移除' : '保存' }}</el-button><el-button :disabled="busy" @click="cancel">取消</el-button></div>
@@ -147,7 +147,7 @@ onBeforeUnmount(cancel);
     </tbody></table>
   </div>
   <div class="actions section"><el-button :disabled="cursors.length <= 1 || loading || busy" @click="pageBack">上一页</el-button><span class="hint">第 {{ cursors.length }} 页</span><el-button :disabled="!next || loading || busy" @click="pageForward">下一页</el-button></div>
-  <el-card v-if="detail" shadow="never" class="section" data-testid="credential-detail"><template #header><h3 class="card-title">{{ detail.name }} · 凭据详情</h3></template><p class="hint">{{ detail.id }} · {{ detail.updated_by }} · {{ formatTime(detail.updated_at) }}</p><p>第 {{ detail.revision }} 版 · 密钥第 {{ detail.secret_version }} 版 · {{ states[detail.state] }}</p><div data-testid="credential-consumers"><h4>消费对象</h4><ul v-if="detail.consumers.length"><li v-for="consumer in detail.consumers" :key="consumer.model_id ?? consumer.service">{{ consumerText(consumer) }}</li></ul><p v-else class="hint">当前没有消费对象。</p></div><el-button @click="detail = null">关闭详情</el-button></el-card>
+  <el-card v-if="detail" shadow="never" class="section" data-testid="credential-detail"><template #header><h3 class="card-title">{{ detail.name }} · 凭据详情</h3></template><p class="hint">{{ detail.id }} · {{ formatTime(detail.updated_at) }}</p><p>第 {{ detail.revision }} 版 · 密钥第 {{ detail.secret_version }} 版 · {{ states[detail.state] }}</p><div data-testid="credential-consumers"><h4>消费对象</h4><ul v-if="detail.consumers.length"><li v-for="consumer in detail.consumers" :key="consumer.service">{{ consumerText(consumer) }}</li></ul><p v-else class="hint">当前没有消费对象。</p></div><el-button @click="detail = null">关闭详情</el-button></el-card>
   <p class="hint">一次性环境迁移使用 bid platform credential import-env 的受保护文件入口。</p>
 </template>
 <style scoped>

@@ -16,11 +16,8 @@ from app.models.entities import (
     ApiToken,
     CertificateRevision,
     Job,
-    Membership,
-    Org,
     Task,
     TaskCertificate,
-    User,
 )
 from app.models.response_cards import DraftRun, Evidence, ResponseCard, ResponseItem
 from app.providers.storage import Storage
@@ -74,11 +71,6 @@ async def lock_inputs(session: AsyncSession, actor: Identity, task_id: UUID) -> 
         .order_by(ResponseCard.id)
         .with_for_update(read=True)
     )
-    await session.scalar(select(Org).where(Org.id == actor.org_id).with_for_update(read=True))
-    await session.scalar(select(User).where(User.id == actor.user_id).with_for_update(read=True))
-    await session.scalar(
-        select(Membership).where(Membership.user_id == actor.user_id).with_for_update(read=True)
-    )
     if actor.token_id is not None:
         await session.scalar(
             select(ApiToken).where(ApiToken.id == actor.token_id).with_for_update(read=True)
@@ -101,7 +93,7 @@ async def require_dependencies(
 ) -> DraftRun:
     """Authorize the fixed graph even when an old report's inputs are now stale."""
     draft = await session.get(DraftRun, UUID(manifest["draft_id"]))
-    if draft is None or draft.task_id != task_id or str(draft.org_id) != manifest["org_id"]:
+    if draft is None or draft.task_id != task_id:
         raise not_found()
     extraction = await session.get(Job, draft.extraction_job_id)
     if (
@@ -135,9 +127,7 @@ async def require_dependencies(
             evidence = await session.get(Evidence, UUID(dependency["id"]))
             if evidence is None or evidence.task_id != task_id or evidence.card_id != row.card_id:
                 raise not_found()
-            if entry["partition"] == "response" and (
-                evidence.confirmed_by is None or evidence.confirmed_at is None
-            ):
+            if entry["partition"] == "response" and (evidence.confirmed_at is None):
                 integrity()
             # This checks material scopes and parent locations, but an inactive
             # historical selection remains readable. No candidate view is returned.
@@ -156,7 +146,7 @@ async def confirmed_material(
     *,
     semantic: bool = False,
 ) -> tuple[dict, dict]:
-    if row.confirmed_by is None or row.confirmed_at is None:
+    if row.confirmed_at is None:
         integrity()
     view = await cards.evidence_view(session, actor, row)
     if not view["active_selection"]:
@@ -176,7 +166,7 @@ async def confirmed_material(
         if row.kind == "certificate_pdf_page":
             assert row.evidence_source_id is not None
             archive, _, original = await require_source(session, actor, row.evidence_source_id)
-            content_bytes = await storage.read(actor.org_id, original.storage_key)
+            content_bytes = await storage.read(original.storage_key)
             original_text = await asyncio.to_thread(cards.page_text, content_bytes, archive.page)
         else:
             _, revision_model, _, revision_field, _, _ = cards.MATERIALS[row.kind]
@@ -243,7 +233,7 @@ async def snapshot(
     for row in rows:
         if row.kind == "row" and row.card_revision_id is not None:
             linked = await cards.linked_evidence(session, row.card_revision_id)
-            if any(e.confirmed_by is None or e.confirmed_at is None for e in linked):
+            if any(e.confirmed_at is None for e in linked):
                 integrity()
     batch, grouped, current = await drafts.load_draft_reads(
         session, actor, [draft], requirements, storage
@@ -323,7 +313,7 @@ async def snapshot(
             if (
                 revision is None
                 or revision.state != "confirmed"
-                or revision.confirmed_by is None
+                or revision.confirmed_at is None
                 or any(getattr(row, key) != getattr(revision, key) for key in cards.CONTENT_FIELDS)
                 or (row.response_kind == "evidence" and not item["evidence"])
                 or (row.response_kind == "commitment" and item["evidence"])
@@ -415,7 +405,6 @@ async def snapshot(
     warning_codes = await cards.scope_warnings(session, extraction.id)
     limitations.extend(warning_codes)
     manifest = {
-        "org_id": str(actor.org_id),
         "task_id": str(task_id),
         "draft_id": str(draft.id),
         "draft_input_hash": draft.input_hash,
@@ -438,7 +427,6 @@ async def snapshot(
         "model_redaction_revision": task.model_redaction_revision,
         "redaction_rule_version": redaction.RULE_VERSION,
         "confidential": fixed_fields,
-        "review_roles": {"commercial": "bidder", "technical": "technical"},
     }
     return CheckSnapshot(
         draft,

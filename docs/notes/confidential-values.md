@@ -4,7 +4,7 @@
 
 Bid prices, identity numbers, bank accounts, contact names and phone numbers
 must appear in the delivered document, but a model needs none of them to draft
-a response. Sending them to a vendor exposes the org's most sensitive data, and
+a response. Sending them to a vendor exposes the installation's most sensitive data, and
 pattern masking alone leaves `[REDACTED_…]` text that nothing can turn back into
 the right value.
 
@@ -23,9 +23,8 @@ its decisions are in [confidential-values.md](../plan/confidential-values.md).
 
 ### Storage and access
 
-[confidential.py](../../server/app/models/confidential.py) holds the authoritative field/value FORCE RLS
-tables created by migration `0030`. `confidential_fields` fixes `key`, `kind`
-and `scope` (`org` or `task`); only `label`, `archived` and `revision` can be
+[confidential.py](../../server/app/models/confidential.py) maps the authoritative baseline field/value tables. `confidential_fields` fixes `key`, `kind`
+and `scope` (`library` or `task`); only `label`, `archived` and `revision` can be
 updated. `confidential_values` is append-only: each set adds a version for the
 field, or for the field and task, and the highest version is current. Values are
 encrypted with the data key and listed in `ENCRYPTED_COLUMNS` in
@@ -33,73 +32,40 @@ encrypted with the data key and listed in `ENCRYPTED_COLUMNS` in
 four characters only for identity, account and contact values of at least eight
 characters; amounts and names keep none.
 
-`confidential:read` (keys, labels, status, tails) belongs to every role and may
-be granted to a token. `confidential:write` and `confidential:reveal` belong to
-admin and bidder sessions only. They are absent from token `SCOPES`, refused by
+`confidential:read` (keys, labels, status, tails) may be granted to a token.
+`confidential:write` and `confidential:reveal` require the human identity. They are absent from token `SCOPES`, refused by
 the `token_forbidden_confidential_scopes` constraint, and every write or reveal
 also requires a session actor. Audit rows record field, value row and task IDs,
 never the value.
 
 ### Bounded management and checked writes
 
-The org confidential page uses `management_confidential.fields/values/history`
+The confidential library page uses `management_confidential.fields/values/history`
 in [management_confidential.py](../../server/app/services/management_confidential.py).
-Definitions are org-wide; task context is authorized before reading even metadata.
-Without a task, current values contain only org fields. With a task, each field
-resolves either its org owner or that exact task owner. History requires the
-field's exact scope. Foreign or unavailable parents are indistinguishable.
+Definitions are installation-wide; task context is authorized before reading even metadata.
+Without a task, current values contain only library fields. With a task, each field
+resolves either library scope or that exact task scope. History requires the
+field's exact scope. Missing or unavailable parents are indistinguishable.
 
 Queries use literal casefolded key/label prefix tokens, 25-row default keysets and
 an optional exact `field_id` editor filter. Read SQL limits fields before lateral
 current-value lookup and limits history before joining field metadata. Safe column
 projections omit ciphertext; no list, editor hydration or history read decrypts.
 Only authorized masked views may carry the existing four-character tail. Value
-`set_at`/`set_by` are retained row metadata; field revision is only a concurrency
+`set_at` are retained row metadata; field revision is only a concurrency
 counter, with no archived labels or reconstructed metadata authors.
 
-Cursors expire after 15 minutes and bind org, actor, live scopes, task workflow/member
-authority, normalized filters and parent/order. Pages enforce complete Result byte
-budgets and a two-second statement timeout. Migration
-[0055_confidential_management.py](../../server/migrations/versions/0055_confidential_management.py)
-adds generated search metadata, a derived lexeme projection, keyset/owner indexes
-and an AFTER fixed-field guard, preserving the existing RLS, composite keys and
-field/value column-level write privileges.
-
-PostgreSQL's `tsvector @@ tsquery` function is not leakproof, so a GIN predicate
-cannot be promoted ahead of the field table's RLS barrier. The derived
-`confidential_field_search_tokens` table stores only `tsvector_to_array` lexemes
-from key/label metadata. Its `(org_id, token, field_id)` B-tree uses `C` collation;
-literal prefix bounds use leakproof text comparisons. A recursive keyset reads
-ordered `(token, field_id)` windows of 128 lexemes, retaining both columns as
-its continuation. Each window has its own ORDER BY and LIMIT before any
-DISTINCT or remaining-token filter; materialization alone does not fix the
-inner scan's access path. The recursion continues until an empty window, so the
-batch size never caps matching fields. De-duplicated candidate IDs then use
-bounded `(org_id, field_id, token)` probes for remaining query tokens and feed
-parameterized field point reads, with `OFFSET 0` preventing join flattening;
-archive/scope/exact-ID/keyset filters and the original `@@` semantic check precede
-page LIMIT. The values path reads only that retained field page.
-
-The projection has FORCE RLS and an org/field composite FK. An invoker-rights
-AFTER trigger refreshes it on field insertion or label change; another AFTER
-guard refuses direct projection writes and checks nested changes against the real
-parent vector under a shared row lock. Trigger depth alone is not a provenance
-check: caller-owned temporary triggers must not insert fake lexemes or remove
-current ones. FK cascade cleanup is allowed when the parent no longer exists;
-queued AFTER triggers do not have a fixed cascade nesting depth.
-Runtime INSERT/DELETE grants serve derived maintenance, with no
-privileged function owner, new bypass role or change to PostgreSQL's leakproof flags. The scale acceptance checks both root
-and lexeme relation visits and the actual range index conditions for both the
-initial and continuation windows. Repeated per-loop counters use conservative
-visit bounds instead of rounded averages alone. The scale fixture creates its
-own orgs/accounts and retains earlier runs' data; each receipt records global
-cardinality growth and is saved under its unique run ID.
-Its stored search-column/index build needs a maintenance window sized for the
-existing field table; recovery preserves rows and guards and repairs forward.
+Cursors expire after 15 minutes and bind actor, live scopes and task workflow authority, normalized filters and parent/order. Pages enforce complete Result byte
+budgets and a two-second statement timeout. The baseline search projection
+`confidential_field_search_tokens` stores only key/label lexemes. Its
+`(token, field_id)` prefix index and `(field_id, token)` probes support bounded
+field selection before current-value lookup. Parent foreign keys and fixed-field
+triggers preserve the derived projection; direct writes cannot forge search terms.
+Field/value column grants and immutable history remain enforced by the runtime role.
 
 `ConfidentialValueRevisionSet` requires the field counter and an explicitly supplied
 current value ID; null asserts absence for that one field/owner. The checked setter
-locks task/workflow before the field, compares both preconditions, then explicitly
+locks the task before the field, compares both preconditions, then explicitly
 constructs the existing `ConfidentialValueSet`. Saving and `confidential.value.set`
 audit share one transaction. A conflict clears the transient value and requires a
 new deliberate entry. Legacy setters still append without CAS.
@@ -107,7 +73,7 @@ new deliberate entry. Legacy setters still append without CAS.
 The UI and CLI send secret input once through dedicated transports. Generic checked
 command serialization and repr omit it; CLI reads it only from stdin. Forms never
 prefill a value or trigger reveal. Explicit reveal stays in the existing human-only
-audited route and clears on close, blur, hide, navigation, logout and org switch.
+audited route and clears on close, blur, hide, navigation, logout .
 No value, search text or field content enters URL state or persistent browser storage.
 Secret Playwright scenarios disable traces, screenshots and video, and artifact
 assertions record booleans rather than captured values. See the
@@ -133,7 +99,7 @@ input with a new hash.
 
 ### Cards and declarations
 
-Resource declarations (products, features, certificates, org profiles,
+Resource declarations (products, features, certificates, company profiles,
 templates) may name fields too. `check_placeholders` in
 [versioned.py](../../server/app/services/versioned.py) refuses unknown or
 archived keys on every create and update. A declaration that names a field
@@ -185,4 +151,4 @@ so a value changed after submission fails with `export_input_changed`.
 - [exports.py](../../server/app/services/exports.py), [export_render.py](../../server/app/jobs/export_render.py) and [export_renderer.py](../../server/app/services/export_renderer.py).
 - [SecretTextEditor.vue](../../web/src/components/SecretTextEditor.vue) (labelled blocks, drag and click insertion), [ConfidentialPanel.vue](../../web/src/components/ConfidentialPanel.vue), [CardEditor.vue](../../web/src/components/CardEditor.vue) and [OrgProfiles.vue](../../web/src/views/OrgProfiles.vue).
 - [management_confidential.py](../../server/app/api/management_confidential.py), [management CLI](../../cli/bid_cli/management_confidential.py), [OrgConfidential.vue](../../web/src/views/OrgConfidential.vue) and [confidential-management.spec.js](../../web/e2e/confidential-management.spec.js).
-- [test_confidential_values.py](../../server/tests/test_confidential_values.py): drafting, export, permission and isolation scenarios with a repeatable DOCX artifact.
+- [test_confidential_values.py](../../server/tests/test_confidential_values.py): drafting, export, human/token permission scenarios with a repeatable DOCX artifact.

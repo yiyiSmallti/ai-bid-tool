@@ -138,7 +138,7 @@ async def document_page(
     document: Document = await documents.require_document(session, document_id)
     if document.media_type != "application/pdf" or document.citation_mode == "block":
         raise ServiceError("preview_not_pdf", "Only PDF originals have page previews", 400, 2)
-    content = await storage.read(actor.org_id, document.storage_key)
+    content = await storage.read(document.storage_key)
     if hashlib.sha256(content).hexdigest() != document.sha256:
         raise ServiceError("content_mismatch", "Stored document hash does not match", 409, 4)
     return await render_pdf_page_async(content, page, zoom, settings)
@@ -208,7 +208,6 @@ async def submit_export_preview(
         job.lease_until, job.finished_at, job.run_id = None, None, None
     if job is None:
         job = Job(
-            org_id=actor.org_id,
             task_id=row.task_id,
             document_id=run.document_id,
             kind=JOB_KIND,
@@ -222,7 +221,6 @@ async def submit_export_preview(
                     "file_sha256": row.file_sha256,
                     "object_key": row.object_key,
                     "size_bytes": row.size_bytes,
-                    "actor_user_id": str(actor.user_id),
                 },
                 "cost": Cost().model_dump(mode="json"),
             },
@@ -291,15 +289,14 @@ async def export_page(
 
 async def convert(execution: JobExecution, storage: Storage, converter, settings: Settings) -> None:
     """Worker step: convert the released file once and publish only a bounded, readable PDF."""
-    org_id = execution.org_id
-    async with execution.db.transaction(org_id) as session:
+    async with execution.db.transaction() as session:
         submission = (await execution.owned_job(session)).result["submission"]
     key, size, sha256 = (
         submission["object_key"],
         submission["size_bytes"],
         submission["file_sha256"],
     )
-    content = await storage.read(org_id, key)
+    content = await storage.read(key)
     if len(content) != size or hashlib.sha256(content).hexdigest() != sha256:
         raise ServiceError(
             "export_file_integrity", "Export file failed length or hash verification", 500, 4
@@ -308,9 +305,9 @@ async def convert(execution: JobExecution, storage: Storage, converter, settings
         raise ProviderFailure("Export previews are not configured", code="preview_unavailable")
     pdf = await converter.docx_to_pdf(content, "export.docx")
     page_count = await pdf_page_count_async(pdf, settings.preview_max_pages, settings)
-    object_key = f"org/{org_id}/export-previews/{submission['export_id']}/{execution.run_id}.pdf"
-    await storage.put(org_id, object_key, pdf)
-    async with execution.db.transaction(org_id) as session:
+    object_key = f"export-previews/{submission['export_id']}/{execution.run_id}.pdf"
+    await storage.put(object_key, pdf)
+    async with execution.db.transaction() as session:
         job = await execution.owned_job(session)
         job.status, job.error, job.finished_at = "succeeded", None, datetime.now(UTC)
         job.result = {
