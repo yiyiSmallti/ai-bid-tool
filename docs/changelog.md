@@ -6,6 +6,18 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-13: macOS developer app and safe installation startup
+
+- Build the local MyGo developer app for `darwin/arm64`, using a server
+  checkout and PostgreSQL binaries outside the app. The local packaged-app procedure
+  is in [the desktop development how-to](guides/desktop-development.md).
+- Stage generated installation keys in memory; persist them only after database
+  migration and console-port selection succeed. Incompatible databases retain
+  existing installation-file bytes, and unchanged compatible starts do not
+  rewrite the file.
+- Add regression coverage for migration failure, compatible startup and unchanged
+  restart behavior.
+
 ## 2026-10-13: Single-user local installation
 
 - Replace the multi-org migration chain with one baseline revision whose SQL lives in
