@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -38,7 +40,7 @@ type installation struct {
 // data directory, reachable only through a private Unix socket, and the API and
 // worker processes of the Python server.
 type Backend struct {
-	DataDir   string // user data: cluster, files, installation.json
+	DataDir   string // user data: cluster, files, backups, installation.json
 	LogDir    string
 	SocketDir string // must be short and free of spaces; see socketDir
 	ServerDir string // holds alembic.ini, server/migrations and web/dist
@@ -50,6 +52,7 @@ type Backend struct {
 	install           *installation
 	installationDirty bool
 	url               string
+	lock              *os.File // held while this backend owns DataDir
 
 	// mu guards what Stop tears down, since a quit can arrive mid-startup.
 	mu        sync.Mutex
@@ -71,11 +74,17 @@ func (b *Backend) Start() (string, error) {
 			return "", err
 		}
 	}
+	if err := b.lockDataDir(); err != nil {
+		return "", err
+	}
 	if err := b.loadInstallation(); err != nil {
 		return "", fmt.Errorf("installation keys: %w", err)
 	}
 	if err := b.startPostgres(); err != nil {
 		return "", fmt.Errorf("PostgreSQL: %w", err)
+	}
+	if err := b.backupBeforeMigration(); err != nil {
+		return "", fmt.Errorf("database backup: %w", err)
 	}
 	// init-db is idempotent: it creates the runtime role once and applies new
 	// migrations, so an updated app upgrades the database on its next launch.
@@ -127,9 +136,40 @@ func (b *Backend) Stop() {
 		_ = b.pg("pg_ctl", "-D", b.clusterDir(), "-m", "fast", "-w", "stop")
 		b.pgRunning = false
 	}
+	if b.lock != nil {
+		b.lock.Close()
+		b.lock = nil
+	}
 }
 
 func (b *Backend) clusterDir() string { return filepath.Join(b.DataDir, "pg") }
+
+// lockDataDir makes this backend the only one using DataDir until Stop or exit.
+// MyGo's single-instance lock normally hands a second launch to the running
+// app; this lock also holds when that one cannot, such as a launch with another
+// temporary directory. Child processes do not inherit it, so a crashed launch
+// releases it even if its cluster keeps running.
+func (b *Backend) lockDataDir() error {
+	f, err := os.OpenFile(filepath.Join(b.DataDir, "instance.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return errors.New("another AI Bid process is using " + b.DataDir)
+		}
+		return err
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.stopped {
+		f.Close()
+		return errStopped
+	}
+	b.lock = f
+	return nil
+}
 
 func (b *Backend) loadInstallation() error {
 	b.installationDirty = false
@@ -198,8 +238,9 @@ func (b *Backend) startPostgres() error {
 			return err
 		}
 	}
-	// A cluster left running by a crashed launch is stopped and restarted so
-	// it uses this launch's log and settings.
+	// The data directory lock rules out a live owner, so a running cluster was
+	// left by a crashed launch. It is stopped and restarted so it uses this
+	// launch's log and settings.
 	if b.pg("pg_ctl", "-D", cluster, "status") == nil {
 		if err := b.pg("pg_ctl", "-D", cluster, "-m", "fast", "-w", "stop"); err != nil {
 			return err
@@ -223,6 +264,104 @@ func (b *Backend) startPostgres() error {
 		return b.pg("createdb", "-h", b.SocketDir, "-p", pgPort, "-U", "bid_owner", "bid")
 	}
 	return nil
+}
+
+// migrationStatus is the output of `python -m app.admin migration-status`.
+type migrationStatus struct {
+	Current []string `json:"current_revisions"`
+	Pending bool     `json:"upgrade_pending"`
+}
+
+// backupBeforeMigration dumps the database before init-db migrates it, so the
+// data can be restored for the previous app version. It keeps the new backup
+// and the newest one taken at an earlier revision; repeated attempts at the
+// same revision replace each other.
+func (b *Backend) backupBeforeMigration() error {
+	out, err := b.pythonOutput("admin-init-db.log", b.ownerEnv(), "-m", "app.admin", "migration-status")
+	if err != nil {
+		return err
+	}
+	var status migrationStatus
+	if err := json.Unmarshal([]byte(out), &status); err != nil {
+		return fmt.Errorf("migration status: %w", err)
+	}
+	if !status.Pending {
+		return nil
+	}
+	dir := b.backupDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	revision := strings.Join(status.Current, "+")
+	path := filepath.Join(dir, "bid-"+time.Now().UTC().Format("20060102T150405.000Z")+"-"+revision+".dump")
+	partial := path + ".partial"
+	if err := b.pg("pg_dump", "-h", b.SocketDir, "-p", pgPort, "-U", "bid_owner", "-d", "bid",
+		"-Fc", "-f", partial); err != nil {
+		os.Remove(partial)
+		return err
+	}
+	// The archive must be readable by the restore tool before it counts.
+	if err := b.pg("pg_restore", "--list", "-f", os.DevNull, partial); err != nil {
+		os.Remove(partial)
+		return err
+	}
+	if err := syncFile(partial); err != nil {
+		os.Remove(partial)
+		return err
+	}
+	if err := os.Rename(partial, path); err != nil {
+		return err
+	}
+	return pruneBackups(dir, revision)
+}
+
+func (b *Backend) backupDir() string { return filepath.Join(b.DataDir, "backups") }
+
+// pruneBackups keeps the newest backup, taken at revision, and the newest
+// backup taken at any other revision. Unfinished dumps are removed.
+func pruneBackups(dir, revision string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	var dumps []string
+	for _, e := range entries {
+		switch name := e.Name(); {
+		case strings.HasSuffix(name, ".dump.partial"):
+			if err := os.Remove(filepath.Join(dir, name)); err != nil {
+				return err
+			}
+		case strings.HasPrefix(name, "bid-") && strings.HasSuffix(name, ".dump"):
+			dumps = append(dumps, name)
+		}
+	}
+	// Names start with a UTC timestamp, so the newest sort last.
+	slices.Sort(dumps)
+	slices.Reverse(dumps)
+	keptCurrent, keptPrevious := false, false
+	for _, name := range dumps {
+		atRevision := strings.HasSuffix(name, "-"+revision+".dump")
+		switch {
+		case atRevision && !keptCurrent:
+			keptCurrent = true
+		case !atRevision && !keptPrevious:
+			keptPrevious = true
+		default:
+			if err := os.Remove(filepath.Join(dir, name)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func syncFile(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Sync()
 }
 
 func (b *Backend) databaseURL(role string) string {
@@ -281,6 +420,25 @@ func (b *Backend) runPython(logName string, env []string, args ...string) error 
 		return fmt.Errorf("%w (see %s)", err, log.Name())
 	}
 	return nil
+}
+
+// pythonOutput runs a server command that reports on stdout; its stderr goes to
+// the log.
+func (b *Backend) pythonOutput(logName string, env []string, args ...string) (string, error) {
+	cmd := exec.Command(b.Python, args...)
+	cmd.Dir = b.ServerDir
+	cmd.Env = env
+	log, err := os.OpenFile(filepath.Join(b.LogDir, logName), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return "", err
+	}
+	defer log.Close()
+	var stdout bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, log
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("%w (see %s)", err, log.Name())
+	}
+	return stdout.String(), nil
 }
 
 func (b *Backend) spawn(logName, name string, args ...string) (*process, error) {

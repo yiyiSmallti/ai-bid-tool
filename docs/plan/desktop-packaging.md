@@ -13,10 +13,12 @@ dependency. The [decisions](#decisions) below are accepted.
 
 ## What the installation must contain
 
-The [backend](../../desktop/backend.go) starts PostgreSQL, runs migrations, then
-starts the API and the job worker. Each component comes from the bundle; the
-[staging script](../../desktop/scripts/stage-resources.sh) builds all but
-PostgreSQL, which `BID_DESKTOP_PG_BIN` still supplies.
+The [backend](../../desktop/backend.go) starts PostgreSQL, backs up a database
+that needs migrating, runs migrations, then starts the API and the job worker.
+Each component comes from the bundle, which the
+[staging script](../../desktop/scripts/stage-resources.sh) builds;
+[build-postgres.sh](../../desktop/scripts/build-postgres.sh) builds PostgreSQL
+from the pinned source release.
 
 | Component | Packaged requirement |
 | --- | --- |
@@ -70,14 +72,12 @@ Each row records the accepted option.
 
 ## Delivery slices
 
-1. **PostgreSQL.** Bundle relocatable PostgreSQL binaries; add pre-migration
-   backup and single-instance handling.
-2. **Optional services.** Implement the D5 and D6 outcomes and the console's
+1. **Optional services.** Implement the D5 and D6 outcomes and the console's
    unavailable states.
-3. **Signing and notarization.** Sign every nested binary, notarize and staple
+2. **Signing and notarization.** Sign every nested binary, notarize and staple
    the disk image; verify with `codesign --verify --deep --strict` and
    `spctl --assess` on a clean machine.
-4. **Release procedure.** A runbook for building, notarizing and publishing a
+3. **Release procedure.** A runbook for building, notarizing and publishing a
    release, and the changelog entry for the first installable version.
 
 ## Out of scope

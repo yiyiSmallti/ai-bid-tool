@@ -6,6 +6,21 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-14: Desktop app bundles PostgreSQL
+
+- Build PostgreSQL 16 from the pinned source release into a relocatable tree with
+  `desktop/scripts/build-postgres.sh`; staging bundles it and the app runs it.
+  `BID_DESKTOP_PG_BIN` remains a development override.
+- Back up an existing database before migrating it, keeping the newest backup and
+  the newest one from an earlier revision; a failed backup stops the launch before
+  migration. `python -m app.admin migration-status` reports whether a migration is
+  pending. Restore steps are in
+  [the desktop development how-to](guides/desktop-development.md#restore-a-database-backup).
+- Refuse a second backend on the same data directory.
+- Run the desktop backend tests against the bundled PostgreSQL in a macOS CI job
+  when the desktop app or its startup's server files change; desktop-only changes
+  no longer run the Python suite.
+
 ## 2026-10-13: Desktop app bundles its runtime
 
 - Stage a standalone Python 3.12 with the locked dependencies and the server,
