@@ -6,6 +6,16 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-13: Desktop app bundles its runtime
+
+- Stage a standalone Python 3.12 with the locked dependencies and the server,
+  the console, migrations, the screenshot renderer and `chi_sim`/`eng` OCR data
+  into the app with `desktop/scripts/stage-resources.sh`. The app runs from its
+  own resources; only PostgreSQL still comes from `BID_DESKTOP_PG_BIN`, and
+  `BID_DESKTOP_SERVER` remains a development override.
+- Accept packaging decisions D1–D10 in
+  [desktop packaging](plan/desktop-packaging.md#decisions).
+
 ## 2026-10-13: macOS developer app and safe installation startup
 
 - Build the local MyGo developer app for `darwin/arm64`, using a server

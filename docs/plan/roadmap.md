@@ -9,7 +9,7 @@ suggested order. Shipped behavior is defined in the [mechanism notes](../README.
 and their linked code; delivery history is in [changelog.md](../changelog.md).
 The [single-user installation plan](single-user.md) implements accepted
 [ADR 0012](../adr/0012-single-user-installation.md). Hosted and multi-person operation
-require a new decision; desktop packaging decisions are open in [desktop packaging](desktop-packaging.md). The
+require a new decision; desktop packaging decisions and remaining slices are in [desktop packaging](desktop-packaging.md). The
 design's non-goals—fabricating materials, electronic bidding platform integration,
 pricing strategy and developing models in-house—are excluded.
 
@@ -30,7 +30,7 @@ Terminology follows [the glossary](../glossary.md).
 | F07 Background jobs | Persistent parse/extract/card_generate/draft/provider_test/export_render/export_preview/sandbox/screenshot/prototype (原型) generation/vendor (厂家) search/simulated proposal (模拟拟投)/score_rubric/score/agent jobs, cancellation, bounded retries, leases and `run_id` overwrite protection | Jobs for other commands, automatic recovery of legacy jobs | New interface confirmation |
 | F08 AuditLog | Resource changes, human response-card (响应卡) decisions, model drafting, scoring-rubric generation and human decisions, scoring execution, redaction (遮挡) settings and table assembly (组表); export events follow [human-section-exports.md](../notes/human-section-exports.md#how-it-works); [agent/token invocation provenance](../notes/builtin-agent.md#how-it-works) | Access-key/session, token and other configuration audit and queries; actor/token/agent/job attribution acceptance | New contract for additions |
 | F09 UsageRecord | Durable per-call LLM/Vision/OCR/search/Browser resource counts and provider/model/duration attribution | Storage measurements and cross-capability progress | [Usage-only decision](../adr/0011-remove-billing.md) |
-| F10 Local operation and quality | Single-user baseline, rootless local PostgreSQL/socket workflow, supporting Compose services, locked dependencies and scoped CI checks; database per test worker | Integrated browser acceptance, local backup/restore and release requirements; desktop packaging, bundled runtimes and signing wait on the [desktop packaging](desktop-packaging.md#decisions) decisions | [Single-user scope boundary](single-user.md#out-of-scope); [development commands](../guides/development.md)
+| F10 Local operation and quality | Single-user baseline, rootless local PostgreSQL/socket workflow, supporting Compose services, locked dependencies and scoped CI checks; database per test worker | Integrated browser acceptance, local backup/restore and release requirements; bundled PostgreSQL, optional desktop services, signing and release follow the [desktop packaging slices](desktop-packaging.md#delivery-slices) | [Single-user scope boundary](single-user.md#out-of-scope); [development commands](../guides/development.md)
 
 ## Coverage matrix: resources and task selection
 
@@ -125,7 +125,6 @@ memory CRUD and approval, public evaluation-set preparation.
 | Installation-wide vendor-capture rate limit (currently 60 requests per minute; large pages can be truncated as incomplete) | Before accepting sustained vendor-web capture |
 | Later memory scopes and retrieval | [Memory decisions and enablement conditions](memory.md#decisions) |
 | Dashboard response-card interaction and progress display | Before U02; service state machine in [response-cards.md](../notes/response-cards.md) |
-| Desktop target operating systems, runtime distribution, service lifecycle, installer/update and signing strategy | [Desktop packaging](desktop-packaging.md#decisions); do not implement before these decisions |
 | Local backup/restore and release acceptance | Before desktop release; hosted deployment is outside ADR 0012 |
 
 ## Known defects and acceptance gaps
@@ -144,4 +143,4 @@ memory CRUD and approval, public evaluation-set preparation.
 2. Complete integrated management, attachment and protected-download acceptance against the baseline, including the [attachment archive acceptance plan](attachment-archive.md#acceptance-plan) before multipart/redacted pages or the B05 attachment adapter are enabled.
 3. Complete [certificate-page annotation acceptance](annotation.md#failure-modes-and-test-plan) (B05); enable vendor renditions only after archive/privacy/mapping acceptance, and profile/contract annotation only after archive and B05 acceptance.
 4. Complete WPS visual pagination and protected-download acceptance for exports (B11), plus sandbox lease-expiry takeover, disconnect and storage-failure injection scenarios.
-5. Resolve desktop platform and runtime-distribution choices in [desktop packaging](desktop-packaging.md#decisions). Packaging implementation, bundled runtimes and signing are outside the single-user cutover.
+5. Continue the [desktop packaging slices](desktop-packaging.md#delivery-slices): bundled PostgreSQL, optional services, then signing and release.
