@@ -2,8 +2,8 @@
 
 ## Problem
 
-Parsing and extraction need durable state, repeatable requests, tenant context and
-safe cancellation, rather than processing inside the request transaction.
+Parsing and extraction need durable state, repeatable requests and safe
+cancellation, rather than processing inside the request transaction.
 
 ## Usage
 
@@ -13,9 +13,23 @@ Inspect jobs with `bid job status <id>`; cancel with `bid job cancel <id>`.
 
 ## How it works
 
-The RLS business job is committed before dispatch to Procrastinate. If dispatch
-fails, the API returns a retryable error; a repeat request schedules the durable
-job. Workers claim queued state under a row lock and restore tenant context.
+Ordinary process-job submission and its Procrastinate delivery commit in the same
+PostgreSQL transaction through `dispatch_process_job`. A dispatch interruption
+rolls both back and returns `queue_unavailable`; repeat the original request.
+No newly saved job ID is promised on that failure. Read-only previews create
+neither business jobs nor deliveries. Independently retained memory-feedback
+candidates keep the recovery semantics in [memory management](memory-management.md).
+
+Repeating an already queued request locks its business row and verifies that its
+delivery belongs to the same job and is either waiting or owned by a live queue
+worker. A stale queue ID alone cannot suppress rescheduling. Worker startup and
+periodic reconciliation also inspect abandoned process deliveries in bounded
+batches. Only still-queued ordinary jobs whose current delivery matches the
+abandoned record and have no pending/unknown vendor call are redispatched; the
+abandoned delivery is closed. Concurrent recovery must retain one runnable delivery. Agent-owned
+and sandbox work use their separate recovery mechanisms.
+
+Workers claim queued state under a row lock.
 External work runs outside that transaction, allowing cancellation to commit.
 Before committing results, workers recheck cancellation and `run_id`. Usage is retained even
 when an extraction result is invalid or cancelled. Provider transient failures
@@ -74,10 +88,24 @@ attempt UUID prevents older cancelled workers from overwriting the new attempt.
 Interactive progress/SSE is
 separate from the lease heartbeat.
 
+Automatic process reconciliation does not take over `running` jobs, even when
+their lease expired. An abandoned queued job with an unresolved vendor call
+cannot be redispatched by repeating its submission; `job_recovery_required`
+requires explicit outcome reconciliation. Legacy queued business rows with no
+retained queue delivery cannot be discovered by this sweep and need an authorized
+repeat request. Recovery cannot infer that a missing worker sent no provider request.
+
 ## Code
 
-`server/app/jobs/`, `services/parsing.py`, `services/extraction.py`,
-`tests/test_runtime_integration.py`, `tests/test_job_boundaries.py`,
-[test_vendor_call_guards.py](../../server/tests/test_vendor_call_guards.py).
+- [Queue](../../server/app/jobs/queue.py): `dispatch_process_job`,
+  `ensure_process_delivery`, `recover_process_jobs` and transaction-bound insertion.
+- [Worker](../../server/app/jobs/worker.py) `run`: startup reconciliation and queue lifecycle.
+- [Tender submission](../../server/app/services/tender_jobs.py) `submit` and
+  [processor](../../server/app/jobs/processor.py) `Processor`: fixed-input reuse,
+  locked claims and guarded publication.
+- [Delivery recovery acceptance](../../server/tests/test_process_delivery_recovery.py),
+  [runtime integration](../../server/tests/test_runtime_integration.py),
+  [job boundaries](../../server/tests/test_job_boundaries.py) and
+  [vendor call guards](../../server/tests/test_vendor_call_guards.py).
 
 Reference: https://procrastinate.readthedocs.io/en/stable/quickstart.html

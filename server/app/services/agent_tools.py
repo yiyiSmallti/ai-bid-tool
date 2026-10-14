@@ -50,16 +50,18 @@ async def definitions(principal) -> list[AgentToolDefinition]:
     for command, scopes in TOOL_SCOPES.items():
         if not set(scopes) <= set(principal.scopes):
             continue
-        invocation = schema["commands"][command]["invocation_input"]
+        entry = schema["commands"][command]
+        invocation = entry["invocation_input"]
+        result_schema = entry.get("agent_result", entry["result"])
         output.append(
             AgentToolDefinition(
                 command=command,
                 contract_version=CONTRACT_VERSION,
                 schema_sha256=digest(
-                    {"command": command, "input": invocation, "result": schema["result"]}
+                    {"command": command, "input": invocation, "result": result_schema}
                 ),
                 invocation_input=invocation,
-                result_schema=schema["result"],
+                result_schema=result_schema,
                 required_scopes=list(scopes),
                 effect="job" if command in {"card generate", "draft"} else "read",
                 supports_dry_run=command in {"card generate", "draft"},

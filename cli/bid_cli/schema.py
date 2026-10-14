@@ -938,4 +938,19 @@ def command_schema(app=None, version: str = "5.0") -> dict:
         for name in planned:
             if name in schema["commands"]:
                 schema["commands"][name]["preflight"] = {"$ref": "#/$defs/PreflightData"}
+    if version == "5.0":
+        from app.schemas.tool_outputs import (
+            AGENT_JOB_RESULT,
+            TOOL_DATA,
+            TOOL_ITEMS,
+            TOOL_RESULTS,
+        )
+
+        for name, output in TOOL_DATA.items():
+            schema["commands"][name].update(
+                output=output.json_schema(),
+                items=TOOL_ITEMS[name].json_schema(),
+                result=TOOL_RESULTS[name].json_schema(),
+            )
+        schema["commands"]["job status"]["agent_result"] = AGENT_JOB_RESULT.json_schema()
     return schema

@@ -137,6 +137,16 @@ async def test_previews_are_bounded_isolated_and_publish_only_readable_pdfs(
         base = f"/exports/{export['id']}/preview"
         before = await api.get(base, headers=header)
         assert before.json()["data"]["status"] == "not_requested"
+        from dispatch_acceptance import assert_dispatch_rollback
+
+        await assert_dispatch_rollback(
+            api,
+            app,
+            header,
+            base,
+            None,
+            tmp_path / "preview-dispatch-rollback.json",
+        )
         opened = await api.post(base, headers=header)
         assert opened.status_code == 200, opened.text
         job_id = opened.json()["data"]["job_id"]

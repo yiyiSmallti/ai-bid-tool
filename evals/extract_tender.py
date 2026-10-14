@@ -1,15 +1,19 @@
-"""Run the configured real LLM on one public tender (PDF or Word) and save a reviewable artifact.
+"""Evaluate tender extraction with a real provider or a fixed offline acceptance fixture.
 
-Calls the vendor API and costs money. Not part of CI. Reads non-secret BID_LLM_* settings and resolves standalone credentials from PostgreSQL.
+The real-provider mode calls the configured vendor API and costs money. It must be
+explicitly enabled with --real-provider. The offline acceptance script exercises
+the parser and citation/coverage diagnostics without making provider calls.
 
-    uv run python evals/extract_tender.py --file PUBLIC_TENDER.docx --output NEW_RESULT.json
-    uv run python evals/extract_tender.py --file PUBLIC_TENDER.docx --batch-chars 200000 --output WHOLE.json
+    uv run python evals/extract_tender.py --real-provider --file PUBLIC_TENDER.docx --output NEW_RESULT.json
+    uv run python evals/extract_tender.py --real-provider --file PUBLIC_TENDER.docx --batch-chars 200000 --output WHOLE.json
+    uv run python evals/offline_extract_acceptance.py --output evals/artifacts/offline-extract.json
 """
 
 import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 import uuid
@@ -24,11 +28,17 @@ from app.providers.calls import standalone_evaluation  # noqa: E402
 from app.providers.llm import create_llm  # noqa: E402
 from app.providers.local_ocr import LocalOCR  # noqa: E402
 from app.schemas.contracts import Extraction, SectionText  # noqa: E402
-from app.services.extraction import cited, merge_starred, validate_extraction  # noqa: E402
+from app.services.extraction import (  # noqa: E402
+    cited,
+    merge_starred,
+    normalize,
+    validate_extraction,
+)
 from app.services.parsing import parse_document  # noqa: E402
 from cryptography.fernet import Fernet  # noqa: E402
 
 STAR = "★"
+STAR_UNIT_BOUNDARIES = re.compile(r"[；;。！？!?]|\n{2,}")
 
 
 def settings(batch_chars: int | None) -> Settings:
@@ -42,27 +52,79 @@ def settings(batch_chars: int | None) -> Settings:
     return config
 
 
-def star_units(chunks: list[dict]) -> list[tuple[str, str]]:
-    """(position, text) of every unit that carries a ★: Word blocks or PDF lines."""
+def star_units(chunks: list[dict]) -> list[dict]:
+    """Return each source clause introduced by ★ with its exact citation position."""
     units = []
     for chunk in chunks:
         if chunk.get("blocks"):
-            units += [(b["block_id"], b["text"]) for b in chunk["blocks"] if STAR in b["text"]]
+            sources = [(b["text"], b) for b in chunk["blocks"]]
         else:
-            units += [
-                (str(chunk["page"]), line) for line in chunk["text"].splitlines() if STAR in line
-            ]
+            sources = [(chunk["text"], None)]
+        for text, block in sources:
+            for match in re.finditer(re.escape(STAR), text):
+                boundary = STAR_UNIT_BOUNDARIES.search(text, match.end())
+                next_star = text.find(STAR, match.end())
+                ends = [
+                    end
+                    for end in (boundary.end() if boundary else None, next_star)
+                    if end is not None and end > match.start()
+                ]
+                end = min(ends) if ends else len(text)
+                quote = text[match.start() : end].strip()
+                units.append(
+                    {
+                        "chunk_id": str(chunk["id"]),
+                        "position": block["block_id"] if block else str(chunk["page"]),
+                        "quote": quote,
+                        "location": (
+                            {key: value for key, value in block.items() if key != "text"}
+                            if block
+                            else None
+                        ),
+                        "page": None if block else chunk["page"],
+                    }
+                )
     return units
 
 
-def position(item) -> str:
-    return item.source.location.block_id if item.source.location else str(item.source.page)
+def same_source_position(item, unit: dict) -> bool:
+    if str(item.source.chunk_id) != unit["chunk_id"]:
+        return False
+    if unit["location"] is None:
+        return item.source.location is None and item.source.page == unit["page"]
+    return item.source.location is not None and item.source.location.block_id == unit["position"]
 
 
-def star_recall(items, units) -> dict:
-    found = {position(item) for item in items}
-    covered = sum(1 for unit_position, _ in units if unit_position in found)
-    return {"star_units": len(units), "covered": covered}
+def clause_text(text: str) -> str:
+    """Compare source clauses while treating the star marker as a separate label."""
+    return normalize(text.replace(STAR, "").replace("☆", "")).strip()
+
+
+def star_coverage(items, units: list[dict], chunks: list[dict]) -> dict:
+    """Report source-clause coverage and star labels; this is not human-annotated recall."""
+    by_id = {str(chunk["id"]): chunk for chunk in chunks}
+    valid_items = [item for item in items if cited(item, by_id.get(str(item.source.chunk_id)))]
+    covered, labelled = 0, 0
+    for unit in units:
+        matches = [
+            item
+            for item in valid_items
+            if same_source_position(item, unit)
+            and clause_text(item.source.quote) == clause_text(unit["quote"])
+        ]
+        if matches:
+            covered += 1
+            if any(item.starred for item in matches):
+                labelled += 1
+    count = len(units)
+    return {
+        "source_star_clauses": count,
+        "covered_clauses": covered,
+        "star_labelled_clauses": labelled,
+        "clause_coverage": covered / count if count else None,
+        "star_label_coverage": labelled / count if count else None,
+        "metric_note": "Parser-derived ★ clause diagnostic; not recall against human annotations.",
+    }
 
 
 async def run(name: str, content: bytes, batch_chars: int | None) -> tuple[dict, int]:
@@ -132,8 +194,8 @@ async def _run(name: str, content: bytes, batch_chars: int | None) -> tuple[dict
         "model_items": len(items),
         "verified_citations": sum(valid),
         "batch_accepted_by_citation_check": accepted,
-        "star_recall_model": star_recall(items, units),
-        "star_recall_with_rule": star_recall(merged.items, units),
+        "star_coverage_model": star_coverage(items, units, chunks),
+        "star_coverage_with_rule": star_coverage(merged.items, units, chunks),
         "items_after_rule": len(merged.items),
         "by_category": {
             category: sum(item.category.value == category for item in items)
@@ -153,7 +215,8 @@ async def _run(name: str, content: bytes, batch_chars: int | None) -> tuple[dict
     }
     print(
         f"{len(items)} items, {sum(valid)} verified citations, accepted={accepted}, "
-        f"★ model {artifact['star_recall_model']}, with rule {artifact['star_recall_with_rule']}, "
+        f"★ coverage model {artifact['star_coverage_model']['clause_coverage']}, "
+        f"with rule {artifact['star_coverage_with_rule']['clause_coverage']}, "
         f"tokens={result.usage.tokens}, {artifact['duration_ms'] / 1000:.0f}s"
     )
     return artifact, 0 if accepted else 1
@@ -161,12 +224,17 @@ async def _run(name: str, content: bytes, batch_chars: int | None) -> tuple[dict
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--real-provider", action="store_true", help="Explicitly enable a billable provider call"
+    )
     parser.add_argument("--file", type=Path, required=True, help="Public tender as .pdf or .docx")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--batch-chars", type=int, default=None, help="Characters per model request"
     )
     args = parser.parse_args()
+    if not args.real_provider:
+        parser.error("real provider calls require --real-provider")
     if args.output.exists():
         raise SystemExit("Choose a new output path; existing files are not overwritten")
     try:

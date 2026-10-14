@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError
+from app.jobs.queue import dispatch_process_job
 from app.models.entities import Chunk, Job
 from app.providers.configured import model_identity
 from app.providers.llm import reasoning_choices, with_reasoning
@@ -43,8 +44,8 @@ async def submit(
 ) -> tuple[dict, list[str]]:
     """Create or reuse the cached job for this document, kind and model: (data, warnings).
 
-    The job row is committed before it is enqueued, so a queue failure leaves a saved
-    job that repeating the request schedules.
+    The job and its delivery commit together. Repeating a queued request verifies
+    the delivery instead of trusting a stale queue identifier.
     """
     identity.require("tender:parse" if kind == "parse" else "req:extract")
     document = await require_document(session, document_id)
@@ -200,22 +201,7 @@ async def submit(
             *level_warnings,
             "This identical job is terminal. Inspect its status; use --retry explicitly to run it again.",
         ]
-    if job.status == "queued" and job.queue_id is None:
-        # Commit the durable job before making it visible to the independent queue.
-        await session.commit()
-        try:
-            queue_id = await queue.enqueue(str(job.id))
-        except Exception as exc:
-            raise ServiceError(
-                "queue_unavailable",
-                "Job is saved but queue is unavailable; repeat the request to schedule it",
-                503,
-                3,
-            ) from exc
-        async with db.transaction() as update:
-            saved = await update.get(Job, job.id)
-            if saved is not None:
-                saved.queue_id = queue_id
+    await dispatch_process_job(session, queue, job)
     return {
         "job_id": str(job.id),
         "status": job.status,

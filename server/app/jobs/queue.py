@@ -5,16 +5,34 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import procrastinate
+from procrastinate.exceptions import ConnectorException
 from procrastinate.jobs import Status
+from psycopg import OperationalError
 from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import OperationalError as SqlAlchemyOperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.errors import ServiceError
 from app.jobs.sandbox_queue import register_sandbox_task
 from app.models.entities import Job
 
 logger = logging.getLogger(__name__)
+
+
+async def dispatch_process_job(session: AsyncSession, queue, job: Job | None) -> None:
+    """Publish a business job and its delivery in the caller's transaction."""
+    if job is None or job.status != "queued":
+        return
+    try:
+        await queue.ensure_process_delivery(session, job)
+    except (OSError, ConnectorException, OperationalError, SqlAlchemyOperationalError) as exc:
+        # Raising lets the request transaction roll back both business and queue
+        # writes, including a queue insert whose response was interrupted.
+        raise ServiceError(
+            "queue_unavailable", "Job could not be scheduled; repeat the request", 503, 3
+        ) from exc
 
 
 class Queue:
@@ -71,10 +89,12 @@ class Queue:
         async def agent_recover(timestamp: int):
             await self.recover_agent_wakes()
             await self.recover_sandbox_jobs()
+            await self.recover_process_jobs()
 
         self.agent_wake_task = agent_wake
         self.agent_recover_task = agent_recover
         self.lock = asyncio.Lock()
+        self._process_recovery_cursor = 0
 
     @staticmethod
     async def transaction_connection(session: AsyncSession):
@@ -118,21 +138,132 @@ class Queue:
 
     async def ensure_process_delivery(self, session: AsyncSession, job) -> None:
         """A killed queue worker may never have reached the business Job claim."""
+        # Autoflush preserves retry changes before refreshing a row another
+        # submitter may have dispatched while this transaction waited for it.
+        saved = await session.scalar(
+            select(Job)
+            .where(Job.id == job.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if saved is None or saved.status != "queued":
+            return
         runnable = (
             await session.scalar(
                 text(
                     "SELECT queued.status='todo' OR (queued.status='doing' AND EXISTS ("
                     "SELECT 1 FROM procrastinate_workers AS worker WHERE worker.id=queued.worker_id "
                     "AND worker.last_heartbeat>now()-interval '30 seconds')) "
-                    "FROM procrastinate_jobs AS queued WHERE queued.id=:id"
+                    "FROM procrastinate_jobs AS queued WHERE queued.id=:id "
+                    "AND queued.task_name='bid.process' AND queued.queue_name='bid' "
+                    "AND queued.args->>'job_id'=:job"
                 ),
-                {"id": job.queue_id},
+                {"id": job.queue_id, "job": str(job.id)},
             )
             if job.queue_id is not None
             else False
         )
         if not runnable:
+            from app.models.entities import VendorCall
+
+            unresolved = await session.scalar(
+                select(VendorCall.id)
+                .where(
+                    VendorCall.job_id == job.id,
+                    VendorCall.state.in_(["pending", "unknown"]),
+                )
+                .limit(1)
+            )
+            if unresolved is not None:
+                raise ServiceError(
+                    "job_recovery_required",
+                    "Verify unresolved vendor calls before rescheduling this job",
+                    409,
+                    4,
+                )
             job.queue_id = await self.enqueue_in_transaction(session, str(job.id))
+
+    async def recover_process_jobs(self, *, limit: int = 100) -> None:
+        """Recover only queued ordinary jobs discovered through abandoned deliveries.
+
+        Running attempts and unresolved vendor calls require their explicit
+        recovery flow, even when a worker heartbeat or application lease expired.
+        """
+        from app.jobs.execution import locked_job
+        from app.jobs.processor import Processor
+        from app.models.entities import VendorCall
+
+        if not isinstance(self.processor, Processor):
+            raise RuntimeError("Worker processor is not configured")
+        limit = max(1, min(limit, 100))
+        async with self.processor.db.transaction() as session:
+            candidates = (
+                await session.execute(
+                    text(
+                        "SELECT queued.id, queued.args FROM procrastinate_jobs AS queued "
+                        "WHERE queued.id>:after AND queued.task_name='bid.process' "
+                        "AND queued.queue_name='bid' AND queued.status='doing' "
+                        "AND NOT EXISTS (SELECT 1 FROM procrastinate_workers AS live "
+                        "WHERE live.id=queued.worker_id "
+                        "AND live.last_heartbeat>now()-interval '30 seconds') "
+                        "ORDER BY queued.id LIMIT :limit"
+                    ),
+                    {"after": self._process_recovery_cursor, "limit": limit},
+                )
+            ).all()
+        # Retained/invalid rows cannot permanently hide later recoverable jobs.
+        self._process_recovery_cursor = candidates[-1].id if len(candidates) == limit else 0
+        recovered = 0
+        for candidate in candidates:
+            try:
+                job_id = UUID(str(candidate.args.get("job_id")))
+            except (AttributeError, ValueError):
+                continue
+            async with self.processor.db.transaction() as session:
+                job = await locked_job(session, job_id)
+                if (
+                    job is None
+                    or job.queue_id != candidate.id
+                    or job.status != "queued"
+                    or job.kind in {"agent", "sandbox"}
+                    or job.agent_session_id is not None
+                ):
+                    continue
+                unresolved = await session.scalar(
+                    select(VendorCall.id)
+                    .where(
+                        VendorCall.job_id == job.id,
+                        VendorCall.state.in_(["pending", "unknown"]),
+                    )
+                    .limit(1)
+                )
+                if unresolved is not None:
+                    continue
+                delivery = await session.scalar(
+                    text(
+                        "SELECT queued.id FROM procrastinate_jobs AS queued "
+                        "WHERE queued.id=:id AND queued.status='doing' "
+                        "AND queued.task_name='bid.process' AND queued.queue_name='bid' "
+                        "AND queued.args->>'job_id'=:job "
+                        "AND NOT EXISTS (SELECT 1 FROM procrastinate_workers AS live "
+                        "WHERE live.id=queued.worker_id "
+                        "AND live.last_heartbeat>now()-interval '30 seconds') "
+                        "FOR UPDATE OF queued SKIP LOCKED"
+                    ),
+                    {"id": candidate.id, "job": str(job_id)},
+                )
+                if delivery is None:
+                    continue
+                await self.ensure_process_delivery(session, job)
+                if job.queue_id != delivery:
+                    await session.execute(
+                        text("SELECT procrastinate_finish_job_v1(:id, 'aborted', false)"),
+                        {"id": delivery},
+                    )
+                    recovered += 1
+        logger.info(
+            "Process queue reconciliation: checked=%s recovered=%s", len(candidates), recovered
+        )
 
     async def enqueue_agent_wake(
         self, session: AsyncSession, session_id: str, *, delay: int = 30

@@ -394,7 +394,7 @@ Missing required entry pages/archives or resource-limit violations fail the enti
 
 Add jobs.kind=sandbox_render/sandbox_capture without changing existing kinds. Retain [`Job`](../../server/app/models/entities.py) non-null document_id, resolving the actual tender Document from explicit same-task successful extraction. Feature/product selections must belong to the task. No initial tender-free playground, fabricated Document or white paper in a tender-document FK. Generic document-free agent jobs need a separate Job-relationship contract before any nullable relaxation.
 
-Reuse [background jobs](../notes/background-jobs.md): commit business jobs before dispatch, locked claiming/independent heartbeat/leases/run_id/cancellation. Network/render/storage I/O holds no long business locks; short final transactions recheck fixed inputs/current permissions/attempt. Old attempts may settle real cost but cannot publish, overwrite new state or undo cancellation. Persistent instance IDs/supervisor deadlines bound duplicate dispatch/worker crashes/temporary DB outages without unmanaged long-lived browsers.
+Reuse [background jobs](../notes/background-jobs.md): publish business state and its queue delivery transactionally, locked claiming/independent heartbeat/leases/run_id/cancellation. Network/render/storage I/O holds no long business locks; short final transactions recheck fixed inputs/current permissions/attempt. Old attempts may settle real cost but cannot publish, overwrite new state or undo cancellation. Persistent instance IDs/supervisor deadlines bound duplicate dispatch/worker crashes/temporary DB outages without unmanaged long-lived browsers.
 
 | Work | Admission/accounting |
 | --- | --- |

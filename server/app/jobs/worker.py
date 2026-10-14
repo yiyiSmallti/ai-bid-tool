@@ -32,6 +32,7 @@ async def run():
         async with queue.app.open_async():
             await queue.recover_agent_wakes()
             await queue.recover_sandbox_jobs()
+            await queue.recover_process_jobs()
             await queue.app.run_worker_async(queues=["bid"])
     finally:
         await db.engine.dispose()

@@ -3,13 +3,10 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
-from procrastinate.exceptions import ConnectorException
-from psycopg import OperationalError
 
-from app.core.errors import ServiceError
+from app.jobs.queue import dispatch_process_job
 from app.memory.candidates import dispatch
 from app.memory.feedback import take_pending_jobs
-from app.models.entities import Job
 from app.schemas.contracts import Result
 from app.schemas.response_card_contracts import (
     CardAction,
@@ -121,19 +118,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
         session, actor = ctx
         data, job = await drafts.submit_draft(session, actor, task_id, body, storage)
         warnings = await cards.scope_warnings(session, body.extraction_job_id)
-        if job is not None and job.status == "queued" and job.queue_id is None:
-            await session.commit()
-            try:
-                queue_id = await queue.enqueue(str(job.id))
-            except (OSError, ConnectorException, OperationalError) as exc:
-                # Dispatch is a boundary: the durable job remains available for explicit retry.
-                raise ServiceError(
-                    "queue_unavailable", "Job saved; repeat request to schedule it", 503, 3
-                ) from exc
-            async with db.transaction() as update:
-                saved = await update.get(Job, job.id)
-                if saved is not None:
-                    saved.queue_id = queue_id
+        await dispatch_process_job(session, queue, job)
         return result("draft", data, warnings=warnings)
 
     @router.post("/tasks/{task_id}/cards/generations", name="card_generate", response_model=Result)
@@ -145,18 +130,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
         data, job, warnings = await card_generation.submit_generation(
             session, actor, task_id, body, storage, provider, settings
         )
-        if job is not None and job.status == "queued" and job.queue_id is None:
-            await session.commit()
-            try:
-                queue_id = await queue.enqueue(str(job.id))
-            except (OSError, ConnectorException, OperationalError) as exc:
-                raise ServiceError(
-                    "queue_unavailable", "Job saved; repeat request to schedule it", 503, 3
-                ) from exc
-            async with db.transaction() as update:
-                saved = await update.get(Job, job.id)
-                if saved is not None:
-                    saved.queue_id = queue_id
+        await dispatch_process_job(session, queue, job)
         return result("card generate", data, warnings=warnings)
 
     @router.get("/drafts/{draft_id}", name="draft_show", response_model=Result)

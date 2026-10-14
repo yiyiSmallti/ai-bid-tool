@@ -84,7 +84,8 @@ async def test_tools_are_exact_cli_invocation_schemas():
     }
     for row in definitions:
         assert row.invocation_input == schemas["commands"][row.command]["invocation_input"]
-        assert row.result_schema == schemas["result"]
+        entry = schemas["commands"][row.command]
+        assert row.result_schema == entry.get("agent_result", entry["result"])
     assert agent_tools.schema_digest(definitions) == agent_tools.schema_digest(definitions)
     assert not any(word in row.command for row in definitions for word in ("shell", "http", "file"))
 

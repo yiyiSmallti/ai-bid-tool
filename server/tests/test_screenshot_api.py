@@ -131,6 +131,16 @@ async def test_image_jobs_preview_download_derivation_and_withdrawal(database, t
             f"/screenshots/{asset['id']}/renditions", headers=header, json=plan | {"dry_run": True}
         )
         assert preview.status_code == 200
+        from dispatch_acceptance import assert_dispatch_rollback
+
+        await assert_dispatch_rollback(
+            api,
+            app,
+            header,
+            f"/screenshots/{asset['id']}/renditions",
+            plan,
+            tmp_path / "screenshot-dispatch-rollback.json",
+        )
         response = await api.post(
             f"/screenshots/{asset['id']}/renditions", headers=header, json=plan
         )

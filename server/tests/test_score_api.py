@@ -1112,7 +1112,7 @@ async def test_rubric_redaction_off_is_zero_write_admission_blocker(rubric_input
     assert after["jobs"] == before["jobs"] and after["score_rubric_sets"] == 0
 
 
-async def test_rubric_queue_outage_keeps_one_durable_job_and_redispatches(
+async def test_rubric_queue_outage_rolls_back_submission_before_retry(
     rubric_input_case, monkeypatch
 ):
     case = rubric_input_case
@@ -1123,19 +1123,20 @@ async def test_rubric_queue_outage_keeps_one_durable_job_and_redispatches(
         raise OSError("Synthetic unavailable queue")
 
     preview = await preview_rubric(case)
+    before = await rubric_counts(case)
     monkeypatch.setattr(queue, "enqueue", unavailable)
     refused = await submit_rubric(case, preview)
     assert refused.status_code == 503
     body = refused.json()
     assert body["data"]["error"]["exit_code"] == 3
-    job_id = body["data"]["job_id"]
+    assert "job_id" not in body["data"]
     assert not case["vendor"].requests
-    before = await rubric_counts(case)
+    assert await rubric_counts(case) == before
     monkeypatch.setattr(queue, "enqueue", normal_enqueue)
     accepted = await submit_rubric(case, preview)
-    assert accepted.status_code == 200 and accepted.json()["data"]["job_id"] == job_id
-    assert accepted.json()["data"]["cached"]
-    assert await rubric_counts(case) == before
+    assert accepted.status_code == 200
+    assert not accepted.json()["data"]["cached"]
+    assert (await rubric_counts(case))["jobs"] == before["jobs"] + 1
     terminal = await finish_rubric(case, accepted.json()["data"])
     assert terminal["status"] == "succeeded", terminal
 

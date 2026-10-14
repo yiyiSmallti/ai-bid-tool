@@ -331,7 +331,7 @@ Register new commands/Pydantic Schema in bid schema, retaining old structures; i
 
 ## Jobs, costs and resource limits
 
-Add jobs.kind=export_render; document_id is draft-selected extraction's actual tender Document, never certificate/nullable relaxation. Fix run/job inputs together before dispatch, retaining retryable jobs after dispatch failure. Restore job attempt context/recheck fixed read/export scopes, using existing lease/run_id/cancellation/bounded retries. Workers inherit no session and only run/attempt-scoped render capability; internal signatures/job parameters are not human release authority.
+Add jobs.kind=export_render; document_id is draft-selected extraction's actual tender Document, never certificate/nullable relaxation. Fix run/job inputs and queue delivery in one transaction under the [shared dispatch boundary](../notes/background-jobs.md#how-it-works); a failed new submission rolls back and can be repeated. Restore job attempt context/recheck fixed read/export scopes, using existing lease/run_id/cancellation/bounded retries. Workers inherit no session and only run/attempt-scoped render capability; internal signatures/job parameters are not human release authority.
 
 Recommend internal `ExportRenderer.render(manifest, authorized_inputs) -> candidate`, with service-resolved authorized template/pages and no external URLs/caller paths; it is not a model-calling Provider. Reuse python-docx/PyMuPDF/standard ZIP, no major dependency/cloud conversion/real vendor calls. Workers are terminable; deadlines/cancellation kill/reap owned render processes rather than leave timeout threads writing objects. Read/validate/stage media page-by-page without simultaneous whole-PDF/scan decoding.
 

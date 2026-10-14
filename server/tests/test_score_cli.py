@@ -338,10 +338,9 @@ def score_interface(*, fail_show: bool = False, fail_submit: bool = False) -> Fa
         if fail_submit:
             raise ServiceError(
                 "queue_unavailable",
-                "Rubric job was saved, but the queue is unavailable",
+                "Job could not be scheduled; repeat the request",
                 503,
                 3,
-                job_id=JOB,
             )
         return _result(data={"job_id": JOB, "status": "queued", "cached": False})
 
@@ -788,7 +787,7 @@ def test_score_rubric_queue_failure_preserves_job_id(monkeypatch, tmp_path, caps
         capsys,
     )
     assert code == 3 and body["data"]["error"]["code"] == "queue_unavailable"
-    assert body["data"]["job_id"] == JOB
+    assert "job_id" not in body["data"]
 
 
 @pytest.mark.parametrize(

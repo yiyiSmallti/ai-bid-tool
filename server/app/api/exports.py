@@ -4,12 +4,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
-from procrastinate.exceptions import ConnectorException
-from psycopg import OperationalError
 from sqlalchemy import select
 
 from app.core.errors import ServiceError, not_found
-from app.models.entities import Job, Task
+from app.jobs.queue import dispatch_process_job
+from app.models.entities import Task
 from app.models.exports import Export
 from app.schemas.contracts import Result
 from app.schemas.export_contracts import (
@@ -63,18 +62,7 @@ def create_router(context, db, storage, queue, settings, crypto):
                 "exit_code": 2,
             }
             return JSONResponse(status_code=400, content=payload)
-        if job is not None and job.status == "queued" and job.queue_id is None:
-            await session.commit()
-            try:
-                queue_id = await queue.enqueue(str(job.id))
-            except (OSError, ConnectorException, OperationalError) as exc:
-                raise ServiceError(
-                    "queue_unavailable", "Export job saved; repeat request to schedule it", 503, 3
-                ) from exc
-            async with db.transaction() as update:
-                saved = await update.get(Job, job.id)
-                if saved is not None:
-                    saved.queue_id = queue_id
+        await dispatch_process_job(session, queue, job)
         return result("export prepare", data)
 
     @router.get("/export-runs/{run_id}", name="export_run_show", response_model=Result)
@@ -126,18 +114,7 @@ def create_router(context, db, storage, queue, settings, crypto):
         data, job = await page_previews.submit_export_preview(
             session, actor, export_id, storage, settings, retry=retry
         )
-        if job.status == "queued" and job.queue_id is None:
-            await session.commit()
-            try:
-                queue_id = await queue.enqueue(str(job.id))
-            except (OSError, ConnectorException, OperationalError) as exc:
-                raise ServiceError(
-                    "queue_unavailable", "Preview job saved; repeat request to schedule it", 503, 3
-                ) from exc
-            async with db.transaction() as update:
-                saved = await update.get(Job, job.id)
-                if saved is not None:
-                    saved.queue_id = queue_id
+        await dispatch_process_job(session, queue, job)
         return result("export preview", data)
 
     @router.get("/exports/{export_id}/preview", name="export_preview_show", response_model=Result)

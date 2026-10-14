@@ -44,7 +44,7 @@ One human maintains resources and model configuration, prepares responses and re
 | Estimate score | Human or scoped agent | Scoring criteria + bid draft | Item estimates, reasons for lost points, possible improvements |
 | External agent invocation | External agent | CLI commands + human-issued token | Same Result contract; confirmation and export remain human-only |
 
-Typical flow: create task/upload tender documents/select templates and products → confirm requirements → verify proposed-model parameters → confirm evidence item by item → export response tables → check and estimate scores after the bid is finalized.
+Typical flow: create task/upload tender documents/select templates and products → confirm the effective tender baseline and its requirements → verify proposed-model parameters → confirm evidence item by item → export response tables → check and estimate scores after the bid is finalized. Corrections and later tender notices return affected work to review through the [requirement lifecycle](#requirement-corrections-and-tender-baselines).
 
 ## Overall architecture
 
@@ -96,6 +96,8 @@ Requirements and evidence remain central: requirements locate original tender te
 | Tasks | TaskResource | Selected-resource snapshot | Resource type/ID/version |
 | Tasks | Document, Chunk | Uploaded file and parsed content | Type, content hash, page, section path, OCR flag |
 | Tasks | Requirement | One requirement | Category, starred flag, original text/location, structured condition |
+| Tasks | RequirementRevision, RequirementDisposition | Source-bound interpretation and explicit treatment of a requirement | Original requirement, exact source pin, previous revision, corrected meaning, treatment, related requirement, reason, human decision |
+| Tasks | TenderBaseline | Immutable effective tender scope for a task/lot | Selected document hashes and extraction/manual-set revisions, applicable requirements, supersession relations, human confirmation, previous baseline |
 | Tasks | Evidence | One evidence item | Requirement/product, source, capture time, quote, screenshot/hash, verdict, human confirmation timestamp |
 | Tasks | ResponseItem, Finding, ScoreItem | Response row, check finding, score estimate | Deviation, risk level, estimate/basis |
 | Tasks | Card | Dashboard card | Related object, state, version |
@@ -129,6 +131,112 @@ Structured parameter conditions let code compare satisfaction rather than relyin
 ```
 
 Evidence with empty `confirmed_at` cannot enter response tables or exports.
+
+## Requirement corrections and tender baselines
+
+The rules below define the target lifecycle. Delivery scope and interface work are
+tracked in [B02 and B08 of the roadmap](plan/roadmap.md#coverage-matrix-parsing-requirements-evidence-responses-and-checking).
+The existing [requirement-confirmation contract](plan/requirement-confirmation.md)
+continues to govern confirmation and verified manual entry until the revision and
+baseline interfaces are implemented; it does not authorize silent deletion or
+automatic transfer of human decisions.
+
+### Correcting a requirement
+
+An extraction is a retained observation of a particular source version. A human
+correction appends an interpretation revision; it must preserve the original
+extracted text, citation, category, starred flag and condition for inspection.
+The revision binds a verified quote and occurrence within an immutable document
+and parse revision. A quotation from discussion or memory cannot replace that
+source. If the source is ambiguous, the requirement stays unresolved.
+
+| Treatment | Required meaning and evidence | Coverage effect |
+| --- | --- | --- |
+| Correct interpretation | The original source is unchanged; a human fixes the interpreted text, category, starred flag or structured condition, with a reason and exact source pin | The new revision replaces the old interpretation only after requirement review; old dependent work becomes stale |
+| Duplicate | Two observations express the same obligation in the same applicable scope; name the retained requirement/revision and verify both sources | Count the obligation once and retain both source links; the retained requirement must remain in the baseline |
+| Not applicable | A cited applicability rule excludes an explicitly unselected lot or scope; record that rule, scope and human reason | Show the disposition in coverage reports; do not silently drop the item |
+| Superseded or withdrawn | A selected formal amendment/clarification explicitly changes the earlier obligation; bind both source revisions and the relation | Change effective coverage only through a new confirmed tender baseline |
+| Cannot comply | The proposed product or bid does not meet an applicable requirement | Keep the requirement in coverage; use the existing negative-deviation or gap workflow |
+
+For example, changing a model interpretation from “A and B” to “A or B” is a
+correction only when the original quote supports “or”. Product limitations cannot
+justify weakening a requirement, clearing its star or marking it inapplicable.
+Duplicate and supersession relations must remain within the same task and
+compatible lot scope, have no cycles and never terminate at an omitted obligation.
+
+Only the installation human may accept a revision or disposition. Tokens and
+agents may propose work but cannot approve it. A saved revision starts
+unconfirmed; its confirmation binds the exact meaning, source and treatment
+together. Mutation requests must carry the observed revision and an idempotency
+key. Conflicts return the current revision without overwriting a concurrent edit.
+Reopening or revising cannot copy an earlier approval. Existing response/evidence
+confirmation remains a separate decision.
+
+### Effective tender scope
+
+A `TenderBaseline` fixes the set of obligations used for one task and its explicit
+lot selection. It must include:
+
+- The original tender and selected amendments/clarifications, each with its role,
+  content hash, parse revision, successful extraction ID and manual-entry set
+  revision. Membership uses exact IDs, never a moving “latest extraction” query.
+- The applicable requirement revisions and explicit duplicate, inapplicability,
+  replacement or withdrawal relations, with their verified sources and decisions.
+- The predecessor baseline, confirmation time and a digest of the entire scope.
+  Display unresolved conflicts, rejected extraction items and known omissions
+  separately; a confirmed baseline is not proof of perfect recall.
+
+Uploading or re-extracting a file creates candidate changes. It cannot switch the
+active baseline. Neither upload order, a later timestamp nor model similarity
+establishes legal precedence. A human must resolve conflicting instructions using
+the cited formal notice; unresolved conflicts block baseline confirmation and
+final export. Changing the selected lot also requires a new baseline.
+
+Before activation, show added, changed, superseded, withdrawn and unchanged
+requirements plus affected response cards, rubrics, findings and drafts. Activate
+the baseline and its invalidations atomically using an expected-current-baseline
+check. The previous baseline and its artifacts remain inspectable. Returning to
+older inputs creates another reviewed baseline; it never rewrites history.
+
+### Consumer freshness and acceptance
+
+Draft, check, score, export and agent work must pin the baseline digest and exact
+requirement revisions in their fixed inputs and results. Human confirmation,
+background publication and final export recheck those pins. A worker that finishes
+after an affected revision changes may retain its attempt history but cannot
+publish it as current accepted work. Historical downloads identify their original
+scope and cannot appear as the task's current final export.
+
+Preserve unaffected human decisions only when source, meaning, treatment and all
+other dependency pins are identical. Revalidate them in the new baseline; similarity
+is insufficient. Changed requirements reopen their response review and invalidate
+affected rubric acceptance, checks, scores and assembled drafts. Real evidence
+assets remain retained; a new binding needs its own applicable review. Coverage
+must account for every selected observation as an effective obligation or an
+explicit disposition, and keep genuine negative deviations and unresolved gaps
+visible. Neither exclusion nor re-extraction may improve completeness silently.
+
+Acceptance must follow the user-facing path: extract “A or B” incorrectly as
+“A and B”, correct and confirm it, regenerate affected responses, assemble and
+export; then introduce an amendment that changes one obligation and prove that
+only dependent work becomes stale while old artifacts remain historical. Include
+duplicate cycles, invalid sources, unjustified star removal, concurrent edits,
+late worker publication and token or agent approval attempts. These scenarios
+extend the [B02 gates](plan/requirement-confirmation.md#acceptance-requirements),
+not replace them.
+
+### Delivery and compatibility
+
+Deliver corrections within one explicit extraction scope first, including the
+complete review-to-export invalidation path. Add baseline activation only after
+those consumers accept exact requirement revision pins. Initialize a task's first
+baseline from explicitly selected extraction/manual sets and human scope approval;
+do not infer it from whichever successful job happens to be latest. Existing
+extraction-scoped commands and artifacts keep their documented scope and must not
+be relabelled as complete multi-document coverage. Baseline-aware interfaces must
+identify that scope in their request, output and cache identity, with intentional
+CLI versioning for incompatible changes. New revision/baseline tables and endpoints
+inherit the existing task-access and audit requirements.
 
 <a id="org-resources-and-task-creation"></a>
 ## Resource library and task creation
@@ -349,23 +457,56 @@ Parameter cards reach terminal state only through pending-human-confirmation. Mi
 
 ## Evaluation
 
-Rerun a fixed dataset after prompt/model/rule changes. Starred-clause recall is mandatory; set other targets after first measurements.
+Rerun a versioned, human-annotated dataset after parser, prompt, model or rule
+changes. Match each gold clause by document hash, PDF page or Word block, source
+occurrence and clause content; merely sharing a page/block is never a hit. Only
+valid citations enter recall numerators. Report model-only output and output
+after rule supplementation separately. A source-symbol scan is a diagnostic,
+not an independent ground truth. Runtime citation validation does not by itself
+prove that the interpreted meaning is correct.
 
 | Metric | Calculation | Initial target |
 | --- | --- | --- |
-| Starred-clause recall | Extracted ground-truth starred clauses / all such clauses | 100% |
+| Starred-clause recall | Matched human-annotated starred clauses with valid citations / all gold starred clauses | 100% on the fixed acceptance set; investigate every miss |
+| Star identification | Correct starred labels among matched gold clauses; report false stars separately | No missed mandatory labels on the acceptance set |
 | Requirement recall/precision | Item matching against ground truth | After measurement |
 | Citation validity | Quote appears at referenced location | After measurement |
 | Parameter verdict accuracy | Agreement on satisfied/not satisfied/not found | After measurement |
 | Evidence acceptance | Human-confirmed rather than rejected | After measurement |
 | Risk detection/false positives | Compare human-annotated findings | After measurement |
 | Per-document resource use/time | Model cost/total time from parse through check | After measurement |
+| Human correction effort | Corrections, unresolved items and active review minutes per document | Measure the first baseline before setting a target |
+| Time to reviewable output | Upload to first source-verifiable response draft, with waiting and human work separated | Measure the first baseline before setting a target |
 
 **Dataset**
 
-1. Development: download public hardware tender documents from government procurement sites; annotate requirements.
-2. After first usable release: add real bids with consent, using final human deliverables as ground truth.
-3. Record dashboard confirmations/rejections as new test samples automatically.
+1. Development: curate legally reusable public PDF and Word tenders. Annotate
+   clause IDs, exact sources, category, star status, interpretation and applicability;
+   adjudicate disagreements before treating labels as gold. Cover same-page and
+   same-block multiple clauses, repeated text, cross-line text, tables, scans,
+   no-star documents and amendment conflicts. Keep tuning and held-out sets separate.
+2. After first usable release: add real bids with consent. Human final deliverables
+   and review events are candidate labels requiring adjudication, not automatically
+   correct ground truth.
+3. Persist dataset/input hashes, parser/model/prompt/rule versions, matching rules,
+   per-clause differences, resource use and timings in reproducible artifacts outside
+   `docs/`. A zero denominator is “not applicable”, never an invented 100% score.
+
+**Trial release gate**
+
+Establish E01/E02 measurements before a user trial. Require valid sources for every
+accepted requirement, no missed gold starred clause or mandatory label in the
+fixed acceptance set, and review of every newly introduced miss or false positive.
+Publish the denominator and per-document failures alongside aggregates. A passing
+small dataset does not establish recall on unseen tenders. Other quality and human
+effort targets need an initial measurement and an explicit release decision.
+
+The implementation entry points are
+[the standalone evaluator](../evals/extract_tender.py) and
+[offline parser acceptance](../evals/offline_extract_acceptance.py);
+[development commands](guides/development.md#configure-the-extraction-model)
+define explicit opt-in for provider calls. Dataset readiness and measured results
+belong in [E01/E02](plan/roadmap.md#coverage-matrix-evaluation-and-confidentiality).
 
 ## Security and compliance
 

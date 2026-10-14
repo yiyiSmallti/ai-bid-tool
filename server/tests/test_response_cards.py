@@ -544,6 +544,16 @@ async def test_full_review_chain_and_draft_partition(database, tmp_path, admin_e
             await api.get(f"/tasks/{task}/drafts", headers=header, params={"job": extraction})
         ).json()["items"] == []
 
+        from dispatch_acceptance import assert_dispatch_rollback
+
+        await assert_dispatch_rollback(
+            api,
+            app,
+            header,
+            f"/tasks/{task}/drafts",
+            {"extraction_job_id": extraction},
+            tmp_path / "draft-dispatch-rollback.json",
+        )
         queued_response = await api.post(
             f"/tasks/{task}/drafts",
             headers=header,
