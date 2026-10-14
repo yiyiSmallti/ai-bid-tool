@@ -29,8 +29,10 @@ replaces each external path with a bundled one:
 
 Optional services that the Compose stack provides do not exist on a desktop:
 the Office converter (`BID_CONVERTER_URL`), SearXNG search and the gVisor browser
-[sandbox](sandbox.md). Each needs an explicit desktop decision; a feature whose
-service is absent must report itself unavailable rather than fail late.
+[sandbox](sandbox.md). Vendor search uses the Perplexity API instead of SearXNG,
+selected by the backend. The converter and the sandbox each need an explicit
+desktop decision; a feature whose service is absent must report itself
+unavailable rather than fail late.
 
 ## Requirements independent of the decisions
 

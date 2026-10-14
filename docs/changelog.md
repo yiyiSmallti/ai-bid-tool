@@ -17,6 +17,8 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   rewrite the file.
 - Add regression coverage for migration failure, compatible startup and unchanged
   restart behavior.
+- Select Perplexity vendor search in the developer app; it uses the credential
+  added under 服务凭据 and needs no local search service.
 
 ## 2026-10-13: Single-user local installation
 

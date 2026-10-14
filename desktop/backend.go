@@ -244,6 +244,9 @@ func (b *Backend) baseEnv() []string {
 		"BID_SECRETS_KEY=" + b.install.SecretsKey,
 		"BID_DATA_DIR=" + filepath.Join(b.DataDir, "files"),
 		"BID_WEB_DIR=" + filepath.Join(b.ServerDir, "web", "dist"),
+		// Vendor search needs no local service: it uses the Perplexity
+		// credential added under 服务凭据, and reports itself unavailable without one.
+		"BID_SEARCH_PROVIDER=perplexity",
 	}
 }
 

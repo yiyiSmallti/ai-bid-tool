@@ -74,6 +74,14 @@ multi-org data: the single-user baseline does not convert it. Failed migrations
 preserve preexisting installation-file bytes; compatible startup persists staged
 keys or a changed console port only when necessary.
 
+## Optional services
+
+Vendor search uses the Perplexity API: add a Perplexity credential under
+服务凭据 in the console; until then search reports itself unavailable. The
+developer app configures no Office converter and no browser sandbox, so export
+page previews and sandbox captures are unavailable; their desktop outcomes are
+decisions D5 and D6 in [desktop packaging](../plan/desktop-packaging.md#decisions).
+
 ## Verify without using default account data
 
 The normal app has no data-root override. A same-account acceptance build must
