@@ -208,6 +208,29 @@ async def test_review_export_real_chain_and_every_route_gated(
         assert not blocked.json()["data"]["ready"]
         assert any(i["code"] == "export_gaps_present" for i in blocked.json()["data"]["issues"])
         body["mode"] = "review_copy"
+        from dispatch_acceptance import assert_dispatch_rollback
+
+        preview = await api.post(
+            f"/tasks/{task}/export-runs", headers=header, json={**body, "dry_run": True}
+        )
+        assert preview.status_code == 200, preview.text
+        preflight = preview.json()["data"]
+        await assert_dispatch_rollback(
+            api,
+            app,
+            header,
+            f"/tasks/{task}/export-runs",
+            {
+                **body,
+                "expected_input_hash": preflight["input_hash"],
+                "acknowledged_issue_ids": [
+                    issue["issue_id"]
+                    for issue in preflight["issues"]
+                    if issue["severity"] == "acknowledge"
+                ],
+            },
+            tmp_path / "export-dispatch-rollback.json",
+        )
         run = await prepared(api, app, header, task, body)
         released = await api.post(
             f"/export-runs/{run['id']}/release",

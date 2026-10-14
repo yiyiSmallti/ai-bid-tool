@@ -6,6 +6,7 @@ from uuid import UUID
 import httpx
 import pytest
 from app.api.check import create_router
+from app.core.errors import ServiceError
 from fastapi import FastAPI
 
 IDENTIFIER = UUID("00000000-0000-0000-0000-000000000001")
@@ -23,6 +24,9 @@ class Queue:
         if self.fail:
             raise OSError("synthetic queue failure")
         return 7
+
+    async def ensure_process_delivery(self, session, job):
+        job.queue_id = await self.enqueue(str(job.id))
 
 
 class Database:
@@ -223,35 +227,28 @@ async def test_check_submission_commits_before_queue_dispatch(interface):
         "status": "queued",
         "cached": False,
     }
-    assert session.commits == 1
+    assert session.commits == 0
     assert queue.calls == [str(IDENTIFIER)]
 
 
-async def test_check_queue_failure_returns_durable_job_id(interface):
+async def test_check_queue_failure_aborts_the_request_transaction(interface):
     app, _, queue, session = interface
     queue.fail = True
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    ) as api:
-        response = await api.post(
-            f"/tasks/{IDENTIFIER}/checks",
-            json={
-                "draft_id": str(IDENTIFIER_2),
-                "assessment_date": "2026-10-04",
-                "expected_input_hash": SHA,
-            },
-        )
-    assert response.status_code == 503
-    body = response.json()
-    assert set(body) == {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}
-    assert body["ok"] is False and body["command"] == "check run"
-    assert body["data"] == {
-        "error": {
-            "code": "queue_unavailable",
-            "message": "Check job saved; repeat request to schedule it",
-            "exit_code": 3,
-        },
-        "job_id": str(IDENTIFIER),
-    }
-    assert session.commits == 1
+    # This small router harness has no application exception handler. The real API
+    # translates this ServiceError and rolls back its transaction.
+    with pytest.raises(ServiceError) as failure:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as api:
+            await api.post(
+                f"/tasks/{IDENTIFIER}/checks",
+                json={
+                    "draft_id": str(IDENTIFIER_2),
+                    "assessment_date": "2026-10-04",
+                    "expected_input_hash": SHA,
+                },
+            )
+    assert failure.value.code == "queue_unavailable"
+    assert failure.value.exit_code == 3
+    assert session.commits == 0
     assert queue.calls == [str(IDENTIFIER)]

@@ -109,6 +109,18 @@ Standalone evaluation uses a `standalone_llm` service credential, the runtime
 database URL and provider-secret root. Its entrypoint adaptation is tracked in
 [the single-user plan](../plan/single-user.md); the caller is
 [evals/extract_tender.py](../../evals/extract_tender.py).
+It sends provider requests only when `--real-provider` is passed.
+
+To check the coverage calculation without credentials or provider calls, run the
+synthetic PDF/Word parser acceptance with a new artifact path:
+
+```sh
+uv run python evals/offline_extract_acceptance.py --output data/work/offline-extract.json
+```
+
+The JSON records source-clause coverage and star-label coverage separately. These
+parser-derived diagnostics do not replace the human-annotated evaluation defined
+in [the design](../design.md#evaluation).
 
 Batching and model options are defined by
 [llm-providers.md](../notes/llm-providers.md); variable names are in

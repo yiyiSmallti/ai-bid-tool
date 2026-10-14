@@ -50,6 +50,27 @@ Generation first reads a preflight and fixes the input hash. Proposals remain
 unconfirmed; deterministic draft assembly copies only human-confirmed responses.
 This first agent workflow retrieves no memory.
 
+Their Result discovery entries also expose command-specific `output`, `items`
+and a complete seven-key `result` schema, covering preview, accepted-job,
+published, partial and error branches, including CLI `--wait` projections.
+`job status` keeps its public common record for all CLI jobs and an `agent_result`
+profile limited to extract, card_generate, draft and agent results. The broker
+uses that narrower profile; it does not advertise arbitrary job kinds as agent
+capabilities. These types reuse the domain response contracts in
+[tool_outputs.py](../../server/app/schemas/tool_outputs.py).
+
+Each tool's contract hash includes its command, invocation input and complete
+business Result schema. The session's fixed tool-set digest therefore changes
+when an output schema changes even if its invocation arguments stay identical.
+An existing incompatible session stops with `tool_schema_changed`; it cannot
+silently continue under a different output contract. Schema discovery additions
+leave the seven-key runtime envelope intact. For model requests,
+`decision_payload` shares identical definition graphs in a request-local JSON
+Schema catalog and rewrites their references. Discovery and contract hashes
+retain the complete standalone schemas. This representation must reconstruct the
+original contracts without losing fields or constraints and stay within the
+existing provider byte ceiling; larger conversations still pause.
+
 Messages, arguments and receipts are encrypted. Public projections are bounded
 and redacted. Model decisions use a closed schema; trusted provider usage comes
 from the adapter rather than the model. Hidden reasoning is not persisted.
@@ -107,8 +128,9 @@ acceptance remains defined by the
 - [Controller](../../server/app/jobs/agent.py) `decision_request/projection/fragment/checkpoint/wake`
   and [queue](../../server/app/jobs/queue.py) `enqueue_in_transaction/enqueue_agent_wake`:
   redacted context, transactional dispatch, checkpoints, durable wakes and lease fences.
-- [Decision Provider](../../server/app/providers/agent.py) `HTTPAgentProvider`:
-  closed structured decisions and trusted HTTP usage under the pinned model.
+- [Decision Provider](../../server/app/providers/agent.py) `HTTPAgentProvider/decision_payload`:
+  closed structured decisions, shared output-schema definitions and trusted HTTP
+  usage under the pinned model.
 - [Generation](../../server/app/services/card_generation.py) `snapshot/prompt_memory/worker`,
   [cards](../../server/app/services/response_cards.py) `access/card_view` and
   [drafts](../../server/app/services/drafts.py) `submit_draft/complete_draft/show_draft`:

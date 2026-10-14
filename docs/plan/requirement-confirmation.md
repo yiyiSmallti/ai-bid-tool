@@ -34,6 +34,10 @@ and must not dispatch model work.
 
 No extraction-completeness certification, delete/exclude/free-edit operation,
 automatic semantic repair, automatic confirmation or multi-job union is introduced.
+Source-bound semantic correction and supersession follow the
+[requirement revision and tender-baseline design](../design.md#requirement-corrections-and-tender-baselines)
+under a later interface contract; that design does not expand this slice's runtime
+authority.
 
 ## Identity, source and history
 

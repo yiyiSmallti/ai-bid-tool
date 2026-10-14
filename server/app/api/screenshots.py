@@ -5,8 +5,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from fastapi.routing import APIRoute
-from procrastinate.exceptions import ConnectorException
-from psycopg import OperationalError
 from pydantic import ValidationError
 from python_multipart.multipart import MultipartParser, parse_options_header
 from sqlalchemy import select, tuple_
@@ -14,7 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets, TokenSigner
-from app.models.entities import Job
+from app.jobs.queue import dispatch_process_job
 from app.models.screenshots import PrototypeEvidenceDecision, ScreenshotAsset, ScreenshotRendition
 from app.providers.base import ProviderFailure
 from app.schemas.contracts import Result
@@ -154,18 +152,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         return Result(ok=True, command=command, data=data or {}, items=items or [])
 
     async def dispatch(session, actor, job):
-        if job is not None and job.status == "queued" and job.queue_id is None:
-            await session.commit()
-            try:
-                queue_id = await queue.enqueue(str(job.id))
-            except (OSError, ConnectorException, OperationalError) as exc:
-                raise ServiceError(
-                    "queue_unavailable", "Job saved; repeat request to schedule it", 503, 3
-                ) from exc
-            async with db.transaction() as update:
-                saved = await update.get(Job, job.id)
-                if saved is not None:
-                    saved.queue_id = queue_id
+        await dispatch_process_job(session, queue, job)
 
     async def discard_staged(keys):
         from app.providers.screenshot_objects import discard

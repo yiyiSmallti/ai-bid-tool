@@ -61,6 +61,9 @@ class InterfaceQueue:
     async def enqueue(self, job_id: str):
         return 1
 
+    async def ensure_process_delivery(self, session, job):
+        job.queue_id = await self.enqueue(str(job.id))
+
 
 def check_interface(
     monkeypatch,
@@ -438,7 +441,7 @@ def test_check_cli_queue_failure_is_retryable(monkeypatch, tmp_path, capsys):
         capsys,
     )
     assert code == 3 and body["data"]["error"]["code"] == "queue_unavailable"
-    assert body["data"]["job_id"] == IDENTIFIER
+    assert "job_id" not in body["data"]
 
 
 @pytest.mark.parametrize(

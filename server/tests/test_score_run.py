@@ -197,7 +197,9 @@ async def counts(case):
         }
 
 
-async def test_score_preview_worker_cross_response_total_cache_and_cli(score_case, monkeypatch):
+async def test_score_preview_worker_cross_response_total_cache_and_cli(
+    score_case, monkeypatch, tmp_path
+):
     from bid_cli import main as cli
 
     case = score_case
@@ -207,6 +209,21 @@ async def test_score_preview_worker_cross_response_total_cache_and_cli(score_cas
     assert await counts(case) == before and (not case["score_vendor"].requests)
     refused = await submit_score(case, preview, expected_input_hash="0" * 64)
     assert refused.status_code == 409
+    from dispatch_acceptance import assert_dispatch_rollback
+
+    await assert_dispatch_rollback(
+        case["api"],
+        case["app"],
+        case["header"],
+        f"/tasks/{case['task']}/scores",
+        {
+            "draft_id": case["draft_id"],
+            "rubric_id": case["rubric"]["rubric"]["id"],
+            "assessment_date": "2026-10-05",
+            "expected_input_hash": preview["input"]["input_hash"],
+        },
+        tmp_path / "score-dispatch-rollback.json",
+    )
     accepted = await submit_score(case, preview)
     assert accepted.status_code == 200, accepted.text
     terminal = await finish_score(case, accepted.json()["data"])

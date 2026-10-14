@@ -275,6 +275,17 @@ async def test_generation_review_and_draft_full_chain(database, tmp_path, admin_
         )
         await select_real_materials(api, header, task, tmp_path)
         agent = await token_header(api, header)
+        from dispatch_acceptance import assert_dispatch_rollback
+
+        await assert_dispatch_rollback(
+            api,
+            app,
+            agent,
+            f"/tasks/{task}/cards/generations",
+            {"extraction_job_id": extraction},
+            tmp_path / "generation-dispatch-rollback.json",
+            expected_failure_receipt=True,
+        )
         receipt = await submit(api, agent, task, extraction)
         terminal = await execute(api, app, header, receipt)
         assert terminal["data"]["status"] == "succeeded", terminal

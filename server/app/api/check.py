@@ -4,12 +4,9 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
-from procrastinate.exceptions import ConnectorException
-from psycopg import OperationalError
 
 from app.core.errors import ServiceError
-from app.models.entities import Job
+from app.jobs.queue import dispatch_process_job
 from app.schemas.check_contracts import CheckRequest, FindingDecisionRequest
 from app.schemas.console_assessments import AssessmentHistoryQuery, CheckPageRequest
 from app.schemas.contracts import Result
@@ -30,41 +27,12 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         )
         return bounded_result(payload) if console else payload
 
-    async def dispatch(session, actor, job: Job | None) -> JSONResponse | None:
-        if job is None or job.status != "queued" or job.queue_id is not None:
-            return None
-        # The submission and its authorization snapshot are durable before queue I/O.
-        await session.commit()
-        try:
-            queue_id = await queue.enqueue(str(job.id))
-        except (OSError, ConnectorException, OperationalError):
-            body = Result(
-                ok=False,
-                command="check run",
-                data={
-                    "error": {
-                        "code": "queue_unavailable",
-                        "message": "Check job saved; repeat request to schedule it",
-                        "exit_code": 3,
-                    },
-                    "job_id": str(job.id),
-                },
-            )
-            return JSONResponse(status_code=503, content=body.model_dump(mode="json"))
-        async with db.transaction() as update:
-            saved = await update.get(Job, job.id)
-            if saved is not None:
-                saved.queue_id = queue_id
-        return None
-
     @router.post("/tasks/{task_id}/checks", name="check_run", response_model=Result)
     async def check_run(task_id: UUID, body: CheckRequest, ctx=Depends(context, scope="function")):
 
         session, actor = ctx
         data, job = await check.submit_check(session, actor, task_id, body, storage, settings)
-        dispatch_error = await dispatch(session, actor, job)
-        if dispatch_error is not None:
-            return dispatch_error
+        await dispatch_process_job(session, queue, job)
         warnings = data.get("limitations", []) if body.dry_run else []
         return result("check run", data, warnings=warnings)
 

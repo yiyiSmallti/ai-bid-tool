@@ -4,12 +4,10 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
-from procrastinate.exceptions import ConnectorException
-from psycopg import OperationalError
 from sqlalchemy import select
 
 from app.core.errors import ServiceError
+from app.jobs.queue import dispatch_process_job
 from app.models.entities import Job
 from app.models.score import ScoreRubricSet
 from app.schemas.console_assessments import (
@@ -124,30 +122,7 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         data, job = await invoke(
             score_generation.submit_rubric, session, actor, task_id, body, settings
         )
-        if job is not None and job.status == "queued" and job.queue_id is None:
-            # A queue outage leaves an authorized durable job that the same request
-            # can redispatch without another provider call or submitted audit.
-            await session.commit()
-            try:
-                queue_id = await queue.enqueue(str(job.id))
-            except (OSError, ConnectorException, OperationalError):
-                body = Result(
-                    ok=False,
-                    command="score rubric generate",
-                    data={
-                        "error": {
-                            "code": "queue_unavailable",
-                            "message": "Rubric job saved; repeat request to schedule it",
-                            "exit_code": 3,
-                        },
-                        "job_id": str(job.id),
-                    },
-                )
-                return JSONResponse(status_code=503, content=body.model_dump(mode="json"))
-            async with db.transaction() as update:
-                saved = await update.get(Job, job.id)
-                if saved is not None:
-                    saved.queue_id = queue_id
+        await dispatch_process_job(session, queue, job)
         return result("generate", data)
 
     async def execute(task_id, body, ctx):
@@ -162,28 +137,7 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
             settings,
             storage,
         )
-        if job is not None and job.status == "queued" and job.queue_id is None:
-            await session.commit()
-            try:
-                queue_id = await queue.enqueue(str(job.id))
-            except (OSError, ConnectorException, OperationalError):
-                response = Result(
-                    ok=False,
-                    command="score run",
-                    data={
-                        "error": {
-                            "code": "queue_unavailable",
-                            "message": "Score job saved; repeat request to schedule it",
-                            "exit_code": 3,
-                        },
-                        "job_id": str(job.id),
-                    },
-                )
-                return JSONResponse(status_code=503, content=response.model_dump(mode="json"))
-            async with db.transaction() as update:
-                saved = await update.get(Job, job.id)
-                if saved is not None:
-                    saved.queue_id = queue_id
+        await dispatch_process_job(session, queue, job)
         warnings = data.get("limitations", []) if body.dry_run else []
         return score_result("run", data, warnings=warnings)
 

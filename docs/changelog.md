@@ -6,6 +6,29 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-14: Extraction evaluation, job delivery and agent output contracts
+
+- Replace page/block-only star recall with source-position and clause-content
+  coverage diagnostics. Count only verified citations, distinguish clause coverage
+  from star labels, and report zero-denominator ratios as undefined. Add reproducible
+  offline PDF/Word parser acceptance; require explicit opt-in for provider calls.
+- Commit ordinary process jobs and queue deliveries atomically across tender,
+  response, check, score, export and screenshot submissions. Recheck abandoned
+  deliveries on resubmission and during bounded worker reconciliation; running
+  attempts and unresolved vendor calls are never redispatched. A failed new
+  dispatch rolls back with `queue_unavailable` instead of promising a saved job ID.
+- Register business data, item and complete Result schemas for the built-in
+  agent's command tools, with a restricted job-result profile. Include outputs in
+  tool-contract hashes so existing sessions detect output-only changes. Reuse
+  shared schema definitions in model requests without changing their byte ceiling
+  or the complete discovery contracts.
+- Extend the [main design](design.md#requirement-corrections-and-tender-baselines)
+  with source-bound requirement revisions, explicit dispositions and immutable
+  effective tender baselines. Keep their interface/implementation work explicit in
+  [B02/B08](plan/roadmap.md#coverage-matrix-parsing-requirements-evidence-responses-and-checking).
+  Define adjudicated quality measurements and human review effort as trial-release
+  inputs; parser scan diagnostics do not establish gold recall.
+
 ## 2026-10-14: Desktop app bundles PostgreSQL
 
 - Build PostgreSQL 16 from the pinned source release into a relocatable tree with
