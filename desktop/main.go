@@ -12,29 +12,52 @@ import (
 	"github.com/egoist/mygo"
 )
 
-// locate finds the Python server and the PostgreSQL binaries: the copies
-// shipped in the app's resources, or, until those are bundled, the paths in
-// BID_DESKTOP_SERVER and BID_DESKTOP_PG_BIN.
-func locate() (server, pgBin string, err error) {
+// paths are what the backend runs, from the app's resources unless
+// BID_DESKTOP_SERVER and BID_DESKTOP_PG_BIN select a development checkout and
+// PostgreSQL binaries.
+type paths struct {
+	server, python, pgBin string
+	renderer, ocrData     string // empty when the resources lack them
+}
+
+func locate() (paths, error) {
 	resources, err := mygo.App.Path(mygo.PathResources)
 	if err != nil {
-		return "", "", err
+		return paths{}, err
 	}
-	server = filepath.Join(resources, "server")
-	pgBin = filepath.Join(resources, "pgsql", "bin")
+	p := paths{
+		server: filepath.Join(resources, "server"),
+		python: filepath.Join(resources, "python", "bin", "python3"),
+		pgBin:  filepath.Join(resources, "pgsql", "bin"),
+	}
 	if v := os.Getenv("BID_DESKTOP_SERVER"); v != "" {
-		server = v
+		p.server, p.python = v, filepath.Join(v, ".venv", "bin", "python")
 	}
 	if v := os.Getenv("BID_DESKTOP_PG_BIN"); v != "" {
-		pgBin = v
+		p.pgBin = v
 	}
-	if _, err := os.Stat(filepath.Join(server, "alembic.ini")); err != nil {
-		return "", "", fmt.Errorf("server not found at %s: %w", server, err)
+	for _, required := range []string{filepath.Join(p.server, "alembic.ini"), p.python} {
+		if _, err := os.Stat(required); err != nil {
+			return paths{}, fmt.Errorf("server not found: %w", err)
+		}
 	}
-	if _, err := os.Stat(filepath.Join(pgBin, "pg_ctl")); err != nil {
-		return "", "", fmt.Errorf("PostgreSQL not found at %s: %w", pgBin, err)
+	if _, err := os.Stat(filepath.Join(p.pgBin, "pg_ctl")); err != nil {
+		return paths{}, fmt.Errorf("PostgreSQL not found at %s: %w", p.pgBin, err)
 	}
-	return server, pgBin, nil
+	// A development checkout without these falls back to its own renderer
+	// build and runs without OCR data.
+	if v := filepath.Join(resources, "bin", "bid-screenshot-renderer"); exists(v) {
+		p.renderer = v
+	}
+	if v := filepath.Join(resources, "tessdata"); exists(v) {
+		p.ocrData = v
+	}
+	return p, nil
+}
+
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // socketDir is where the cluster's Unix socket lives. macOS limits socket
@@ -106,7 +129,7 @@ func main() {
 }
 
 func start(b *Backend) (string, error) {
-	server, pgBin, err := locate()
+	p, err := locate()
 	if err != nil {
 		return "", err
 	}
@@ -122,6 +145,7 @@ func start(b *Backend) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	b.DataDir, b.LogDir, b.SocketDir, b.ServerDir, b.PGBin = data, logs, socket, server, pgBin
+	b.DataDir, b.LogDir, b.SocketDir = data, logs, socket
+	b.ServerDir, b.Python, b.PGBin, b.Renderer, b.OCRData = p.server, p.python, p.pgBin, p.renderer, p.ocrData
 	return b.Start()
 }

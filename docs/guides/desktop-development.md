@@ -4,20 +4,19 @@ kind: howto
 
 # Build and launch the macOS developer app
 
-Use the MyGo shell with a server checkout of this repository and PostgreSQL.
-This procedure produces a local developer app. Bundled runtimes, supported release
-platforms, installers, distribution signing, notarization and updates are planned in
+Build the MyGo shell with the server, console, Python runtime, screenshot
+renderer and OCR language data inside the app. PostgreSQL still comes from
+outside the app. Supported release platforms, installers, distribution signing,
+notarization and updates are planned in
 [desktop packaging](../plan/desktop-packaging.md).
 
 ## Prepare the dependencies
 
 - Use the Go version in [desktop/go.mod](../../desktop/go.mod) and Bun with the
   dependencies locked in [desktop/bun.lock](../../desktop/bun.lock).
-- Prepare the server checkout's `.venv` from its `pyproject.toml` and `uv.lock`.
-  Its root must contain `alembic.ini`, `server/migrations` and `web/dist`.
-- Build the console in that checkout with `npm ci && npm run build` from `web`.
-  The desktop frontend embeds only the startup screen; the Python API serves
-  the console from the selected checkout's `web/dist`.
+- Staging needs `uv`, Node.js with npm, the Rust toolchain that
+  [scripts/build_screenshot_renderer.sh](../../scripts/build_screenshot_renderer.sh)
+  uses, and network access to download Python, wheels and the OCR data.
 - Provide PostgreSQL 16 binaries, including `initdb`, `pg_ctl`, `psql` and
   `createdb`. The app owns the cluster it creates and stops it on quit.
 
@@ -32,33 +31,47 @@ export PATH="$GOROOT/bin:$PWD/data/work/toolchains/bun:$PATH"
 
 ## Build the app
 
-From `desktop`:
+From `desktop`, stage the bundled resources, then build:
 
 ```sh
+scripts/stage-resources.sh
 bun install --frozen-lockfile
 bun run build --platform darwin/arm64 -skip-dmg -skip-notarize
 ```
 
+[The staging script](../../desktop/scripts/stage-resources.sh) fills the
+gitignored `desktop/resources/darwin-arm64`, which MyGo copies into
+`Contents/Resources`, and fails if a staged library links outside the bundle or
+macOS. Rerun it after server, dependency or console changes. MyGo copies no
+hidden files, so the script renames package `.dylibs` directories and removes
+other hidden files.
+
 The app is `desktop/build/darwin-arm64/AI Bid.app`, relative to the worktree root.
 MyGo applies its default ad hoc signature for local execution. These flags make
-no installer and submit nothing to a notarization or release service.
+no installer and submit nothing to a notarization or release service. The bundle
+stays read-only at run time: bytecode is compiled during staging and the server
+writes none, so the signature stays valid after launches.
 
-## Launch with external runtimes
+## Launch
 
 Use a dedicated macOS development account with no existing AI Bid installation
 for disposable acceptance. An ordinary launch writes the account's normal app
 data and persistent WebKit storage. The runtime overrides below select software
 locations; they do **not** isolate installation data.
 
-From the worktree root, set paths for the prepared server checkout and
-PostgreSQL binaries, then execute the bundle's binary so the environment is
-inherited:
+From the worktree root, select the PostgreSQL binaries and execute the bundle's
+binary so the environment is inherited:
 
 ```sh
-export BID_DESKTOP_SERVER=/absolute/path/to/ai-bid-tool
 export BID_DESKTOP_PG_BIN=/opt/homebrew/opt/postgresql@16/bin
 "$PWD/desktop/build/darwin-arm64/AI Bid.app/Contents/MacOS/AI Bid"
 ```
+
+To run server changes without restaging, also set `BID_DESKTOP_SERVER` to a
+checkout whose root holds `alembic.ini`, `server/migrations`, a built `web/dist`
+and a `.venv` prepared from `pyproject.toml` and `uv.lock`; the app then runs
+that checkout's `.venv/bin/python`. The bundled renderer and OCR data are used
+in both cases.
 
 The main window opens the task page after the shell exchanges its generated
 installation access key. Do not print the key or `installation.json`. Quit with
@@ -77,7 +90,8 @@ keys or a changed console port only when necessary.
 ## Optional services
 
 Vendor search uses the Perplexity API: add a Perplexity credential under
-服务凭据 in the console; until then search reports itself unavailable. The
+服务凭据 in the console; until then search reports itself unavailable. Screenshot
+annotation and local OCR use the bundled renderer and language data. The
 developer app configures no Office converter and no browser sandbox, so export
 page previews and sandbox captures are unavailable; their desktop outcomes are
 decisions D5 and D6 in [desktop packaging](../plan/desktop-packaging.md#decisions).

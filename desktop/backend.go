@@ -41,8 +41,11 @@ type Backend struct {
 	DataDir   string // user data: cluster, files, installation.json
 	LogDir    string
 	SocketDir string // must be short and free of spaces; see socketDir
-	ServerDir string // checkout or bundle holding alembic.ini and .venv
+	ServerDir string // holds alembic.ini, server/migrations and web/dist
+	Python    string // interpreter with the server installed
 	PGBin     string // initdb, pg_ctl, psql, createdb
+	Renderer  string // screenshot renderer; empty uses the server's default
+	OCRData   string // tessdata directory; empty leaves OCR to the server's default
 
 	install           *installation
 	installationDirty bool
@@ -88,13 +91,12 @@ func (b *Backend) Start() (string, error) {
 		return "", fmt.Errorf("installation keys: %w", err)
 	}
 	b.url = "http://127.0.0.1:" + port
-	python := filepath.Join(b.ServerDir, ".venv", "bin", "python")
-	api, err := b.spawn("api.log", python, "-m", "uvicorn", "app.api.main:create_app", "--factory",
+	api, err := b.spawn("api.log", b.Python, "-m", "uvicorn", "app.api.main:create_app", "--factory",
 		"--host", "127.0.0.1", "--port", port, "--no-access-log")
 	if err != nil {
 		return "", err
 	}
-	if _, err := b.spawn("worker.log", python, "-m", "app.jobs.worker"); err != nil {
+	if _, err := b.spawn("worker.log", b.Python, "-m", "app.jobs.worker"); err != nil {
 		return "", err
 	}
 	if err := b.waitHealthy(api, 90*time.Second); err != nil {
@@ -230,13 +232,17 @@ func (b *Backend) databaseURL(role string) string {
 // baseEnv is the whole environment of the server processes: the user's shell
 // variables never reach them, so a stray BID_* setting cannot change the app.
 func (b *Backend) baseEnv() []string {
-	return []string{
+	env := []string{
 		"HOME=" + os.Getenv("HOME"),
 		"TMPDIR=" + os.TempDir(),
 		"PATH=" + b.PGBin + ":/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
 		"LANG=en_US.UTF-8",
 		"LC_ALL=en_US.UTF-8",
 		"PYTHONUNBUFFERED=1",
+		// The bundled interpreter is read-only and ships its own bytecode;
+		// packages in the user's site directory must not shadow its own.
+		"PYTHONDONTWRITEBYTECODE=1",
+		"PYTHONNOUSERSITE=1",
 		"BID_DATABASE_URL=" + b.databaseURL("bid_app"),
 		"BID_ACCESS_KEY=" + b.install.AccessKey,
 		"BID_ENCRYPTION_KEY=" + b.install.EncryptionKey,
@@ -248,6 +254,13 @@ func (b *Backend) baseEnv() []string {
 		// credential added under 服务凭据, and reports itself unavailable without one.
 		"BID_SEARCH_PROVIDER=perplexity",
 	}
+	if b.Renderer != "" {
+		env = append(env, "BID_SCREENSHOT_RENDERER="+b.Renderer)
+	}
+	if b.OCRData != "" {
+		env = append(env, "BID_OCR_DATA_DIR="+b.OCRData)
+	}
+	return env
 }
 
 func (b *Backend) ownerEnv() []string {
@@ -255,7 +268,7 @@ func (b *Backend) ownerEnv() []string {
 }
 
 func (b *Backend) runPython(logName string, env []string, args ...string) error {
-	cmd := exec.Command(filepath.Join(b.ServerDir, ".venv", "bin", "python"), args...)
+	cmd := exec.Command(b.Python, args...)
 	cmd.Dir = b.ServerDir
 	cmd.Env = env
 	log, err := os.OpenFile(filepath.Join(b.LogDir, logName), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)

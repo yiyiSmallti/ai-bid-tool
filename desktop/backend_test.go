@@ -78,7 +78,7 @@ func TestStartInstallationPersistence(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer os.RemoveAll(root)
-			b := &Backend{DataDir: filepath.Join(root, "data"), LogDir: filepath.Join(root, "logs"), SocketDir: filepath.Join(root, "socket"), ServerDir: server, PGBin: pgBin}
+			b := &Backend{DataDir: filepath.Join(root, "data"), LogDir: filepath.Join(root, "logs"), SocketDir: filepath.Join(root, "socket"), ServerDir: server, Python: filepath.Join(server, ".venv", "bin", "python"), PGBin: pgBin}
 			defer b.Stop()
 			for _, dir := range []string{b.DataDir, b.LogDir, b.SocketDir} {
 				if err := os.MkdirAll(dir, 0700); err != nil {
@@ -137,7 +137,7 @@ func TestStartInstallationPersistence(t *testing.T) {
 				t.Fatal("installation must remain owner-only")
 			}
 			b.Stop()
-			restarted := &Backend{DataDir: b.DataDir, LogDir: b.LogDir, SocketDir: b.SocketDir, ServerDir: server, PGBin: pgBin}
+			restarted := &Backend{DataDir: b.DataDir, LogDir: b.LogDir, SocketDir: b.SocketDir, ServerDir: server, Python: filepath.Join(server, ".venv", "bin", "python"), PGBin: pgBin}
 			defer restarted.Stop()
 			if _, err := restarted.Start(); err != nil {
 				t.Fatal(err)
