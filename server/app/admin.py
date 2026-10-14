@@ -13,6 +13,9 @@ import sys
 import procrastinate
 from alembic import command
 from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from alembic.util import CommandError
 from psycopg import sql
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
@@ -77,6 +80,32 @@ def initialize_database():
                 )
             )
     engine.dispose()
+
+
+def migration_status() -> dict:
+    """Read-only: whether init-db would migrate the selected database.
+
+    A database without revisions is new and one at revisions these migrations do
+    not know is incompatible; neither is pending, since init-db would create the
+    former and refuse the latter. The desktop app backs up a pending database first.
+    """
+    script = ScriptDirectory.from_config(Config("alembic.ini"))
+    heads = sorted(script.get_heads())
+    engine = create_engine(os.environ["BID_MIGRATION_DATABASE_URL"], hide_parameters=True)
+    try:
+        with engine.connect() as connection:
+            current = sorted(MigrationContext.configure(connection).get_current_heads())
+    finally:
+        engine.dispose()
+    try:
+        known = all(script.get_revision(revision) is not None for revision in current)
+    except CommandError:
+        known = False
+    return {
+        "current_revisions": current,
+        "head_revisions": heads,
+        "upgrade_pending": bool(current) and known and current != heads,
+    }
 
 
 # Every column written with Secrets.encrypt. A new encrypted column must be added here.
@@ -322,6 +351,7 @@ def main():
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("init-db")
+    commands.add_parser("migration-status")
     commands.add_parser("rotate-provider-secrets")
     rotate = commands.add_parser("rotate-encryption")
     rotate.add_argument("--scope", choices=("data", "provider-secrets"), default="data")
@@ -329,6 +359,8 @@ def main():
     if args.command == "init-db":
         initialize_database()
         print("Selected development database initialized; runtime role is restricted")
+    elif args.command == "migration-status":
+        print(json.dumps(migration_status()))
     elif args.command in {"rotate-encryption", "rotate-provider-secrets"}:
         if args.command == "rotate-provider-secrets" or args.scope == "provider-secrets":
             from sqlalchemy.exc import SQLAlchemyError

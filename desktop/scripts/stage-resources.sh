@@ -2,8 +2,8 @@
 # Stages what the app runs into resources/darwin-arm64, which `mygo build`
 # copies into Contents/Resources: a standalone Python with the server and its
 # locked dependencies installed, the files init-db and the console read from
-# the server directory, the screenshot renderer and the OCR language data.
-# PostgreSQL is not staged yet; BID_DESKTOP_PG_BIN selects it.
+# the server directory, PostgreSQL, the screenshot renderer and the OCR
+# language data.
 set -eu
 
 desktop_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -68,6 +68,8 @@ cp -R "$repository_dir/server/migrations" "$out/server/server/"
 find "$out/server" -name __pycache__ -type d -prune -exec rm -rf {} +
 (cd "$repository_dir/web" && npm ci --no-audit --no-fund && npm run build)
 cp -R "$repository_dir/web/dist" "$out/server/web/dist"
+
+"$desktop_dir/scripts/build-postgres.sh" "$out/pgsql"
 
 "$repository_dir/scripts/build_screenshot_renderer.sh"
 install -m 0755 "$repository_dir/data/work/bin/bid-screenshot-renderer" "$out/bin/"
