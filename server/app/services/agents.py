@@ -51,6 +51,7 @@ from app.services import preflight as preflight_service
 from app.services.auth import AGENT_SCOPES, set_actor_context
 from app.services.response_cards import access, generation_materials_stale, linked_evidence
 from app.services.task_access import access as task_access
+from app.services.task_access import visible_task
 from app.services.versioned import audit
 
 TERMINAL = {"completed", "partial", "failed", "cancelled"}
@@ -186,12 +187,12 @@ async def session_record(session, actor, session_id, *, lock=False):
     query = select(AgentSession).where(
         AgentSession.id == session_id,
     )
-    if lock:
-        target = await session.scalar(query)
-        if target is None:
-            raise not_found()
-        # Admission and usage recording lock Task before AgentSession.
-        await session.scalar(select(Task).where(Task.id == target.task_id).with_for_update())
+    target = await session.scalar(query)
+    if target is None:
+        raise not_found()
+    # Only the project's members see its agents. Admission and usage recording
+    # lock Task before AgentSession.
+    await visible_task(session, actor, target.task_id, lock=lock)
     row = await session.scalar(query.with_for_update() if lock else query)
     if row is None:
         raise not_found()
