@@ -129,7 +129,7 @@ class AuditLog(Base):
     agent_principal_id: Mapped[UUID | None] = mapped_column(nullable=True)
     agent_session_id: Mapped[UUID | None] = mapped_column(nullable=True)
     agent_step_id: Mapped[UUID | None] = mapped_column(nullable=True)
-    # Filled by the attribution trigger; the worker acts for this member.
+    # Filled by the attribution trigger.
     actor_member_id: Mapped[UUID | None] = mapped_column(nullable=True)
     invocation_id: Mapped[UUID | None] = mapped_column(nullable=True)
     command: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -862,6 +862,8 @@ class Job(Base):
     agent_principal_id: Mapped[UUID | None] = mapped_column(nullable=True)
     agent_session_id: Mapped[UUID | None] = mapped_column(nullable=True)
     agent_step_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    # Filled by the attribution trigger; the worker acts for this member.
+    actor_member_id: Mapped[UUID | None] = mapped_column(nullable=True)
     invocation_id: Mapped[UUID | None] = mapped_column(nullable=True)
     command: Mapped[str | None] = mapped_column(String(100), nullable=True)
     bid_submission_document_id: Mapped[UUID | None] = mapped_column(nullable=True)

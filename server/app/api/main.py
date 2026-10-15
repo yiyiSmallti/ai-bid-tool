@@ -25,7 +25,7 @@ from app.providers.disabled import DisabledLLM
 from app.providers.local_ocr import LocalOCR
 from app.providers.storage import create_storage
 from app.schemas.contracts import CONTRACT_VERSION, Result
-from app.services.auth import authenticate, set_actor_context
+from app.services.auth import authenticate, require_current_password, set_actor_context
 
 RESOURCE_MANAGEMENT_READS = {
     "memory_browse",
@@ -390,6 +390,7 @@ def create_app(
                     crypto,
                     settings,
                 )
+                require_current_password(identity, request.scope["route"].name)
                 identity.invocation_id = uuid4()
                 session.info["command"] = command
                 await set_actor_context(session, identity)

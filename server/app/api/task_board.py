@@ -27,7 +27,7 @@ from app.schemas.task_board import (
     TaskProgressQuery,
 )
 from app.services import requirement_board, task_board, task_events
-from app.services.auth import authenticate, set_actor_context
+from app.services.auth import authenticate, require_current_password, set_actor_context
 from app.services.task_access import access
 
 MAX_RESULT_BYTES = 1024 * 1024
@@ -188,6 +188,7 @@ def create_router(context, db, storage, queue, settings):
             ):
                 await session.execute(text("SET LOCAL statement_timeout='2000ms'"))
                 actor = await authenticate(session, credentials.credentials, crypto, settings)
+                require_current_password(actor, "task_board")
                 await set_actor_context(session, actor)
                 session.info["memory_settings"] = settings
                 yield session, actor
