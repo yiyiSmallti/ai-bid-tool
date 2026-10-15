@@ -4909,6 +4909,32 @@
                 "title": "Content Sha256",
                 "type": "string"
               },
+              "covers_from": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Covers From"
+              },
+              "covers_to": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Covers To"
+              },
               "created_at": {
                 "format": "date-time",
                 "title": "Created At",
@@ -4929,7 +4955,8 @@
                   "human",
                   "assistant",
                   "tool",
-                  "system"
+                  "system",
+                  "summary"
                 ],
                 "title": "Role",
                 "type": "string"
@@ -7277,7 +7304,8 @@
               "kind": {
                 "enum": [
                   "decision",
-                  "tool"
+                  "tool",
+                  "summary"
                 ],
                 "title": "Kind",
                 "type": "string"

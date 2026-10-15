@@ -38,6 +38,9 @@ ToolCommand = Literal[
     "source read",
 ]
 TOOL_LIMIT = 9
+# Long sessions are bounded by estimated tokens, not by message count; this only
+# caps one request's list so a malformed history cannot grow it without limit.
+MESSAGE_LIMIT = 80
 SessionState = Literal[
     "queued", "running", "waiting_job", "paused", "completed", "partial", "failed", "cancelled"
 ]
@@ -262,18 +265,20 @@ class AgentMessageView(Contract):
     id: UUID
     session_id: UUID
     ordinal: int = Field(strict=True, ge=1)
-    role: Literal["human", "assistant", "tool", "system"]
+    role: Literal["human", "assistant", "tool", "system", "summary"]
     step_id: UUID | None = None
     content: str = Field(max_length=8000)
     content_sha256: Sha256
     created_at: AwareDatetime
+    covers_from: int | None = Field(default=None, strict=True, ge=1)
+    covers_to: int | None = Field(default=None, strict=True, ge=1)
 
 
 class AgentStepView(Contract):
     id: UUID
     session_id: UUID
     ordinal: int = Field(strict=True, ge=1)
-    kind: Literal["decision", "tool"]
+    kind: Literal["decision", "tool", "summary"]
     state: StepState
     command: ToolCommand | None = None
     created_by_job_id: UUID
@@ -388,7 +393,7 @@ class AgentJobResult(Contract):
 class AgentDecisionRequest(Contract):
     session_id: UUID
     step_id: UUID
-    messages: list[AgentMessageView] = Field(max_length=40)
+    messages: list[AgentMessageView] = Field(max_length=MESSAGE_LIMIT)
     tools: list[AgentToolDefinition] = Field(max_length=TOOL_LIMIT)
     input_refs: list[AgentInputRef] = Field(max_length=100)
     remaining_steps: int = Field(strict=True, ge=1, le=64)
@@ -442,3 +447,32 @@ class AgentRecoveryProvider(Protocol):
     """Internal installation queue recovery; not a model tool."""
 
     async def wake(self, session_id: UUID, now: datetime) -> AgentJobResult: ...
+
+
+class PendingHumanAction(Contract):
+    resource_id: UUID | None = None
+    action: str = Field(min_length=1, max_length=300)
+
+
+class AgentSummary(Contract):
+    """Closed model output that replaces older messages in later requests."""
+
+    goal: str = Field(min_length=1, max_length=1500)
+    progress: str = Field(min_length=1, max_length=3000)
+    open_gaps: list[Annotated[str, Field(min_length=1, max_length=300)]] = Field(max_length=20)
+    pending_human_actions: list[PendingHumanAction] = Field(max_length=30)
+
+
+class AgentSummaryRequest(Contract):
+    session_id: UUID
+    step_id: UUID
+    covers_from: int = Field(strict=True, ge=1)
+    covers_to: int = Field(strict=True, ge=1)
+    messages: list[AgentMessageView] = Field(min_length=1, max_length=MESSAGE_LIMIT)
+    pending_resources: list[UUID] = Field(max_length=100)
+    deadline: AwareDatetime
+
+
+class AgentSummaryOutput(Contract):
+    summary: AgentSummary
+    usage: ProviderUsage

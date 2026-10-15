@@ -239,18 +239,21 @@ class AgentMessageView(Contract):
     id: UUID
     session_id: UUID
     ordinal: int = Field(strict=True, ge=1)
-    role: Literal["human", "assistant", "tool", "system"]
+    role: Literal["human", "assistant", "tool", "system", "summary"]
     step_id: UUID | None = None
     content: str = Field(max_length=8000)
     content_sha256: Sha256
     created_at: AwareDatetime
+    # Set only on a summary: the message ordinals it replaces in later requests.
+    covers_from: int | None = Field(default=None, strict=True, ge=1)
+    covers_to: int | None = Field(default=None, strict=True, ge=1)
 
 
 class AgentStepView(Contract):
     id: UUID
     session_id: UUID
     ordinal: int = Field(strict=True, ge=1)
-    kind: Literal["decision", "tool"]
+    kind: Literal["decision", "tool", "summary"]
     state: StepState
     command: ToolCommand | None = None
     created_by_job_id: UUID
@@ -365,7 +368,7 @@ class AgentJobResult(Contract):
 class AgentDecisionRequest(Contract):
     session_id: UUID
     step_id: UUID
-    messages: list[AgentMessageView] = Field(max_length=40)
+    messages: list[AgentMessageView] = Field(max_length=80)
     tools: list[AgentToolDefinition] = Field(max_length=7)
     input_refs: list[AgentInputRef] = Field(max_length=100)
     remaining_steps: int = Field(strict=True, ge=1, le=64)
