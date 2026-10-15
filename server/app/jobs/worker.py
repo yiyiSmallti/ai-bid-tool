@@ -1,7 +1,10 @@
 import asyncio
+import json
+import sys
 
 from app.core.config import Settings
 from app.core.db import Database
+from app.core.errors import ServiceError
 from app.jobs.processor import Processor
 from app.jobs.queue import Queue
 from app.providers.disabled import DisabledLLM
@@ -13,7 +16,12 @@ from app.providers.storage import create_storage
 async def run():
     settings = Settings.load()
     db = Database(settings)
-    await db.verify_role()
+    try:
+        await db.verify_role()
+    except ServiceError as exc:
+        await db.engine.dispose()
+        print(json.dumps({"error": exc.code, "message": exc.message}), file=sys.stderr)
+        raise SystemExit(exc.exit_code) from None
     queue = Queue(settings)
 
     async def resolve(session, job=None):
