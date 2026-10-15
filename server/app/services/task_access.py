@@ -1,10 +1,15 @@
-"""Task existence, scoped authority and transaction-local actor attribution."""
+"""Task existence, project visibility, scoped authority and actor attribution.
+
+On a gateway a project is visible to administrators and to its members only;
+everyone else gets `not_found`, the same answer as for a missing task. Worker
+steps skip the check: a job admitted before a member left the project finishes.
+"""
 
 from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, exists, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +45,28 @@ async def live_actor(session: AsyncSession, actor: Identity) -> Identity:
     return replace(actor, scopes=scopes)
 
 
+def visibility(actor: Identity) -> ColumnElement[bool] | None:
+    """The predicate on `Task.id` that limits what `actor` sees, or None for everything."""
+    if actor.member_id is None or actor.member_role == "admin" or actor.actor_kind == "worker":
+        return None
+    return exists().where(TaskMember.task_id == Task.id, TaskMember.member_id == actor.member_id)
+
+
+async def visible_task(
+    session: AsyncSession, actor: Identity, task_id: UUID, *, lock: bool = False
+) -> Task:
+    query = select(Task).where(Task.id == task_id)
+    condition = visibility(actor)
+    if condition is not None:
+        query = query.where(condition)
+    if lock:
+        query = query.with_for_update(of=Task)
+    task = await session.scalar(query.execution_options(populate_existing=True))
+    if task is None:
+        raise not_found()
+    return task
+
+
 async def access(
     session: AsyncSession,
     actor: Identity,
@@ -51,13 +78,7 @@ async def access(
     bind_context: bool = True,
 ) -> Task:
     # Preparation may defer the write lock, but publication must repeat the gate.
-    query = select(Task).where(Task.id == task_id)
-    should_lock = write if lock is None else lock
-    if should_lock:
-        query = query.with_for_update()
-    task = await session.scalar(query.execution_options(populate_existing=True))
-    if task is None:
-        raise not_found()
+    task = await visible_task(session, actor, task_id, lock=write if lock is None else lock)
     live = await live_actor(session, actor)
     live.require("task:read")
     live.require(scope)
