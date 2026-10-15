@@ -51,6 +51,8 @@ func nativeWarning(code string) string {
 		return message
 	case code == "manual_scope:extraction_completeness_not_asserted":
 		return "当前集合来自人工补录，不声明已完整覆盖招标文件"
+	case strings.HasPrefix(code, "content_blocked:"):
+		return "模型服务的内容审核拦截了 " + strings.TrimPrefix(code, "content_blocked:") + " 段原文，这些段落未抽取，请在拒绝回执中查看位置并人工补录"
 	case strings.HasPrefix(code, "extraction_rejected:"):
 		return "抽取有 " + strings.TrimPrefix(code, "extraction_rejected:") + " 项被拒绝，请核对拒绝回执与遗漏要求"
 	default:

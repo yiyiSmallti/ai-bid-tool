@@ -6,6 +6,17 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Faster tender extraction
+
+- Cut Word sections longer than the batch budget into runs of whole blocks, and
+  run eight model calls at once by default, so one long section no longer holds
+  up the whole extraction.
+- Let the model leave a requirement's text empty when its quote already states
+  it; the quote is saved as the text.
+- Retry a batch that the model service's content review blocks in smaller
+  parts, and skip only the passage that stays blocked, listed in the rejection
+  receipt, instead of failing the extraction.
+
 ## 2026-10-15: Native client visual redesign
 
 - Hide the system title bar and redraw the shell: brand mark, icon navigation,

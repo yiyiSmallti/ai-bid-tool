@@ -54,6 +54,17 @@ class TruncatedOutput(ProviderFailure):
         )
 
 
+class ContentBlocked(ProviderFailure):
+    """The vendor's content review rejected the request; a smaller part may pass."""
+
+    def __init__(self, usage: list[ProviderUsage] | None = None):
+        super().__init__(
+            "The model service's content review blocked the request",
+            code="provider_content_blocked",
+            usage=usage,
+        )
+
+
 class LLMProvider(Protocol):
     name: str
     model: str
