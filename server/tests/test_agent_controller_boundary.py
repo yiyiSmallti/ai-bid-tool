@@ -42,6 +42,7 @@ async def test_child_read_identity_cannot_publish_controller_receipts(
         agent_principal_id=principal_id,
         agent_session_id=session_id,
         invocation_id=uuid4(),
+        actor_member_id=None,
     )
     step = SimpleNamespace(
         id=step_id,
