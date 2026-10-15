@@ -5,7 +5,6 @@
 # repository credentials and GitHub holds no host credentials. Layout under $ROOT:
 #   compose.override.yml, secrets/bid.env   host configuration (never replaced)
 #   releases/<sha>/                         extracted sources, src -> current release
-#   web/dist/                               console assets served by the API
 #   backups/                                pg_dump before every migrating deploy
 #   deploy-state/{deployed,failed,sandbox-attention}
 set -euo pipefail
@@ -13,7 +12,7 @@ umask 022
 
 ROOT=${BID_DEPLOY_ROOT:-/opt/bid-tool}
 REPO=${BID_DEPLOY_REPO:-yiyiSmallti/ai-bid-tool}
-CHECKS=${BID_DEPLOY_CHECKS:-python web}
+CHECKS=${BID_DEPLOY_CHECKS:-python}
 HEALTH_URL=${BID_DEPLOY_HEALTH_URL:-https://bid.smallti.com:8443/health}
 HEALTH_RESOLVE=${BID_DEPLOY_HEALTH_RESOLVE:-bid.smallti.com:8443:127.0.0.1}
 KEEP_RELEASES=${BID_DEPLOY_KEEP_RELEASES:-4}
@@ -116,10 +115,6 @@ else
   new_migrations=unknown
 fi
 
-log "building console"
-(cd "$rel/web" && npm ci --no-audit --no-fund --loglevel=error && npm run build >/dev/null) \
-  || fail "console build"
-
 log "building images"
 for service in migrate server worker; do
   if sudo -n docker image inspect "bidtool-$service:latest" >/dev/null 2>&1; then
@@ -169,7 +164,6 @@ rollback() {
     sudo -n docker tag "bidtool-$service:prev" "bidtool-$service:latest"
   done
   compose "$previous" up -d --no-build migrate server worker >/dev/null 2>&1 || true
-  rsync -a --delete "$previous/web/dist/" web/dist/ 2>/dev/null || true
   # The previous release can fail too, for example after a host configuration change
   # it does not support; say so instead of reporting a successful rollback.
   if ! reason=$(healthy); then
@@ -180,7 +174,6 @@ rollback() {
 
 compose "$rel" up -d --no-build migrate server worker >"$STATE/up.log" 2>&1 \
   || rollback "compose up (see deploy-state/up.log)"
-rsync -a --delete "$rel/web/dist/" web/dist/
 
 reason=$(healthy) || rollback "$reason (see deploy-state/server.log and worker.log)"
 

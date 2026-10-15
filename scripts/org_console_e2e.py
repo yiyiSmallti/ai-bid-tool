@@ -1,4 +1,4 @@
-"""Provision the single-user console browser fixture through API and job processor.
+"""Provision the single-user native console fixture through API and job processor.
 
 The script accepts only a PostgreSQL database whose name starts with ``bid_test``.
 It creates every business object through the authenticated application API. Parse, extraction and draft jobs are run
@@ -6,7 +6,7 @@ by the production Processor. The only vendor is an in-process
 ``httpx.MockTransport`` returning explicitly synthetic, exact citations.
 
 The generated manifest contains object IDs and fixture metadata needed by
-Playwright. It never contains passwords, sessions, authorization headers, signed
+native acceptance consumers. It never contains passwords, sessions, authorization headers, signed
 URLs or vendor request bodies. Run artifacts and storage must stay under
 ``data/work`` in this worktree.
 """
@@ -76,9 +76,9 @@ def configured_data_directory() -> Path:
     return data_dir
 
 
-def write_browser_materials(output: Path) -> dict[str, str]:
-    pdf_path = output / "browser-upload-synthetic.pdf"
-    word_path = output / "browser-upload-synthetic.docx"
+def write_upload_materials(output: Path) -> dict[str, str]:
+    pdf_path = output / "upload-synthetic.pdf"
+    word_path = output / "upload-synthetic.docx"
     pdf_path.write_bytes(pdf_fixture(2, "A"))
     word_path.write_bytes(word_fixture(4, "A"))
     return {"pdf": str(pdf_path), "word": str(word_path)}
@@ -207,11 +207,10 @@ class FixtureQueue:
         return len(self.calls)
 
 
-def fixture_settings(data_dir: Path, *, web_dir: Path | None = None) -> Settings:
+def fixture_settings(data_dir: Path) -> Settings:
     return Settings.load().model_copy(
         update={
             "data_dir": data_dir,
-            "web_dir": web_dir,
             "llm_provider": "openai",
             "llm_model": SYNTHETIC_MODEL,
             "llm_api_key": None,
@@ -1118,7 +1117,7 @@ async def provision(output: Path) -> Path:
             "BID_TEST_ADMIN_URL and BID_DATABASE_URL must select the same test database"
         )
     data_dir = await asyncio.to_thread(configured_data_directory)
-    browser_materials = await asyncio.to_thread(write_browser_materials, output)
+    upload_materials = await asyncio.to_thread(write_upload_materials, output)
 
     settings = fixture_settings(data_dir)
     vendor = SyntheticVendor()
@@ -1153,7 +1152,7 @@ async def provision(output: Path) -> Path:
         "tasks": {"a": public_task_data(task_a), "b": public_task_data(task_b)},
         "review": review,
         "previews": previews,
-        "browser_materials": browser_materials,
+        "upload_materials": upload_materials,
         "expectations": {
             "large_requirement_count": WORD_REQUIREMENTS,
             "page_size": 50,
@@ -1174,7 +1173,7 @@ def main() -> None:
     parser.add_argument(
         "--serve",
         action="store_true",
-        help="Serve the built console and synthetic API after provisioning",
+        help="Serve the synthetic API for native consumer verification after provisioning",
     )
     parser.add_argument("--host", choices=("127.0.0.1",), default="127.0.0.1")
     parser.add_argument("--port", type=tcp_port, default=8000)
@@ -1185,10 +1184,7 @@ def main() -> None:
     if args.serve:
         import uvicorn
 
-        web_dir = REPO_ROOT / "web" / "dist"
-        if not (web_dir / "index.html").is_file():
-            raise SystemExit("Run npm run build in web/ before --serve")
-        settings = fixture_settings(configured_data_directory(), web_dir=web_dir)
+        settings = fixture_settings(configured_data_directory())
         app = fixture_app(settings, SyntheticVendor(), run_jobs=True)
         uvicorn.run(app, host=args.host, port=args.port, access_log=False)
 

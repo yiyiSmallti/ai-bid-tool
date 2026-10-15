@@ -6,6 +6,65 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Native client visual redesign
+
+- Hide the system title bar and redraw the shell: brand mark, icon navigation,
+  current task card with deadline, page breadcrumbs and a busy indicator.
+- Rebuild the access key, task list and task detail pages: deadline statistics,
+  searchable task rows, modal task creation, a six-step preparation flow and
+  sectioned document, extraction and export cards.
+- Give shared tables status badges and local times, library lists a search and
+  status toolbar, and paging controls only when a listing spans pages. The
+  [native console note](notes/org-console.md#native-rendering-boundary) records
+  the rules.
+- Align form labels, metadata, paging and library filters across inner pages,
+  with compact IDs, localized values and context-specific empty states.
+- Show the latest parse result on the task detail page with translated parse
+  warnings, and browse a Word document's parsed sections in an outline with
+  paragraphs and tables, or a PDF page beside its extracted text.
+- Show a running job's in-flight model calls and localized job kind, mark the
+  extraction step as in progress, and show the extraction failure notice only
+  when the newest run failed.
+- Explain failed extraction records and their preflight/retry requirement, and
+  align confidential panels and model configuration details with shared sections.
+
+## 2026-10-15: Native bid preparation workspace design
+
+- Rework the shared MyGo shell into a task workflow sidebar, collapsible library
+  and settings groups, a clear page header and native light/dark typography.
+  Replace uniform button emphasis with explicit primary and destructive actions.
+- Reshape task creation/detail, requirement and response review, library forms,
+  report records and installation panels around readable content and grouped
+  actions. Resource editors keep save/cancel outside their scrolling fields;
+  tables use compact variable-height rows, useful column widths and direct opening.
+- Clear table selection when its row snapshot changes, preserve literal names and
+  button labels, and keep extraction context separate from memory candidate job
+  identifiers. The [native console note](notes/org-console.md#native-rendering-boundary)
+  records these interaction rules; API, review and confidential-value contracts remain.
+- Make native selector options actionable through accessibility, label requirement
+  collections from existing document/history metadata, and accept ordinary date/time
+  entry for task deadlines while preserving local-time interpretation.
+
+## 2026-10-15: MyGo native console rendering
+
+- Replace all 39 console page contracts with MyGo 0.4.5 native Go views, covering
+  tasks, tender parsing and requirement review, response/evidence review, checks,
+  scoring, bid reviews, exports, resource libraries and installation settings.
+  Internal routes preserve task, extraction and revision scope; the
+  [native console note](notes/org-console.md#page-routes) maps every page to its implementation.
+- Retain the existing API/CLI and human confirmation gates. Native consumers preserve
+  exact revisions, source citations, protected downloads, saved-job recovery, SSE
+  invalidation and explicit model preflight. Confidential values use transient state
+  and clear through the window lifecycle and expiry handlers.
+- Remove the Vue application, JavaScript build/dependencies, static-console mounting,
+  browser wiring tests and obsolete deployment steps. Desktop packaging now builds
+  the native UI with its local API, worker, PostgreSQL and bundled runtime resources.
+- Add consumer regressions for authorization loss, partial reports, rejected
+  confirmation, origin boundaries, credential-safe errors, verified file saving and
+  late results after navigation. Actual-window acceptance and isolated runtime cleanup
+  follow the [desktop development guide](guides/desktop-development.md#verify-without-using-default-account-data).
+  Complete-response parsing rejects appended JSON values and garbage.
+
 ## 2026-10-14: Extraction evaluation, job delivery and agent output contracts
 
 - Replace page/block-only star recall with source-position and clause-content

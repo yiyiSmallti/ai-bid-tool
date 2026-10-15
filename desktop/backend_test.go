@@ -178,10 +178,8 @@ func TestStartBacksUpBeforeMigration(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(root) })
 	serverDir := filepath.Join(root, "server")
 	versions := filepath.Join(serverDir, "server", "migrations", "versions")
-	for _, dir := range []string{filepath.Join(serverDir, "server"), filepath.Join(serverDir, "web", "dist")} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.MkdirAll(filepath.Join(serverDir, "server"), 0o700); err != nil {
+		t.Fatal(err)
 	}
 	for _, copy := range [][2]string{
 		{filepath.Join(server, "alembic.ini"), serverDir},
@@ -191,7 +189,6 @@ func TestStartBacksUpBeforeMigration(t *testing.T) {
 			t.Fatalf("%v: %s", err, out)
 		}
 	}
-	writeFile(t, filepath.Join(serverDir, "web", "dist", "index.html"), "<!doctype html><title>probe</title>\n")
 	setRevision := func(revision, down, statement string) {
 		writeFile(t, filepath.Join(versions, revision+"_probe.py"), fmt.Sprintf(
 			"from alembic import op\n\nrevision = %q\ndown_revision = %q\n\n\ndef upgrade():\n    op.execute(%q)\n",

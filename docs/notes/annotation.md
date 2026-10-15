@@ -152,11 +152,9 @@ re-preview. Scoped tokens can inspect permitted metadata but cannot submit, atta
   protocol; [main.rs](../../stamp/src/main.rs): same-binary protocol dispatch.
 - [annotation.py](../../cli/bid_cli/annotation.py) and
   [schema.py](../../cli/bid_cli/schema.py): command registration, wait and discovery.
-- [OrgAnnotation.vue](../../web/src/views/OrgAnnotation.vue),
-  [annotation.js](../../web/src/annotation.js), and
-  [CardEditor.vue](../../web/src/components/CardEditor.vue): bounded editor, typed
-  image source and explicit human evidence attachment.
-- [test_annotation_cli.py](../../server/tests/test_annotation_cli.py),
-  [annotation.spec.js](../../web/e2e/annotation.spec.js), and
-  [annotation-fixture.js](../../web/e2e/annotation-fixture.js): transport snapshots and
-  mocked console acceptance with failure scenarios.
+- [Native annotation editor](../../desktop/native_annotations.go) and
+  [response editor](../../desktop/native_responses.go): bounded controls, typed
+  image sources and explicit human evidence attachment.
+- [CLI acceptance](../../server/tests/test_annotation_cli.py): transport snapshots.
+  Native rendering and isolated window acceptance follow the
+  [console boundary](org-console.md#native-rendering-boundary).

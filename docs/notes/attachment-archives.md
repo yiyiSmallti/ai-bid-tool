@@ -87,5 +87,6 @@ resolvers deny stale use before projections catch up.
   [storage and integrity acceptance](../../server/tests/test_attachment_storage.py),
   [fixed-scale reads](../../server/tests/test_attachment_scale.py), and
   [CLI checks](../../server/tests/test_attachment_cli.py).
-- [Browser scenarios](../../web/e2e/attachment-management.spec.js) and the
+- [Native archive pages](../../desktop/native_management_attachments.go),
+  [task attachments](../../desktop/native_management_task_attachments.go) and the
   [acceptance plan](../plan/attachment-archive.md#acceptance-plan).

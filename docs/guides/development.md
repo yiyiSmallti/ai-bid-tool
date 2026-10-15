@@ -45,8 +45,9 @@ need no database still run.
 checks in CI on pull requests that are not drafts; it skips the suite whose files a
 pull request leaves unchanged and can be started by hand from the Actions tab. Open a
 pull request as a draft while still pushing fixes, and mark it ready for review to run
-the checks once; the required `python` and `web` checks fail on drafts so a draft cannot
-be merged on skipped checks. With `-n`, each pytest-xdist worker creates and migrates its own
+the checks once; the required `python` check fails on drafts so a draft cannot
+be merged on skipped checks. Native desktop changes also run Go checks on macOS.
+With `-n`, each pytest-xdist worker creates and migrates its own
 `bid_test_gwN` database in the same cluster, because tests truncate shared tables.
 CI splits the suite across runners with `BID_TEST_SHARD=index/count`; `shard_of`,
 `ISOLATED_SHARD_TESTS` and `PINNED_SHARD_TESTS` in
@@ -185,15 +186,15 @@ The guard scenarios write synthetic
 Keep
    evidence outside `docs/`.
 
-## Build the console
+## Build the native console
 
-```sh
-cd web && npm ci && npm run build
-```
+Follow [desktop development](desktop-development.md) to build and launch the
+MyGo app. All pages render in Go with `ui.View`; the API serves business requests
+and protected assets without mounting a browser application. The standalone API
+and `bid` CLI retain their existing contracts.
 
-Set `BID_WEB_DIR` to the absolute path of `web/dist` and restart the API. For live
-editing, run `npm run dev` in `web/` with `BID_API_URL` pointing at the API. Console
-access-key integration is tracked in [the single-user plan](../plan/single-user.md).
+For isolated consumer fixtures, `scripts/org_console_e2e.py --serve` runs the
+synthetic API without a frontend asset build. It does not call real providers.
 
 ## Check an export in Word
 

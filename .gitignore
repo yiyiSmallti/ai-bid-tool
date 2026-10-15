@@ -16,8 +16,6 @@ venv/
 htmlcov/
 *.egg-info/
 
-# Frontend
-node_modules/
 dist/
 
 # Rust
@@ -35,9 +33,8 @@ dist/
 .idea/
 .vscode/
 
-# Playwright output
-test-results/
-playwright-report/
-
 # Editor swap files
 *.swp
+
+# go build output of the desktop module
+/desktop/desktop

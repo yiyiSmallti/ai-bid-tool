@@ -4,17 +4,16 @@ kind: howto
 
 # Build and launch the macOS developer app
 
-Build the MyGo shell with the server, console, Python runtime, PostgreSQL,
+Build the MyGo native app with the server, Python runtime, PostgreSQL,
 screenshot renderer and OCR language data inside the app. Supported release
 platforms, installers, distribution signing, notarization and updates are
 planned in [desktop packaging](../plan/desktop-packaging.md).
 
 ## Prepare the dependencies
 
-- Use the Go version in [desktop/go.mod](../../desktop/go.mod) and Bun with the
-  dependencies locked in [desktop/bun.lock](../../desktop/bun.lock).
-- Staging needs `uv`, Node.js with npm, the Xcode Command Line Tools, the Rust
-  toolchain that
+- Use the Go version and MyGo dependency pinned in
+  [desktop/go.mod](../../desktop/go.mod). The native app has no JavaScript build.
+- Staging needs `uv`, the Xcode Command Line Tools, and the Rust toolchain that
   [scripts/build_screenshot_renderer.sh](../../scripts/build_screenshot_renderer.sh)
   uses, and network access to download Python, wheels, the PostgreSQL source
   release and the OCR data.
@@ -25,7 +24,7 @@ The toolchain cache used by this worktree can be selected from its root:
 export GOROOT="$PWD/data/work/toolchains/go"
 export GOPATH="$PWD/data/work/toolchains/gopath"
 export GOCACHE="$PWD/data/work/toolchains/gocache"
-export PATH="$GOROOT/bin:$PWD/data/work/toolchains/bun:$PATH"
+export PATH="$GOROOT/bin:$PATH"
 ```
 
 ## Build the app
@@ -34,14 +33,13 @@ From `desktop`, stage the bundled resources, then build:
 
 ```sh
 scripts/stage-resources.sh
-bun install --frozen-lockfile
-bun run build --platform darwin/arm64 -skip-dmg -skip-notarize
+go run github.com/egoist/mygo/cmd/mygo build --platform darwin/arm64 -skip-dmg -skip-notarize
 ```
 
 [The staging script](../../desktop/scripts/stage-resources.sh) fills the
 gitignored `desktop/resources/darwin-arm64`, which MyGo copies into
 `Contents/Resources`, and fails if a staged library links outside the bundle or
-macOS. Rerun it after server, dependency or console changes. MyGo copies no
+macOS. Rerun it after server or dependency changes. MyGo copies no
 hidden files, so the script renames package `.dylibs` directories and removes
 other hidden files.
 
@@ -61,8 +59,8 @@ writes none, so the signature stays valid after launches.
 
 Use a dedicated macOS development account with no existing AI Bid installation
 for disposable acceptance. An ordinary launch writes the account's normal app
-data and persistent WebKit storage. The runtime overrides below select software
-locations; they do **not** isolate installation data.
+data. The runtime overrides below select software locations; they do **not**
+isolate installation data.
 
 From the worktree root, execute the bundle's binary so the environment is
 inherited:
@@ -72,13 +70,13 @@ inherited:
 ```
 
 To run server changes without restaging, set `BID_DESKTOP_SERVER` to a checkout
-whose root holds `alembic.ini`, `server/migrations`, a built `web/dist` and a
-`.venv` prepared from `pyproject.toml` and `uv.lock`; the app then runs that
+whose root holds `alembic.ini`, `server/migrations` and a `.venv` prepared from
+`pyproject.toml` and `uv.lock`; the app then runs that
 checkout's `.venv/bin/python`. `BID_DESKTOP_PG_BIN` likewise selects PostgreSQL
 16 binaries outside the app, such as `/opt/homebrew/opt/postgresql@16/bin`. The
 bundled renderer and OCR data are used in all cases.
 
-The main window opens the task page after the shell exchanges its generated
+The native main window opens the task page after exchanging its generated
 installation access key. Do not print the key or `installation.json`. Quit with
 Command-Q; the API and worker stop before PostgreSQL shuts down.
 
@@ -86,14 +84,14 @@ Command-Q; the API and worker stop before PostgreSQL shuts down.
 `~/Library/Application Support/AI Bid` for installation keys, files, the cluster
 and database backups, and `~/Library/Logs/AI Bid` for logs.
 [The shell](../../desktop/main.go) puts the PostgreSQL socket in
-`~/Library/Caches/io.github.yiyismallti.aibid/pg`. MyGo's macOS webview also uses
-persistent storage under the app identifier. The app owns the cluster it creates
-and stops it on quit. A second launch focuses the running window, and a backend
+`~/Library/Caches/io.github.yiyismallti.aibid/pg`. The app creates no browser
+storage. It owns the cluster it creates and stops it on quit. A second launch
+focuses the running window, and a backend
 started while another process holds the data directory's `instance.lock` exits
 with an error instead of touching the cluster. Do not launch against existing
 multi-org data: the single-user baseline does not convert it. Failed migrations
 preserve preexisting installation-file bytes; compatible startup persists staged
-keys or a changed console port only when necessary.
+keys or a changed API port only when necessary.
 
 ## Restore a database backup
 
@@ -126,7 +124,7 @@ later version migrates the restored database again and backs it up first.
 ## Optional services
 
 Vendor search uses the Perplexity API: add a Perplexity credential under
-服务凭据 in the console; until then search reports itself unavailable. Screenshot
+服务凭据 in the native app; until then search reports itself unavailable. Screenshot
 annotation and local OCR use the bundled renderer and language data. The
 developer app configures no Office converter and no browser sandbox, so export
 page previews and sandbox captures are unavailable; their desktop outcomes are
@@ -134,21 +132,23 @@ decisions D5 and D6 in [desktop packaging](../plan/desktop-packaging.md#decision
 
 ## Verify without using default account data
 
-The normal app has no data-root override. A same-account acceptance build must
-use a temporary physical source copy with a distinct app name and identifier,
-pre-main `App.SetPath` overrides for data/log/cache/temp, the shell's socket path
-redirected to that cache, and a nonpersistent `WKWebsiteDataStore`. Require a
-fresh private root before backend startup, inspect markers in the packaged
-binary, and run a preflight that exits before creating the cluster. Go overlays
-passed in `GOFLAGS` are insufficient: MyGo's frontend build supplies its own
-`-overlay` flag.
+The normal app has no user-facing data-root mode. For same-account acceptance,
+use a private temporary Go build overlay that changes only the application name,
+MyGo `App.SetPath` values for user data, logs, cache and resources, and the socket
+directory to consume that private cache. Compile with `go build -race -overlay=...`.
+Build the unmodified source separately. Keep the real `main`, pages, HTTP client,
+backend locks, session exchange and worker startup in both builds.
 
-A temporary acceptance hook can use MyGo's native page evaluation to require
-`/app/org/tasks`, an empty URL fragment, successful authenticated session/task
-requests and the rendered task table, then call `App.Quit`. Confirm clean child
-shutdown and remove the temporary source, bundle and synthetic data. This checks
-an instrumented packaged app; it does not establish that the normal bundle was
-launched with isolation. Keep acceptance evidence outside `docs/`.
+Use a fresh private root and synthetic documents/database records. Reuse private
+Python dependencies without changing the checkout's environment. Record the
+overlay manifest and actual binary, data and socket paths outside `docs/`; do not
+record installation keys, revealed values or credential input. Exercise actual
+native controls and observe the rendered window, including the supported minimum
+size. UI testers and successful compilation alone do not establish window behavior.
+
+Quit the app cleanly, confirm its children release the private cluster, and remove
+the temporary overlay and automation helpers. Retain only sanitized acceptance
+evidence outside `docs/`.
 
 For the backend regressions alone, stage the resources, then run from
 `desktop` with a checkout prepared as for `BID_DESKTOP_SERVER`:
@@ -156,7 +156,7 @@ For the backend regressions alone, stage the resources, then run from
 ```sh
 BID_DESKTOP_TEST_SERVER=/absolute/path/to/ai-bid-tool \
 BID_DESKTOP_TEST_PG_BIN="$PWD/resources/darwin-arm64/pgsql/bin" \
-go test -v -count=1 .
+go test -race -v -count=1 .
 ```
 
 [The tests](../../desktop/backend_test.go) create disposable clusters under

@@ -1,15 +1,16 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 )
 
 // paths are what the backend runs, from the app's resources unless
@@ -80,17 +81,21 @@ func main() {
 		return // the running instance owns the database
 	}
 	backend := &Backend{}
+	app := NewNativeApp()
 
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:     "AI Bid",
-			Width:     1360,
-			Height:    880,
-			MinWidth:  960,
-			MinHeight: 640,
-			StateKey:  "main",
-			URL:       "/", // the startup page until the console is up
+			Title: "AI Bid",
+			// The sidebar and page header draw the title bar and drag the window.
+			TitleBarStyle: mygo.TitleBarHidden,
+			Width:         1360,
+			Height:        880,
+			MinWidth:      960,
+			MinHeight:     640,
+			StateKey:      "main",
+			Content:       ui.View(app.View),
 		})
+		app.bindWindow(win)
 		mygo.App.OnSecondInstance(func([]string, string) { win.Focus() })
 
 		go func() {
@@ -101,24 +106,12 @@ func main() {
 				mygo.App.Quit()
 				return
 			}
-			// Console pages that open a new tab stay in the app, where the
-			// session lives; other sites go to the default browser.
-			win.Page().SetWindowOpenHandler(func(req mygo.WindowOpenRequest) *mygo.WindowOptions {
-				if strings.HasPrefix(req.URL, baseURL+"/") {
-					return &mygo.WindowOptions{Title: "AI Bid", Width: 1200, Height: 800, URL: req.URL}
-				}
-				externalURL, err := url.Parse(req.URL)
-				if err != nil {
-					return nil
-				}
-				// The access key is only exchanged inside the console.
-				externalURL.Fragment, externalURL.RawFragment = "", ""
-				_ = mygo.Shell.OpenExternal(externalURL.String())
-				return nil
-			})
-			if err := win.Page().LoadURL(baseURL + "/app/#key=" + url.QueryEscape(backend.install.AccessKey)); err != nil {
-				log.Print(err)
+			client := NewAPIClient(baseURL)
+			if err := client.Exchange(context.Background(), backend.install.AccessKey); err != nil {
+				win.Update(func() { app.Client = client; app.navigate("/login"); app.Error = err.Error() })
+				return
 			}
+			win.Update(func() { app.Client = client; app.navigate("/org/tasks") })
 		}()
 	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { backend.Stop() })

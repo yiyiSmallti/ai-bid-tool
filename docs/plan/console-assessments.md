@@ -52,7 +52,7 @@ are fully specified here, not represented by inactive production placeholders.
 | [score inputs](../../server/app/services/score_inputs.py) `snapshot`, `source_original`; [score run inputs](../../server/app/services/score_run_inputs.py) `fixed_rows` | Rubric input is the selected extraction's scoring requirements and cited original blocks, not a fresh full-document scan. Scoring uses pinned card-revision text, not the latest editable card text. |
 | [authentication](../../server/app/services/auth.py) `Identity`, `SCOPES`, `HUMAN_SCOPES`; [response cards](../../server/app/services/response_cards.py) `access` | Revalidate token status, human session expiry and delegated scopes on each operation; browser capability hints do not authorize writes. |
 | [console reads](../../server/app/api/org_console.py) `task_get`, `task_job_list`; [job service](../../server/app/services/jobs.py) `status`, `cancel` | Task metadata and single-job reads are reused. Task-job discovery additionally accepts `check`, `score_rubric` and `score` while preserving the parse projection. |
-| [router](../../web/src/router.js), [API adapter](../../web/src/api.js) `checkedPath`, `parseResult`, [console helpers](../../web/src/org.js), [JobPanel](../../web/src/components/JobPanel.vue) | Reuse session identity checks, Chinese labels, precise same-origin paths and polling. Assessment paths and partial-result cases must be added explicitly to the adapter during implementation. |
+| [Native app](../../desktop/native_app.go), [API client](../../desktop/native_client.go), [Chinese labels](../../desktop/native_labels.go), [job progress](../../desktop/native_board.go) | Reuse session identity checks, Chinese labels, validated loopback API paths, job polling and durable SSE recovery. |
 | [runtime contracts](../../server/app/schemas/contracts.py) `CONTRACT_VERSION`, `Cost`, `Result` |Console reads and preflight use these runtime types. |
 | [design](../design.md#dashboard-and-agent-design) | Its pending/fixed/ignored risk cards and SSE are not current check behavior. Actual findings have open/dismissed states plus decision history, and jobs are polled. There is no “mark fixed” operation. |
 | [checking plan](check.md), [checking notes](../notes/check.md), [scoring plan](score.md), [scoring notes](../notes/score.md) | Check decision-history reads currently do not attach stale warnings, despite the check plan's wording; obtain current report validity separately. Rules coverage serializes `semantic_outcome:null` and `semantic_citations:[]`, not absent fields. Score schema permits `range_only`, but `aggregate` currently emits `estimated` or `unavailable`. |
@@ -63,18 +63,18 @@ requires bounded assessment projections; it does not silently change existing ca
 
 ## Navigation and shared page behavior
 
-Add task-local entries “检查风险” and “评分预估” to the task, review and draft pages. Keep the
-existing task navigation shell from [App.vue](../../web/src/App.vue), with these approved
-browser routes (the router's `/app/` base is included here):
+Task-local entries “检查风险” and “评分预估” use the shared
+[native navigation](../../desktop/native_widgets.go). The approved internal routes
+also accept the `/app` prefix:
 
 | Page | Route and primary action |
 | --- | --- |
-| Check workspace/history | `/app/tasks/:taskId/checks?job=E&draft=D`; “预览检查” |
-| Saved check report | `/app/tasks/:taskId/checks/:reportId`; “查看处理记录” / “前往响应卡修改” |
-| Rubric list/generation | `/app/tasks/:taskId/score-rubrics?job=E`; “预览生成评分规则” |
-| Rubric review | `/app/tasks/:taskId/score-rubrics/:rubricId`; current-state next action |
-| Score workspace/history | `/app/tasks/:taskId/scores?job=E&draft=D&rubric=R`; “预览评分” |
-| Saved score report | `/app/tasks/:taskId/scores/:reportId`; “查看失分原因” / “前往响应卡修改” |
+| Check workspace/history | `/org/tasks/:taskId/checks?job=E&draft=D`; “预览检查” |
+| Saved check report | `/org/tasks/:taskId/checks/:reportId`; “查看处理记录” / “前往响应卡修改” |
+| Rubric list/generation | `/org/tasks/:taskId/score-rubrics?job=E`; “预览生成评分规则” |
+| Rubric review | `/org/tasks/:taskId/score-rubrics/:rubricId`; current-state next action |
+| Score workspace/history | `/org/tasks/:taskId/scores?job=E&draft=D&rubric=R`; “预览评分” |
+| Saved score report | `/org/tasks/:taskId/scores/:reportId`; “查看失分原因” / “前往响应卡修改” |
 
 `E/D/R` denote actual IDs, never client-selected actor identities. A report deep link
 loads its pinned extraction/draft/rubric; a contradictory query selection is rejected or
@@ -144,11 +144,10 @@ model usage belongs to the report's recorded generation operation.
 
 ## Jobs and planned two-stage rubric generation
 
-Reuse [JobPanel.vue](../../web/src/components/JobPanel.vue): poll about every two seconds,
-back off transient failures up to its existing limit and honor `Retry-After`, pause in
-hidden tabs, stop on terminal states, and release listeners on unmount.
-Polling errors
-do not submit or cancel a job.
+Reuse [native job progress](../../desktop/native_board.go) and the recovery rules in
+[task progress](../notes/task-progress.md). Poll the existing job, stop on terminal
+states and release listeners when the page closes. Polling errors do not submit
+or cancel a job.
 Show “排队中”, “处理中”, “已完成”, “部分完成”, “处理失败”
 or “已取消” with attempts, safe reason and next action.
 Job success, report completeness,
@@ -552,7 +551,7 @@ Reads require assessment/task scopes and the scopes of actual draft/card/materia
 
 Every route validates task and same-parent relationships before returning rows, counts, cursors, capability hints or original text. Missing or unrelated IDs return 404; a forbidden human operation returns 403 and known state conflicts return 409. Cursors bind principal/session, parent, filters and review snapshot. No organization/user/role fields or overrides enter public views or requests. Cancellation does not invent an initiator-only check.
 
-Reuse existing events, written by the service/DB transaction, not the Vue page:
+Reuse existing events written by the service/DB transaction:
 
 | Existing producer | Events and retained meaning |
 | --- | --- |
@@ -641,14 +640,13 @@ replacement, nonhuman decision and each exit 0/2/3/4/5.
 Keep old no-option show
 snapshots unchanged.
 
-### Playwright with a mocked API
+### Native UI with a synthetic API
 
-Use `web/e2e/console-assessments.spec.js` using the static-built-app interception
-pattern in [console-assessments.spec.js](../../web/e2e/console-assessments.spec.js):
-`E2E_STATIC_DIR` serves built assets through page.route; synthetic human sessions and
-stateful route handlers supply exact typed Result envelopes.
-Abort unexpected requests
-and all external origins; no running API/PostgreSQL or model credentials are needed.
+Exercise the [native assessment pages](../../desktop/native_assessments.go) and
+[reports](../../desktop/native_assessment_reports.go) against synthetic human sessions
+and exact typed Result envelopes. Reject unexpected requests and external origins;
+no provider credentials are needed. Pair consumer checks with the actual native
+window procedure in [desktop development](../guides/desktop-development.md#verify-without-using-default-account-data).
 Assert request method/path/body, revisions, hashes and mutation
 counts as well as visible output.
 
@@ -685,11 +683,9 @@ Save a repeatable artifact under `data/work/console-assessments-validation/<run-
 `result.json` with case assertions and counts, sanitized command/environment names,
 screenshots of synthetic states and the exact synthetic fixture/seed version. Retain
 request shapes/revision/hash assertions, not Authorization/Cookie/signed URLs/raw traces.
-Use the existing [Playwright config](../../web/playwright.config.js); a representative
-command is `E2E_BASE_URL=http://console.test E2E_STATIC_DIR=dist
-E2E_OUTPUT=../data/work/console-assessments-validation/browser npx playwright test
-e2e/console-assessments.spec.js` from `web/`, after a normal local build. Keep artifacts
-outside `docs/`. Browser acceptance cannot be claimed until those pages are implemented.
+Use the [native window acceptance procedure](../guides/desktop-development.md#verify-without-using-default-account-data)
+after a normal local build. Keep artifacts outside `docs/`. Consumer checks do not
+establish actual window layout, focus, scrolling or operating-system lifecycle behavior.
 
 ### Contract verification
 
@@ -720,7 +716,7 @@ runtime authorization, publication integrity, query performance or UI delivery.
 | Progress transport | Existing polling, optional observed StageProgress; no SSE prerequisite | Works with current single-pass and later fixed-section two-stage workers without invented percentages. |
 | Unknown/unavailable scores | Preserve backend null/state/reason; no frontend totals | Partial or unsupported calculations cannot become a misleading total. |
 | Human batches and automatic repair | Individual review actions only; explicit whole-set confirmation after server checks | Makes responsibility and reason visible and avoids a second bulk-decision contract. |
-| UI acceptance | Static built Vue with stateful mocked API plus separate single-user API/DB gate suite | Repeatable browser behavior without real provider calls; mocks cannot establish database publication or server authorization. |
+| UI acceptance | Native consumers with synthetic API responses, actual native window observation and a separate single-user API/DB gate suite | Repeatable UI behavior without real provider calls; synthetic responses cannot establish database publication or server authorization. |
 
 ## Implementation acceptance note
 
@@ -729,10 +725,8 @@ algorithm change.
 The companion module re-exports the runtime schemas so the approved
 transport contract has one definition.
 
-The built-app Playwright suite uses stateful mocked API responses, real versioned
-request paths and synthetic fixtures. Browser startup was blocked by the execution
-sandbox before any page interaction; no browser acceptance pass is claimed. Database
-isolation and route tests are supplied for the integration environment because this
-worktree's sandbox cannot reach PostgreSQL. Executable tests and generated artifacts
-are linked from the [mechanism note](../notes/console-assessments.md#code); artifacts
-remain under `data/work/`, outside the documentation tree.
+Native consumers use real versioned request paths and synthetic fixtures. Pair
+transport checks with API/database gates and actual window observation; each proves
+a different boundary. Source entry points are linked from the
+[mechanism note](../notes/console-assessments.md#code); acceptance artifacts remain
+outside the documentation tree.

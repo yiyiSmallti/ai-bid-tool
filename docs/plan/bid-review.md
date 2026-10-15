@@ -734,9 +734,9 @@ The bounded runtime subset is defined by
 [finding schemas](../../server/app/schemas/bid_review_findings.py) and the
 [mechanism note](../notes/bid-review.md#bid-compliance-and-human-decisions).
 
-The [HTTP/worker acceptance suite](../../server/tests/test_bid_review_findings_db.py)
-and [mocked browser suite](../../web/e2e/bid-review-findings.spec.js) define acceptance. Generated
-verification artifacts belong under ignored `data/work/bid-review-findings`.
+Use the [HTTP/worker acceptance suite](../../server/tests/test_bid_review_findings_db.py)
+and the [native finding workflow](../../desktop/native_bid_findings.go) for acceptance.
+Generated verification artifacts belong under ignored `data/work/bid-review-findings`.
 Visible mark presence, image evidence review, scoring, Word rendering and Clef
 remain outside this slice.
 
@@ -757,9 +757,10 @@ The [runtime schemas](../../server/app/schemas/bid_review_report.py) define this
 bounded subset; [the mechanism note](../notes/bid-review.md#immutable-console-and-word-reports)
 links its implementation.
 
-The [HTTP/worker suite](../../server/tests/test_bid_review_report_db.py) and
-[mocked browser suite](../../web/e2e/bid-review-report.spec.js) cover snapshot drift,
-projections, sections, failures and downloads. Static checks and CLI tests do not establish database or browser gates. Repeatable acceptance artifacts belong under ignored
+Use the [HTTP/worker suite](../../server/tests/test_bid_review_report_db.py) and
+the [native report workflow](../../desktop/native_bid_reports.go) to cover snapshot
+drift, projections, sections, failures and downloads. Static checks and CLI tests do not
+establish database or native UI gates. Repeatable acceptance artifacts belong under ignored
 `data/work/bid-review-report`. Scoring, claim-to-image evidence verification,
 visible mark presence and Clef remain outside this slice.
 
@@ -797,9 +798,9 @@ multiple required mark types use the lowest relevant probability, and seam group
 remain uncertain. All locations retain human confirmation, including high-presence
 results. Missing/uncertain marks carry an explicit escalation.
 
-The [HTTP/worker acceptance suite](../../server/tests/test_bid_review_clef_db.py),
-[HTTPS mocked browser suite](../../web/e2e/bid-review-clef.spec.js) and
-[synthetic blur experiment](../../scripts/check_bid_presence_blur.py) cover the slice.
+Use the [HTTP/worker acceptance suite](../../server/tests/test_bid_review_clef_db.py),
+the [native presence workflow](../../desktop/native_bid_presence.go) and
+the [synthetic blur experiment](../../scripts/check_bid_presence_blur.py) for acceptance.
 Numeric blur checks alone establish
 neither real-document privacy nor missing-mark recall. Artifacts belong under ignored
 `data/work/bid-review-clef`, outside documentation.

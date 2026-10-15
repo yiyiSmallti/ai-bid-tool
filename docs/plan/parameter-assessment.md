@@ -562,7 +562,7 @@ Bounded reads are a contract, not a UI pagination hint:
 
 Add “参数核对” to the task workspace using the existing task board and assessment
 patterns in [org-console.md](org-console.md), [console-assessments.md](console-assessments.md)
-and `web/`. Lead with five work buckets: needs requirement review, needs interpretation,
+and the [native console](../notes/org-console.md#native-rendering-boundary). Lead with five work buckets: needs requirement review, needs interpretation,
 needs product material, awaiting technical review, and accepted/stale. Verdict and
 review state remain separate labels; ★ and known failures remain visible in all views.
 
@@ -619,12 +619,12 @@ the comparator are prescribed.
 | Real workflow gates | Human with technical task authority accepts B02/condition/result separately, attaches a card, completes the separate human Evidence and response decisions, assembles and exports. Negative cases cover every missing gate, wrong role, token scope issuance/request, stale source/pin/rules, a changed-back revision, simulated/prototype declarations and contradictory card. Reopen/reject recovery remains usable. |
 | Parameter end-to-end vectors | Run source → condition → facts → assessment through actual API with fake model proposals: Chinese inequalities/negation/full-width digits, 64 GB/64 GiB, 23/24 ports, exact boundaries, negative temperature, open/closed ranges, all/any sets, per-port versus total, installed versus maximum, explicit tolerance, unsupported/ambiguous statements, missing or conflicting facts, ★ preservation and quote-matched-but-semantically-wrong proposals. |
 | CLI snapshots | Snapshot `--json` for **every listed command**, dry-run/job wait, page/cursor, human denial, stale gate, retryable/nonretryable/partial outcomes and Result 5.0 costs. Import schema discovery and ensure no unregistered command or older cost projection is advertised as B03. Snapshot decimal strings, both source sides and empty-result pages. |
-| Browser end-to-end | One human with the required review-domain authority exercises source inspection, ambiguity correction, card attachment, separate human/material/B02 decisions, negative-deviation acknowledgment and export; unauthorized identities retain read/write denial assertions. Replace the product pin during an open review and test SSE reconnect/stale refresh. Retain a redacted Playwright trace and assertions tied to immutable IDs, not screenshots alone. |
+| Native UI end-to-end | The installation human exercises source inspection, ambiguity correction, card attachment, separate human/material/B02 decisions, negative-deviation acknowledgment and export; unauthorized identities retain read/write denial assertions. Replace the product pin during an open review and test SSE reconnect/stale refresh. Retain sanitized request assertions tied to immutable IDs and actual native window observations. |
 | Boundedness/concurrency | Seed enough data to cross each page/batch/quote/byte/manifest bound. Assert SQL bounded reads, no N+1 source loading, correct UTF-8 envelope shrinking, cursor forward progress, timeout mapping and changed-input publication rejection. Queue replay and cancellation retain cost and one receipt per target. |
 
 Keep repeatable acceptance artifacts under git-ignored `data/work/b03-acceptance/<run>/`
 or the CI artifact store, never under `docs/`. Include command/version/seed manifest,
-exit results, sanitized JSON snapshots and browser trace. Database/service operation is
+exit results, sanitized JSON snapshots and native window observations. Database/service operation is
 owned by the main implementation session, not delegated workers.
 
 Synthetic evaluation uses deterministic, source-bearing tender/product pairs covering

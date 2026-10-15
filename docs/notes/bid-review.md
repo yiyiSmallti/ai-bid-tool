@@ -275,7 +275,7 @@ fixed metadata and cannot read quotations or reasons, classify or decide.
 
 Findings and history have bounded encoded responses
 and authenticated cursors tied to the current event snapshot. Console text uses
-normal Vue escaping and reasons are never saved in browser persistence.
+literal native text elements; reasons remain in memory and are never persisted by the UI.
 
 ### Immutable console and Word reports
 
@@ -420,16 +420,14 @@ cases have not been validated by the reported seal-presence feasibility experime
   [preparation job](../../server/app/jobs/bid_review_prepare.py) and
   [DOCX inspection](../../server/app/core/bid_docx.py).
 - [CLI](../../cli/bid_cli/bid_review.py),
-  [upload console](../../web/src/views/OrgBidSubmissions.vue) and
-  [submission console](../../web/src/views/OrgBidSubmission.vue).
+  [native submissions](../../desktop/native_bid_submissions.go).
 - [PostgreSQL HTTP acceptance](../../server/tests/test_bid_review_upload_db.py),
   [CLI transport snapshots](../../server/tests/test_bid_review_cli.py) and
-  [mocked browser acceptance](../../web/e2e/bid-review-upload.spec.js).
+  [native acceptance boundary](org-console.md#native-rendering-boundary).
 - [Signature persistence](../../server/app/models/bid_signature.py),
   [trust-anchor platform routes](../../server/app/api/platform_trust_anchors.py),
-  [trust-anchor console](../../web/src/views/TrustAnchors.vue),
-  [HTTP/worker signature acceptance](../../server/tests/test_bid_review_signatures_db.py)
-  and [signature browser acceptance](../../web/e2e/bid-review-signatures.spec.js).
+  [native trust anchors](../../desktop/native_settings_trust.go) and
+  [HTTP/worker signature acceptance](../../server/tests/test_bid_review_signatures_db.py).
 
 - [Authorized text schemas](../../server/app/schemas/bid_review_privacy.py),
   [review-run schemas](../../server/app/schemas/bid_review_run.py),
@@ -440,21 +438,19 @@ cases have not been validated by the reported seal-presence feasibility experime
   captures synthetic provider requests and sanitized result receipts.
 - [Finding persistence and decision service](../../server/app/services/bid_review_findings.py),
   [finding models](../../server/app/models/bid_review_findings.py),
-  [finding console](../../web/src/components/BidReviewFindings.vue),
-  [HTTP/worker acceptance](../../server/tests/test_bid_review_findings_db.py) and
-  [mocked browser acceptance](../../web/e2e/bid-review-findings.spec.js).
+  [native findings](../../desktop/native_bid_findings.go) and
+  [HTTP/worker acceptance](../../server/tests/test_bid_review_findings_db.py).
 
 - [Report schemas](../../server/app/schemas/bid_review_report.py),
   [report persistence](../../server/app/models/bid_review_report.py),
   [report worker](../../server/app/jobs/bid_review_report.py),
   [HTTP/worker report acceptance](../../server/tests/test_bid_review_report_db.py),
   [CLI report snapshots](../../server/tests/test_bid_review_report_cli.py) and
-  [mocked report browser acceptance](../../web/e2e/bid-review-report.spec.js).
+  [native report pages](../../desktop/native_bid_reports.go).
 
 - [Presence persistence](../../server/app/models/bid_review_presence.py),
   [Clef stage](../../server/app/services/bid_review_clef.py),
   [platform configuration](../../server/app/services/platform_clef.py),
   [single-user baseline](../../server/migrations/baseline/00_functions_bid.sql),
-  [image authorization console](../../web/src/components/BidPresenceAuthorization.vue),
-  [Clef HTTP/worker acceptance](../../server/tests/test_bid_review_clef_db.py) and
-  [mocked browser acceptance](../../web/e2e/bid-review-clef.spec.js).
+  [native image authorization](../../desktop/native_bid_presence.go) and
+  [Clef HTTP/worker acceptance](../../server/tests/test_bid_review_clef_db.py).
