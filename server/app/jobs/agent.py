@@ -1533,6 +1533,32 @@ async def process_if_agent(processor, job_id):
     return True
 
 
+async def close_session(session, row, timestamp, state, pause_status):
+    """End a session from a wake, with no live execution, cancelling its own jobs."""
+    if row.pause_id:
+        pending = await session.get(AgentPause, row.pause_id)
+        if pending is not None and pending.status == "pending":
+            pending.status = pause_status
+    unfinished = (
+        await session.scalars(
+            select(Job).where(
+                Job.id.in_(agent_limits.own_jobs(row)),
+                Job.status.in_(["queued", "running"]),
+            )
+        )
+    ).all()
+    for child in unfinished:
+        child.status, child.finished_at, child.lease_until = "cancelled", timestamp, None
+    # Closing the live job first admits only the cleanup transition under
+    # the database's no-execution recovery fence.
+    await session.flush(unfinished)
+    row.active_seconds_used = agent_limits.active_used(row, timestamp)
+    row.state, row.active_since = state, None
+    row.current_job_id, row.current_run_id = None, None
+    row.revision += 1
+    row.updated_at = timestamp
+
+
 async def wake(processor, session_id):
     """An durable wake advances a checkpoint or saves its successor."""
     async with processor.db.transaction() as session:
@@ -1553,28 +1579,7 @@ async def wake(processor, session_id):
         if timestamp >= row.expires_at or (
             row.state != "paused" and agent_limits.remaining_seconds(row, timestamp) <= 0
         ):
-            if row.pause_id:
-                pending = await session.get(AgentPause, row.pause_id)
-                if pending is not None and pending.status == "pending":
-                    pending.status = "expired"
-            unfinished = (
-                await session.scalars(
-                    select(Job).where(
-                        Job.id.in_(agent_limits.own_jobs(row)),
-                        Job.status.in_(["queued", "running"]),
-                    )
-                )
-            ).all()
-            for child in unfinished:
-                child.status, child.finished_at, child.lease_until = "cancelled", timestamp, None
-            # Closing the live job first admits only the cleanup transition under
-            # the database's no-execution recovery fence.
-            await session.flush(unfinished)
-            row.active_seconds_used = agent_limits.active_used(row, timestamp)
-            row.state, row.active_since = "failed", None
-            row.current_job_id, row.current_run_id = None, None
-            row.revision += 1
-            row.updated_at = timestamp
+            await close_session(session, row, timestamp, "failed", "expired")
             audit(
                 session,
                 actor,
@@ -1586,6 +1591,12 @@ async def wake(processor, session_id):
                     else "agent_time_limit"
                 },
             )
+            return
+        # Every session wakes at least each 30 seconds, paused ones too, so a
+        # member removed from the project or disabled stops its agents by then.
+        if await agents.member_removed(session, row):
+            await close_session(session, row, timestamp, "cancelled", "cancelled")
+            audit(session, actor, "agent.session.cancelled", row.id, {"reason": "member_removed"})
             return
         if live:
             return

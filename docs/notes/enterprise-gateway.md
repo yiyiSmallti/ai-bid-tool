@@ -39,6 +39,20 @@ signs in as a member, and every human decision records which member made it.
   goes to the new owner-only file named by `--output`.
 - `GET /installation` (and `bid installation show`) is unauthenticated and
   returns the mode, company name, server version and contract version.
+- A project is visible to administrators and its members only; anyone else
+  gets `not_found` for the project and everything in it, the same answer as for
+  a random identifier. The member who creates a project owns it.
+- `GET /tasks/{id}/members` lists a project's members. The owner or an
+  administrator adds members (`POST /tasks/{id}/members`), removes them
+  (`DELETE /tasks/{id}/members/{member_id}`) and hands the project to another
+  member (`POST /tasks/{id}/owner`); the owner cannot be removed
+  (`owner_not_removable`). An administrator sets
+  `PATCH /tasks/{id}/sharing` (`export_to_personal_allowed`). The CLI does the
+  same with `bid task member list|add|remove`, `bid task owner` and
+  `bid task sharing` and a `bid_` token holding `task:create`.
+- Grants open the shared library: `library:edit` (materials, certificates,
+  profiles, templates, attachments), `memory:edit` (memory writes and review)
+  and `confidential:reveal`. A member without a grant reads but does not write.
 
 ## How it works
 
@@ -80,6 +94,26 @@ signs in as a member, and every human decision records which member made it.
   without a member. `0005` finds these tables with `DECISION_TABLES`, and
   [test_members.py](../../server/tests/test_members.py) reruns that query, so a
   later decision table without the column fails there.
+- Migration `0006` adds `task_members` with one `owner` row per project
+  (`task_single_owner`) and `tasks.export_to_personal_allowed`. On a gateway
+  the deferred `task_owner_required` trigger rejects, at commit, a project
+  without an owner; a hand-over demotes the old owner before promoting the new
+  one. `task_access.seed` adds the creator as owner.
+- `visible_task` ([task_access.py](../../server/app/services/task_access.py))
+  loads every task with `visibility(actor)`, an `EXISTS` on `task_members` for
+  a non-administrator member, and `access` and the task list go through it.
+  Worker steps skip the check, so a job admitted before a removal finishes.
+  Agent sessions resolve their task the same way (`session_record` in
+  [agents.py](../../server/app/services/agents.py)).
+- `member_scopes(role, grants)` in
+  [auth.py](../../server/app/services/auth.py) removes the scopes of each
+  `GRANTED_SCOPES` entry the member lacks, for sessions, tokens and agents.
+- Every agent session wakes at least every 30 seconds, paused ones too. A wake
+  whose member was disabled or, unless an administrator, removed from the
+  project cancels the session and its own jobs and audits
+  `agent.session.cancelled` with `member_removed`
+  (`agents.member_removed`, `wake` in
+  [agent.py](../../server/app/jobs/agent.py)).
 
 ## Pitfalls
 
@@ -90,9 +124,11 @@ signs in as a member, and every human decision records which member made it.
   `BID_PERSONAL_MODEL_ENDPOINTS`, where an empty value means no personal models.
 - The mode never changes in place; moving a project between modes uses
   [packages](../plan/enterprise-gateway.md#packages).
-- Member grants are stored but not yet enforced; until project visibility
-  ships, a member holds every human scope except the administrator-only ones
-  (`ADMIN_ONLY_SCOPES` in [auth.py](../../server/app/services/auth.py)).
+- Memory has no `private` scope yet, so all memory is public and needs
+  `memory:edit` to change.
+- `export_to_personal_allowed` is stored for [packages](../plan/enterprise-gateway.md#packages);
+  nothing reads it yet.
+- An agent of a removed member can run until its next wake, up to 30 seconds.
 - The limiter keys on the client address the API sees. Behind a reverse proxy
   that is the proxy, so the 30-per-source limit then applies to everyone.
 
@@ -100,6 +136,9 @@ signs in as a member, and every human decision records which member made it.
 
 - [0004_installation_mode.py](../../server/migrations/versions/0004_installation_mode.py)
 - [0005_members.py](../../server/migrations/versions/0005_members.py)
+- [0006_project_members.py](../../server/migrations/versions/0006_project_members.py)
+- [project_members.py](../../server/app/services/project_members.py) service,
+  [project_members.py](../../server/app/api/project_members.py) routes
 - [members.py](../../server/app/services/members.py) service,
   [members.py](../../server/app/api/members.py) routes,
   [members.py](../../cli/bid_cli/members.py) CLI
@@ -108,4 +147,5 @@ signs in as a member, and every human decision records which member made it.
 - [auth.py](../../server/app/services/auth.py) `authenticate`, `access_key_refused`,
   `member_session_identity`, `agent_identity`
 - [test_deployment_mode.py](../../server/tests/test_deployment_mode.py),
-  [test_members.py](../../server/tests/test_members.py)
+  [test_members.py](../../server/tests/test_members.py),
+  [test_project_visibility.py](../../server/tests/test_project_visibility.py)

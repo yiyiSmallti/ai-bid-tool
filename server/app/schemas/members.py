@@ -76,3 +76,24 @@ class InstallationView(Contract):
     company_name: str | None
     server_version: str
     contract_version: str
+
+
+class ProjectMemberView(Contract):
+    member_id: UUID
+    login: str
+    display_name: str
+    role: Literal["owner", "member"]
+    status: Literal["active", "disabled"]
+    added_at: datetime
+
+
+class ProjectMemberAdd(Contract):
+    member_ids: list[UUID] = Field(min_length=1, max_length=100)
+
+
+class ProjectOwnerChange(Contract):
+    member_id: UUID
+
+
+class ProjectSharingUpdate(Contract):
+    export_to_personal_allowed: bool

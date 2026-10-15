@@ -191,8 +191,8 @@ HUMAN_SCOPES = {
 HUMAN_SCOPES.update(ATTACHMENT_HUMAN_SCOPES)
 HUMAN_SCOPES.update(BID_REVIEW_HUMAN_SCOPES)
 
-# Gateway scopes held by administrators only. Grants and project visibility
-# refine the member scopes further in a later gateway slice.
+# Gateway scopes held by administrators only. Project visibility limits the
+# task-scoped scopes further, in `task_access.visible_task`.
 ADMIN_ONLY_SCOPES = {
     "member:manage",
     "credential:manage",
@@ -206,10 +206,40 @@ PASSWORD_CHANGE_ROUTES = {"auth_session_show", "auth_session_delete", "account_p
 SEEN_INTERVAL = timedelta(minutes=1)
 
 
-def member_scopes(role: str) -> set[str]:
+# A member holds these only with the grant named; an administrator always does.
+GRANTED_SCOPES = {
+    "library:edit": {
+        "resource:write",
+        "certificate:write",
+        "certificate:file:write",
+        "certificate:lifecycle",
+        "profile:write",
+        "profile:lifecycle",
+        "template:write",
+        "attachment:write",
+        "attachment:review",
+        "attachment:manage",
+        "attachment:privacy",
+    },
+    "memory:edit": {
+        "memory:write",
+        "memory:approve",
+        "memory:manage",
+        "memory:candidate:run",
+        "memory:eval:review",
+    },
+    "confidential:reveal": {"confidential:reveal"},
+}
+
+
+def member_scopes(role: str, grants: list[str]) -> set[str]:
     if role == "admin":
         return HUMAN_SCOPES | {"member:manage"}
-    return HUMAN_SCOPES - ADMIN_ONLY_SCOPES
+    scopes = HUMAN_SCOPES - ADMIN_ONLY_SCOPES
+    for grant, granted in GRANTED_SCOPES.items():
+        if grant not in grants:
+            scopes -= granted
+    return scopes
 
 
 @dataclass
@@ -358,14 +388,15 @@ async def member_session_identity(
             .values(last_seen_at=now)
             .execution_options(synchronize_session=False)
         )
+    grants = await member_grants(session, member.id)
     return Identity(
-        scopes=member_scopes(member.role),
+        scopes=member_scopes(member.role, grants),
         session_expires_at=row.expires_at,
         member_id=member.id,
         member_role=member.role,
         member_session_id=row.id,
         must_change_password=member.must_change_password,
-        grants=await member_grants(session, member.id),
+        grants=grants,
     )
 
 
@@ -395,7 +426,7 @@ async def authenticate(
             # A token works only while its member does, within the member's scopes.
             if member is None:
                 raise ServiceError("invalid_token", "Invalid or expired credentials", 401, 4)
-            scopes &= member_scopes(member.role)
+            scopes &= member_scopes(member.role, await member_grants(session, member.id))
         return Identity(
             scopes=scopes,
             token_id=token.id,
@@ -433,7 +464,7 @@ async def agent_identity(session: AsyncSession, principal) -> Identity:
         member = await active_member(session, principal.member_id)
         if member is None:
             raise ServiceError("agent_authority_expired", "Agent authority has expired", 403, 4)
-        scopes &= member_scopes(member.role)
+        scopes &= member_scopes(member.role, await member_grants(session, member.id))
     return Identity(
         scopes=scopes,
         actor_kind="agent",

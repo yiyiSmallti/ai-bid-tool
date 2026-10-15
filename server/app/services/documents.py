@@ -44,7 +44,13 @@ async def create_task(session: AsyncSession, identity: Identity, body: TaskCreat
 
 async def list_tasks(session: AsyncSession, identity: Identity):
     identity.require("task:read")
-    return (await session.scalars(select(Task).order_by(Task.created_at))).all()
+    from app.services.task_access import visibility
+
+    query = select(Task).order_by(Task.created_at)
+    condition = visibility(identity)
+    if condition is not None:
+        query = query.where(condition)
+    return (await session.scalars(query)).all()
 
 
 @task_authorized("task:read", parent=("document_id", "documents"))

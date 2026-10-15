@@ -24,6 +24,7 @@ from app.models.agent import (
     AgentStep,
 )
 from app.models.entities import Document, Job, Requirement, Task
+from app.models.members import Member, TaskMember
 from app.models.response_cards import ResponseCard, ResponseCardRevision
 from app.providers.agent import reasoning_provider
 from app.providers.base import ProviderFailure
@@ -50,6 +51,7 @@ from app.services import preflight as preflight_service
 from app.services.auth import AGENT_SCOPES, set_actor_context
 from app.services.response_cards import access, generation_materials_stale, linked_evidence
 from app.services.task_access import access as task_access
+from app.services.task_access import visible_task
 from app.services.versioned import audit
 
 TERMINAL = {"completed", "partial", "failed", "cancelled"}
@@ -185,12 +187,12 @@ async def session_record(session, actor, session_id, *, lock=False):
     query = select(AgentSession).where(
         AgentSession.id == session_id,
     )
-    if lock:
-        target = await session.scalar(query)
-        if target is None:
-            raise not_found()
-        # Admission and usage recording lock Task before AgentSession.
-        await session.scalar(select(Task).where(Task.id == target.task_id).with_for_update())
+    target = await session.scalar(query)
+    if target is None:
+        raise not_found()
+    # Only the project's members see its agents. Admission and usage recording
+    # lock Task before AgentSession.
+    await visible_task(session, actor, target.task_id, lock=lock)
     row = await session.scalar(query.with_for_update() if lock else query)
     if row is None:
         raise not_found()
@@ -844,6 +846,19 @@ async def message(session, identity, session_id, body, settings):
     audit(session, actor, "agent.message.added", first.id, {"session_id": str(row.id)})
     await session.flush()
     return result
+
+
+async def member_removed(session, row: AgentSession) -> bool:
+    """On a gateway, whether the member who started the agent lost its project."""
+    principal = await session.get(AgentPrincipal, row.principal_id)
+    if principal is None or principal.member_id is None:
+        return False
+    member = await session.get(Member, principal.member_id, populate_existing=True)
+    if member is None or member.status != "active":
+        return True
+    if member.role == "admin":
+        return False
+    return await session.get(TaskMember, (row.task_id, member.id)) is None
 
 
 async def cancel(session, identity, session_id, body, settings):
