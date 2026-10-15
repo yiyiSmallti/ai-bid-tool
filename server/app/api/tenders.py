@@ -16,7 +16,8 @@ from app.models.entities import Chunk
 from app.providers.storage import Storage
 from app.schemas.citation_repair_contracts import CitationRepairRequest
 from app.schemas.contracts import JobAction, Result, TaskCreate
-from app.services import citation_repair, documents, requirements, tender_jobs
+from app.schemas.source_contracts import READ_CHARS, SEARCH_MATCH_LIMIT
+from app.services import citation_repair, documents, requirements, sources, tender_jobs
 
 CHUNK_FIELDS = ("id", "document_id", "seq", "page", "text", "ocr", "citation_verified", "blocks")
 
@@ -161,6 +162,30 @@ def create_router(
             )
         ).all()
         return result("chunk list", items=[serial(row, CHUNK_FIELDS) for row in chunks])
+
+    @router.get(
+        "/documents/{document_id}/source/search", name="source_search", response_model=Result
+    )
+    async def source_search(
+        document_id: UUID,
+        query: str = Query(min_length=1, max_length=200, pattern=r"\S"),
+        limit: int = Query(default=SEARCH_MATCH_LIMIT, ge=1, le=SEARCH_MATCH_LIMIT),
+        ctx=Depends(context, scope="function"),
+    ):
+        data, items = await sources.search(ctx[0], ctx[1], document_id, query, limit, settings)
+        warnings = ["source_search_truncated"] if data["truncated"] else []
+        return result("source search", data=data, items=items, warnings=warnings)
+
+    @router.get("/chunks/{chunk_id}/source", name="source_read", response_model=Result)
+    async def source_read(
+        chunk_id: UUID,
+        block: str | None = Query(default=None, min_length=2, max_length=200),
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=READ_CHARS, ge=1, le=READ_CHARS),
+        ctx=Depends(context, scope="function"),
+    ):
+        data = await sources.read(ctx[0], ctx[1], chunk_id, block, offset, limit, settings)
+        return result("source read", data=data)
 
     @router.get("/tasks/{task_id}/requirements", name="req_list", response_model=Result)
     async def req_list(
