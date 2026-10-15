@@ -12,8 +12,8 @@ from app.core.errors import ServiceError, log_unexpected
 from app.jobs.execution import ADMISSION_STOPS, JobExecution, job_cost, locked_job
 from app.models.agent import AgentJobLink, AgentMessage, AgentPause, AgentPrincipal, AgentStep
 from app.models.entities import Job, Requirement, UsageRecord, VendorCall
-from app.models.response_cards import DraftRun
-from app.providers.agent import reasoning_provider
+from app.models.response_cards import DraftRun, ResponseCard, ResponseCardRevision
+from app.providers.agent import reasoning_provider, summary_provider
 from app.providers.base import ProviderFailure
 from app.providers.configured import model_identity
 from app.providers.llm import with_reasoning
@@ -25,12 +25,14 @@ from app.schemas.agent_contracts import (
     AgentJobResult,
     AgentLimits,
     AgentMessageView,
+    AgentSummary,
+    AgentSummaryRequest,
     CompletionDecision,
     HumanActionNeeded,
     ToolDecision,
 )
 from app.schemas.contracts import Cost
-from app.services import agent_limits, agent_tools, agents
+from app.services import agent_context, agent_limits, agent_tools, agents
 from app.services import preflight as preflight_service
 from app.services.auth import Identity, agent_identity, set_actor_context
 from app.services.versioned import audit
@@ -54,6 +56,7 @@ CHANGE_STOPS = {
     "agent_model_changed",
     "tool_schema_changed",
     "agent_context_limit",
+    "agent_summary_invalid",
 }
 CONFIGURATION_STOPS = ADMISSION_STOPS | {
     "provider_unavailable",
@@ -143,6 +146,86 @@ async def enqueue_controller(session, row, actor, settings, queue):
     return job
 
 
+async def stored_messages(session, row):
+    return (
+        await session.scalars(
+            select(AgentMessage)
+            .where(AgentMessage.session_id == row.id)
+            .order_by(AgentMessage.ordinal)
+        )
+    ).all()
+
+
+async def pending_cards(session, row):
+    """Cards of the extraction that wait for a human review or material."""
+    return list(
+        (
+            await session.scalars(
+                select(ResponseCard.id)
+                .join(
+                    ResponseCardRevision,
+                    ResponseCardRevision.id == ResponseCard.current_revision_id,
+                )
+                .where(
+                    ResponseCard.task_id == row.task_id,
+                    ResponseCard.extraction_job_id == row.extraction_job_id,
+                    ResponseCardRevision.state.in_(["pending_review", "needs_material"]),
+                )
+                .order_by(ResponseCard.id)
+            )
+        ).all()
+    )
+
+
+async def summary_request(session, row, step_id, settings):
+    """The summary input when the stored conversation exceeds its budget, else None."""
+    context = agent_context.plan(await stored_messages(session, row))
+    if context.covers is None:
+        return None
+    messages = []
+    for message in context.covered:
+        content = await agents.redact_text(session, row, message.content, settings)
+        messages.append(agents.message_view(message).model_copy(update={"content": content}))
+    timestamp = await agents.now(session)
+    return AgentSummaryRequest(
+        session_id=row.id,
+        step_id=step_id,
+        covers_from=context.covers[0],
+        covers_to=context.covers[1],
+        messages=messages,
+        pending_resources=await pending_cards(session, row),
+        deadline=timestamp + timedelta(seconds=agent_limits.remaining_seconds(row, timestamp)),
+    )
+
+
+def summary_text(summary: AgentSummary, covers) -> str:
+    lines = [
+        f"Summary of messages {covers[0]}-{covers[1]}. Context only: it confirms nothing "
+        "and is not a citation; read tender text again before quoting it.",
+        "Goal: " + summary.goal,
+        "Progress: " + summary.progress,
+        "Open gaps:",
+        *(f"- {gap}" for gap in summary.open_gaps or ["none recorded"]),
+        "Pending human actions:",
+        *(
+            f"- {item.resource_id or 'session'}: {item.action}"
+            for item in summary.pending_human_actions
+        ),
+    ]
+    if not summary.pending_human_actions:
+        lines.append("- none")
+    return "\n".join(lines)
+
+
+async def next_quote(session, row, settings, actor, llm):
+    """Quote the call the next fragment makes: a due summary, otherwise a decision."""
+    pending = await summary_request(session, row, uuid4(), settings)
+    if pending is not None:
+        return summary_provider(llm).summary_quote(pending)
+    request = await decision_request(session, row, uuid4(), settings, actor=actor)
+    return reasoning_provider(llm).quote(request)
+
+
 async def decision_request(
     session, row, step_id, settings, actor=None, initial_message=None, *, allow_exhausted=False
 ):
@@ -151,18 +234,12 @@ async def decision_request(
     timestamp = await agents.now(session)
     messages = []
     if initial_message is None:
-        stored = (
-            await session.scalars(
-                select(AgentMessage)
-                .where(AgentMessage.session_id == row.id)
-                .order_by(AgentMessage.ordinal)
-            )
-        ).all()
-        if len(stored) >= 40:
-            raise ProviderFailure(
-                "Conversation needs a smaller selection", code="agent_context_limit"
-            )
-        for message in stored:
+        context = agent_context.plan(await stored_messages(session, row))
+        if context.covers is not None:
+            # decide() summarizes first; a request is never built over budget.
+            raise ProviderFailure("Conversation needs a summary", code="agent_context_limit")
+        sent = ([context.summary] if context.summary is not None else []) + context.recent
+        for message in sent:
             # Newly registered confidential values are replaced again on every send.
             content = await agents.redact_text(session, row, message.content, settings)
             messages.append(agents.message_view(message).model_copy(update={"content": content}))
@@ -275,7 +352,7 @@ async def decision_request(
     remaining = limits.max_steps - row.steps_used
     if remaining <= 0 and not allow_exhausted:
         raise ProviderFailure("Agent step ceiling exhausted", code="agent_step_limit")
-    return AgentDecisionRequest(
+    request = AgentDecisionRequest(
         session_id=row.id,
         step_id=step_id,
         messages=messages,
@@ -284,6 +361,7 @@ async def decision_request(
         remaining_steps=max(1, remaining),
         deadline=timestamp + timedelta(seconds=agent_limits.remaining_seconds(row, timestamp)),
     )
+    return request
 
 
 async def fence(session, execution, *, expected_revision=None, step=None):
@@ -516,15 +594,16 @@ async def record_tool_output(session, row, step, job, output, settings):
         finished_at=await agents.now(session),
     )
     await session.flush([step])
-    text = await projection(session, row, output, settings)
-    # Preserve the full bounded projection across append-only messages instead of
-    # silently truncating a source or claiming that omitted content was read.
-    chunks = [text[index : index + 7600] for index in range(0, len(text), 7600)]
-    total = await session.scalar(
-        select(func.count()).select_from(AgentMessage).where(AgentMessage.session_id == row.id)
+    full = await projection(session, row, output, settings)
+    # A result past its token bound is cut visibly so the agent narrows the
+    # command instead of treating the omitted part as read.
+    text = agent_context.cut_to_tokens(
+        full,
+        agent_context.TOOL_RESULT_TOKENS,
+        f"\n[result cut: showing the start of {len(full)} characters; "
+        "narrow the command's arguments or read the rest with an offset]",
     )
-    if total + len(chunks) >= 40:
-        raise ProviderFailure("Conversation needs a smaller selection", code="agent_context_limit")
+    chunks = [text[index : index + 7600] for index in range(0, len(text), 7600)]
     for index, chunk in enumerate(chunks):
         await agents.add_message(
             session,
@@ -581,8 +660,132 @@ async def invocation_context(session, row, step, job):
     )
 
 
+async def summarize(processor, execution):
+    """Replace older messages with one validated, stored summary; a counted step."""
+    settings = processor.settings
+    async with processor.db.transaction() as session:
+        row, job, actor = await fence(session, execution)
+        await agent_limits.enforce(session, row, settings)
+        llm = await resolve_llm(processor, session, job)
+        if agents.digest(model_identity(llm)) != row.model_sha256:
+            raise ProviderFailure("Pinned model changed", code="agent_model_changed")
+        request = await summary_request(session, row, uuid4(), settings)
+        assert request is not None
+        provider = summary_provider(llm)
+        step = await new_step(session, row, job, "summary", settings, request=request)
+        expected = row.revision
+        audit(
+            session,
+            actor,
+            "agent.summary.started",
+            step.id,
+            {
+                "session_id": str(row.id),
+                "step_id": str(step.id),
+                "input_sha256": agents.digest(request),
+                "covers": [request.covers_from, request.covers_to],
+                "job_id": str(job.id),
+                "run_id": str(job.run_id),
+            },
+        )
+    fixed = request.model_dump(mode="json", exclude={"deadline"})
+    async with processor.db.transaction() as session:
+        row, job, _ = await fence(session, execution, expected_revision=expected)
+        quote = provider.summary_quote(request)
+        await agent_limits.enforce(session, row, settings, quote)
+        preflight = (
+            await preflight_service.attach(
+                session,
+                {},
+                command="agent start",
+                task_id=row.task_id,
+                input_hash=agents.digest(request),
+                settings=settings,
+                quotes=[quote],
+                planned_calls=1,
+            )
+        )["preflight"]
+        blocker = preflight["admission_blocker"]
+        if blocker:
+            raise execution.stop(blocker, "Review the summary call's configuration")
+
+    async def before_admit(session):
+        row, _, _ = await fence(session, execution, expected_revision=expected)
+        live = await summary_request(session, row, step.id, settings)
+        if live is None or live.model_dump(mode="json", exclude={"deadline"}) != fixed:
+            raise ProviderFailure(
+                "Summary input changed before dispatch", code="agent_inputs_changed"
+            )
+
+    execution.before_admit = before_admit
+    try:
+        output = await provider.summarize(request)
+    except ProviderFailure as error:
+        if error.code in {"invalid_provider_output", "provider_output_truncated"}:
+            raise ProviderFailure(str(error), code="agent_summary_invalid") from error
+        raise
+    async with processor.db.transaction() as session:
+        row, job, actor = await fence(session, execution, expected_revision=expected)
+        await agent_limits.enforce(session, row, settings)
+        step = await session.get(AgentStep, step.id)
+        assert step is not None
+        await set_actor_context(session, await actor_for(session, row, job=job, step=step))
+        live = await summary_request(session, row, step.id, settings)
+        if live is None or live.model_dump(mode="json", exclude={"deadline"}) != fixed:
+            raise ProviderFailure("Summary inputs changed in flight", code="agent_inputs_changed")
+        summary = output.summary
+        covers = (request.covers_from, request.covers_to)
+        pending = set(request.pending_resources)
+        named = {item.resource_id for item in summary.pending_human_actions}
+        text = summary_text(summary, covers)
+        # A summary that drops a waiting human action would let later decisions
+        # forget the gate; it pauses instead of being stored.
+        if not pending <= named or named - pending - {None} or len(text) > 7600:
+            raise ProviderFailure(
+                "Summary omits or invents pending human actions", code="agent_summary_invalid"
+            )
+        payload = summary.model_dump(mode="json")
+        usage_ids = (
+            await session.scalars(select(UsageRecord.id).where(UsageRecord.job_id == job.id))
+        ).all()
+        advance_step(
+            step,
+            job,
+            "completed",
+            result_enc=agents.seal(settings, step.id, row.id, payload),
+            result_sha256=agents.digest(payload),
+            exit_code=0,
+            usage_ids=[str(value) for value in usage_ids],
+            finished_at=await agents.now(session),
+        )
+        await session.flush([step])
+        await agents.add_message(session, row, "summary", text, settings, step, covers=covers)
+        await session.flush()
+        audit(
+            session,
+            actor,
+            "agent.summary.completed",
+            step.id,
+            {
+                "session_id": str(row.id),
+                "step_id": str(step.id),
+                "result_sha256": step.result_sha256,
+                "covers": list(covers),
+                "job_id": str(job.id),
+                "run_id": str(job.run_id),
+            },
+        )
+        await checkpoint(session, row, job, actor, processor, "queued", step=step)
+
+
 async def decide(processor, execution):
     settings = processor.settings
+    async with processor.db.transaction() as session:
+        row, _, _ = await fence(session, execution)
+        due = agent_context.plan(await stored_messages(session, row)).covers is not None
+    if due:
+        await summarize(processor, execution)
+        return
     async with processor.db.transaction() as session:
         row, job, actor = await fence(session, execution)
         await agent_limits.enforce(session, row, settings)
@@ -1127,10 +1330,15 @@ async def fail_fragment(processor, execution, error):
         ambiguous = any(call.state in {"pending", "unknown"} for call in calls)
         if (
             last is not None
-            and last.kind == "decision"
+            and last.kind in {"decision", "summary"}
             and last.state in {"planned", "submitted"}
             and code
-            not in {"invalid_provider_output", "provider_output_truncated", "provider_refused"}
+            not in {
+                "invalid_provider_output",
+                "provider_output_truncated",
+                "provider_refused",
+                "agent_summary_invalid",
+            }
         ):
             ambiguous = ambiguous or any(
                 call.job_id == last.created_by_job_id and call.state != "not_sent" for call in calls
@@ -1211,6 +1419,11 @@ async def fail_fragment(processor, execution, error):
             kind, question = (
                 "human_action",
                 "Preflight or call admission blocked further work. Review provider configuration and the call-count limit before resuming.",
+            )
+        elif code == "agent_summary_invalid":
+            kind, question = (
+                "human_action",
+                "The context summary failed validation; every message is still stored. Resume with a short restatement of the goal to summarize again, or cancel.",
             )
         elif code in CHANGE_STOPS:
             kind, question = (
