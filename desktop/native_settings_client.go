@@ -407,11 +407,11 @@ func settingsProviderChoices(value any, defaultName any, checkDefault bool) bool
 	return ok && seen[name]
 }
 func settingsProviderMetadata(value Object, id string) bool {
-	if !settingsKeys(value, "id", "revision", "configuration", "provider", "model", "credential_state", "updated_at", "revised_at", "reasoning", "default_reasoning") || !settingsUUID(str(value, "id")) || id != "" && str(value, "id") != id || !settingsInteger(value["revision"], 1, 1<<30) || !containsString([]string{"anthropic", "openai"}, str(value, "provider")) || !settingsString(value["model"], 1, 100) || str(value, "credential_state") != "configured" || !settingsTime(value["updated_at"]) || !settingsTime(value["revised_at"]) {
+	if !settingsKeys(value, "id", "slot", "name", "revision", "configuration", "provider", "model", "credential_state", "updated_at", "revised_at", "reasoning", "default_reasoning") || !settingsUUID(str(value, "id")) || !settingsUUID(str(value, "slot")) || value["name"] != nil && !settingsString(value["name"], 1, 60) || id != "" && str(value, "id") != id || !settingsInteger(value["revision"], 1, 1<<30) || !containsString([]string{"anthropic", "openai"}, str(value, "provider")) || !settingsString(value["model"], 1, 100) || str(value, "credential_state") != "configured" || !settingsTime(value["updated_at"]) || !settingsTime(value["revised_at"]) {
 		return false
 	}
 	configuration := object(value["configuration"])
-	if !settingsKeys(configuration, "capability", "provider", "model", "base_url", "json_mode", "reasoning", "default_reasoning", "expected_revision") || str(configuration, "capability") != "llm_extract" || configuration["expected_revision"] != nil || str(configuration, "provider") != str(value, "provider") || !settingsString(configuration["model"], 1, 100) || str(configuration, "model") != str(value, "model") || !settingsHTTPS(configuration["base_url"]) || !containsString([]string{"json_schema", "json_object"}, str(configuration, "json_mode")) || !settingsObjectArray(configuration["reasoning"], 8) {
+	if !settingsKeys(configuration, "capability", "slot", "new", "name", "provider", "model", "base_url", "json_mode", "reasoning", "default_reasoning", "expected_revision") || str(configuration, "capability") != "llm_extract" || configuration["expected_revision"] != nil || str(configuration, "slot") != str(value, "slot") || configuration["new"] != false || configuration["name"] != value["name"] || str(configuration, "provider") != str(value, "provider") || !settingsString(configuration["model"], 1, 100) || str(configuration, "model") != str(value, "model") || !settingsHTTPS(configuration["base_url"]) || !containsString([]string{"json_schema", "json_object"}, str(configuration, "json_mode")) || !settingsObjectArray(configuration["reasoning"], 8) {
 		return false
 	}
 	for _, level := range objects(configuration["reasoning"]) {
@@ -422,7 +422,17 @@ func settingsProviderMetadata(value Object, id string) bool {
 	return settingsProviderChoices(value["reasoning"], value["default_reasoning"], true)
 }
 func settingsProviderSettings(value Object) bool {
-	if !settingsKeys(value, "capability", "configured", "current", "reasoning", "actions", "connection_status") || str(value, "capability") != "llm_extract" || str(value, "connection_status") != "not_checked" || !settingsBoolean(value["configured"]) || mgBool(value["configured"]) != (value["current"] != nil) || value["current"] != nil && !settingsProviderMetadata(object(value["current"]), "") || !settingsProviderChoices(value["reasoning"], nil, false) || !settingsObjectArray(value["actions"], 2) || len(objects(value["actions"])) != 2 {
+	if !settingsKeys(value, "capability", "configured", "current", "models", "default_slot", "reasoning", "actions", "connection_status") || !settingsObjectArray(value["models"], 20) || value["default_slot"] != nil && str(value, "default_slot") != str(object(value["current"]), "slot") || value["default_slot"] == nil && value["current"] != nil || str(value, "capability") != "llm_extract" || str(value, "connection_status") != "not_checked" || !settingsBoolean(value["configured"]) || mgBool(value["configured"]) != (value["current"] != nil) || value["current"] != nil && !settingsProviderMetadata(object(value["current"]), "") || !settingsProviderChoices(value["reasoning"], nil, false) || !settingsObjectArray(value["actions"], 2) || len(objects(value["actions"])) != 2 {
+		return false
+	}
+	slots := make(map[string]bool, 20)
+	for _, model := range objects(value["models"]) {
+		if !settingsProviderMetadata(model, "") || slots[str(model, "slot")] {
+			return false
+		}
+		slots[str(model, "slot")] = true
+	}
+	if value["current"] != nil && !slots[str(object(value["current"]), "slot")] {
 		return false
 	}
 	seen := make(map[string]bool, 2)

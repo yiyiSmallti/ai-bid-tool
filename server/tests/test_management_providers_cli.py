@@ -21,6 +21,7 @@ PREFIX = "/v4/management/providers"
 SECRET = "synthetic-provider-private"
 ROW = {
     "id": ID,
+    "slot": OTHER,
     "revision": 1,
     "configuration": {
         "capability": "llm_extract",
@@ -52,6 +53,8 @@ def projection(command, empty=False):
             "capability": "llm_extract",
             "configured": True,
             "current": ROW,
+            "models": [ROW],
+            "default_slot": OTHER,
             "reasoning": [],
             "actions": [{"action": "configure", "allowed": True, "reason": None}],
             "connection_status": "not_checked",

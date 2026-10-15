@@ -21,6 +21,10 @@ and `provider:write`; API tokens and agent identities cannot receive that scope.
 An installation without a saved revision returns `configured=false` and no
 current configuration. A configured revision has `connection_status=not_checked`
 until an explicit test supplies a receipt; presence of a key proves no connection.
+`current` is the default model; `models` lists every saved model's latest
+revision, default first, with one bounded lookup per model, and `default_slot`
+names the default. [Several models](provider-config.md#several-models) defines
+model choice.
 
 Save appends an immutable revision with `expected_revision`. The page rereads
 metadata after success. Testing uses a cost preflight and a separate start

@@ -390,3 +390,111 @@ async def test_failed_decryption_and_key_echo_fail_closed(database, tmp_path, pd
             "/providers", headers=headers, json=local_config(api_key=KEY + "\n")
         )
         assert invalid.status_code == 422 and KEY not in invalid.text
+
+
+async def test_several_models_default_choice_and_removal(database, tmp_path, pdf_bytes):
+    """Failure inventory: a second model replaces the first; a chosen model is ignored;
+    a key leaks to another endpoint; removal strands pinned jobs or leaves no default."""
+    async with configured(database, tmp_path) as (app, api, headers, vendor):
+        first = await save(api, headers, name="DeepSeek")
+        assert first["is_default"]
+        # Same endpoint: the saved key is reused without being sent again.
+        same = await save(api, headers, new=True, name="DeepSeek 推理", model="r", api_key=None)
+        other_key = "synthetic-second-vendor-key-9876"
+        other = await save(
+            api,
+            headers,
+            new=True,
+            name="智谱",
+            model="glm-synthetic",
+            base_url="https://open.bigmodel.cn/api/paas/v4",
+            api_key=other_key,
+        )
+        missing = await api.post(
+            "/providers",
+            headers=headers,
+            json=local_config(new=True, base_url="https://api.moonshot.cn/v1", api_key=None),
+        )
+        assert missing.status_code == 400 and "provider_key_required" in missing.text
+        assert {same["key_last4"], other["key_last4"]} == {"4321", "9876"}
+        assert len({first["slot"], same["slot"], other["slot"]}) == 3
+        assert not same["is_default"] and not other["is_default"]
+        listing = (await api.get("/providers", headers=headers)).json()["items"]
+        assert [row["slot"] for row in listing][0] == first["slot"] and len(listing) == 3
+        settings = (await api.get("/management/providers", headers=headers)).json()["data"]
+        assert settings["default_slot"] == first["slot"] and len(settings["models"]) == 3
+        assert settings["current"]["name"] == "DeepSeek"
+
+        # Revising one model leaves the others alone.
+        stale = await api.post(
+            "/providers",
+            headers=headers,
+            json=local_config(slot=other["slot"], expected_revision=first["revision"]),
+        )
+        assert stale.status_code == 409
+        revised = await save(
+            api,
+            headers,
+            slot=other["slot"],
+            expected_revision=other["revision"],
+            name="智谱 flash",
+            model="glm-synthetic",
+            base_url="https://open.bigmodel.cn/api/paas/v4",
+            api_key=None,
+        )
+        assert revised["slot"] == other["slot"] and revised["key_last4"] == "9876"
+
+        task, document = await create_document(api, headers, pdf_bytes)
+        await run_job(api, app, headers, document, "parse")
+        chosen = await api.post(
+            f"/documents/{document}/extract", headers=headers, json={"model": other["slot"]}
+        )
+        assert chosen.status_code == 200, chosen.text
+        chosen_job = chosen.json()["data"]["job_id"]
+        default_job = (
+            await api.post(f"/documents/{document}/extract", headers=headers, json={})
+        ).json()["data"]["job_id"]
+        assert chosen_job != default_job
+
+        # Removing a model keeps its queued job runnable and moves the default.
+        removed = await api.delete(f"/providers/models/{other['slot']}", headers=headers)
+        assert removed.status_code == 200, removed.text
+        assert removed.json()["data"]["default"] == first["slot"]
+        await app.state.processor(chosen_job)
+        assert vendor.calls[-1][1] == f"Bearer {other_key}"
+        await app.state.processor(default_job)
+        assert vendor.calls[-1][1] == f"Bearer {KEY}"
+        gone = await api.post(
+            f"/documents/{document}/extract", headers=headers, json={"model": other["slot"]}
+        )
+        assert gone.status_code == 404 and "provider_model_unavailable" in gone.text
+
+        made_default = await api.post(f"/providers/models/{same['slot']}/default", headers=headers)
+        assert made_default.status_code == 200 and made_default.json()["data"]["is_default"]
+        await api.delete(f"/providers/models/{same['slot']}", headers=headers)
+        settings = (await api.get("/management/providers", headers=headers)).json()["data"]
+        assert settings["default_slot"] == first["slot"] and len(settings["models"]) == 1
+        async with app.state.db.transaction() as session:
+            jobs = {
+                str(job.id): str(job.provider_config_id)
+                for job in await session.scalars(
+                    select(Job).where(Job.id.in_([UUID(chosen_job), UUID(default_job)]))
+                )
+            }
+        assert jobs == {chosen_job: revised["id"], default_job: first["id"]}
+        await asyncio.to_thread(
+            Path("data/work/provider-validation").mkdir, parents=True, exist_ok=True
+        )
+        await asyncio.to_thread(
+            Path("data/work/provider-validation/multi-model-flow.json").write_text,
+            json.dumps(
+                {
+                    "slots": [first["slot"], same["slot"], other["slot"]],
+                    "jobs": jobs,
+                    "final_default": settings["default_slot"],
+                    "vendor_calls": len(vendor.calls),
+                },
+                indent=2,
+            )
+            + "\n",
+        )

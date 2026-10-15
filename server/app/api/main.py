@@ -91,8 +91,8 @@ def create_app(
     resolve: Callable[..., Awaitable[Any]] | None = None
     if llm is None:
 
-        async def resolve_default(session, job=None):
-            return await resolve_llm(session, settings, llm_transport, job)
+        async def resolve_default(session, job=None, model=None):
+            return await resolve_llm(session, settings, llm_transport, job, model)
 
         resolve, llm = resolve_default, DisabledLLM()
     ocr = ocr or LocalOCR(settings.ocr_language, settings.ocr_data_dir)

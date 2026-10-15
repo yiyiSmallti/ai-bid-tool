@@ -106,6 +106,11 @@ def validate_provider_options(options):
 
 class ProviderConfigInput(Contract):
     capability: Literal["llm_extract"] = "llm_extract"
+    # The saved model this revision belongs to; omitted means the default model.
+    slot: UUID | None = None
+    # Save as an additional model instead of revising an existing one.
+    new: bool = False
+    name: str | None = Field(default=None, min_length=1, max_length=60)
     provider: Literal["anthropic", "openai"]
     model: str = Field(min_length=1, max_length=100)
     base_url: str | None = Field(default=None, max_length=300)
@@ -152,6 +157,12 @@ class ProviderConfigInput(Contract):
         return value.rstrip("/")
 
     @model_validator(mode="after")
+    def model_target(self):
+        if self.new and (self.slot is not None or self.expected_revision is not None):
+            raise ValueError("a new model has no slot or expected revision")
+        return self
+
+    @model_validator(mode="after")
     def reasoning_fields(self):
         names = [level.name for level in self.reasoning]
         if len(names) != len(set(names)):
@@ -178,6 +189,8 @@ class ProviderConfigSet(ProviderConfigInput):
 class ProviderTest(Contract):
     dry_run: bool = False
     capability: Literal["llm_extract"] = "llm_extract"
+    # The saved model to test; omitted means the default model.
+    model: UUID | None = None
     reasoning: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,20}$")
 
 
@@ -185,6 +198,9 @@ class ProviderConfigView(Contract):
     id: UUID
     revision: int
     capability: str
+    slot: UUID
+    name: str | None
+    is_default: bool
     provider: str
     model: str
     base_url: str | None

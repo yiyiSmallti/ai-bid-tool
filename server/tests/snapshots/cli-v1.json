@@ -9290,6 +9290,16 @@
             {
               "default": null,
               "multiple": false,
+              "name": "model",
+              "options": [
+                "--model"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
               "name": "expect_input_hash",
               "options": [
                 "--expect-input-hash"
@@ -9374,6 +9384,19 @@
                 "title": "Extraction Job Id",
                 "type": "string"
               },
+              "model": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Model"
+              },
               "reasoning": {
                 "anyOf": [
                   {
@@ -9442,6 +9465,19 @@
                     "format": "uuid",
                     "title": "Extraction Job Id",
                     "type": "string"
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Model"
                   },
                   "reasoning": {
                     "anyOf": [
@@ -49472,6 +49508,19 @@
                     "title": "Dry Run",
                     "type": "boolean"
                   },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Model"
+                  },
                   "reasoning": {
                     "anyOf": [
                       {
@@ -57608,6 +57657,31 @@
             "$ref": "#/$defs/PreflightData"
           }
         },
+        "provider default": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "model",
+              "options": [
+                "--model"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
         "provider history": {
           "cli_parameters": [
             {
@@ -57752,6 +57826,25 @@
                     "title": "Model",
                     "type": "string"
                   },
+                  "name": {
+                    "anyOf": [
+                      {
+                        "maxLength": 60,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Name"
+                  },
+                  "new": {
+                    "default": false,
+                    "title": "New",
+                    "type": "boolean"
+                  },
                   "provider": {
                     "enum": [
                       "anthropic",
@@ -57767,6 +57860,19 @@
                     "maxItems": 8,
                     "title": "Reasoning",
                     "type": "array"
+                  },
+                  "slot": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Slot"
                   }
                 },
                 "required": [
@@ -57897,6 +58003,19 @@
                 "title": "Model",
                 "type": "string"
               },
+              "name": {
+                "anyOf": [
+                  {
+                    "maxLength": 60,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Name"
+              },
               "provider": {
                 "enum": [
                   "anthropic",
@@ -57921,6 +58040,11 @@
               "revision": {
                 "$ref": "#/$defs/Revision"
               },
+              "slot": {
+                "format": "uuid",
+                "title": "Slot",
+                "type": "string"
+              },
               "updated_at": {
                 "format": "date-time",
                 "title": "Updated At",
@@ -57929,6 +58053,7 @@
             },
             "required": [
               "id",
+              "slot",
               "revision",
               "configuration",
               "provider",
@@ -57990,6 +58115,31 @@
         },
         "provider list": {
           "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "provider remove": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "model",
+              "options": [
+                "--model"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
             {
               "default": "False",
               "multiple": false,
@@ -58091,6 +58241,25 @@
                     "title": "Model",
                     "type": "string"
                   },
+                  "name": {
+                    "anyOf": [
+                      {
+                        "maxLength": 60,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Name"
+                  },
+                  "new": {
+                    "default": false,
+                    "title": "New",
+                    "type": "boolean"
+                  },
                   "provider": {
                     "enum": [
                       "anthropic",
@@ -58106,6 +58275,19 @@
                     "maxItems": 8,
                     "title": "Reasoning",
                     "type": "array"
+                  },
+                  "slot": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Slot"
                   }
                 },
                 "required": [
@@ -58236,6 +58418,19 @@
                 "title": "Model",
                 "type": "string"
               },
+              "name": {
+                "anyOf": [
+                  {
+                    "maxLength": 60,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Name"
+              },
               "provider": {
                 "enum": [
                   "anthropic",
@@ -58260,6 +58455,11 @@
               "revision": {
                 "$ref": "#/$defs/Revision"
               },
+              "slot": {
+                "format": "uuid",
+                "title": "Slot",
+                "type": "string"
+              },
               "updated_at": {
                 "format": "date-time",
                 "title": "Updated At",
@@ -58268,6 +58468,7 @@
             },
             "required": [
               "id",
+              "slot",
               "revision",
               "configuration",
               "provider",
@@ -58432,6 +58633,25 @@
                 "title": "Model",
                 "type": "string"
               },
+              "name": {
+                "anyOf": [
+                  {
+                    "maxLength": 60,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Name"
+              },
+              "new": {
+                "default": false,
+                "title": "New",
+                "type": "boolean"
+              },
               "provider": {
                 "enum": [
                   "anthropic",
@@ -58447,6 +58667,19 @@
                 "maxItems": 8,
                 "title": "Reasoning",
                 "type": "array"
+              },
+              "slot": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Slot"
               }
             },
             "required": [
@@ -58600,6 +58833,25 @@
                     "title": "Model",
                     "type": "string"
                   },
+                  "name": {
+                    "anyOf": [
+                      {
+                        "maxLength": 60,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Name"
+                  },
+                  "new": {
+                    "default": false,
+                    "title": "New",
+                    "type": "boolean"
+                  },
                   "provider": {
                     "enum": [
                       "anthropic",
@@ -58615,6 +58867,19 @@
                     "maxItems": 8,
                     "title": "Reasoning",
                     "type": "array"
+                  },
+                  "slot": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Slot"
                   }
                 },
                 "required": [
@@ -58658,6 +58923,19 @@
                     "title": "Model",
                     "type": "string"
                   },
+                  "name": {
+                    "anyOf": [
+                      {
+                        "maxLength": 60,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Name"
+                  },
                   "provider": {
                     "enum": [
                       "anthropic",
@@ -58682,6 +58960,11 @@
                   "revision": {
                     "$ref": "#/$defs/Revision"
                   },
+                  "slot": {
+                    "format": "uuid",
+                    "title": "Slot",
+                    "type": "string"
+                  },
                   "updated_at": {
                     "format": "date-time",
                     "title": "Updated At",
@@ -58690,6 +58973,7 @@
                 },
                 "required": [
                   "id",
+                  "slot",
                   "revision",
                   "configuration",
                   "provider",
@@ -58826,6 +59110,27 @@
                   }
                 ]
               },
+              "default_slot": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Default Slot"
+              },
+              "models": {
+                "items": {
+                  "$ref": "#/$defs/ProviderRevisionMetadata"
+                },
+                "maxItems": 20,
+                "title": "Models",
+                "type": "array"
+              },
               "reasoning": {
                 "items": {
                   "$ref": "#/$defs/ReasoningChoice"
@@ -58868,6 +59173,16 @@
               "type": "text"
             },
             {
+              "default": null,
+              "multiple": false,
+              "name": "model",
+              "options": [
+                "--model"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
               "default": "False",
               "multiple": false,
               "name": "dry_run",
@@ -58901,6 +59216,19 @@
                 "default": false,
                 "title": "Dry Run",
                 "type": "boolean"
+              },
+              "model": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Model"
               },
               "reasoning": {
                 "anyOf": [
@@ -61612,6 +61940,16 @@
               "type": "text"
             },
             {
+              "default": null,
+              "multiple": false,
+              "name": "model",
+              "options": [
+                "--model"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
               "default": "False",
               "multiple": false,
               "name": "json_output",
@@ -61629,6 +61967,19 @@
                 "default": false,
                 "title": "Dry Run",
                 "type": "boolean"
+              },
+              "model": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Model"
               },
               "reasoning": {
                 "anyOf": [
@@ -107739,6 +108090,19 @@
                 "default": false,
                 "title": "Dry Run",
                 "type": "boolean"
+              },
+              "model": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Model"
               },
               "reasoning": {
                 "anyOf": [

@@ -126,7 +126,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
         task_id: UUID, body: CardGenerateRequest, ctx=Depends(context, scope="function")
     ):
         session, actor = ctx
-        provider = await resolve(session) if resolve else llm
+        provider = await resolve(session, model=body.model) if resolve else llm
         data, job, warnings = await card_generation.submit_generation(
             session, actor, task_id, body, storage, provider, settings
         )

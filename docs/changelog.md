@@ -6,6 +6,15 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Several extraction models
+
+- Save several models, each with its own provider, endpoint and key, mark one
+  as the default, and remove models without affecting queued jobs.
+- Choose the model for one extraction, drafting run or connection test; runs
+  without a choice use the default model.
+- Fill a new model from vendor templates (Zhipu, DeepSeek, Qwen, Kimi, MiniMax,
+  SiliconFlow, OpenRouter, Anthropic), so only the key needs entering.
+
 ## 2026-10-15: Faster tender extraction
 
 - Cut Word sections longer than the batch budget into runs of whole blocks, and

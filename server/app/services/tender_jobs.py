@@ -50,9 +50,15 @@ async def submit(
     identity.require("tender:parse" if kind == "parse" else "req:extract")
     document = await require_document(session, document_id)
     count = await session.scalar(select(Chunk.id).where(Chunk.document_id == document_id).limit(1))
-    if kind == "parse" and body.reasoning is not None:
-        raise ServiceError("invalid_input", "Reasoning levels apply only to extraction", 400, 2)
-    model = await resolve(session) if resolve is not None and kind == "extract" else llm
+    if kind == "parse" and (body.reasoning is not None or body.model is not None):
+        raise ServiceError(
+            "invalid_input", "Models and reasoning levels apply only to extraction", 400, 2
+        )
+    model = (
+        await resolve(session, model=body.model)
+        if resolve is not None and kind == "extract"
+        else llm
+    )
     level, level_warnings = None, []
     if kind == "extract":
         model, level, level_warnings = with_reasoning(model, body.reasoning)

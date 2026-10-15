@@ -395,7 +395,7 @@ func (c *APIClient) ProviderWrite(ctx context.Context, body any) (Result, error)
 	if err == nil && response.StatusCode >= 200 && response.StatusCode < 300 && receipt.OK && len(receipt.Data.ID) == 36 && receipt.Data.Revision > 0 {
 		return Result{OK: true, Data: Object{"id": receipt.Data.ID, "revision": receipt.Data.Revision}}, nil
 	}
-	messages := map[string]string{"revision_conflict": "修订已变化，请核对当前配置", "provider_key_required": "首次设置或更换供应商、端点需输入新密钥", "invalid_input": "配置参数无效", "forbidden": "当前身份无权维护配置", "human_required": "需要本人操作", "not_found": "模型不可访问", "session_required": "请重新输入访问密钥"}
+	messages := map[string]string{"revision_conflict": "修订已变化，请核对当前配置", "provider_key_required": "首次设置或更换供应商、端点需输入新密钥", "invalid_input": "配置参数无效", "forbidden": "当前身份无权维护配置", "human_required": "需要本人操作", "not_found": "模型不可访问", "session_required": "请重新输入访问密钥", "provider_model_limit": "最多保存 20 个模型，请先删除不用的模型", "provider_model_unavailable": "该模型已删除或不存在，请重新读取"}
 	code := receipt.Data.Error.Code
 	message, ok := messages[code]
 	if !ok {

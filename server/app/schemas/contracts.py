@@ -68,6 +68,8 @@ class JobAction(Contract):
     retry: bool = False
     # Extraction only: one of the model's official reasoning levels; omitted means its default.
     reasoning: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,20}$")
+    # Extraction only: a saved model; omitted means the default model.
+    model: UUID | None = None
 
 
 class Category(StrEnum):

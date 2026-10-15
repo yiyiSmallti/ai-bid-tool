@@ -267,6 +267,8 @@ COMMANDS = {
     "provider history": None,
     "provider set": ProviderConfigInput,
     "provider test": ProviderTest,
+    "provider default": None,
+    "provider remove": None,
     "sandbox render": PrototypeSpec,
     "sandbox capture": VendorSpec,
     "sandbox list": None,

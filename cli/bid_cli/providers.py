@@ -4,6 +4,7 @@ import os
 import stat
 from pathlib import Path
 from typing import Annotated
+from uuid import UUID
 
 import typer
 from app.core.errors import ServiceError
@@ -71,18 +72,36 @@ def provider_set(
     emit(call("POST", "/providers", json=body), "provider set", json_output)
 
 
+@app.command("default")
+def provider_default(model: Annotated[UUID, typer.Option()], json_output: JsonOption = False):
+    from bid_cli.main import call, emit
+
+    emit(call("POST", f"/providers/models/{model}/default"), "provider default", json_output)
+
+
+@app.command("remove")
+def provider_remove(model: Annotated[UUID, typer.Option()], json_output: JsonOption = False):
+    from bid_cli.main import call, emit
+
+    emit(call("DELETE", f"/providers/models/{model}"), "provider remove", json_output)
+
+
 @app.command("test")
 def provider_test(
     capability: Annotated[str, typer.Option()] = "llm_extract",
     reasoning: Annotated[str | None, typer.Option()] = None,
+    model: Annotated[UUID | None, typer.Option()] = None,
     dry_run: Annotated[bool, typer.Option()] = False,
     json_output: JsonOption = False,
 ):
     from bid_cli.main import call, emit
 
     body = ProviderTest.model_validate(
-        {"capability": capability, "reasoning": reasoning, "dry_run": dry_run}
+        {"capability": capability, "reasoning": reasoning, "model": model, "dry_run": dry_run}
     )
-    result = call("POST", "/providers/test", json=body.model_dump(mode="json"))
+    payload = body.model_dump(mode="json")
+    if model is None:
+        del payload["model"]
+    result = call("POST", "/providers/test", json=payload)
     code = result.get("data", {}).get("error", {}).get("exit_code", 4) if not result["ok"] else 0
     emit(result, "provider test", json_output, code)

@@ -257,6 +257,11 @@ func (a *NativeApp) handleError(err error) bool {
 			a.Error = "会话已失效，请重新输入访问密钥"
 			return true
 		}
+		// A removed model is a stale choice on the page, not an inaccessible page.
+		if api.Code == "provider_model_unavailable" {
+			a.Error = settingsFailures[api.Code]
+			return true
+		}
 		if api.Status == 403 || api.Status == 404 {
 			a.cancel()
 			a.ctx, a.cancel = context.WithCancel(context.Background())

@@ -24,6 +24,27 @@ Updates require `expected_revision`.
 defined in [model settings](model-settings.md). Read access requires
 `provider:read`; save and test require the human identity and `provider:write`.
 
+## Several models
+
+An installation can save up to 20 models. Each model is a slot with its own
+revision chain, name, provider, endpoint, and key; one model is the default.
+`provider_slots` in
+[0002_provider_models.py](../../server/migrations/versions/0002_provider_models.py)
+records the default and removed models. Revisions saved before that migration
+belong to the legacy slot, which becomes the default.
+
+`ProviderConfigInput` with `new: true` adds a model; with `slot` it revises that
+model; with neither it revises the default model. An omitted key reuses the key
+of any live model with the same provider and endpoint. `bid provider default
+--model SLOT` and `bid provider remove --model SLOT` change the default and
+remove a model; removing the default promotes the most recently saved model.
+Extraction, drafting, and provider tests accept `model`; an omitted model means
+the default, and a removed or unknown model fails with
+`provider_model_unavailable`. Queued jobs keep their pinned revision, so
+removing a model does not strand them. The desktop settings page fills new
+models from vendor templates in
+[native_settings_templates.go](../../desktop/native_settings_templates.go).
+
 ## Revisions and encryption
 
 The authoritative table, triggers, and grants are in the
