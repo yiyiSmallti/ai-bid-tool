@@ -180,7 +180,11 @@ async def decision_request(
             )
         )
     scope = agents.canonical(
-        {"task": str(row.task_id), "extraction_job_id": str(row.extraction_job_id)}
+        {
+            "task": str(row.task_id),
+            "document": str(row.document_id),
+            "extraction_job_id": str(row.extraction_job_id),
+        }
     )
     messages.insert(
         0,
@@ -189,7 +193,7 @@ async def decision_request(
             session_id=row.id,
             ordinal=1,
             role="system",
-            content="Use only this fixed task and extraction: " + scope,
+            content="Use only this fixed task, document and extraction: " + scope,
             content_sha256=agents.digest(scope),
             created_at=row.created_at,
         ),
@@ -740,6 +744,10 @@ async def finish_goal(session, row, job, actor, processor, step, action, *, exec
         .limit(1)
     )
     if draft is None:
+        # Keep the answer for the human; without a draft the goal stays open.
+        await agents.add_message(
+            session, row, "assistant", action.summary, processor.settings, step
+        )
         pending = await agents.pause(
             session,
             row,

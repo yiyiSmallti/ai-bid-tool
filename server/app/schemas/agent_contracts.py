@@ -10,6 +10,7 @@ from app.providers.base import LLMProvider
 from app.schemas.agent_provenance import AgentProvenance as AgentProvenance
 from app.schemas.contracts import Contract, Cost, ProviderUsage, Result
 from app.schemas.response_card_contracts import CardGenerateRequest, DraftRequest
+from app.schemas.source_contracts import SourceReadArguments, SourceSearchArguments
 
 Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 AgentScope = Literal[
@@ -26,8 +27,17 @@ AgentScope = Literal[
     "evidence:source:read",
 ]
 ToolCommand = Literal[
-    "req list", "card list", "card show", "card generate", "draft", "draft show", "job status"
+    "req list",
+    "card list",
+    "card show",
+    "card generate",
+    "draft",
+    "draft show",
+    "job status",
+    "source search",
+    "source read",
 ]
+TOOL_LIMIT = 9
 SessionState = Literal[
     "queued", "running", "waiting_job", "paused", "completed", "partial", "failed", "cancelled"
 ]
@@ -143,6 +153,16 @@ class JobStatusCall(Contract):
     arguments: JobStatusArguments
 
 
+class SourceSearchCall(Contract):
+    command: Literal["source search"]
+    arguments: SourceSearchArguments
+
+
+class SourceReadCall(Contract):
+    command: Literal["source read"]
+    arguments: SourceReadArguments
+
+
 ToolCall = Annotated[
     ReqListCall
     | CardListCall
@@ -150,7 +170,9 @@ ToolCall = Annotated[
     | CardGenerateCall
     | DraftCall
     | DraftShowCall
-    | JobStatusCall,
+    | JobStatusCall
+    | SourceSearchCall
+    | SourceReadCall,
     Field(discriminator="command"),
 ]
 
@@ -300,7 +322,7 @@ class AgentPreviewData(Contract):
     task_id: UUID
     extraction_job_id: UUID
     effective_scopes: list[AgentScope]
-    tools: list[AgentToolDefinition] = Field(max_length=7)
+    tools: list[AgentToolDefinition] = Field(max_length=TOOL_LIMIT)
     limits: AgentLimits
     estimated_cost: Cost
     estimate_basis: Literal["first_decision_upper_bound", "unknown"]
@@ -367,7 +389,7 @@ class AgentDecisionRequest(Contract):
     session_id: UUID
     step_id: UUID
     messages: list[AgentMessageView] = Field(max_length=40)
-    tools: list[AgentToolDefinition] = Field(max_length=7)
+    tools: list[AgentToolDefinition] = Field(max_length=TOOL_LIMIT)
     input_refs: list[AgentInputRef] = Field(max_length=100)
     remaining_steps: int = Field(strict=True, ge=1, le=64)
     deadline: AwareDatetime

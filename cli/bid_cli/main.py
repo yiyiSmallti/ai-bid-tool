@@ -87,6 +87,7 @@ app.add_typer(memory_app, name="memory")
 app.add_typer(agent_app, name="agent")
 app.add_typer(score_app, name="score")
 task_app, tender_app, req_app, job_app, token_app = (typer.Typer() for _ in range(5))
+source_app = typer.Typer()
 resource_app, product_app, task_resource_app = (typer.Typer() for _ in range(3))
 feature_app, task_feature_app = typer.Typer(), typer.Typer()
 certificate_app, task_certificate_app = typer.Typer(), typer.Typer()
@@ -99,6 +100,7 @@ for name, group in (
     ("task", task_app),
     ("tender", tender_app),
     ("req", req_app),
+    ("source", source_app),
     ("job", job_app),
     ("token", token_app),
     ("resource", resource_app),
@@ -1161,6 +1163,32 @@ def req_list(
 ):
     params = {"job": str(job)} if job else None
     emit(call("GET", f"/tasks/{task}/requirements", params=params), "req list", json_output)
+
+
+@source_app.command("search")
+def source_search(
+    document: Annotated[UUID, typer.Option()],
+    query: Annotated[str, typer.Option(help="Terms that must all appear in one line")],
+    limit: Annotated[int, typer.Option(min=1, max=50)] = 50,
+    json_output: JsonOption = False,
+):
+    params = {"query": query, "limit": limit}
+    response = call("GET", f"/documents/{document}/source/search", params=params)
+    emit(response, "source search", json_output)
+
+
+@source_app.command("read")
+def source_read(
+    chunk: Annotated[UUID, typer.Option()],
+    block: Annotated[str | None, typer.Option(help="One Word block of the chunk")] = None,
+    offset: Annotated[int, typer.Option(min=0)] = 0,
+    limit: Annotated[int, typer.Option(min=1, max=8000)] = 8000,
+    json_output: JsonOption = False,
+):
+    params: dict = {"offset": offset, "limit": limit}
+    if block is not None:
+        params["block"] = block
+    emit(call("GET", f"/chunks/{chunk}/source", params=params), "source read", json_output)
 
 
 @req_app.command("history")

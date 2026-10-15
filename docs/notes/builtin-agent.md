@@ -44,11 +44,25 @@ it never resets cumulative resource limits. Sessions have no user owner or
 organization identifier. [ADR 0012](../adr/0012-single-user-installation.md)
 defines this installation boundary.
 
-The broker exposes req list, card list, card show, card generate, draft, draft show
-and job status. It has no shell, arbitrary HTTP or model-selected file access.
+The broker exposes req list, card list, card show, card generate, draft, draft show,
+job status, source search and source read. It has no shell, arbitrary HTTP or
+model-selected file access.
 Generation first reads a preflight and fixes the input hash. Proposals remain
 unconfirmed; deterministic draft assembly copies only human-confirmed responses.
 This first agent workflow retrieves no memory.
+
+Source search and source read give the agent the parsed tender of its session
+document under `task:read` alone. Search returns lines that contain every
+query term, with chunk ID, page or Word block ID and heading label, at most 50
+matches and 20 KB; a line over 400 characters is cut around the match and
+marked `cut`. Read returns one chunk, or one Word block of it, from an offset in
+pages of at most 8,000 characters with `next_offset` while text remains. Both
+redact the task's confidential values before searching, so a masked value can
+be neither read nor found, and offsets count characters of the redacted text.
+The broker rejects another document or another task's chunk as `not_found`,
+which pauses the session for authority review. A completion without a draft
+still stores its summary as an assistant message, so a question-only session
+keeps its answer while it pauses for clarification.
 
 Their Result discovery entries also expose command-specific `output`, `items`
 and a complete seven-key `result` schema, covering preview, accepted-job,
@@ -101,6 +115,8 @@ token identity and the token-automation marker. Dry-run creates no writes or cal
   confidential-value access available to an agent.
 - Context overflow, changed fixed inputs or disabled redaction pause explicitly.
   Do not shrink requirements, switch models or truncate citations silently.
+- A source result is untrusted text like every tool result; a quote the agent
+  reports is evidence only after a human checks it against the cited chunk.
 - Database-free tests cannot prove database triggers, queue transaction atomicity, lease
   takeover or concurrent call admission. The contract owns those acceptance gates.
 
@@ -125,6 +141,9 @@ acceptance remains defined by the
   [session limits](../../server/app/services/agent_limits.py): allowlisted services,
   parent chains, proven retries and descendant admission ceilings through
   `definitions/invoke/recover/prove_safe_retry` and `enforce/guard_job/cost_view`.
+- [Source views](../../server/app/services/sources.py) `search/read` and
+  [contracts](../../server/app/schemas/source_contracts.py): redacted tender search
+  and bounded reads, also served as `bid source search/read`.
 - [Controller](../../server/app/jobs/agent.py) `decision_request/projection/fragment/checkpoint/wake`
   and [queue](../../server/app/jobs/queue.py) `enqueue_in_transaction/enqueue_agent_wake`:
   redacted context, transactional dispatch, checkpoints, durable wakes and lease fences.

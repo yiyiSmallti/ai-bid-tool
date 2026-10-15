@@ -147,26 +147,16 @@ historical jobs add no new resource use. Unknown calls block unsafe replay;
 late real receipts may settle usage after cancellation but cannot publish work.
 The model receives bounded redacted projections; hidden reasoning is not stored.
 
-## Planned: tender source tools
+## Tender source tools
 
-The agent sees requirements and cards but no tender text. Two read-only CLI
-commands, also exposed as tools under `task:read`, let it locate and read the
-parsed tender of its session task on demand instead of receiving whole documents:
+The agent reads the parsed tender of its session through `source search` and
+`source read`; the [mechanism note](../notes/builtin-agent.md#how-it-works)
+describes the bounds and redaction.
 
-- `source search`: keyword search over the task's parsed sections. Returns
-  section and chunk identifiers with the matching line, at most 50 matches and
-  20 KB; longer lines are cut with a marker.
-- `source read`: one section or chunk from an offset, at most 8,000 characters
-  per call, with `next_offset` while text remains.
-
-Both results pass confidential-value redaction and are untrusted data like
-every tool result. Citations the agent reports must still resolve to stored
-chunks. The tool ceiling in `AgentDecisionRequest` rises from 7 to 9; the
-contract version, CLI registry and snapshot change with it.
-
-Acceptance: on a real tender, a session asked for the bid deadline and the
-document collection period answers with verbatim citations to the stored
-chunks; calls, tokens and duration are recorded under `data/work`.
+Remaining acceptance: on a real tender, a session asked for the bid deadline
+and the document collection period answers with verbatim citations to the
+stored chunks; calls, tokens and duration are recorded under `data/work`. It
+needs real provider calls and runs as an eval, not in CI.
 
 ## Planned: long sessions
 

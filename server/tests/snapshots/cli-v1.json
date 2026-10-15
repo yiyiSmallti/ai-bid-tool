@@ -6710,7 +6710,7 @@
                     "items": {
                       "$ref": "#/$defs/AgentToolDefinition"
                     },
-                    "maxItems": 7,
+                    "maxItems": 9,
                     "title": "Tools",
                     "type": "array"
                   }
@@ -6887,7 +6887,9 @@
                       "card generate",
                       "draft",
                       "draft show",
-                      "job status"
+                      "job status",
+                      "source search",
+                      "source read"
                     ],
                     "title": "Command",
                     "type": "string"
@@ -7173,7 +7175,9 @@
                       "card generate",
                       "draft",
                       "draft show",
-                      "job status"
+                      "job status",
+                      "source search",
+                      "source read"
                     ],
                     "type": "string"
                   },
@@ -103184,6 +103188,1052 @@
             "type": "object"
           }
         },
+        "source read": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "chunk",
+              "options": [
+                "--chunk"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "block",
+              "options": [
+                "--block"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "0",
+              "multiple": false,
+              "name": "offset",
+              "options": [
+                "--offset"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "8000",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "invocation_input": {
+            "additionalProperties": false,
+            "properties": {
+              "block": {
+                "anyOf": [
+                  {
+                    "maxLength": 200,
+                    "minLength": 2,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Block"
+              },
+              "chunk": {
+                "format": "uuid",
+                "title": "Chunk",
+                "type": "string"
+              },
+              "limit": {
+                "default": 8000,
+                "maximum": 8000,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "offset": {
+                "default": 0,
+                "minimum": 0,
+                "title": "Offset",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "chunk"
+            ],
+            "title": "SourceReadArguments",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "JsonValue": {}
+            },
+            "items": {
+              "$ref": "#/$defs/JsonValue"
+            },
+            "maxItems": 0,
+            "type": "array"
+          },
+          "output": {
+            "$defs": {
+              "CommandError": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "enum": [
+                      2,
+                      3,
+                      4,
+                      5
+                    ],
+                    "title": "Exit Code",
+                    "type": "integer"
+                  },
+                  "message": {
+                    "title": "Message",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "exit_code"
+                ],
+                "title": "CommandError",
+                "type": "object"
+              },
+              "CommandFailure": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/CommandError"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "CommandFailure",
+                "type": "object"
+              },
+              "SourceReadData": {
+                "additionalProperties": false,
+                "properties": {
+                  "block_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Block Id"
+                  },
+                  "chunk_id": {
+                    "format": "uuid",
+                    "title": "Chunk Id",
+                    "type": "string"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "label": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                  },
+                  "length": {
+                    "description": "Characters in the whole chunk or block",
+                    "minimum": 0,
+                    "title": "Length",
+                    "type": "integer"
+                  },
+                  "next_offset": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Next Offset"
+                  },
+                  "offset": {
+                    "minimum": 0,
+                    "title": "Offset",
+                    "type": "integer"
+                  },
+                  "page": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page"
+                  },
+                  "seq": {
+                    "minimum": 1,
+                    "title": "Seq",
+                    "type": "integer"
+                  },
+                  "text": {
+                    "title": "Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "chunk_id",
+                  "seq",
+                  "document_id",
+                  "offset",
+                  "length",
+                  "text"
+                ],
+                "title": "SourceReadData",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SourceReadData"
+              },
+              {
+                "$ref": "#/$defs/CommandFailure"
+              }
+            ]
+          },
+          "result": {
+            "$defs": {
+              "CommandError": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "enum": [
+                      2,
+                      3,
+                      4,
+                      5
+                    ],
+                    "title": "Exit Code",
+                    "type": "integer"
+                  },
+                  "message": {
+                    "title": "Message",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "exit_code"
+                ],
+                "title": "CommandError",
+                "type": "object"
+              },
+              "CommandFailure": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/CommandError"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "CommandFailure",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "description": "Provider usage counters; the envelope name is retained for CLI compatibility.",
+                "properties": {
+                  "browser_units": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Browser Units",
+                    "type": "integer"
+                  },
+                  "calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Calls",
+                    "type": "integer"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "search_requests": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Search Requests",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              },
+              "JsonValue": {},
+              "SourceReadData": {
+                "additionalProperties": false,
+                "properties": {
+                  "block_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Block Id"
+                  },
+                  "chunk_id": {
+                    "format": "uuid",
+                    "title": "Chunk Id",
+                    "type": "string"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "label": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                  },
+                  "length": {
+                    "description": "Characters in the whole chunk or block",
+                    "minimum": 0,
+                    "title": "Length",
+                    "type": "integer"
+                  },
+                  "next_offset": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Next Offset"
+                  },
+                  "offset": {
+                    "minimum": 0,
+                    "title": "Offset",
+                    "type": "integer"
+                  },
+                  "page": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page"
+                  },
+                  "seq": {
+                    "minimum": 1,
+                    "title": "Seq",
+                    "type": "integer"
+                  },
+                  "text": {
+                    "title": "Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "chunk_id",
+                  "seq",
+                  "document_id",
+                  "offset",
+                  "length",
+                  "text"
+                ],
+                "title": "SourceReadData",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "const": "source read",
+                "title": "Command",
+                "type": "string"
+              },
+              "cost": {
+                "$ref": "#/$defs/Cost"
+              },
+              "data": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SourceReadData"
+                  },
+                  {
+                    "$ref": "#/$defs/CommandFailure"
+                  }
+                ],
+                "title": "Data"
+              },
+              "duration_ms": {
+                "default": 0,
+                "title": "Duration Ms",
+                "type": "integer"
+              },
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "maxItems": 0,
+                "title": "Items",
+                "type": "array"
+              },
+              "ok": {
+                "title": "Ok",
+                "type": "boolean"
+              },
+              "warnings": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Warnings",
+                "type": "array"
+              }
+            },
+            "required": [
+              "ok",
+              "command",
+              "data",
+              "items"
+            ],
+            "title": "SourceReadResult",
+            "type": "object"
+          }
+        },
+        "source search": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "document",
+              "options": [
+                "--document"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "query",
+              "options": [
+                "--query"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "invocation_input": {
+            "additionalProperties": false,
+            "properties": {
+              "document": {
+                "format": "uuid",
+                "title": "Document",
+                "type": "string"
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 50,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "query": {
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "\\S",
+                "title": "Query",
+                "type": "string"
+              }
+            },
+            "required": [
+              "document",
+              "query"
+            ],
+            "title": "SourceSearchArguments",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "SourceMatch": {
+                "additionalProperties": false,
+                "properties": {
+                  "block_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Block Id"
+                  },
+                  "chunk_id": {
+                    "format": "uuid",
+                    "title": "Chunk Id",
+                    "type": "string"
+                  },
+                  "cut": {
+                    "description": "The line was shortened around the match; read it in full",
+                    "title": "Cut",
+                    "type": "boolean"
+                  },
+                  "label": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                  },
+                  "line": {
+                    "title": "Line",
+                    "type": "string"
+                  },
+                  "line_offset": {
+                    "minimum": 0,
+                    "title": "Line Offset",
+                    "type": "integer"
+                  },
+                  "page": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page"
+                  },
+                  "seq": {
+                    "minimum": 1,
+                    "title": "Seq",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "chunk_id",
+                  "seq",
+                  "line_offset",
+                  "line",
+                  "cut"
+                ],
+                "title": "SourceMatch",
+                "type": "object"
+              }
+            },
+            "items": {
+              "$ref": "#/$defs/SourceMatch"
+            },
+            "type": "array"
+          },
+          "output": {
+            "$defs": {
+              "CommandError": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "enum": [
+                      2,
+                      3,
+                      4,
+                      5
+                    ],
+                    "title": "Exit Code",
+                    "type": "integer"
+                  },
+                  "message": {
+                    "title": "Message",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "exit_code"
+                ],
+                "title": "CommandError",
+                "type": "object"
+              },
+              "CommandFailure": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/CommandError"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "CommandFailure",
+                "type": "object"
+              },
+              "SourceSearchData": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "matches": {
+                    "minimum": 0,
+                    "title": "Matches",
+                    "type": "integer"
+                  },
+                  "query": {
+                    "title": "Query",
+                    "type": "string"
+                  },
+                  "truncated": {
+                    "description": "More matches exist than the match or byte limit allows",
+                    "title": "Truncated",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "query",
+                  "matches",
+                  "truncated"
+                ],
+                "title": "SourceSearchData",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SourceSearchData"
+              },
+              {
+                "$ref": "#/$defs/CommandFailure"
+              }
+            ]
+          },
+          "result": {
+            "$defs": {
+              "CommandError": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "enum": [
+                      2,
+                      3,
+                      4,
+                      5
+                    ],
+                    "title": "Exit Code",
+                    "type": "integer"
+                  },
+                  "message": {
+                    "title": "Message",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "exit_code"
+                ],
+                "title": "CommandError",
+                "type": "object"
+              },
+              "CommandFailure": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/CommandError"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "CommandFailure",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "description": "Provider usage counters; the envelope name is retained for CLI compatibility.",
+                "properties": {
+                  "browser_units": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Browser Units",
+                    "type": "integer"
+                  },
+                  "calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Calls",
+                    "type": "integer"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "search_requests": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Search Requests",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              },
+              "SourceMatch": {
+                "additionalProperties": false,
+                "properties": {
+                  "block_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Block Id"
+                  },
+                  "chunk_id": {
+                    "format": "uuid",
+                    "title": "Chunk Id",
+                    "type": "string"
+                  },
+                  "cut": {
+                    "description": "The line was shortened around the match; read it in full",
+                    "title": "Cut",
+                    "type": "boolean"
+                  },
+                  "label": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                  },
+                  "line": {
+                    "title": "Line",
+                    "type": "string"
+                  },
+                  "line_offset": {
+                    "minimum": 0,
+                    "title": "Line Offset",
+                    "type": "integer"
+                  },
+                  "page": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page"
+                  },
+                  "seq": {
+                    "minimum": 1,
+                    "title": "Seq",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "chunk_id",
+                  "seq",
+                  "line_offset",
+                  "line",
+                  "cut"
+                ],
+                "title": "SourceMatch",
+                "type": "object"
+              },
+              "SourceSearchData": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "matches": {
+                    "minimum": 0,
+                    "title": "Matches",
+                    "type": "integer"
+                  },
+                  "query": {
+                    "title": "Query",
+                    "type": "string"
+                  },
+                  "truncated": {
+                    "description": "More matches exist than the match or byte limit allows",
+                    "title": "Truncated",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "query",
+                  "matches",
+                  "truncated"
+                ],
+                "title": "SourceSearchData",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "const": "source search",
+                "title": "Command",
+                "type": "string"
+              },
+              "cost": {
+                "$ref": "#/$defs/Cost"
+              },
+              "data": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SourceSearchData"
+                  },
+                  {
+                    "$ref": "#/$defs/CommandFailure"
+                  }
+                ],
+                "title": "Data"
+              },
+              "duration_ms": {
+                "default": 0,
+                "title": "Duration Ms",
+                "type": "integer"
+              },
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/SourceMatch"
+                },
+                "title": "Items",
+                "type": "array"
+              },
+              "ok": {
+                "title": "Ok",
+                "type": "boolean"
+              },
+              "warnings": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Warnings",
+                "type": "array"
+              }
+            },
+            "required": [
+              "ok",
+              "command",
+              "data",
+              "items"
+            ],
+            "title": "SourceSearchResult",
+            "type": "object"
+          }
+        },
         "task activity": {
           "cli_parameters": [
             {
@@ -108536,6 +109586,65 @@
     },
     "duration_ms": 0,
     "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "source read": {
+    "command": "source read",
+    "cost": {
+      "browser_units": 0,
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "unresolved_calls": 0
+    },
+    "data": {
+      "block_id": null,
+      "chunk_id": "00000000-0000-0000-0000-000000000002",
+      "document_id": "00000000-0000-0000-0000-000000000001",
+      "label": null,
+      "length": 400,
+      "next_offset": 160,
+      "offset": 120,
+      "page": 3,
+      "seq": 3,
+      "text": "交货期：合同签订后30日历天内，送达采购人指定地点。"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "source search": {
+    "command": "source search",
+    "cost": {
+      "browser_units": 0,
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "unresolved_calls": 0
+    },
+    "data": {
+      "document_id": "00000000-0000-0000-0000-000000000001",
+      "matches": 1,
+      "query": "交货期",
+      "truncated": false
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "block_id": null,
+        "chunk_id": "00000000-0000-0000-0000-000000000002",
+        "cut": false,
+        "label": null,
+        "line": "交货期：合同签订后30日历天内",
+        "line_offset": 120,
+        "page": 3,
+        "seq": 3
+      }
+    ],
     "ok": true,
     "warnings": []
   },

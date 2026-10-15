@@ -1,4 +1,4 @@
-"""The seven broker commands' public Result output contracts.
+"""The nine broker commands' public Result output contracts.
 
 Business payloads reuse their owning domain contracts. Job status has a common
 record for the unrestricted CLI and a separate, closed broker profile for the
@@ -23,6 +23,7 @@ from app.schemas.response_card_contracts import (
     DraftPreview,
     DraftView,
 )
+from app.schemas.source_contracts import SourceMatch, SourceReadData, SourceSearchData
 
 JobState = Literal["queued", "running", "succeeded", "failed", "cancelled"]
 EmptyItems = Annotated[list[JsonValue], Field(max_length=0)]
@@ -210,6 +211,8 @@ DATA_TYPES = {
     "draft": (DraftPreflight | JobAccepted | DraftWait | FailedWait | DraftView | CommandFailure),
     "draft show": DraftView | CommandFailure,
     "job status": PublicJobStatus | CommandFailure,
+    "source search": SourceSearchData | CommandFailure,
+    "source read": SourceReadData | CommandFailure,
 }
 ITEM_TYPES = {
     name: (
@@ -219,6 +222,8 @@ ITEM_TYPES = {
         if name == "card list"
         else list[dict[str, JsonValue]]
         if name == "job status"
+        else list[SourceMatch]
+        if name == "source search"
         else EmptyItems
     )
     for name in DATA_TYPES

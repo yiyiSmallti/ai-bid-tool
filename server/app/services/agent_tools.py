@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 
 from app.core.errors import ServiceError, not_found
 from app.models.agent import AgentJobLink
-from app.models.entities import Job, Requirement, VendorCall
+from app.models.entities import Chunk, Job, Requirement, VendorCall
 from app.models.response_cards import DraftRun, ResponseCard
 from app.schemas.agent_contracts import (
     AgentProvenance,
@@ -22,7 +22,7 @@ from app.schemas.agent_contracts import (
 )
 from app.schemas.contracts import CONTRACT_VERSION, Result
 from app.schemas.preflight_contracts import PreflightData
-from app.services import card_generation, drafts, jobs, requirements
+from app.services import card_generation, drafts, jobs, requirements, sources
 from app.services import response_cards as cards
 
 TOOL_SCOPES: dict[ToolCommand, tuple[AgentScope, ...]] = {
@@ -33,6 +33,8 @@ TOOL_SCOPES: dict[ToolCommand, tuple[AgentScope, ...]] = {
     "draft": ("task:read", "card:read", "draft:run"),
     "draft show": ("task:read", "draft:read"),
     "job status": ("task:read", "job:read"),
+    "source search": ("task:read",),
+    "source read": ("task:read",),
 }
 
 
@@ -192,6 +194,13 @@ async def validate_call(session, actor, agent_session, step, call):
             )
             if linked is None:
                 raise not_found()
+    elif call.command == "source search":
+        if args.document != agent_session.document_id:
+            raise not_found()
+    elif call.command == "source read":
+        row = await session.get(Chunk, args.chunk)
+        if not same_parent(row, agent_session) or row.document_id != agent_session.document_id:
+            raise not_found()
     elif call.command == "job status":
         row = await session.get(Job, args.job_id)
         if not same_parent(row, agent_session) or row.document_id != agent_session.document_id:
@@ -429,6 +438,17 @@ async def invoke(
         result = Result(
             ok=data["completion"] != "partial", command=call.command, data=data, warnings=warnings
         )
+    elif call.command == "source search":
+        data, items = await sources.search(
+            session, actor, args.document, args.query, args.limit, settings
+        )
+        warnings = ["source_search_truncated"] if data["truncated"] else []
+        result = Result(ok=True, command=call.command, data=data, items=items, warnings=warnings)
+    elif call.command == "source read":
+        data = await sources.read(
+            session, actor, args.chunk, args.block, args.offset, args.limit, settings
+        )
+        result = Result(ok=True, command=call.command, data=data)
     else:
         result = Result.model_validate(await jobs.status(session, actor, args.job_id, storage))
     if child is not None:

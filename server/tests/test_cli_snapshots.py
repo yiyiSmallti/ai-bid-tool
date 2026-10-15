@@ -608,6 +608,35 @@ async def fake_request(self, method, path, **kwargs):
             data = CONFIDENTIAL_VALUE
         else:
             data, items = {"count": 1}, [CONFIDENTIAL_VALUE]
+    elif path == f"/documents/{IDENTIFIER}/source/search":
+        assert kwargs["params"] == {"query": "交货期", "limit": 50}
+        data = {"document_id": IDENTIFIER, "query": "交货期", "matches": 1, "truncated": False}
+        items = [
+            {
+                "chunk_id": IDENTIFIER_2,
+                "seq": 3,
+                "page": 3,
+                "block_id": None,
+                "label": None,
+                "line_offset": 120,
+                "line": "交货期：合同签订后30日历天内",
+                "cut": False,
+            }
+        ]
+    elif path == f"/chunks/{IDENTIFIER_2}/source":
+        assert kwargs["params"] == {"offset": 120, "limit": 40}
+        data = {
+            "chunk_id": IDENTIFIER_2,
+            "seq": 3,
+            "page": 3,
+            "block_id": None,
+            "label": None,
+            "document_id": IDENTIFIER,
+            "offset": 120,
+            "length": 400,
+            "text": "交货期：合同签订后30日历天内，送达采购人指定地点。",
+            "next_offset": 160,
+        }
     elif path == "/confidential-values":
         data = {"task_id": IDENTIFIER, "missing": 0}
         items = [CONFIDENTIAL_VALUE]
@@ -1391,6 +1420,8 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "req extract": ["req", "extract", "--document", IDENTIFIER, "--reasoning", "high"],
         "req list": ["req", "list", "--task", IDENTIFIER, "--job", IDENTIFIER],
         "req history": ["req", "history", "--task", IDENTIFIER],
+        "source search": ["source", "search", "--document", IDENTIFIER, "--query", "交货期"],
+        "source read": ["source", "read", "--chunk", IDENTIFIER_2, "--offset", "120", "--limit", "40"],
         "req repair-citations": ["req", "repair-citations", "--task", IDENTIFIER, "--job", IDENTIFIER],
         "req repair-citations execute": ["req", "repair-citations", "--task", IDENTIFIER, "--job", IDENTIFIER, "--execute", "--expected-preview", "a" * 64, "--reason", "Reviewed synthetic citation repair"],
         "job status": ["job", "status", IDENTIFIER],
