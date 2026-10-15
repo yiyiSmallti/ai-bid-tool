@@ -700,7 +700,7 @@ class BindingDetailQuery(Contract):
 
 
 class MemoryQuery(PageQuery):
-    scope: Literal["library"] = "library"
+    scope: Literal["library", "private"] = "library"
     q: SearchText | None = None
     kind: MemoryKind | None = None
     status: MemoryStatus | None = None

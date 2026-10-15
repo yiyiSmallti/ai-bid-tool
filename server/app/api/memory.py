@@ -34,7 +34,7 @@ def create_router(context, db, queue, settings, storage):
 
     @router.get("/memories", name="memory_list", response_model=Result)
     async def listing(
-        scope: Literal["global", "library", "project"] = Query(...),
+        scope: Literal["global", "library", "project", "private"] = Query(...),
         task_id: UUID | None = None,
         status: Literal["candidate", "active", "disabled"] | None = None,
         include_deleted: bool = False,

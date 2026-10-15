@@ -13,7 +13,7 @@ from app.schemas.response_card_contracts import ReviewDomain
 
 if TYPE_CHECKING:
     from app.providers.drafting import DraftingOutput
-type MemoryScope = Literal["global", "library", "project"]
+type MemoryScope = Literal["global", "library", "project", "private"]
 type MemoryKind = Literal["rule", "preference"]
 type MemoryStatus = Literal["candidate", "active", "disabled"]
 type MemoryOrigin = Literal["human", "system"]
@@ -231,7 +231,7 @@ class MemoryPageData(Contract):
 
 
 class MemoryRetrievalRequest(Contract):
-    scopes: list[MemoryScope] = Field(min_length=1, max_length=3)
+    scopes: list[MemoryScope] = Field(min_length=1, max_length=4)
     task_id: UUID | None = None
     query: str = Field(min_length=1, max_length=2000)
     keywords: list[Tag] = Field(default_factory=list, max_length=20)
@@ -256,6 +256,14 @@ class MemoryRetrievalRequest(Contract):
 class MemoryEpochView(Contract):
     scope: MemoryScope
     epoch: int = Field(strict=True, ge=0)
+    # Private memory has one epoch per owner; absent for every other scope.
+    owner_member_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
+
+    @model_validator(mode="after")
+    def private_owner(self):
+        if (self.scope == "private") != (self.owner_member_id is not None):
+            raise ValueError("only a private epoch names its owner")
+        return self
 
 
 class MemoryRef(Contract):
@@ -292,7 +300,7 @@ class MemoryRetrievalData(Contract):
     priority_version: str
     query_sha256: Digest
     manifest_sha256: Digest
-    scopes: list[MemoryScope] = Field(min_length=1, max_length=3)
+    scopes: list[MemoryScope] = Field(min_length=1, max_length=4)
     epochs: list[MemoryEpochView]
     valid_until: AwareDatetime | None
     omitted: list[MemoryOmission] = Field(default_factory=list)

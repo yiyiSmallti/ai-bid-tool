@@ -1,4 +1,4 @@
-"""Bounded library-memory browse over the authenticated Result API."""
+"""Bounded library and private memory browse over the authenticated Result API."""
 
 from pathlib import Path
 from typing import Annotated
@@ -14,8 +14,8 @@ COMMAND_INPUTS = {"memory browse": MemoryQuery}
 COMMAND_ITEMS = {"memory browse": MemoryView}
 
 
-def validated(body: dict) -> dict:
-    """Reject malformed or non-library browse receipts before emitting success."""
+def validated(body: dict, scope: str = "library") -> dict:
+    """Reject malformed browse receipts, or rows of another scope, before emitting success."""
     try:
         if set(body) != {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}:
             raise ValueError("invalid envelope")
@@ -23,7 +23,7 @@ def validated(body: dict) -> dict:
         if not result.ok or result.command != "memory browse":
             raise ValueError("invalid command result")
         page = Page[MemoryView].model_validate({"data": result.data, "items": result.items})
-        if any(item.current.target.scope != "library" for item in page.items):
+        if any(item.current.target.scope != scope for item in page.items):
             raise ValueError("unsupported memory scope")
     except (KeyError, TypeError, ValueError, ValidationError) as exc:
         raise ServiceError(
@@ -37,7 +37,6 @@ def register(memory_app: typer.Typer):
 
     @memory_app.command("browse")
     def browse(input: Annotated[Path, typer.Option()], json_output: cli.JsonOption = False):
-        body = cli.call(
-            "POST", "/management/memories/query", json=cli.input_contract(input, MemoryQuery)
-        )
-        cli.emit(validated(body), "memory browse", json_output)
+        request = cli.input_contract(input, MemoryQuery)
+        body = cli.call("POST", "/management/memories/query", json=request)
+        cli.emit(validated(body, request["scope"]), "memory browse", json_output)

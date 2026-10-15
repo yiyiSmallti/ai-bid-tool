@@ -165,7 +165,11 @@ async def test_memory_retrieval_full_entries_top_k_and_context_budget(api, heade
 
 @pytest.mark.parametrize(
     "scope,target",
-    [("global", {}), ("project", {"task_id": "00000000-0000-0000-0000-000000000001"})],
+    [
+        ("global", {}),
+        ("project", {"task_id": "00000000-0000-0000-0000-000000000001"}),
+        ("private", {}),
+    ],
 )
 async def test_memory_disabled_scope_error_is_explicit(api, headers, scope, target):
     reply = await api.post(

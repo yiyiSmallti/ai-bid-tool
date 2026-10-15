@@ -48309,7 +48309,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
@@ -48603,7 +48604,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
@@ -49049,7 +49051,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
@@ -49364,8 +49367,11 @@
                 "default": null
               },
               "scope": {
-                "const": "library",
                 "default": "library",
+                "enum": [
+                  "library",
+                  "private"
+                ],
                 "title": "Scope",
                 "type": "string"
               },
@@ -49569,7 +49575,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
@@ -50412,7 +50419,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
@@ -50849,7 +50857,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
@@ -51273,7 +51282,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
@@ -51634,7 +51644,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
@@ -51873,6 +51884,19 @@
                     "title": "Epoch",
                     "type": "integer"
                   },
+                  "owner_member_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Owner Member Id"
+                  },
                   "scope": {
                     "$ref": "#/$defs/MemoryScope"
                   }
@@ -51920,7 +51944,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
@@ -51996,7 +52021,7 @@
                 "items": {
                   "$ref": "#/$defs/MemoryScope"
                 },
-                "maxItems": 3,
+                "maxItems": 4,
                 "minItems": 1,
                 "title": "Scopes",
                 "type": "array"
@@ -52084,7 +52109,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
@@ -52133,7 +52159,7 @@
                 "items": {
                   "$ref": "#/$defs/MemoryScope"
                 },
-                "maxItems": 3,
+                "maxItems": 4,
                 "minItems": 1,
                 "title": "Scopes",
                 "type": "array"
@@ -52188,6 +52214,19 @@
                     "title": "Epoch",
                     "type": "integer"
                   },
+                  "owner_member_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Owner Member Id"
+                  },
                   "scope": {
                     "$ref": "#/$defs/MemoryScope"
                   }
@@ -52235,7 +52274,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
@@ -52311,7 +52351,7 @@
                 "items": {
                   "$ref": "#/$defs/MemoryScope"
                 },
-                "maxItems": 3,
+                "maxItems": 4,
                 "minItems": 1,
                 "title": "Scopes",
                 "type": "array"
@@ -52978,7 +53018,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
@@ -53473,7 +53514,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
@@ -53858,7 +53900,8 @@
                 "enum": [
                   "global",
                   "library",
-                  "project"
+                  "project",
+                  "private"
                 ],
                 "type": "string"
               },
