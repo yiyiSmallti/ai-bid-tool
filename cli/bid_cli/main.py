@@ -1316,7 +1316,7 @@ platform_app.add_typer(platform_trust_anchor_app, name="trust-anchor")
 
 
 register_task_board_commands(task_app)
-register_member_commands(app)
+register_member_commands(app, task_app)
 register_management_product_commands(product_app)
 register_management_feature_commands(feature_app)
 register_management_template_commands(template_app)
