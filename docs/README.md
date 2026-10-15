@@ -28,6 +28,7 @@ each page declares one `kind`, and each fact has one home. Kind mappings are in
 Notes use the structure required by [the agent workflow](../agent.md#workflow).
 
 - [Built-in agent orchestration](notes/builtin-agent.md): bounded command tools, owner authority, durable pauses and recovery.
+- [Enterprise gateway](notes/enterprise-gateway.md): stored deployment mode, startup check and gateway-only settings.
 - [platform-credentials.md](notes/platform-credentials.md): platform credential authority, resolution before each call, import and root-key rotation.
 - [tenant-isolation.md](notes/tenant-isolation.md): RLS, org (organization/tenant; 单位) context and file isolation.
 - [memory-management.md](notes/memory-management.md): bounded org memory pages, exact revision actions and recorded task feedback recovery.
