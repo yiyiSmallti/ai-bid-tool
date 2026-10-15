@@ -12,6 +12,7 @@ from app.core.errors import ServiceError
 from app.core.security import TokenSigner, access_key_matches
 from app.schemas.contracts import CONTRACT_VERSION, Result, SessionCreate, TokenCreate
 from app.services import tokens
+from app.services.auth import access_key_refused
 
 
 def create_router(
@@ -42,6 +43,8 @@ def create_router(
 
     @router.post("/auth/session", name="auth_session_create", response_model=Result)
     async def auth_session_create(body: SessionCreate):
+        if settings.deployment == "enterprise":
+            raise access_key_refused()
         if not access_key_matches(
             body.access_key.get_secret_value(), settings.access_key.get_secret_value()
         ):
