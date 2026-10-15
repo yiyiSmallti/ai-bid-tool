@@ -13,8 +13,11 @@ reproducible with --basetemp=data/work/members.
 import json
 import os
 import runpy
+import socket
+import stat
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -52,6 +55,12 @@ def bootstrap_admin(login):
     return json.loads(done.stdout)
 
 
+def free_port():
+    with socket.socket() as reservation:
+        reservation.bind(("127.0.0.1", 0))
+        return reservation.getsockname()[1]
+
+
 def code(response):
     return [response.status_code, response.json()["data"].get("error", {}).get("code")]
 
@@ -71,6 +80,44 @@ async def session_for(api, login, password):
     response = await sign_in(api, login, password)
     assert response.status_code == 200, response.text
     return bearer(response.json()["data"]["session"])
+
+
+def run_cli(arguments, server, token):
+    """The CLI against a real gateway process, holding only a `bid_` token."""
+    env = {
+        name: value
+        for name, value in os.environ.items()
+        if name not in {"BID_ACCESS_KEY", "BID_ACCESS_KEY_FILE"}
+    }
+    done = subprocess.run(
+        [str(Path(sys.executable).with_name("bid")), "--server", server, *arguments, "--json"],
+        env=env | {"BID_TOKEN": token},
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    return done.returncode, json.loads(done.stdout or done.stderr)
+
+
+def start_gateway(tmp_path):
+    port = free_port()
+    process = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "app.api.main:create_app", "--factory"]
+        + ["--host", "127.0.0.1", "--port", str(port), "--log-level", "warning"],
+        env=os.environ | GATEWAY | {"BID_DATA_DIR": str(tmp_path / "files")},
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    address = f"http://127.0.0.1:{port}"
+    for _ in range(200):
+        try:
+            if httpx.get(address + "/health").status_code == 200:
+                return process, address
+        except httpx.NetworkError:
+            pass
+        time.sleep(0.1)
+    process.terminate()
+    raise AssertionError("Gateway API did not start")
 
 
 @pytest.fixture
@@ -343,14 +390,78 @@ async def test_member_sessions_passwords_and_attribution(gateway, database, tmp_
         headers=root_a,
         json={"login": "second.admin", "display_name": "B", "role": "admin"},
     )
-    report["last_admin"]["demote_with_second"] = code(
-        await api.patch(f"/members/{root_id}", headers=root_a, json={"role": "member"})
-    )
     assert second.status_code == 200
+    second_id = second.json()["data"]["member"]["id"]
+    report["last_admin"]["demote_with_second"] = code(
+        await api.patch(f"/members/{second_id}", headers=root_a, json={"role": "member"})
+    )
     assert report["last_admin"] == {
         "demote": [409, "last_admin"],
         "disable": [409, "last_admin"],
         "demote_with_second": [200, None],
+    }
+
+    # The CLI manages members with an administrator's `bid_` token; one-time
+    # passwords land in owner-only files, never on stdout.
+    token = await api.post(
+        "/tokens",
+        headers=root_a,
+        json={
+            "name": "synthetic cli",
+            "scopes": ["member:manage", "task:read"],
+            "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert token.status_code == 200, token.text
+    root_token = token.json()["data"]["token"]
+    server, address = start_gateway(tmp_path)
+    try:
+        password_file = tmp_path / "cli-user.password"
+        status, shown = run_cli(["installation", "show"], address, "bid_invalid")
+        assert status == 0 and shown["data"]["mode"] == "enterprise"
+        status, created = run_cli(
+            ["member", "create", "--login", "cli.user", "--display-name", "CLI user"]
+            + ["--grant", "memory:edit", "--output", str(password_file)],
+            address,
+            root_token,
+        )
+        assert status == 0, created
+        secret = password_file.read_text()
+        assert stat.S_IMODE(password_file.stat().st_mode) == 0o600
+        assert secret not in json.dumps(created) and "initial_password" not in created["data"]
+        cli_member = created["data"]["member"]["id"]
+        await session_for(api, "cli.user", secret)
+        status, again = run_cli(
+            ["member", "reset-password", "--member", cli_member, "--output", str(password_file)],
+            address,
+            root_token,
+        )
+        report["cli"] = {
+            "existing_password_file": [status, again["data"]["error"]["code"]],
+            "list": sorted(
+                row["login"] for row in run_cli(["member", "list"], address, root_token)[1]["items"]
+            ),
+            "revoke_sessions": run_cli(
+                ["member", "revoke-sessions", "--member", cli_member], address, root_token
+            )[1]["data"]["revoked_sessions"],
+            "disable": run_cli(
+                ["member", "update", "--member", cli_member, "--status", "disabled"],
+                address,
+                root_token,
+            )[1]["data"]["status"],
+            "member_token": run_cli(["member", "list"], address, alice_token["Authorization"][7:])[
+                1
+            ]["data"]["error"]["code"],
+        }
+    finally:
+        server.terminate()
+        server.wait(timeout=30)
+    assert report["cli"] == {
+        "existing_password_file": [2, "existing_password_file"],
+        "list": ["alice", "cli.user", "root.admin", "second.admin"],
+        "revoke_sessions": 1,
+        "disable": "disabled",
+        "member_token": "forbidden",
     }
 
     # Five failures lock a login (this one has none yet); the sixth attempt is
