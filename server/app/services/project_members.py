@@ -1,7 +1,7 @@
 """Gateway project members, the owner hand-over and the personal-export flag.
 
-The owner or an administrator manages members; only an administrator changes
-sharing. Agents never manage either. A member removed from a project loses it
+The owner or an administrator manages members, holding `task:create`, the
+scope that makes a project owner; only an administrator changes sharing. Agents never manage either. A member removed from a project loses it
 at once through `visible_task`, and the member's agents on it are cancelled by
 their next wake (`agents.member_removed`).
 """
@@ -55,7 +55,7 @@ async def members(session: AsyncSession, task_id: UUID) -> list[ProjectMemberVie
 async def managed(session: AsyncSession, identity: Identity, task_id: UUID) -> Task:
     """Lock a project the caller owns or administers."""
     caller = human_member(identity)
-    task = await access(session, identity, task_id, "task:write", write=True)
+    task = await access(session, identity, task_id, "task:create", write=True)
     if identity.member_role != "admin":
         own = await session.get(TaskMember, (task_id, caller), populate_existing=True)
         if own is None or own.role != "owner":
@@ -156,7 +156,7 @@ async def update_sharing(
     human_member(identity)
     if identity.member_role != "admin":
         raise ServiceError("forbidden", "Permission denied", 403, 4)
-    task = await access(session, identity, task_id, "task:write", write=True)
+    task = await access(session, identity, task_id, "task:create", write=True)
     task.export_to_personal_allowed = body.export_to_personal_allowed
     await session.flush()
     return task
