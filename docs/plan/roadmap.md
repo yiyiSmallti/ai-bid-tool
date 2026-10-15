@@ -149,5 +149,5 @@ memory CRUD and approval, public evaluation-set preparation.
 5. Complete [certificate-page annotation acceptance](annotation.md#failure-modes-and-test-plan) (B05); enable vendor renditions only after archive/privacy/mapping acceptance, and profile/contract annotation only after archive and B05 acceptance.
 6. Complete WPS visual pagination and protected-download acceptance for exports (B11), plus sandbox lease-expiry takeover, disconnect and storage-failure injection scenarios.
 7. Continue the [desktop packaging slices](desktop-packaging.md#delivery-slices): optional services, then signing and release.
-8. Add agent [long-session summaries](agent.md#planned-long-sessions); run the [tender source tools](agent.md#tender-source-tools) acceptance on a real tender.
+8. Run the agent [tender source tools](agent.md#tender-source-tools) and [long-session](agent.md#long-sessions) acceptance on a real tender.
 9. Deliver the [enterprise gateway slices](enterprise-gateway.md) in order, starting with the deployment mode.
