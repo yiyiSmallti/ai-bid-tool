@@ -81,6 +81,8 @@ async def test_tools_are_exact_cli_invocation_schemas():
         "draft",
         "draft show",
         "job status",
+        "source search",
+        "source read",
     }
     for row in definitions:
         assert row.invocation_input == schemas["commands"][row.command]["invocation_input"]
@@ -94,7 +96,11 @@ async def test_tools_are_exact_cli_invocation_schemas():
 async def test_tools_require_every_grant():
     _, principal, _, _ = context()
     principal.scopes = ["task:read"]
-    assert [row.command for row in await agent_tools.definitions(principal)] == ["req list"]
+    assert [row.command for row in await agent_tools.definitions(principal)] == [
+        "req list",
+        "source search",
+        "source read",
+    ]
 
 
 @pytest.mark.parametrize("command", ["export", "card confirm", "task create", "shell", "http"])

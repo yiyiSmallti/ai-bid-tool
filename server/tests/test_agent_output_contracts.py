@@ -4,7 +4,7 @@ Failure matrix: discovery omits data/items/error or preview/receipt/terminal
 branches; typed payloads reject real review metadata or accept invented fields;
 partial/failed/cancelled jobs lose their result; schema output changes leave an
 old agent executable; schema generation changes legacy business responses;
-seven full schemas exceed provider byte limits, or sharing definitions changes
+nine full schemas exceed provider byte limits, or sharing definitions changes
 the meaning of local references or the hashed contract.
 Run with disposable PostgreSQL and fake Providers only. Artifacts contain
 synthetic Results and discovery schemas, never real documents or credentials.
@@ -27,7 +27,17 @@ from test_agent_tools import context
 from test_card_generation import drafting_client
 from test_response_cards import create_tender, select_real_materials
 
-TOOLS = ("req list", "card list", "card show", "card generate", "draft", "draft show", "job status")
+TOOLS = (
+    "req list",
+    "card list",
+    "card show",
+    "card generate",
+    "draft",
+    "draft show",
+    "job status",
+    "source search",
+    "source read",
+)
 
 
 async def test_cli_discovery_and_output_changes_fence_existing_agent(capsys, monkeypatch, tmp_path):
@@ -296,7 +306,7 @@ async def test_all_scopes_fit_provider_and_shared_schemas_are_lossless(tmp_path)
 
     _, principal, _, _ = context()
     tools = await agent_tools.definitions(principal)
-    assert len(tools) == 7
+    assert len(tools) == len(TOOLS)
     complete = [tool.model_dump(mode="json") for tool in tools]
     decision = request("合成输入" * 2000)
     decision.tools = tools
