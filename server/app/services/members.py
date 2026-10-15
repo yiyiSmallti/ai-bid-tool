@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, func, select, update
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
@@ -205,13 +205,12 @@ async def guarded_flush(session: AsyncSession) -> None:
     """Translate the database rules on members into their error codes."""
     try:
         await session.flush()
-    except IntegrityError as error:
+    except DBAPIError as error:
+        # The last-admin trigger raises check_violation, an IntegrityError too.
         if "member_login_unique" in str(error.orig):
             raise ServiceError(
                 "member_login_taken", "That login is already in use", 409, 2
             ) from None
-        raise
-    except DBAPIError as error:
         if "last_admin" in str(error.orig):
             raise ServiceError(
                 "last_admin", "At least one active administrator is required", 409, 2
