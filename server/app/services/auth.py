@@ -262,7 +262,9 @@ async def set_actor_context(session: AsyncSession, actor: Identity) -> None:
 
 
 def access_key_refused() -> ServiceError:
-    return ServiceError("access_key_not_accepted", "This gateway accepts member sign-in only", 401, 4)
+    return ServiceError(
+        "access_key_not_accepted", "This gateway accepts member sign-in only", 401, 4
+    )
 
 
 async def authenticate(
