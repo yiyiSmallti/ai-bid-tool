@@ -252,6 +252,7 @@ from bid_cli.management_providers import COMMAND_ITEMS as PROVIDER_COMMAND_ITEMS
 from bid_cli.management_templates import COMMAND_DATA as TEMPLATE_COMMAND_DATA
 from bid_cli.management_templates import COMMAND_INPUTS as TEMPLATE_COMMAND_INPUTS
 from bid_cli.management_templates import COMMAND_ITEMS as TEMPLATE_COMMAND_ITEMS
+from bid_cli.members import COMMAND_INPUTS as MEMBER_INPUTS
 from bid_cli.platform_clef import COMMAND_DATA as CLEF_DATA
 from bid_cli.platform_clef import COMMAND_INPUTS as CLEF_INPUTS
 from bid_cli.platform_trust_anchors import COMMAND_DATA as TRUST_ANCHOR_DATA
@@ -693,6 +694,7 @@ COMMANDS.update(CONFIDENTIAL_COMMAND_INPUTS)
 COMMANDS.update(ATTACHMENT_INPUTS)
 COMMANDS.update(REVIEW_INPUTS)
 COMMANDS.update(CLEF_INPUTS)
+COMMANDS.update(MEMBER_INPUTS)
 OUTPUTS.update({name: TypeAdapter(model) for name, model in CLEF_DATA.items()})
 COMMANDS.update(TRUST_ANCHOR_INPUTS)
 OUTPUTS.update({name: TypeAdapter(model) for name, model in TRUST_ANCHOR_DATA.items()})

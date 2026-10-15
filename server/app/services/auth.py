@@ -1,15 +1,16 @@
 import json
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import ServiceError
 from app.core.security import TokenSigner, access_key_matches, token_digest
 from app.models.entities import ApiToken
+from app.models.members import Member, MemberGrant, MemberSession
 from app.schemas.attachment_contracts import HUMAN_ONLY_SCOPES as ATTACHMENT_HUMAN_SCOPES
 from app.schemas.bid_review import HUMAN_ONLY_SCOPES as BID_REVIEW_HUMAN_SCOPES
 from app.schemas.bid_review import TOKEN_SCOPES as BID_REVIEW_TOKEN_SCOPES
@@ -77,6 +78,9 @@ SCOPES = {
 }
 
 SCOPES.update(BID_REVIEW_TOKEN_SCOPES)
+# A gateway administrator's `bid_` token may manage members, since the CLI signs
+# in with tokens only; agents never hold it (AGENT_SCOPES).
+SCOPES.add("member:manage")
 
 HUMAN_ONLY_SCOPES = {
     "credential:manage",
@@ -187,6 +191,26 @@ HUMAN_SCOPES = {
 HUMAN_SCOPES.update(ATTACHMENT_HUMAN_SCOPES)
 HUMAN_SCOPES.update(BID_REVIEW_HUMAN_SCOPES)
 
+# Gateway scopes held by administrators only. Grants and project visibility
+# refine the member scopes further in a later gateway slice.
+ADMIN_ONLY_SCOPES = {
+    "member:manage",
+    "credential:manage",
+    "clef:manage",
+    "trust-anchor:manage",
+    "confidential:write",
+    "provider:write",
+}
+# A must_change_password session may call only these routes.
+PASSWORD_CHANGE_ROUTES = {"auth_session_show", "auth_session_delete", "account_password_change"}
+SEEN_INTERVAL = timedelta(minutes=1)
+
+
+def member_scopes(role: str) -> set[str]:
+    if role == "admin":
+        return HUMAN_SCOPES | {"member:manage"}
+    return HUMAN_SCOPES - ADMIN_ONLY_SCOPES
+
 
 @dataclass
 class Identity:
@@ -200,6 +224,12 @@ class Identity:
     session_expires_at: datetime | None = None
     job_id: UUID | None = None
     run_id: UUID | None = None
+    # Gateway only; absent in a personal installation.
+    member_id: UUID | None = None
+    member_role: str | None = None
+    member_session_id: UUID | None = None
+    must_change_password: bool = False
+    grants: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         if self.token_id is not None and self.actor_kind == "session":
@@ -232,6 +262,7 @@ async def set_actor_context(session: AsyncSession, actor: Identity) -> None:
         elif actor.invocation_id is None:
             actor.invocation_id = job.invocation_id
         actor.job_id, actor.run_id = job.id, job.run_id
+        actor.member_id = job.actor_member_id
     session.info["actor"] = actor
     await session.execute(
         text(
@@ -244,7 +275,8 @@ async def set_actor_context(session: AsyncSession, actor: Identity) -> None:
             "set_config('app.execution_job_id', :execution_job, true), "
             "set_config('app.execution_run_id', :execution_run, true), "
             "set_config('app.invocation_id', :invocation, true), "
-            "set_config('app.command', :command, true)"
+            "set_config('app.command', :command, true), "
+            "set_config('app.actor_member_id', :member, true)"
         ),
         {
             "scopes": json.dumps(sorted(actor.scopes)),
@@ -257,6 +289,7 @@ async def set_actor_context(session: AsyncSession, actor: Identity) -> None:
             "command": session.info.get("command", ""),
             "kind": actor.actor_kind,
             "token": str(actor.token_id) if actor.token_id else "",
+            "member": str(actor.member_id) if actor.member_id else "",
         },
     )
 
@@ -267,16 +300,86 @@ def access_key_refused() -> ServiceError:
     )
 
 
+def require_current_password(identity: Identity, route: str) -> None:
+    if identity.must_change_password and route not in PASSWORD_CHANGE_ROUTES:
+        raise ServiceError("password_change_required", "Change the initial password first", 403, 4)
+
+
+def invalid_session() -> ServiceError:
+    return ServiceError("invalid_session", "Invalid or expired credentials", 401, 4)
+
+
+async def active_member(session: AsyncSession, member_id: UUID | None) -> Member | None:
+    if member_id is None:
+        return None
+    member = await session.get(Member, member_id, populate_existing=True)
+    return member if member is not None and member.status == "active" else None
+
+
+async def member_grants(session: AsyncSession, member_id: UUID) -> list[str]:
+    rows = await session.scalars(
+        select(MemberGrant.grant).where(MemberGrant.member_id == member_id)
+    )
+    return sorted(rows)
+
+
+async def member_session_identity(
+    session: AsyncSession, payload: dict, settings: Settings
+) -> Identity:
+    """Load the session row and its member on every request, so revocation,
+    disabling and password changes take effect on the next one."""
+    try:
+        session_id, member_id = UUID(payload["sid"]), UUID(payload["mid"])
+    except (KeyError, TypeError, ValueError):
+        raise invalid_session() from None
+    row = await session.get(MemberSession, session_id, populate_existing=True)
+    member = await active_member(session, member_id)
+    now = datetime.now(UTC)
+    if (
+        row is None
+        or member is None
+        or row.member_id != member.id
+        or row.revoked_at is not None
+        or row.expires_at <= now
+        or row.last_seen_at <= now - timedelta(minutes=settings.session_idle_minutes)
+    ):
+        raise invalid_session()
+    if row.last_seen_at <= now - SEEN_INTERVAL:
+        # SKIP LOCKED: a concurrent request of the same session already touches it.
+        await session.execute(
+            update(MemberSession)
+            .where(
+                MemberSession.id.in_(
+                    select(MemberSession.id)
+                    .where(MemberSession.id == session_id)
+                    .with_for_update(skip_locked=True)
+                )
+            )
+            .values(last_seen_at=now)
+            .execution_options(synchronize_session=False)
+        )
+    return Identity(
+        scopes=member_scopes(member.role),
+        session_expires_at=row.expires_at,
+        member_id=member.id,
+        member_role=member.role,
+        member_session_id=row.id,
+        must_change_password=member.must_change_password,
+        grants=await member_grants(session, member.id),
+    )
+
+
 async def authenticate(
     session: AsyncSession,
     bearer: str,
     crypto: TokenSigner,
     settings: Settings,
 ) -> Identity:
-    if settings.deployment == "enterprise" and not bearer.startswith("bid_"):
-        # The access key serves the gateway host's admin command line only.
-        raise access_key_refused()
+    enterprise = settings.deployment == "enterprise"
     if access_key_matches(bearer, settings.access_key.get_secret_value()):
+        if enterprise:
+            # The access key serves the gateway host's admin command line only.
+            raise access_key_refused()
         return Identity(scopes=set(HUMAN_SCOPES))
     if bearer.startswith("bid_"):
         token = await session.scalar(
@@ -286,15 +389,33 @@ async def authenticate(
         )
         if token is None or token.expires_at <= datetime.now(UTC):
             raise ServiceError("invalid_token", "Invalid or expired credentials", 401, 4)
-        return Identity(scopes=set(token.scopes) & SCOPES, token_id=token.id)
+        scopes = set(token.scopes) & SCOPES
+        member = await active_member(session, token.member_id)
+        if enterprise:
+            # A token works only while its member does, within the member's scopes.
+            if member is None:
+                raise ServiceError("invalid_token", "Invalid or expired credentials", 401, 4)
+            scopes &= member_scopes(member.role)
+        return Identity(
+            scopes=scopes,
+            token_id=token.id,
+            member_id=member.id if member is not None else None,
+            member_role=member.role if member is not None else None,
+        )
     try:
         payload = crypto.open(bearer)
     except ServiceError as error:
         if isinstance(error.__cause__, ValueError) and str(error.__cause__) == "expired":
             raise
+        if enterprise:
+            raise invalid_session() from None
         raise ServiceError("invalid_access_key", "Invalid access key", 401, 4) from None
     if payload.get("kind") != "session":
         raise ServiceError("invalid_access_key", "Invalid access key", 401, 4)
+    if enterprise:
+        return await member_session_identity(session, payload, settings)
+    if "sid" in payload:
+        raise invalid_session()
     return Identity(
         scopes=set(HUMAN_SCOPES),
         session_expires_at=datetime.fromtimestamp(payload["exp"], UTC),
@@ -306,4 +427,17 @@ async def agent_identity(session: AsyncSession, principal) -> Identity:
     if principal.revoked_at is not None or principal.authority_expires_at <= datetime.now(UTC):
         raise ServiceError("agent_authority_expired", "Agent authority has expired", 403, 4)
     scopes = set(principal.initial_grants) & set(principal.scopes) & AGENT_SCOPES
-    return Identity(scopes=scopes, actor_kind="agent", principal_id=principal.id)
+    member = None
+    if principal.member_id is not None:
+        # The member who started the agent must still be active, every step.
+        member = await active_member(session, principal.member_id)
+        if member is None:
+            raise ServiceError("agent_authority_expired", "Agent authority has expired", 403, 4)
+        scopes &= member_scopes(member.role)
+    return Identity(
+        scopes=scopes,
+        actor_kind="agent",
+        principal_id=principal.id,
+        member_id=principal.member_id,
+        member_role=member.role if member is not None else None,
+    )

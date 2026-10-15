@@ -18,6 +18,8 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
@@ -28,6 +30,7 @@ ENTERPRISE = {
     "BID_COMPANY_NAME": "Synthetic Company",
 }
 PERSONAL = {"BID_DEPLOYMENT": "personal"}
+HEAD = ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
 
 
 @pytest.fixture
@@ -149,7 +152,7 @@ def test_mode_mismatch_both_ways(scratch_databases, tmp_path):
     assert init_db(gateway) == (0, None)
     assert init_db(gateway) == (0, None)
     assert stored(migration) == (
-        "0004",
+        HEAD,
         {"mode": "enterprise", "company_name": "Synthetic Company"},
     )
     personal_on_gateway = environment(migration, runtime, PERSONAL, tmp_path)
@@ -217,7 +220,7 @@ def test_mode_mismatch_both_ways(scratch_databases, tmp_path):
     migration, runtime = scratch_databases()
     personal = environment(migration, runtime, PERSONAL, tmp_path)
     assert init_db(personal) == (0, None)
-    assert stored(migration) == ("0004", {"mode": "personal", "company_name": None})
+    assert stored(migration) == (HEAD, {"mode": "personal", "company_name": None})
     gateway_on_personal = environment(migration, runtime, ENTERPRISE, tmp_path)
     report["personal_database"] = {
         "init_db_enterprise": init_db(gateway_on_personal),
@@ -252,6 +255,6 @@ def test_mode_mismatch_both_ways(scratch_databases, tmp_path):
         "init_db_enterprise": (4, "deployment_mode_mismatch"),
         "after_refusal": ("0003", None),
         "init_db_personal": (0, None),
-        "after_upgrade": ("0004", {"mode": "personal", "company_name": None}),
+        "after_upgrade": (HEAD, {"mode": "personal", "company_name": None}),
     }
     (tmp_path / "deployment-mode.json").write_text(json.dumps(report, indent=2))

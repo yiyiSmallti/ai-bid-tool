@@ -384,6 +384,38 @@ def rotate_provider_secrets() -> dict:
         engine.dispose()
 
 
+def create_member(login: str, display_name: str | None, role: str) -> dict:
+    """Bootstrap a gateway member from the gateway host; the one-time password is
+    printed to this terminal only."""
+    from app.core.config import Settings
+    from app.core.db import Database
+    from app.core.errors import ServiceError
+    from app.core.password_attempts import PasswordAttempts
+    from app.schemas.members import MemberCreate
+    from app.services import members
+
+    settings = Settings.load()
+    if settings.deployment != "enterprise":
+        raise ServiceError("enterprise_only", "Members exist only on a gateway", 400, 2)
+
+    async def run():
+        db = Database(settings)
+        attempts = PasswordAttempts(db)
+        try:
+            await db.verify_role()
+            body = MemberCreate.model_validate(
+                {"login": login, "display_name": display_name or login, "role": role}
+            )
+            async with db.transaction() as session:
+                created = await members.create_member(session, attempts, settings, body)
+            return created.model_dump(mode="json")
+        finally:
+            await attempts.close()
+            await db.engine.dispose()
+
+    return asyncio.run(run())
+
+
 def main():
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
@@ -392,6 +424,11 @@ def main():
     commands.add_parser("rotate-provider-secrets")
     rotate = commands.add_parser("rotate-encryption")
     rotate.add_argument("--scope", choices=("data", "provider-secrets"), default="data")
+    member = commands.add_parser("member").add_subparsers(dest="member_command", required=True)
+    create = member.add_parser("create")
+    create.add_argument("--login", required=True)
+    create.add_argument("--display-name")
+    create.add_argument("--role", choices=("admin", "member"), default="member")
     args = parser.parse_args()
     if args.command == "init-db":
         from app.core.errors import ServiceError
@@ -404,6 +441,19 @@ def main():
         print("Selected development database initialized; runtime role is restricted")
     elif args.command == "migration-status":
         print(json.dumps(migration_status()))
+    elif args.command == "member":
+        from pydantic import ValidationError
+
+        from app.core.errors import ServiceError
+
+        try:
+            print(json.dumps(create_member(args.login, args.display_name, args.role)))
+        except ServiceError as exc:
+            print(json.dumps({"error": exc.code, "message": exc.message}), file=sys.stderr)
+            raise SystemExit(exc.exit_code) from None
+        except ValidationError:
+            print(json.dumps({"error": "invalid_input"}), file=sys.stderr)
+            raise SystemExit(2) from None
     elif args.command in {"rotate-encryption", "rotate-provider-secrets"}:
         if args.command == "rotate-provider-secrets" or args.scope == "provider-secrets":
             from sqlalchemy.exc import SQLAlchemyError

@@ -40,6 +40,7 @@ async def create_token(
         scopes=sorted(set(body.scopes)),
         expires_at=body.expires_at,
         digest=token_digest(secret),
+        member_id=identity.member_id,
     )
     session.add(token)
     await session.flush()

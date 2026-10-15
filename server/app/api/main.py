@@ -16,16 +16,18 @@ from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException
 
 from app.api.account import create_router as create_account_router
+from app.api.members import create_router as create_member_router
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError
+from app.core.password_attempts import PasswordAttempts
 from app.core.security import TokenSigner
 from app.jobs.queue import Queue
 from app.providers.disabled import DisabledLLM
 from app.providers.local_ocr import LocalOCR
 from app.providers.storage import create_storage
 from app.schemas.contracts import CONTRACT_VERSION, Result
-from app.services.auth import authenticate, set_actor_context
+from app.services.auth import authenticate, require_current_password, set_actor_context
 
 RESOURCE_MANAGEMENT_READS = {
     "memory_browse",
@@ -99,6 +101,7 @@ def create_app(
     ocr = ocr or LocalOCR(settings.ocr_language, settings.ocr_data_dir)
     queue = queue or Queue(settings)
     processor = Processor(settings, db, storage, llm, ocr, resolve)
+    attempts = PasswordAttempts(db)
     queue.processor = processor
     processor.queue = queue
 
@@ -117,6 +120,7 @@ def create_app(
             stream_caps = getattr(_app.state, "workflow_stream_caps", None)
             if stream_caps is not None:
                 await stream_caps.close()
+            await attempts.close()
             await db.engine.dispose()
 
     app = FastAPI(
@@ -390,6 +394,7 @@ def create_app(
                     crypto,
                     settings,
                 )
+                require_current_password(identity, request.scope["route"].name)
                 identity.invocation_id = uuid4()
                 session.info["command"] = command
                 await set_actor_context(session, identity)
@@ -472,7 +477,8 @@ def create_app(
         create_screenshot_router(context, db, storage, queue, settings, llm, resolve, processor)
     )
 
-    app.include_router(create_account_router(context, settings, db, crypto, llm, resolve))
+    app.include_router(create_account_router(context, settings, db, crypto, llm, resolve, attempts))
+    app.include_router(create_member_router(context, settings, attempts))
     app.include_router(
         create_tender_router(context, settings, db, storage, queue, crypto, llm, resolve, ocr)
     )

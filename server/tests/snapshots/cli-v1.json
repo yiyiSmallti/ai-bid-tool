@@ -45985,6 +45985,21 @@
             "type": "object"
           }
         },
+        "installation show": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
         "job cancel": {
           "cli_parameters": [
             {
@@ -47890,6 +47905,337 @@
             }
           ],
           "input": null
+        },
+        "member create": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "login",
+              "options": [
+                "--login"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "display_name",
+              "options": [
+                "--display-name"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "member",
+              "multiple": false,
+              "name": "role",
+              "options": [
+                "--role"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": true,
+              "name": "grant",
+              "options": [
+                "--grant"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "display_name": {
+                "maxLength": 60,
+                "minLength": 1,
+                "pattern": "\\S",
+                "title": "Display Name",
+                "type": "string"
+              },
+              "grants": {
+                "items": {
+                  "enum": [
+                    "library:edit",
+                    "memory:edit",
+                    "confidential:reveal"
+                  ],
+                  "type": "string"
+                },
+                "title": "Grants",
+                "type": "array"
+              },
+              "login": {
+                "pattern": "^[a-z0-9._-]{3,64}$",
+                "title": "Login",
+                "type": "string"
+              },
+              "role": {
+                "default": "member",
+                "enum": [
+                  "admin",
+                  "member"
+                ],
+                "title": "Role",
+                "type": "string"
+              }
+            },
+            "required": [
+              "login",
+              "display_name"
+            ],
+            "title": "MemberCreate",
+            "type": "object"
+          }
+        },
+        "member list": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "member reset-password": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "member",
+              "options": [
+                "--member"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "member revoke-sessions": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "member",
+              "options": [
+                "--member"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "member update": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "member",
+              "options": [
+                "--member"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "display_name",
+              "options": [
+                "--display-name"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "role",
+              "options": [
+                "--role"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": true,
+              "name": "grant",
+              "options": [
+                "--grant"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "clear_grants",
+              "options": [
+                "--clear-grants"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "status",
+              "options": [
+                "--status"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "display_name": {
+                "anyOf": [
+                  {
+                    "maxLength": 60,
+                    "minLength": 1,
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Display Name"
+              },
+              "grants": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "enum": [
+                        "library:edit",
+                        "memory:edit",
+                        "confidential:reveal"
+                      ],
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Grants"
+              },
+              "role": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "admin",
+                      "member"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Role"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "active",
+                      "disabled"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              }
+            },
+            "title": "MemberUpdate",
+            "type": "object"
+          }
         },
         "memory add": {
           "cli_parameters": [

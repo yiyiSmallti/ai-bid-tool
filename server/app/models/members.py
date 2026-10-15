@@ -1,0 +1,66 @@
+"""Gateway members, their grants and sessions, and sign-in attempts.
+
+The tables stay empty in a personal database.
+"""
+
+from datetime import datetime
+from uuid import UUID, uuid4
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import text as sql_text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.models.entities import Base
+
+
+class Member(Base):
+    __tablename__ = "members"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    login: Mapped[str] = mapped_column(String(64), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(60), nullable=False)
+    role: Mapped[str] = mapped_column(String(10), nullable=False)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    password_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class MemberGrant(Base):
+    __tablename__ = "member_grants"
+    member_id: Mapped[UUID] = mapped_column(ForeignKey("members.id"), primary_key=True)
+    grant: Mapped[str] = mapped_column(String(30), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
+
+
+class MemberSession(Base):
+    __tablename__ = "member_sessions"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    member_id: Mapped[UUID] = mapped_column(ForeignKey("members.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    client_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class LoginAttempt(Base):
+    __tablename__ = "login_attempts"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    login_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    outcome: Mapped[str] = mapped_column(String(10), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("clock_timestamp()")
+    )

@@ -6,6 +6,19 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Gateway members
+
+- A gateway has member accounts. Administrators create members, reset
+  passwords, disable members and revoke their sessions in the API or with
+  `bid member`; the first administrator is created on the gateway host.
+- Members sign in with a login and password, must replace an initial password
+  first, and can list and end their own sessions. Repeated failed sign-ins are
+  locked out for 15 minutes.
+- Disabling a member ends its sessions, tokens and running agents at once, and
+  the last active administrator cannot be removed.
+- Every human decision on a gateway records the member who made it.
+- `GET /installation` tells a client what it is connected to.
+
 ## 2026-10-15: Deployment mode
 
 - `BID_DEPLOYMENT` selects a personal installation (default) or an enterprise

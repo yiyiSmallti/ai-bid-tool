@@ -35,6 +35,8 @@ class ApiToken(Base):
     scopes: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Filled by the attribution trigger from the creating session's member.
+    member_id: Mapped[UUID | None] = mapped_column(nullable=True)
     id: Mapped[UUID] = mapped_column(nullable=False, primary_key=True, default=uuid4)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
@@ -127,6 +129,8 @@ class AuditLog(Base):
     agent_principal_id: Mapped[UUID | None] = mapped_column(nullable=True)
     agent_session_id: Mapped[UUID | None] = mapped_column(nullable=True)
     agent_step_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    # Filled by the attribution trigger.
+    actor_member_id: Mapped[UUID | None] = mapped_column(nullable=True)
     invocation_id: Mapped[UUID | None] = mapped_column(nullable=True)
     command: Mapped[str | None] = mapped_column(String(100), nullable=True)
     resource_revision_id_text: Mapped[str | None] = mapped_column(
@@ -858,6 +862,8 @@ class Job(Base):
     agent_principal_id: Mapped[UUID | None] = mapped_column(nullable=True)
     agent_session_id: Mapped[UUID | None] = mapped_column(nullable=True)
     agent_step_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    # Filled by the attribution trigger; the worker acts for this member.
+    actor_member_id: Mapped[UUID | None] = mapped_column(nullable=True)
     invocation_id: Mapped[UUID | None] = mapped_column(nullable=True)
     command: Mapped[str | None] = mapped_column(String(100), nullable=True)
     bid_submission_document_id: Mapped[UUID | None] = mapped_column(nullable=True)

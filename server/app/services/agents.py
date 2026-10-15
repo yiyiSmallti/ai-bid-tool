@@ -632,6 +632,7 @@ async def start(session, identity, task_id, body, settings, queue):
         raise ServiceError("forbidden", "The agent workflow permissions are required", 403, 4)
     principal = AgentPrincipal(
         id=uuid4(),
+        member_id=actor.member_id,
         initial_grants=sorted(initial),
         scopes=scopes,
         created_at=timestamp,
