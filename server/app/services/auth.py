@@ -261,12 +261,21 @@ async def set_actor_context(session: AsyncSession, actor: Identity) -> None:
     )
 
 
+def access_key_refused() -> ServiceError:
+    return ServiceError(
+        "access_key_not_accepted", "This gateway accepts member sign-in only", 401, 4
+    )
+
+
 async def authenticate(
     session: AsyncSession,
     bearer: str,
     crypto: TokenSigner,
     settings: Settings,
 ) -> Identity:
+    if settings.deployment == "enterprise" and not bearer.startswith("bid_"):
+        # The access key serves the gateway host's admin command line only.
+        raise access_key_refused()
     if access_key_matches(bearer, settings.access_key.get_secret_value()):
         return Identity(scopes=set(HUMAN_SCOPES))
     if bearer.startswith("bid_"):

@@ -88,7 +88,8 @@ Both processes need `BID_ACCESS_KEY`, `BID_DATABASE_URL` for `bid_app`, `BID_ENC
 stored data, and a different Fernet key in `BID_TOKEN_KEY` for sessions and
 signed links; [Keys and storage](#keys-and-storage) describes both.
 Startup fails if the runtime role is a superuser, can bypass RLS, or owns
-application tables.
+application tables, or if the database was initialized in another
+[deployment mode](../notes/enterprise-gateway.md).
 
 ```sh
 uv run uvicorn app.api.main:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log

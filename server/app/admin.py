@@ -20,10 +20,34 @@ from psycopg import sql
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
+from app.core import deployment
+
+
+def installation_mode(connection) -> str | None:
+    """The stored mode, or None for a database no migration has touched yet."""
+    if not MigrationContext.configure(connection).get_current_heads():
+        return None
+    if connection.scalar(text("SELECT to_regclass('public.installation')")) is None:
+        return deployment.stored_mode(None)
+    return deployment.stored_mode(connection.scalar(text(deployment.MODE_QUERY)))
+
 
 def initialize_database():
+    from app.core.config import DeploymentSettings
+    from app.core.errors import ServiceError
+
+    configured = DeploymentSettings()
+    if configured.deployment == "enterprise" and configured.company_name is None:
+        raise ServiceError(
+            "company_name_required", "Set BID_COMPANY_NAME to initialize an enterprise database"
+        )
     url = os.environ["BID_MIGRATION_DATABASE_URL"]
     engine = create_engine(url, hide_parameters=True)
+    # Refuse before migrating: an existing database keeps the mode it has.
+    with engine.connect() as connection:
+        stored = installation_mode(connection)
+    if stored is not None:
+        deployment.require_mode(stored, configured.deployment)
     with engine.begin() as connection:
         existing = connection.execute(
             text("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname='bid_app'")
@@ -39,6 +63,19 @@ def initialize_database():
         elif existing.rolsuper or existing.rolbypassrls:
             raise RuntimeError("Existing runtime role is privileged; refusing to change it")
     command.upgrade(Config("alembic.ini"), "head")
+    mode = stored or configured.deployment
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO public.installation (mode, company_name) VALUES (:mode, :company)"
+                " ON CONFLICT (id) DO NOTHING"
+            ),
+            {"mode": mode, "company": configured.company_name if mode == "enterprise" else None},
+        )
+        deployment.require_mode(
+            deployment.stored_mode(connection.scalar(text(deployment.MODE_QUERY))),
+            configured.deployment,
+        )
 
     async def install_queue():
         conninfo = make_url(url).set(drivername="postgresql").render_as_string(hide_password=False)
@@ -357,7 +394,13 @@ def main():
     rotate.add_argument("--scope", choices=("data", "provider-secrets"), default="data")
     args = parser.parse_args()
     if args.command == "init-db":
-        initialize_database()
+        from app.core.errors import ServiceError
+
+        try:
+            initialize_database()
+        except ServiceError as exc:
+            print(json.dumps({"error": exc.code, "message": exc.message}), file=sys.stderr)
+            raise SystemExit(exc.exit_code) from None
         print("Selected development database initialized; runtime role is restricted")
     elif args.command == "migration-status":
         print(json.dumps(migration_status()))

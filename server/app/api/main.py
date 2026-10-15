@@ -1,6 +1,7 @@
 """Application assembly: middleware, error envelopes, authentication context, routers."""
 
 import json
+import logging
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -103,7 +104,13 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_app):
-        await db.verify_role()
+        try:
+            await db.verify_role()
+        except ServiceError as exc:
+            await db.engine.dispose()
+            message = json.dumps({"error": exc.code, "message": exc.message})
+            logging.getLogger("app.startup").error(message)
+            raise
         try:
             yield
         finally:

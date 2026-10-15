@@ -6,6 +6,17 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Deployment mode
+
+- `BID_DEPLOYMENT` selects a personal installation (default) or an enterprise
+  gateway; `init-db` records the mode in the database, and the API and worker
+  refuse to start on a database of the other mode with
+  `deployment_mode_mismatch`.
+- Existing databases stay personal. Enterprise settings for the public URL,
+  company name, session lifetimes, personal model endpoints and password length
+  are validated at startup.
+- A gateway does not accept the access key over HTTP.
+
 ## 2026-10-15: Long agent sessions
 
 - A built-in agent session no longer stops at 40 messages. Older messages are

@@ -3,7 +3,8 @@ import binascii
 import json
 import os
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -33,7 +34,55 @@ class PDFSettings(BaseSettings):
     pdf_output_bytes: int = Field(default=256 * 1024 * 1024, gt=0)
 
 
-class Settings(PDFSettings):
+# Origins of the desktop vendor templates (desktop/native_settings_templates.go).
+VENDOR_TEMPLATE_ORIGINS = (
+    "https://open.bigmodel.cn",
+    "https://api.deepseek.com",
+    "https://dashscope.aliyuncs.com",
+    "https://api.moonshot.cn",
+    "https://api.minimaxi.com",
+    "https://api.siliconflow.cn",
+    "https://openrouter.ai",
+)
+
+
+def https_origin(value: str) -> str:
+    """`https://host[:port]` with nothing after it but an optional slash."""
+    try:
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError
+        parsed.port  # noqa: B018 -- rejects a malformed port
+    except ValueError:
+        raise ValueError(f"{value!r} must be an https:// origin") from None
+    return f"https://{parsed.netloc.lower()}"
+
+
+class DeploymentSettings(BaseSettings):
+    """What `init-db` needs to record the deployment mode; no service credentials."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="BID_", extra="ignore", env_ignore_empty=True, hide_input_in_errors=True
+    )
+    deployment: Literal["personal", "enterprise"] = "personal"
+    # Written into the installation row at init; required there in enterprise mode.
+    company_name: str | None = Field(default=None, min_length=1, max_length=100)
+
+    @field_validator("company_name", mode="before")
+    @classmethod
+    def strip_company(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class Settings(PDFSettings, DeploymentSettings):
     database_url: SecretStr
     access_key: SecretStr = Field(min_length=32)
     encryption_key: SecretStr
@@ -101,6 +150,13 @@ class Settings(PDFSettings):
     )
     converter_timeout_seconds: float = Field(default=180, gt=0, le=600, allow_inf_nan=False)
     preview_max_pages: int = Field(default=1000, ge=1, le=2000)
+    # Enterprise gateway only (docs/plan/enterprise-gateway.md#deployment-mode).
+    public_url: str | None = None
+    session_hours: int = Field(default=12, ge=1, le=72)
+    session_idle_minutes: int = Field(default=120, ge=10, le=720)
+    # An empty BID_PERSONAL_MODEL_ENDPOINTS disables personal models.
+    personal_model_endpoints: Annotated[list[str], NoDecode] = list(VENDOR_TEMPLATE_ORIGINS)
+    password_min_length: int = Field(default=12, ge=12, le=128)
 
     @classmethod
     def load(cls):
@@ -109,6 +165,42 @@ class Settings(PDFSettings):
         settings = cls()  # pyright: ignore[reportCallIssue]
         settings.assert_vendor_credentials_absent()
         return settings
+
+    @model_validator(mode="before")
+    @classmethod
+    def empty_endpoint_list(cls, data):
+        # env_ignore_empty would otherwise turn an empty list back into the default.
+        if (
+            isinstance(data, dict)
+            and "personal_model_endpoints" not in data
+            and os.environ.get("BID_PERSONAL_MODEL_ENDPOINTS") == ""
+        ):
+            return {**data, "personal_model_endpoints": []}
+        return data
+
+    @field_validator("personal_model_endpoints", mode="before")
+    @classmethod
+    def split_endpoints(cls, value):
+        if isinstance(value, str):
+            value = [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("personal_model_endpoints")
+    @classmethod
+    def endpoint_origins(cls, value: list[str]) -> list[str]:
+        origins = [https_origin(item) for item in value]
+        return list(dict.fromkeys(origins))
+
+    @field_validator("public_url")
+    @classmethod
+    def public_origin(cls, value: str | None) -> str | None:
+        return https_origin(value) if value is not None else None
+
+    @model_validator(mode="after")
+    def enterprise_complete(self):
+        if self.deployment == "enterprise" and self.public_url is None:
+            raise ValueError("BID_PUBLIC_URL is required in enterprise mode")
+        return self
 
     @field_validator("encryption_key_previous", "secrets_key_previous", mode="before")
     @classmethod
