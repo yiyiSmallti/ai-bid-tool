@@ -19,7 +19,7 @@ from app.core.config import Settings
 from app.core.errors import ServiceError, log_unexpected
 from app.core.llm_options import output_limits, validate_request_options
 from app.models.entities import Job
-from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
+from app.providers.base import ContentBlocked, MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.calls import accounted_call, plan_calls
 from app.providers.disabled import DisabledLLM
 from app.providers.quotes import serialized_request
@@ -35,7 +35,7 @@ from app.schemas.contracts import (
 from app.schemas.preflight_contracts import CallPlan, Capability
 from app.services.extraction import cited, fingerprint, locate_span, location_of, normalize
 
-ADAPTER_VERSION = "http-extract-v5"
+ADAPTER_VERSION = "http-extract-v6"
 logger = logging.getLogger(__name__)
 RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 # Exhausted quota, unpaid accounts and expired plans do not recover within the retry
@@ -54,7 +54,7 @@ SYSTEM_PROMPT = """你是招标文件分析助手。从用户给出的招标文�
 - substantive：实质性条款，包括带 ★ 的条款、否决投标或废标条款
 
 每条要求：
-- text：用简洁中文复述这条要求，保留全部参数名、数值、比较符、单位、范围及限定条件，不得用“等”、省略号或概括性文字省略原文细节。
+- text：用简洁中文复述这条要求，保留全部参数名、数值、比较符、单位、范围及限定条件，不得用“等”、省略号或概括性文字省略原文细节。quote 本身已完整、可单独读懂地表达这条要求时，text 填空字符串，不要重复原文。
 - ref：要求所在位置。内容以 <page number="N"> 给出时填页码 N；以 <block id="…"> 给出时填块标识，如 p37 或 t5r3c2。
 - quote：逐字复制该位置中的原文连续片段，必须完整出现在同一个 page 或 block 内，不得改写、省略、补全或跨块合并。
 - starred：原文带 ★，或属于实质性、否决投标、废标条款时为 true。
@@ -230,11 +230,11 @@ class WireOutput(BaseModel):
 
 
 def batches(chunks: list[dict], budget: int) -> list[list[dict]]:
-    # A page larger than the budget gets its own batch; pages are never truncated.
+    # A PDF page or Word block larger than the budget gets its own batch and is never cut.
     groups: list[list[dict]] = []
     current: list[dict] = []
     size = 0
-    for chunk in chunks:
+    for chunk in (part for whole in chunks for part in fit(whole, budget)):
         length = len(chunk["text"])
         if current and size + length > budget:
             groups.append(current)
@@ -244,6 +244,29 @@ def batches(chunks: list[dict], budget: int) -> list[list[dict]]:
     if current:
         groups.append(current)
     return groups
+
+
+def fit(chunk: dict, budget: int) -> list[dict]:
+    """Cut a Word section longer than the budget into runs of whole blocks.
+
+    One long section would otherwise be a single call whose output time bounds the
+    whole job. Parts keep their chunk and block IDs, as the halves of a retry do.
+    """
+    blocks = chunk.get("blocks") or []
+    if len(chunk["text"]) <= budget or len(blocks) < 2:
+        return [chunk]
+    parts: list[list[dict]] = []
+    current: list[dict] = []
+    size = 0
+    for block in blocks:
+        length = len(block["text"]) + 1
+        if current and size + length > budget:
+            parts.append(current)
+            current, size = [], 0
+        current.append(block)
+        size += length
+    parts.append(current)
+    return [{**chunk, "blocks": part, "text": "\n".join(b["text"] for b in part)} for part in parts]
 
 
 def split_lines(text: str) -> tuple[str, str] | None:
@@ -287,6 +310,13 @@ def halve(batch: list[dict]) -> list[list[dict]] | None:
     if halves is None:
         return None  # a single line cannot be split further
     return [[{**chunk, "text": part}] for part in halves]
+
+
+def blocked(chunk: dict) -> dict[str, str]:
+    """The rejection receipt for a part the vendor's content review would not process."""
+    blocks = chunk.get("blocks") or []
+    position = location_of(blocks[0]).label if blocks else f"第 {chunk['page']} 页"
+    return {"position": position, "quote": chunk["text"][:200], "reason": "content_blocked"}
 
 
 def render_pages(batch: list[dict]) -> str:
@@ -389,11 +419,11 @@ class HTTPExtractor:
         gap_fill = GapFill()
         filling = False
 
-        async def gather(client, groups) -> list[tuple[list[dict], WireOutput]]:
+        async def gather(client, groups) -> list[tuple[list[dict], WireOutput | None]]:
             results = await asyncio.gather(
                 *(run(client, batch) for batch in groups), return_exceptions=True
             )
-            answered: list[tuple[list[dict], WireOutput]] = []
+            answered: list[tuple[list[dict], WireOutput | None]] = []
             for result in results:
                 if isinstance(result, BaseException):
                     raise result
@@ -416,7 +446,7 @@ class HTTPExtractor:
                 await asyncio.sleep(delay)
             raise AssertionError("unreachable")
 
-        async def run(client, batch: list[dict]) -> list[tuple[list[dict], WireOutput]]:
+        async def run(client, batch: list[dict]) -> list[tuple[list[dict], WireOutput | None]]:
             async with limit:
                 # Batches not yet started are skipped once another batch has failed.
                 if failed.is_set():
@@ -426,10 +456,14 @@ class HTTPExtractor:
                 except ProviderFailure as exc:
                     usages.extend(exc.usage)
                     exc.usage = []
-                    # Truncated or malformed output is retried in smaller parts.
-                    splittable = isinstance(exc, TruncatedOutput | MalformedOutput)
+                    # Truncated, malformed or content-blocked output is retried in smaller
+                    # parts, so a blocked request narrows down to the passage that trips it.
+                    splittable = isinstance(exc, TruncatedOutput | MalformedOutput | ContentBlocked)
                     parts = halve(batch) if splittable else None
                     if parts is None:
+                        if isinstance(exc, ContentBlocked):
+                            # The rest of the tender is still extracted; attach reports this part.
+                            return [(batch, None)]
                         failed.set()
                         raise
                 else:
@@ -492,8 +526,10 @@ class HTTPExtractor:
                 ) from exc
 
     def attach(
-        self, wire: WireOutput, batch: list[dict]
+        self, wire: WireOutput | None, batch: list[dict]
     ) -> tuple[list[ExtractedRequirement], list[dict[str, str]]]:
+        if wire is None:
+            return [], [blocked(chunk) for chunk in batch]
         by_page = {str(chunk["page"]): chunk for chunk in batch if chunk.get("page")}
         by_block = {
             block["block_id"]: (chunk, block)
@@ -519,13 +555,13 @@ class HTTPExtractor:
                     }
                 )
                 continue
-            if not item.text.strip() or not item.quote.strip():
+            if not item.quote.strip():
                 # Nothing to save or verify; reported like an uncited item.
                 rejected.append(
                     {
                         "position": location.label if location else f"第 {page} 页",
                         "quote": item.quote[:200],
-                        "reason": "empty_quote" if not item.quote.strip() else "empty_text",
+                        "reason": "empty_quote",
                     }
                 )
                 continue
@@ -533,7 +569,9 @@ class HTTPExtractor:
                 ExtractedRequirement(
                     category=item.category,
                     starred=item.starred,
-                    text=item.text,
+                    # An empty text means the quote already states the requirement;
+                    # the model leaves it out so it is not written twice.
+                    text=item.text.strip() or item.quote.strip(),
                     model_quote=item.quote,
                     source=Source(
                         document_id=chunk["document_id"],
@@ -841,6 +879,9 @@ class HTTPExtractor:
                     code="provider_quota_exhausted",
                     usage=usages,
                 )
+            if "1301" in codes:
+                # Zhipu's content review; it can trip on one passage of an ordinary tender.
+                raise ContentBlocked(usages)
             # Only the status and vendor error type are kept; bodies may echo input.
             raise ProviderFailure(
                 f"LLM request failed with HTTP {response.status_code} ({kind})",

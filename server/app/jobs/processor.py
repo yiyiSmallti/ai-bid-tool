@@ -384,9 +384,12 @@ class Processor:
                         if output.usage.test_only
                         else []
                     )
-                    if rejected:
+                    blocked = sum(entry["reason"] == "content_blocked" for entry in rejected)
+                    if blocked:
+                        warnings.append(f"content_blocked:{blocked}")
+                    if len(rejected) > blocked:
                         warnings.append(
-                            f"{len(rejected)} extracted requirements were not saved because their "
+                            f"{len(rejected) - blocked} extracted requirements were not saved because their "
                             "quote or position was empty, unknown, unmatched or ambiguous; see result.rejected."
                         )
                     pages = []

@@ -78,7 +78,7 @@ var settingsFailures = map[string]string{
 	"confidential_value_conflict": "当前值已变化；输入已清空，请核对最新版本后重新输入。",
 	"confidential_field_archived": "字段已归档，不能填写。", "confidential_task_required": "需要明确的任务上下文。",
 	"confidential_task_not_allowed": "共用值不能附带任务。", "confidential_field_key_conflict": "字段键名已存在。",
-	"provider_key_required": "首次设置或更换供应商、端点需要输入新密钥。", "provider_unavailable": "模型服务不可用。",
+	"provider_key_required": "首次设置或更换供应商、端点需要输入新密钥。", "provider_unavailable": "模型服务不可用。", "provider_content_blocked": "模型服务的内容审核拦截了请求。",
 	"provider_save_failed":      "保存结果无法核验，请重新读取配置。",
 	"management_cursor_invalid": "分页已失效，请从第一页读取。", "management_cursor_expired": "分页已过期，请从第一页读取。",
 	"forbidden": "当前身份无权执行此操作。", "human_required": "需要本人登录后操作。",

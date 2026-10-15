@@ -8,7 +8,7 @@ from functools import lru_cache
 from app.core.errors import ServiceError
 from app.schemas.contracts import Category, ExtractedRequirement, Extraction, Location, Source
 
-PROMPT_VERSION = "req-v3"
+PROMPT_VERSION = "req-v4"
 EXTRACTION_VERSION = "exact-spans-v2"
 
 

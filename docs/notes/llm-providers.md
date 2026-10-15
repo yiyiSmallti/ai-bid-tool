@@ -24,15 +24,17 @@ with `httpx.MockTransport`.
 
 Both adapters call the vendor over httpx; no vendor SDK is installed. Chunks
 (PDF pages or Word sections) are grouped into batches of at most
-`BID_LLM_BATCH_CHARS` characters (default 8,000), and a chunk larger than the
-budget gets a batch of its own rather than being cut. When the model hits its
+`BID_LLM_BATCH_CHARS` characters (default 8,000). A Word section longer than
+the budget is first cut into runs of whole blocks, so one long section does not
+become a single slow call that the whole job waits for; a PDF page or a single
+block larger than the budget gets a batch of its own rather than being cut. When the model hits its
 output limit or answers with text that does not parse as the schema, the
 batch is halved and both halves are sent again: by chunk
 first, then a Word section by blocks, then a long page or block by lines. A
 part keeps its page number or block ID, and its quotes are still checked
 against the whole stored page or block. Only a single line that still
 overflows fails the job. Up to
-`BID_LLM_CONCURRENCY` batches (default 4) run at once; after a failure, batches
+`BID_LLM_CONCURRENCY` batches (default 8) run at once; after a failure, batches
 not yet started are skipped. Each vendor call has a total deadline of
 `BID_LLM_TIMEOUT_SECONDS`, so a response that keeps the connection alive
 without finishing still ends. `BID_LLM_REQUEST_OPTIONS` is a JSON object merged
@@ -48,6 +50,9 @@ win on conflict. Set the output limit through `BID_LLM_MAX_OUTPUT_TOKENS`.
 The model sees each PDF page as `<page number="N">` and each Word block as
 `<block id="p37">` inside its section, and returns items that cite a page
 number or block ID as `ref` with a verbatim quote.
+The model leaves `text` empty when the quote already states the requirement
+on its own, and the adapter saves the quote as the text, so long clauses are
+not written twice.
 Word citations are covered
 in [docx-citations.md](docx-citations.md).
 Output is constrained to `WIRE_SCHEMA`:
@@ -131,6 +136,7 @@ actually answered.
 | Timeout, connection error (including a TLS connection dropped mid-response), HTTP 408/409/429/5xx/529 | The call is retried after 10 and 30 seconds; if it still fails, the job is requeued with exit code 3, at most three attempts |
 | Upstream quota/account unavailable: HTTP 402, `insufficient_quota`, `billing_error`, Zhipu `QUOTA_CODES` | Failed, `provider_quota_exhausted`, exit 4; correct upstream configuration before retrying |
 | Other HTTP errors, such as 400 or 401 | Failed, `provider_unavailable`, exit 4 |
+| Zhipu content review (`1301`) | The batch is halved like truncated output; a part that is still blocked when it cannot be split further is skipped and listed in `result.rejected` as `content_blocked`, the job succeeds with a `content_blocked:N` warning, and the rest of the tender is still extracted |
 | Refusal | Failed, `provider_refused` |
 | Output limit reached on an unsplittable batch | Failed, `provider_output_truncated`; lower the reasoning level or raise `BID_LLM_MAX_OUTPUT_TOKENS` |
 | Malformed output on an unsplittable batch | Failed, `invalid_provider_output` |
