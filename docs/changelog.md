@@ -6,6 +6,15 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Long agent sessions
+
+- A built-in agent session no longer stops at 40 messages. Older messages are
+  summarized into one stored summary, so a session can use all of its steps.
+- The summary keeps the goal, progress, open gaps and every card that waits for
+  a human; one that misses a waiting card pauses the session instead.
+- Summaries confirm nothing and are no citation; originals stay stored, and a
+  very long tool result is cut with a hint to narrow the command.
+
 ## 2026-10-15: Agent tender source tools
 
 - Search a parsed tender by keywords and read one page, chunk or Word block in

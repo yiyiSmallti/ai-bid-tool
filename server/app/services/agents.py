@@ -277,7 +277,7 @@ async def redact_text(session, row, content, settings, *, limit=8000):
     return sent
 
 
-async def add_message(session, row, role, content, settings, step=None):
+async def add_message(session, row, role, content, settings, step=None, *, covers=None):
     sent = await redact_text(session, row, content, settings)
     ordinal = (
         await session.scalar(
@@ -296,6 +296,8 @@ async def add_message(session, row, role, content, settings, step=None):
         content_enc=seal(settings, record_id, row.id, {"content": content}),
         content=sent,
         content_sha256=hashlib.sha256(sent.encode()).hexdigest(),
+        covers_from=covers[0] if covers else None,
+        covers_to=covers[1] if covers else None,
         created_at=await now(session),
     )
     session.add(message)
@@ -501,7 +503,7 @@ async def _preview(session, actor, row, principal, message, settings, llm):
 
 async def resume_preflight(session, row, actor, settings):
     """Revalidate configuration and fixed inputs before resuming."""
-    from app.jobs.agent import CONFIGURATION_STOPS, decision_request
+    from app.jobs.agent import CONFIGURATION_STOPS, next_quote
     from app.services import drafts
     from app.services.agent_limits import enforce
     from app.services.agent_tools import generation_preflight, validate_call
@@ -571,8 +573,7 @@ async def resume_preflight(session, row, actor, settings):
                 session.info["agent_storage"],
             )
         return
-    request = await decision_request(session, row, uuid4(), settings, actor=actor)
-    quote = reasoning_provider(llm).quote(request)
+    quote = await next_quote(session, row, settings, actor, llm)
     await enforce(session, row, settings, quote)
     attached = await preflight_service.attach(
         session,

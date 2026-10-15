@@ -158,10 +158,9 @@ and the document collection period answers with verbatim citations to the
 stored chunks; calls, tokens and duration are recorded under `data/work`. It
 needs real provider calls and runs as an eval, not in CI.
 
-## Planned: long sessions
+## Long sessions
 
-A session currently fails with `agent_context_limit` at 40 stored messages.
-Replace the count with an estimated token budget per pinned model:
+A session is bounded by an estimated token budget rather than a message count:
 
 - Keep a reserve for the reply (16,384 tokens) and the most recent messages up
   to about 20,000 tokens verbatim.
@@ -175,8 +174,11 @@ Replace the count with an estimated token budget per pinned model:
 - A single tool result longer than its bound is cut with a continuation hint,
   as `source read` does.
 
-Acceptance: a session of more than 60 turns keeps working, its summary retains
-open gaps and pending human actions, and its usage is recorded under `data/work`.
+Acceptance: a session of more than 60 steps (a turn is one counted step;
+`max_steps` allows 64) keeps working, its summary retains open gaps and pending
+human actions, and its usage is recorded under `data/work`. Budgets, the
+summary contract and its validation are described in the
+[built-in agent note](../notes/builtin-agent.md).
 
 ## Audit and A02 provenance
 

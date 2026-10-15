@@ -64,6 +64,28 @@ which pauses the session for authority review. A completion without a draft
 still stores its summary as an assistant message, so a question-only session
 keeps its answer while it pauses for clarification.
 
+A long session is bounded by estimated tokens, not by a message count, in
+[agent_context.py](../../server/app/services/agent_context.py). A token is
+estimated as three UTF-8 bytes, which overcounts for real tokenizers. A
+decision request sends the fixed scope message, the latest stored summary and
+the messages after it. When those exceed 20,000 tokens or 40 messages, the
+next fragment first runs a counted `summary` step: the pinned model, at its
+first configured reasoning level, summarizes everything older than the newest
+messages up to 12,000 tokens or 24 messages, including the previous summary.
+The step has the decision's quote, preflight, admission re-check and usage
+receipt. Its closed output names the goal, progress, open gaps and pending
+human actions; every card of the extraction that waits for review or material
+must appear in those actions with its ID, and no other resource may. The
+stored `summary` message is redacted, records the ordinals it covers, and
+states that it confirms nothing and is no citation; the originals stay stored
+and human gates still read the cards themselves. A summary that is malformed
+or misses a waiting card fails with `agent_summary_invalid`, stores nothing,
+and pauses the session for clarification. A tool result past 8,000 tokens is
+cut with a hint to narrow the command or read on with an offset. Pinned models
+need a context window of at least 128,000 tokens: the 256 KiB request ceiling,
+which tool result schemas fill to about a third, plus the 16,384-token reply
+reserve stays inside it.
+
 Their Result discovery entries also expose command-specific `output`, `items`
 and a complete seven-key `result` schema, covering preview, accepted-job,
 published, partial and error branches, including CLI `--wait` projections.
