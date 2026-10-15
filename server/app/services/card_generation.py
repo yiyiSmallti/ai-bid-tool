@@ -252,7 +252,8 @@ async def snapshot(
             )
         )[:2000] or "drafting"
         memory_request = MemoryRetrievalRequest(
-            scopes=["library"],
+            # A gateway member drafts with public memory and their own private memory.
+            scopes=["library"] if actor.member_id is None else ["library", "private"],
             task_id=task.id,
             query=memory_query,
             keywords=list(dict.fromkeys(word for word in memory_query.split() if len(word) <= 30))[

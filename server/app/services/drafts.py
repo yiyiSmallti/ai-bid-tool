@@ -596,10 +596,10 @@ def draft_view(
         revision = batch.revisions.get(item.card_revision_id) if item.card_revision_id else None
         if revision is not None and revision.model_job_id:
             manifest = batch.generation_manifests.get(revision.model_job_id, {})
-            warning = cards.memory_warning_for(revision, manifest, batch.memory_epoch)
+            warning = cards.memory_warning_for(revision, manifest, batch.memory_epochs)
             if warning:
                 memory_warnings.add(warning + ":" + str(item.requirement_id))
-            lineage = cards.memory_lineage_for(manifest, item.requirement_id)
+            lineage = cards.memory_lineage_for(manifest, item.requirement_id, batch.actor.member_id)
             if lineage:
                 memory_lineage.append({"requirement_id": str(item.requirement_id), **lineage})
     return DraftView.model_validate(

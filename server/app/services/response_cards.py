@@ -708,7 +708,9 @@ def card_view_data(
     ).model_dump(mode="json")
 
 
-def memory_lineage_for(manifest: dict, requirement_id: UUID) -> dict:
+def memory_lineage_for(manifest: dict, requirement_id: UUID, viewer: UUID | None) -> dict:
+    from app.memory.retrieval import shown_refs
+
     memory = manifest.get("memory")
     if not memory:
         return {}
@@ -716,16 +718,16 @@ def memory_lineage_for(manifest: dict, requirement_id: UUID) -> dict:
         "retrieval_id": manifest.get("memory_retrieval_id"),
         "call_id": manifest.get("requirement_calls", {}).get(str(requirement_id)),
         "manifest_sha256": memory["manifest_sha256"],
-        "memories": memory["memories"],
+        "memories": shown_refs(memory, memory["memories"], viewer),
     }
 
 
-def memory_warning_for(revision, manifest, current_epoch):
+def memory_warning_for(revision, manifest, epochs):
     from app.memory.retrieval import manifest_epoch_changed
 
     if "memory" not in manifest:
         return None  # Existing pre-memory drafts retain their historical review semantics.
-    if manifest_epoch_changed(manifest["memory"], current_epoch):
+    if manifest_epoch_changed(manifest["memory"], epochs):
         return (
             "memory_changed_after_review" if revision.state == "confirmed" else "memory_input_stale"
         )
@@ -735,7 +737,7 @@ def memory_warning_for(revision, manifest, current_epoch):
 async def generation_memory_state(session, actor, revision, requirement_id):
     if revision.model_job_id is None:
         return None, {}
-    from app.memory.retrieval import epoch
+    from app.memory.retrieval import epoch_table
 
     run = await session.scalar(
         select(CardGenerationRun).where(
@@ -748,8 +750,8 @@ async def generation_memory_state(session, actor, revision, requirement_id):
         return None, {}
     actor.require("memory:read")
     return (
-        memory_warning_for(revision, run.input_manifest, await epoch(session)),
-        memory_lineage_for(run.input_manifest, requirement_id),
+        memory_warning_for(revision, run.input_manifest, await epoch_table(session)),
+        memory_lineage_for(run.input_manifest, requirement_id, actor.member_id),
     )
 
 
@@ -809,7 +811,7 @@ class CardReadBatch:
     _evidence: dict[UUID, dict] = field(default_factory=dict)
     _generation_stale: dict[UUID, bool] = field(default_factory=dict)
     _views: dict[tuple[UUID, bool], dict] = field(default_factory=dict)
-    memory_epoch: int = 0
+    memory_epochs: dict = field(default_factory=dict)
     requirement_reviews: dict = field(default_factory=dict)
 
     @classmethod
@@ -919,19 +921,19 @@ class CardReadBatch:
                 images[row.id] = (view, *await image_state(session, actor, row, storage))
             except ServiceError as error:
                 images[row.id] = error
-        memory_epoch = 0
+        memory_epochs = {}
         if any("memory" in value for value in generation_manifests.values()):
-            from app.memory.retrieval import epoch
+            from app.memory.retrieval import epoch_table
 
             actor.require("memory:read")
-            memory_epoch = await epoch(session)
+            memory_epochs = await epoch_table(session)
         citations = citation_validity_batch(requirements, chunks)
         reviews = await requirement_consumption.effective(
             session, requirements, citations=citations
         )
         return cls(
             requirement_reviews=reviews,
-            memory_epoch=memory_epoch,
+            memory_epochs=memory_epochs,
             actor=actor,
             requirements=required,
             chunks=chunks,
@@ -1043,7 +1045,7 @@ class CardReadBatch:
                 if revision.model_job_id
                 else {}
             )
-            warning = memory_warning_for(revision, manifest, self.memory_epoch)
+            warning = memory_warning_for(revision, manifest, self.memory_epochs)
             self._views[key] = card_view_data(
                 card,
                 revision,
@@ -1054,7 +1056,7 @@ class CardReadBatch:
                 any(invalid for _, _, invalid in images),
                 {code for _, warnings, _ in images for code in warnings}
                 | ({warning} if warning else set()),
-                memory_lineage_for(manifest, requirement.id),
+                memory_lineage_for(manifest, requirement.id, self.actor.member_id),
                 requirement_review=self.requirement_reviews[requirement.id]
                 if requirement_review_gate
                 else None,
