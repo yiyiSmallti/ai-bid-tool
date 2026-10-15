@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
 from app.models.entities import ApiToken, Task
+from app.models.members import TaskMember
 from app.models.task_events import TaskEventHead
 from app.services.auth import HUMAN_ONLY_SCOPES, HUMAN_SCOPES, SCOPES, Identity, set_actor_context
 
@@ -76,3 +77,8 @@ async def seed(session: AsyncSession, actor: Identity, task: Task) -> None:
         .values(task_id=task.id)
         .on_conflict_do_nothing(index_elements=["task_id"])
     )
+    if live.member_id is not None:
+        # On a gateway the creator owns the project; the deferred trigger
+        # rejects a project without an owner at commit.
+        session.add(TaskMember(task_id=task.id, member_id=live.member_id, role="owner"))
+        await session.flush()

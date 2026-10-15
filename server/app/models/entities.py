@@ -1398,6 +1398,9 @@ class Task(Base):
     model_redaction_revision: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default=sql_text("1")
     )
+    export_to_personal_allowed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sql_text("false")
+    )
     __table_args__ = (
         CheckConstraint(
             "((model_redaction_revision > 0))", name="tasks_model_redaction_revision_check"

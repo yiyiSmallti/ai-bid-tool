@@ -1,4 +1,4 @@
-"""Gateway members, their grants and sessions, and sign-in attempts.
+"""Gateway members, their grants, sessions and projects, and sign-in attempts.
 
 The tables stay empty in a personal database.
 """
@@ -63,4 +63,16 @@ class LoginAttempt(Base):
     outcome: Mapped[str] = mapped_column(String(10), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=sql_text("clock_timestamp()")
+    )
+
+
+class TaskMember(Base):
+    """A member's place on one project; exactly one row per project is the owner."""
+
+    __tablename__ = "task_members"
+    task_id: Mapped[UUID] = mapped_column(ForeignKey("tasks.id"), primary_key=True)
+    member_id: Mapped[UUID] = mapped_column(ForeignKey("members.id"), primary_key=True)
+    role: Mapped[str] = mapped_column(String(10), nullable=False)
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
     )
