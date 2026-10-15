@@ -137,6 +137,11 @@ BEGIN
 END $$;
 
 ALTER TABLE public.api_tokens ADD COLUMN member_id uuid REFERENCES public.members(id);
+-- The gateway CLI signs in with tokens only, so an administrator's token may
+-- manage members; the token is revalidated against its member on every request.
+ALTER TABLE public.api_tokens DROP CONSTRAINT token_forbidden_member_scope;
+ALTER TABLE public.api_tokens ADD CONSTRAINT token_forbidden_member_scope
+    CHECK (NOT (scopes ? 'member:manage') OR member_id IS NOT NULL);
 ALTER TABLE public.agent_principals ADD COLUMN member_id uuid REFERENCES public.members(id);
 ALTER TABLE public.vendor_calls ADD COLUMN member_id uuid;
 ALTER TABLE public.usage_records ADD COLUMN member_id uuid;
