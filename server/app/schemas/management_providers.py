@@ -17,6 +17,8 @@ class ReasoningChoice(Contract):
 
 class ProviderRevisionMetadata(Contract):
     id: UUID
+    slot: UUID
+    name: str | None = Field(default=None, max_length=60)
     revision: Revision
     configuration: ProviderConfigInput
     provider: Literal["anthropic", "openai"]
@@ -40,6 +42,9 @@ class ProviderSettingsData(Contract):
     capability: Literal["llm_extract"] = "llm_extract"
     configured: bool
     current: ProviderRevisionMetadata | None
+    # Every saved model's current revision, the default model first.
+    models: list[ProviderRevisionMetadata] = Field(default_factory=list, max_length=20)
+    default_slot: UUID | None = None
     reasoning: list[ReasoningChoice] = Field(max_length=8)
     actions: list[ActionHint] = Field(max_length=16)
     connection_status: Literal["not_checked"] = "not_checked"
@@ -48,4 +53,6 @@ class ProviderSettingsData(Contract):
     def configuration_binding(self) -> Self:
         if self.configured != (self.current is not None):
             raise ValueError("configured state must follow the saved revision")
+        if self.default_slot != (self.current.slot if self.current else None):
+            raise ValueError("the default model must be the current configuration")
         return self

@@ -68,10 +68,17 @@ func snapFixtures() map[string]snapFixture {
 		{"name": "high", "label": "深度推理，适合复杂条款", "request_options": Object{"reasoning_effort": "high", "thinking": Object{"type": "enabled"}}, "effort": "high", "batch_chars": 4000},
 	}
 	choices := []Object{{"name": "low", "label": "轻量推理"}, {"name": "high", "label": "深度推理"}}
-	config := Object{"id": "11111111-2222-4333-8444-555555555555", "revision": 1, "provider": "openai", "model": "local-fixture-model", "credential_state": "configured", "updated_at": "2026-10-14T09:12:00Z", "revised_at": "2026-10-14T09:12:00Z", "reasoning": choices, "default_reasoning": "low",
-		"configuration": Object{"capability": "llm_extract", "provider": "openai", "model": "local-fixture-model", "base_url": "https://example.invalid/long-model-service-endpoint/v1", "json_mode": "json_object", "reasoning": levels, "default_reasoning": "low", "expected_revision": nil}}
+	config := Object{"id": "11111111-2222-4333-8444-555555555555", "slot": "aaaaaaaa-2222-4333-8444-555555555555", "name": "智谱 GLM", "revision": 3, "provider": "openai", "model": "glm-5.3-flash", "credential_state": "configured", "updated_at": "2026-10-14T09:12:00Z", "revised_at": "2026-10-14T09:12:00Z", "reasoning": choices, "default_reasoning": "low",
+		"configuration": Object{"capability": "llm_extract", "slot": "aaaaaaaa-2222-4333-8444-555555555555", "new": false, "name": "智谱 GLM", "provider": "openai", "model": "glm-5.3-flash", "base_url": "https://open.bigmodel.cn/api/paas/v4", "json_mode": "json_object", "reasoning": levels, "default_reasoning": "low", "expected_revision": nil}}
+	other := func(id, slot, name, provider, model, endpoint string, revision int) Object {
+		return Object{"id": id, "slot": slot, "name": name, "revision": revision, "provider": provider, "model": model, "credential_state": "configured", "updated_at": "2026-10-15T02:00:00Z", "revised_at": "2026-10-15T02:00:00Z", "reasoning": []Object{}, "default_reasoning": nil,
+			"configuration": Object{"capability": "llm_extract", "slot": slot, "new": false, "name": name, "provider": provider, "model": model, "base_url": mgNull(endpoint), "json_mode": "json_object", "reasoning": []Object{}, "default_reasoning": nil, "expected_revision": nil}}
+	}
+	models := []Object{config,
+		other("22222222-2222-4333-8444-555555555555", "bbbbbbbb-2222-4333-8444-555555555555", "DeepSeek", "openai", "deepseek-v4-flash", "https://api.deepseek.com", 2),
+		other("33333333-2222-4333-8444-555555555555", "cccccccc-2222-4333-8444-555555555555", "Claude", "anthropic", "claude-sonnet-5-5", "", 1)}
 	return map[string]snapFixture{
-		"/management/providers":               {data: Object{"capability": "llm_extract", "configured": true, "current": config, "reasoning": choices, "connection_status": "not_checked", "actions": []Object{{"action": "configure", "allowed": true, "reason": nil}, {"action": "test", "allowed": true, "reason": nil}}}, items: []Object{}},
+		"/management/providers":               {data: Object{"capability": "llm_extract", "configured": true, "current": config, "models": models, "default_slot": "aaaaaaaa-2222-4333-8444-555555555555", "reasoning": choices, "connection_status": "not_checked", "actions": []Object{{"action": "configure", "allowed": true, "reason": nil}, {"action": "test", "allowed": true, "reason": nil}}}, items: []Object{}},
 		"/management/providers/history/query": {data: Object{"as_of": "2026-10-14T09:12:00Z", "returned": 1, "next_cursor": nil, "has_more": false}, items: []Object{config}},
 
 		"/tasks":                               {data: Object{}, items: tasks},
@@ -119,6 +126,7 @@ func TestNativeSnapshots(t *testing.T) {
 		"requirements": "/org/tasks/t-1/requirements?job=j-ext-2",
 		"products":     "/org/products",
 		"models":       "/org/settings/models",
+		"models-add":   "/org/settings/models#add",
 	}
 	if only := os.Getenv("BID_UI_SNAP_ONLY"); only != "" {
 		for name := range routes {
@@ -142,7 +150,7 @@ func TestNativeSnapshots(t *testing.T) {
 			tt.SetDark(dark)
 			// As the macOS window with a hidden title bar.
 			tt.SetTitleBar(ui.TitleBar{Height: 28, Left: 78})
-			app.Navigate(route)
+			app.Navigate(strings.TrimSuffix(route, "#add"))
 			if route == "/login" {
 				app.Client = NewAPIClient(server.URL)
 			}
@@ -154,6 +162,13 @@ func TestNativeSnapshots(t *testing.T) {
 				case <-time.After(60 * time.Millisecond):
 					idle++
 				}
+				tt.Frame()
+			}
+			// Opens the add-model form with a vendor template, as a click on 添加模型 would.
+			if page, ok := app.page.(*modelSettingsPage); ok && strings.HasSuffix(route, "#add") {
+				page.startEdit(nil)
+				page.template = "zhipu"
+				page.applyTemplate("zhipu")
 				tt.Frame()
 			}
 			tt.Frame()

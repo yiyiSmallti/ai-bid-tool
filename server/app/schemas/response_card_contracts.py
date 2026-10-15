@@ -205,6 +205,8 @@ class CardGenerateRequest(_TrimmedContract):
     extraction_job_id: UUID
     requirement_ids: list[UUID] | None = None
     reasoning: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,20}$")
+    # A saved model; omitted means the default model.
+    model: UUID | None = None
     dry_run: bool = False
     retry: bool = False
     # Bind submission to the previewed input and model identity.

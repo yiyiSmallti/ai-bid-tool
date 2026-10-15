@@ -1,5 +1,7 @@
 """Provider configuration API, mounted on the shared installation authentication context."""
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 
@@ -34,13 +36,33 @@ def create_router(context, db, settings, llm, resolve, processor, transport=None
             data=await service.set_config(ctx[0], ctx[1], body, settings),
         )
 
+    @router.post("/providers/models/{slot}/default", name="provider_default", response_model=Result)
+    async def provider_default(slot: UUID, ctx=Depends(context, scope="function")):
+        from app.services import provider_configs as service
+
+        return Result(
+            ok=True,
+            command="provider default",
+            data=await service.set_default(ctx[0], ctx[1], slot),
+        )
+
+    @router.delete("/providers/models/{slot}", name="provider_remove", response_model=Result)
+    async def provider_remove(slot: UUID, ctx=Depends(context, scope="function")):
+        from app.services import provider_configs as service
+
+        return Result(
+            ok=True,
+            command="provider remove",
+            data=await service.remove_model(ctx[0], ctx[1], slot),
+        )
+
     @router.post("/providers/test", name="provider_test", response_model=Result)
     async def provider_test(body: ProviderTest, ctx=Depends(context, scope="function")):
         from app.services import provider_configs as service
 
         session, actor = ctx
         await service.require_access(session, actor, write=True)
-        provider = await resolve(session) if resolve else llm
+        provider = await resolve(session, model=body.model) if resolve else llm
         if body.dry_run:
             data, warnings = await service.preview_test(session, actor, body, provider, settings)
             return Result(

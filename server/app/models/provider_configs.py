@@ -3,6 +3,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     Index,
@@ -21,6 +22,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.entities import Base
 
+LEGACY_SLOT = UUID("00000000-0000-4000-8000-000000000001")
+
 
 class ProviderConfig(Base):
     __tablename__ = "provider_configs"
@@ -33,6 +36,12 @@ class ProviderConfig(Base):
     data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     encrypted_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     key_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    # Rows saved before several models existed belong to the legacy slot.
+    slot: Mapped[UUID] = mapped_column(
+        nullable=False,
+        default=lambda: LEGACY_SLOT,
+        server_default=sql_text(f"'{LEGACY_SLOT}'::uuid"),
+    )
     __table_args__ = (
         CheckConstraint("((jsonb_typeof(data) = 'object'::text))", name="provider_config_object"),
         CheckConstraint(
@@ -50,5 +59,34 @@ class ProviderConfig(Base):
             "capability",
             column("revision").desc(),
             column("id").desc(),
+        ),
+        Index("provider_config_slot", "capability", "slot", column("revision").desc()),
+    )
+
+
+class ProviderSlot(Base):
+    """One saved model: whether it is the default and whether it was removed."""
+
+    __tablename__ = "provider_slots"
+    slot: Mapped[UUID] = mapped_column(nullable=False, primary_key=True)
+    capability: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="llm_extract", server_default="llm_extract"
+    )
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sql_text("false")
+    )
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (
+        CheckConstraint(
+            "((capability)::text = 'llm_extract'::text)", name="provider_slot_capability"
+        ),
+        CheckConstraint(
+            "((NOT is_default) OR (removed_at IS NULL))", name="provider_slot_default_live"
+        ),
+        Index(
+            "provider_slot_default",
+            "capability",
+            unique=True,
+            postgresql_where=sql_text("is_default"),
         ),
     )

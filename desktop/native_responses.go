@@ -650,6 +650,7 @@ type generationPanel struct {
 	preview                               Object
 	authorized                            bool
 	job                                   jobPanel
+	models                                modelPicker
 }
 
 func (g *generationPanel) invalidate() { g.preview = nil; g.authorized = false }
@@ -661,7 +662,15 @@ func (g *generationPanel) init(a *NativeApp, task, extraction, document string) 
 	g.extraction = extraction
 	g.document = document
 	g.invalidate()
-	a.Request("POST", "/documents/"+document+"/extract", Object{"dry_run": true}, func(r Result) {
+	g.models.load(a)
+	g.loadLevels(a)
+}
+
+// loadLevels reads the chosen model's reasoning levels from an extraction preflight, which calls no model.
+func (g *generationPanel) loadLevels(a *NativeApp) {
+	body := Object{"dry_run": true}
+	g.models.set(body)
+	a.Request("POST", "/documents/"+g.document+"/extract", body, func(r Result) {
 		g.levels = []string{""}
 		for _, level := range objects(r.Data["reasoning_levels"]) {
 			g.levels = append(g.levels, str(level, "name"))
@@ -687,12 +696,17 @@ func (g *generationPanel) View(c *ui.Context, a *NativeApp, task Object, changed
 			apply()
 		}
 	})
+	if g.models.View(c) {
+		g.invalidate()
+		g.loadLevels(a)
+	}
 	if nativeChoice(c, &g.reasoning, g.levels).Label("官方推理档位").Changed() {
 		g.invalidate()
 	}
 	nativeButton(c, "起草预检").Disabled(a.Busy).OnClick(func() {
 		g.invalidate()
 		body := Object{"extraction_job_id": g.extraction, "dry_run": true}
+		g.models.set(body)
 		if g.ids != nil {
 			body["requirement_ids"] = g.ids
 		}
@@ -718,6 +732,7 @@ func (g *generationPanel) View(c *ui.Context, a *NativeApp, task Object, changed
 		ui.Checkbox(c, &g.authorized, "已核对本次模型、材料、要求范围与外发内容，授权起草")
 		nativePrimaryButton(c, "开始模型起草").Disabled(a.Busy || !g.authorized || len(stringList(g.preview["selected_requirements"])) == 0 || str(g.preview, "admission_blocker") != "").OnClick(func() {
 			body := Object{"extraction_job_id": g.extraction, "expected_input_hash": g.preview["input_hash"]}
+			g.models.set(body)
 			if g.ids != nil {
 				body["requirement_ids"] = g.ids
 			}

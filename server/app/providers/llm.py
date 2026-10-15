@@ -1049,9 +1049,13 @@ def reasoning_choices(llm) -> list[dict]:
 
 
 async def resolve_llm(
-    session: AsyncSession, settings: Settings, transport=None, job: Job | None = None
+    session: AsyncSession,
+    settings: Settings,
+    transport=None,
+    job: Job | None = None,
+    model: UUID | None = None,
 ):
-    """Org revision, platform default, then explicitly unconfigured; no environment fallback."""
+    """The job's pinned revision, the chosen or default saved model, else unconfigured."""
     from app.providers.configured import resolve_configured
 
-    return await resolve_configured(session, settings, transport, job)
+    return await resolve_configured(session, settings, transport, job, model)

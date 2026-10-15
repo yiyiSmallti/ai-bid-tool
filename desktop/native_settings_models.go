@@ -24,8 +24,10 @@ type modelSettingsPage struct {
 	settings, selectedRevision, testedRevision                                Object
 	history                                                                   managementListing
 	provider, model, endpoint, jsonMode, key, defaultReasoning, testReasoning string
+	name, template, editSlot, testModel, expanded                             string
+	editRevision                                                              any
 	levels                                                                    []modelReasoningEditor
-	testOptions                                                               settingsChoices
+	testOptions, testModels                                                   settingsChoices
 	editing, conflict                                                         bool
 	preflight                                                                 Object
 	preflightCost                                                             map[string]int64
@@ -44,10 +46,11 @@ func (p *modelSettingsPage) Close() {
 	p.settings, p.selectedRevision, p.testedRevision, p.preflight = nil, nil, nil, nil
 	p.history = managementListing{}
 	p.key, p.model, p.endpoint, p.defaultReasoning, p.saveReceipt = "", "", "", "", ""
+	p.name, p.template, p.editSlot, p.testModel, p.expanded, p.editRevision = "", "", "", "", "", nil
 	p.levels = nil
 	p.testReceipt = nil
 	p.preflightCost = nil
-	p.testOptions = settingsChoices{}
+	p.testOptions, p.testModels = settingsChoices{}, settingsChoices{}
 	p.editing = false
 }
 func (p *modelSettingsPage) failed(a *NativeApp, err error) {
@@ -57,7 +60,42 @@ func (p *modelSettingsPage) failed(a *NativeApp, err error) {
 	}
 	a.Error = settingsErrorText(err)
 }
-func (p *modelSettingsPage) current() Object { return object(p.settings["current"]) }
+func (p *modelSettingsPage) current() Object  { return object(p.settings["current"]) }
+func (p *modelSettingsPage) models() []Object { return objects(p.settings["models"]) }
+func (p *modelSettingsPage) saved(slot string) Object {
+	for _, model := range p.models() {
+		if str(model, "slot") == slot {
+			return model
+		}
+	}
+	return nil
+}
+func modelTitle(model Object) string {
+	if name := str(model, "name"); name != "" {
+		return name
+	}
+	return str(model, "model")
+}
+
+// Test reasoning levels belong to the chosen model, not to the default one.
+func (p *modelSettingsPage) refreshTestOptions() {
+	pairs := []string{"", "使用默认等级"}
+	reasoning := p.settings["reasoning"]
+	if chosen := p.saved(p.testModel); chosen != nil {
+		reasoning = chosen["reasoning"]
+	}
+	for _, level := range objects(reasoning) {
+		label := str(level, "label")
+		if label == "" {
+			label = str(level, "name")
+		}
+		pairs = append(pairs, str(level, "name"), label)
+	}
+	p.testOptions = settingsOptions(pairs...)
+	if _, ok := p.testOptions.labelByCode[p.testReasoning]; !ok {
+		p.testReasoning = ""
+	}
+}
 func (p *modelSettingsPage) load(a *NativeApp, after func(bool)) {
 	settingsRead(a, &p.reads, "provider-settings", func(ctx context.Context) (Result, error) {
 		return a.Client.Request(ctx, "GET", "/management/providers", nil)
@@ -80,15 +118,15 @@ func (p *modelSettingsPage) load(a *NativeApp, after func(bool)) {
 		p.settings = r.Data
 		p.preflight = nil
 		p.preflightCost = nil
-		pairs := []string{"", "使用默认等级"}
-		for _, level := range objects(r.Data["reasoning"]) {
-			label := str(level, "label")
-			if label == "" {
-				label = str(level, "name")
-			}
-			pairs = append(pairs, str(level, "name"), label)
+		pairs := []string{"", "默认模型"}
+		for _, model := range p.models() {
+			pairs = append(pairs, str(model, "slot"), modelTitle(model)+" · "+str(model, "model"))
 		}
-		p.testOptions = settingsOptions(pairs...)
+		p.testModels = settingsOptions(pairs...)
+		if p.saved(p.testModel) == nil {
+			p.testModel = ""
+		}
+		p.refreshTestOptions()
 		if after != nil {
 			after(true)
 		}
@@ -116,7 +154,7 @@ func (p *modelSettingsPage) loadHistory(a *NativeApp, cursor string) {
 			}
 		}
 		p.history.install(r, cursor, func(row Object) []string {
-			return []string{fmt.Sprint(integer(row, "revision")), str(row, "provider"), str(row, "model"), nativeDisplay(str(row, "revised_at")), nativeShortID(str(row, "id"))}
+			return []string{fmt.Sprint(integer(row, "revision")), nativeDisplay(str(row, "name")), nativeLabel(str(row, "provider")), str(row, "model"), nativeDisplay(str(row, "revised_at")), nativeShortID(str(row, "id"))}
 		})
 	}, func(err error) { p.failed(a, err) })
 }
@@ -139,15 +177,18 @@ func (p *modelSettingsPage) revision(a *NativeApp, id string, tested bool) {
 		}
 	}, func(err error) { p.failed(a, err) })
 }
-func (p *modelSettingsPage) startEdit() {
-	if !mgAllowed(p.settings, "configure") {
+
+// startEdit opens the form for one saved model, or for a new one when model is nil.
+func (p *modelSettingsPage) startEdit(model Object) {
+	if !mgAllowed(p.settings, "configure") || model == nil && len(p.models()) >= 20 {
 		return
 	}
-	p.key = ""
+	p.key, p.template, p.editSlot, p.editRevision, p.name = "", "", "", nil, ""
 	p.provider, p.model, p.endpoint, p.jsonMode, p.defaultReasoning = "openai", "", "", "json_schema", ""
 	p.levels = nil
-	if current := p.current(); current != nil {
-		configuration := object(current["configuration"])
+	if model != nil {
+		configuration := object(model["configuration"])
+		p.editSlot, p.editRevision, p.name = str(model, "slot"), model["revision"], str(model, "name")
 		p.provider, p.model, p.endpoint, p.jsonMode, p.defaultReasoning = str(configuration, "provider"), str(configuration, "model"), str(configuration, "base_url"), str(configuration, "json_mode"), str(configuration, "default_reasoning")
 		for _, level := range objects(configuration["reasoning"]) {
 			p.levels = append(p.levels, modelReasoningEditor{Name: str(level, "name"), Label: str(level, "label"), Options: mgJSON(level["request_options"]), Effort: str(level, "effort"), Batch: fmt.Sprint(integer(level, "batch_chars"))})
@@ -159,12 +200,25 @@ func (p *modelSettingsPage) startEdit() {
 	p.preflight = nil
 	p.preflightCost = nil
 }
+func (p *modelSettingsPage) applyTemplate(key string) {
+	template, ok := findModelTemplate(key)
+	if !ok {
+		return
+	}
+	p.key = ""
+	if p.name == "" || p.editSlot == "" {
+		p.name = template.Name
+	}
+	p.provider, p.endpoint, p.model, p.jsonMode, p.defaultReasoning = template.Provider, template.Endpoint, template.Model, template.JSONMode, template.Default
+	p.levels = append([]modelReasoningEditor(nil), template.Levels...)
+	p.dirty = true
+}
 func (p *modelSettingsPage) cancel(a *NativeApp) {
 	cancel := func() {
 		p.key = ""
 		p.editing, p.dirty, p.conflict = false, false, false
 		p.levels = nil
-		p.model, p.endpoint, p.defaultReasoning = "", "", ""
+		p.model, p.endpoint, p.defaultReasoning, p.name, p.template, p.editSlot, p.editRevision = "", "", "", "", "", "", nil
 		p.preflight = nil
 		p.preflightCost = nil
 	}
@@ -174,13 +228,19 @@ func (p *modelSettingsPage) cancel(a *NativeApp) {
 		cancel()
 	}
 }
+
+// The server reuses a saved key from any model with the same provider and endpoint.
 func (p *modelSettingsPage) reusable() bool {
-	current := p.current()
-	return current != nil && p.provider == str(current, "provider") && settingsEndpoint(p.endpoint) == str(object(current["configuration"]), "base_url")
+	for _, model := range p.models() {
+		if p.provider == str(model, "provider") && settingsEndpoint(p.endpoint) == str(object(model["configuration"]), "base_url") {
+			return true
+		}
+	}
+	return false
 }
 func (p *modelSettingsPage) input() (Object, error) {
-	if strings.TrimSpace(p.model) == "" || len(p.model) > 100 || !settingsHTTPS(mgNull(p.endpoint)) || len(p.levels) > 8 {
-		return nil, fmt.Errorf("请填写模型名称与有效的 HTTPS Base URL。")
+	if strings.TrimSpace(p.model) == "" || len(p.model) > 100 || len([]rune(strings.TrimSpace(p.name))) > 60 || !settingsHTTPS(mgNull(p.endpoint)) || len(p.levels) > 8 {
+		return nil, fmt.Errorf("请填写模型 ID（不超过 100 字符）、显示名称（不超过 60 字）与有效的 HTTPS Base URL。")
 	}
 	levels := make([]Object, 0, len(p.levels))
 	seen := make(map[string]bool, len(p.levels))
@@ -197,11 +257,13 @@ func (p *modelSettingsPage) input() (Object, error) {
 	if len(levels) > 0 && !seen[p.defaultReasoning] || len(levels) == 0 && p.defaultReasoning != "" {
 		return nil, fmt.Errorf("请选择已配置的默认推理等级；未配置等级时应留空。")
 	}
-	var expected any
-	if current := p.current(); current != nil {
-		expected = current["revision"]
+	body := Object{"capability": "llm_extract", "name": mgNull(strings.TrimSpace(p.name)), "provider": p.provider, "model": strings.TrimSpace(p.model), "base_url": mgNull(settingsEndpoint(p.endpoint)), "json_mode": p.jsonMode, "reasoning": levels, "default_reasoning": mgNull(p.defaultReasoning)}
+	if p.editSlot == "" {
+		body["new"] = true
+	} else {
+		body["slot"], body["expected_revision"] = p.editSlot, p.editRevision
 	}
-	return Object{"capability": "llm_extract", "provider": p.provider, "model": strings.TrimSpace(p.model), "base_url": mgNull(settingsEndpoint(p.endpoint)), "json_mode": p.jsonMode, "reasoning": levels, "default_reasoning": mgNull(p.defaultReasoning), "expected_revision": expected}, nil
+	return body, nil
 }
 func (p *modelSettingsPage) save(a *NativeApp) {
 	if !p.editing || !mgAllowed(p.settings, "configure") || a.Busy {
@@ -231,7 +293,11 @@ func (p *modelSettingsPage) save(a *NativeApp) {
 			return
 		}
 		p.load(a, func(ok bool) {
-			if !ok || p.current() == nil || integer(p.current(), "revision") < revision {
+			saved := false
+			for _, model := range p.models() {
+				saved = saved || str(model, "id") == id && integer(model, "revision") == revision
+			}
+			if !ok || !saved {
 				if !p.closed {
 					p.conflict = true
 					a.Error = settingsFailures["provider_save_failed"]
@@ -241,11 +307,11 @@ func (p *modelSettingsPage) save(a *NativeApp) {
 			p.key = ""
 			p.editing, p.dirty, p.conflict = false, false, false
 			p.levels = nil
-			p.model, p.endpoint, p.defaultReasoning = "", "", ""
+			p.model, p.endpoint, p.defaultReasoning, p.name, p.template, p.editSlot, p.editRevision = "", "", "", "", "", "", nil
 			p.saveReceipt = id
 			p.history.Previous = nil
 			p.loadHistory(a, "")
-			a.Notice = "模型配置已保存，密钥不会回显。"
+			a.Notice = "模型已保存，密钥不会回显。"
 		})
 	}, func(err error) {
 		p.failed(a, err)
@@ -285,12 +351,15 @@ func (p *modelSettingsPage) test(a *NativeApp, dry bool) {
 	if a.Busy || p.editing || !mgAllowed(p.settings, "test") || !dry && p.preflight == nil {
 		return
 	}
-	reasoning := mgNull(p.testReasoning)
+	reasoning, chosen := mgNull(p.testReasoning), mgNull(p.testModel)
 	displayed := p.current()
+	if model := p.saved(p.testModel); model != nil {
+		displayed = model
+	}
 	p.key = ""
 	if dry {
 		settingsWrite(a, func(ctx context.Context) (Result, error) {
-			return a.Client.Request(ctx, "POST", "/providers/test", Object{"capability": "llm_extract", "reasoning": reasoning, "dry_run": true})
+			return a.Client.Request(ctx, "POST", "/providers/test", Object{"capability": "llm_extract", "model": chosen, "reasoning": reasoning, "dry_run": true})
 		}, func(r Result) {
 			if r.Data["dry_run"] != true || object(r.Data["preflight"]) == nil {
 				a.Error = settingsFailures["invalid_response"]
@@ -311,7 +380,7 @@ func (p *modelSettingsPage) test(a *NativeApp, dry bool) {
 	}
 	p.preflight, p.preflightCost = nil, nil
 	a.Do(func(ctx context.Context) (func(), error) {
-		result, err := a.Client.Request(ctx, "POST", "/providers/test", Object{"capability": "llm_extract", "reasoning": reasoning, "dry_run": false})
+		result, err := a.Client.Request(ctx, "POST", "/providers/test", Object{"capability": "llm_extract", "model": chosen, "reasoning": reasoning, "dry_run": false})
 		if err != nil {
 			var api *APIError
 			if errors.As(err, &api) && api.Result.Command == "provider test" {
@@ -388,27 +457,107 @@ func modelMetadataView(c *ui.Context, value Object) {
 		})
 	})
 }
+func (p *modelSettingsPage) setDefault(a *NativeApp, model Object) {
+	if a.Busy || !mgAllowed(p.settings, "configure") {
+		return
+	}
+	slot := str(model, "slot")
+	settingsWrite(a, func(ctx context.Context) (Result, error) {
+		return a.Client.Request(ctx, "POST", "/providers/models/"+url.PathEscape(slot)+"/default", nil)
+	}, func(Result) {
+		p.load(a, nil)
+		a.Notice = "已将「" + modelTitle(model) + "」设为默认模型。"
+	}, func(error) { p.load(a, nil) })
+}
+func (p *modelSettingsPage) remove(a *NativeApp, model Object) {
+	if a.Busy || !mgAllowed(p.settings, "configure") {
+		return
+	}
+	slot := str(model, "slot")
+	a.Confirm("删除模型", "删除「"+modelTitle(model)+"」？已排队的作业仍按原配置运行，之后不能再选择该模型。", func() {
+		settingsWrite(a, func(ctx context.Context) (Result, error) {
+			return a.Client.Request(ctx, "DELETE", "/providers/models/"+url.PathEscape(slot), nil)
+		}, func(Result) {
+			if p.testModel == slot {
+				p.testModel = ""
+			}
+			p.load(a, nil)
+			p.loadHistory(a, "")
+			a.Notice = "模型已删除。"
+		}, func(error) { p.load(a, nil) })
+	})
+}
+func (p *modelSettingsPage) modelRow(c *ui.Context, a *NativeApp, model Object) {
+	palette := nativePalette(c)
+	slot := str(model, "slot")
+	isDefault := slot == str(p.settings, "default_slot")
+	configuration := object(model["configuration"])
+	endpoint := str(configuration, "base_url")
+	if endpoint == "" {
+		endpoint = "供应商默认端点"
+	}
+	ui.Column(c.Key("model-"+slot)).FillWidth().Gap(10).Padding(14, 16).Radius(10).Border(1, palette.Border).Background(palette.Card).Children(func() {
+		ui.Row(c).FillWidth().Wrap().Gap(12).AlignItems(ui.Center).Children(func() {
+			ui.Icon(c, nativeIcon("cpu")).FontSize(18).TextColor(palette.Muted)
+			ui.Column(c).Grow(1).MinWidth(220).Gap(3).Children(func() {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, modelTitle(model)).FontSize(14.5).FontWeight(600).SingleLine()
+					if isDefault {
+						nativeBadge(c, "默认", toneAccent)
+					}
+				})
+				ui.Text(c, nativeLabel(str(model, "provider"))+" · "+str(model, "model")+" · 密钥 ••••").FontSize(12.5).TextColor(palette.Muted).SingleLine()
+				ui.Text(c, endpoint).FontSize(12).Font("monospace").TextColor(palette.Subtle).SingleLine()
+			})
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				configure := !a.Busy && !p.editing && mgAllowed(p.settings, "configure")
+				if !isDefault {
+					nativeGhostButton(c, "star", "设为默认", !configure).OnClick(func() { p.setDefault(a, model) })
+				}
+				nativeGhostButton(c, "pencil", "编辑", !configure).OnClick(func() { p.startEdit(model) })
+				detail := "详情"
+				if p.expanded == slot {
+					detail = "收起"
+				}
+				nativeGhostButton(c, "chevron-down", detail, false).OnClick(func() {
+					if p.expanded == slot {
+						p.expanded = ""
+					} else {
+						p.expanded = slot
+					}
+				})
+				nativeGhostButton(c, "trash-2", "删除", !configure).OnClick(func() { p.remove(a, model) })
+			})
+		})
+		if p.expanded == slot {
+			modelMetadataView(c.Key("model-detail-"+slot), model)
+		}
+	})
+}
 func (p *modelSettingsPage) View(c *ui.Context, a *NativeApp) {
 	if p.closed {
 		nativeText(c, "配置不可访问，未保存内容已清除。请重新打开。")
 		return
 	}
 	if p.editing && !p.conflict {
-		nativeHint(c, "保存基准配置修订："+str(p.current(), "id"))
 		p.viewForm(c, a)
 		return
 	}
-	nativeText(c, "维护本人的要求抽取模型配置；密钥只写入，连接状态须通过明确测试核对。")
+	nativeText(c, "可保存多个模型，各自使用独立的供应商、端点与密钥；抽取和起草时可以选择本次使用的模型，未选择时使用默认模型。")
 	ui.Row(c).Wrap().Gap(8).Children(func() {
-		nativeButton(c, "重新读取模型配置").Disabled(a.Busy).OnClick(func() { p.load(a, nil) })
-		nativeButton(c, "编辑模型配置").Disabled(a.Busy || p.editing || !mgAllowed(p.settings, "configure")).OnClick(p.startEdit)
+		nativeIconButton(c, "plus", "添加模型", true).Disabled(a.Busy || p.editing || !mgAllowed(p.settings, "configure") || len(p.models()) >= 20).OnClick(func() { p.startEdit(nil) })
+		nativeGhostButton(c, "refresh-cw", "重新读取", a.Busy).OnClick(func() { p.load(a, nil) })
 	})
 	if p.settings == nil {
 		nativeText(c, "正在读取模型元数据。")
-	} else if p.current() == nil {
-		nativeText(c, "尚未配置要求抽取模型。")
+	} else if len(p.models()) == 0 {
+		nativeEmpty(c, "cpu", "尚未添加模型。点击「添加模型」，选择厂商模板后填入密钥即可。", nil)
 	} else {
-		modelMetadataView(c.Key("current-provider"), p.current())
+		ui.Column(c.Key("model-list")).FillWidth().Gap(10).Children(func() {
+			for _, model := range p.models() {
+				p.modelRow(c, a, model)
+			}
+		})
 	}
 	if p.saveReceipt != "" {
 		mgValue(c, "最近保存回执", p.saveReceipt)
@@ -418,6 +567,10 @@ func (p *modelSettingsPage) View(c *ui.Context, a *NativeApp) {
 	}
 	ui.Divider(c)
 	nativeHeading(c, "连接测试")
+	if settingsChoice(c, "测试模型", &p.testModel, p.testModels) {
+		p.refreshTestOptions()
+		p.preflight, p.preflightCost = nil, nil
+	}
 	if settingsChoice(c, "测试推理等级", &p.testReasoning, p.testOptions) {
 		p.preflight, p.preflightCost = nil, nil
 	}
@@ -444,7 +597,7 @@ func (p *modelSettingsPage) View(c *ui.Context, a *NativeApp) {
 	}
 	ui.Divider(c)
 	nativeHeading(c, "配置修订历史")
-	nativeTable(c, []string{"修订", "供应商", "模型", "修订时间", "配置 ID"}, p.history.Rows, func(i int) { p.revision(a, str(p.history.Items[i], "id"), false) })
+	nativeTable(c, []string{"修订", "名称", "供应商", "模型", "修订时间", "配置 ID"}, p.history.Rows, func(i int) { p.revision(a, str(p.history.Items[i], "id"), false) })
 	p.history.controls(c, a, "模型配置历史", func(cursor string) { p.loadHistory(a, cursor) })
 	if p.selectedRevision != nil {
 		nativeHeading(c, "精确历史配置（只读）")
@@ -453,26 +606,41 @@ func (p *modelSettingsPage) View(c *ui.Context, a *NativeApp) {
 	}
 }
 func (p *modelSettingsPage) viewForm(c *ui.Context, a *NativeApp) {
-	nativeHeading(c, "编辑要求抽取模型")
+	if p.editSlot == "" {
+		nativeHeading(c, "添加模型")
+	} else {
+		nativeHeading(c, "编辑模型："+modelTitle(p.saved(p.editSlot)))
+	}
 	if p.conflict {
 		nativeText(c, "请对照当前服务器修订核对保留的非密钥草稿；新密钥需要重新输入。")
 	}
-	ui.Column(c.Key("model-config-form")).FillWidth().MaxWidth(860).Height(430).Gap(10).Disabled(a.Busy).Children(func() {
+	ui.Column(c.Key("model-config-form")).FillWidth().MaxWidth(860).Height(520).Gap(10).Disabled(a.Busy).Children(func() {
 		ui.Scroll(c.Key("model-fields")).Grow(1).FillWidth().Padding(0, 12, 12, 0).Gap(14).Children(func() {
-			if mgChoice(c, "供应商", &p.provider, []string{"openai", "anthropic"}) {
+			if settingsChoice(c, "厂商模板（自动填写端点、模型与推理等级，只需再填密钥）", &p.template, modelTemplateOptions()) {
+				p.applyTemplate(p.template)
+			}
+			if template, ok := findModelTemplate(p.template); ok && template.Note != "" {
+				nativeHint(c, template.Note)
+			}
+			settingsDirtyField(c, "显示名称（可选，如「智谱 快速」）", &p.name, false, &p.dirty)
+			if mgChoice(c, "供应商协议", &p.provider, []string{"openai", "anthropic"}) {
 				p.key = ""
 				p.dirty = true
 			}
-			settingsDirtyField(c, "模型名称", &p.model, false, &p.dirty)
-			if nativeField(c, "HTTPS Base URL（留空使用默认端点）", &p.endpoint, false) {
+			settingsDirtyField(c, "模型 ID", &p.model, false, &p.dirty)
+			if nativeField(c, "HTTPS Base URL（留空使用默认端点；暂不支持 http 本地服务）", &p.endpoint, false) {
 				p.key = ""
 				p.dirty = true
 			}
 			if mgChoice(c, "结构化输出模式", &p.jsonMode, []string{"json_schema", "json_object"}) {
 				p.dirty = true
 			}
-			ui.Text(c, "API 密钥（只写；不填写时仅可复用同供应商、同端点密钥）")
-			if ui.TextInput(c, &p.key).Password().Label("模型 API 密钥（只写）").Changed() {
+			keyHint := "API 密钥（只写，不回显）"
+			if p.reusable() {
+				keyHint = "API 密钥（可留空：将复用已保存的同供应商、同端点密钥）"
+			}
+			ui.Text(c, keyHint).FontSize(12.5).TextColor(c.Theme().TextMuted)
+			if ui.TextInput(c, &p.key).Password().Label("模型 API 密钥（只写）").Height(36).FillWidth().MaxWidth(760).Radius(8).Background(nativePalette(c).Card).Changed() {
 				p.dirty = true
 			}
 			for i := range p.levels {
@@ -496,7 +664,7 @@ func (p *modelSettingsPage) viewForm(c *ui.Context, a *NativeApp) {
 				})
 			}
 			nativeButton(c, "添加推理等级").Disabled(len(p.levels) >= 8).OnClick(func() {
-				p.levels = append(p.levels, modelReasoningEditor{Options: "{}", Batch: "8000"})
+				p.levels = append(p.levels, modelReasoningEditor{Options: "{}", Batch: "4000"})
 				p.dirty = true
 			})
 			settingsDirtyField(c, "默认推理等级名称（未配置等级时留空）", &p.defaultReasoning, false, &p.dirty)

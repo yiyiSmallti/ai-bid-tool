@@ -24,6 +24,7 @@ type taskDetailPage struct {
 	document                                            documentPanel
 	exportPreview                                       exportPreviewPanel
 	confidential                                        NativePage
+	models                                              modelPicker
 }
 
 func (p *taskDetailPage) Title() string {
@@ -52,6 +53,8 @@ func (p *taskDetailPage) Close() {
 func (p *taskDetailPage) Open(a *NativeApp) {
 	p.confidential = NewConfidentialPanel(p.id)
 	p.confidential.Open(a)
+	p.models.loaded = false
+	p.models.load(a)
 	p.load(a)
 }
 func (p *taskDetailPage) load(a *NativeApp) {
@@ -95,6 +98,9 @@ func (p *taskDetailPage) run(a *NativeApp, kind string, dry, retry bool) {
 	body := Object{"dry_run": dry, "retry": retry}
 	if kind == "extract" && p.reasoning != "" {
 		body["reasoning"] = p.reasoning
+	}
+	if kind == "extract" {
+		p.models.set(body)
 	}
 	p.serial++
 	serial := p.serial
@@ -184,6 +190,11 @@ func (p *taskDetailPage) View(c *ui.Context, a *NativeApp) {
 			nativeCallout(c, toneNeutral, "先上传并选择一份招标文件。")
 		} else {
 			ui.Row(c).FillWidth().Wrap().Gap(8).AlignItems(ui.End).Children(func() {
+				// Reasoning levels belong to the chosen model; preflight again to list them.
+				if p.models.View(c) {
+					p.serial++
+					p.preview, p.reasoning, p.levels = nil, "", nil
+				}
 				if len(p.levels) > 0 {
 					ui.Column(c).Gap(6).Children(func() {
 						ui.Text(c, "官方推理档位").FontSize(12.5).FontWeight(500).TextColor(palette.Muted)

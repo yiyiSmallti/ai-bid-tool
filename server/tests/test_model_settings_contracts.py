@@ -16,6 +16,7 @@ from app.api.main import create_app
 from app.core.config import Settings
 from app.core.errors import ServiceError
 from app.core.security import TokenSigner
+from app.models.provider_configs import LEGACY_SLOT
 from app.schemas.management_pages import PageQuery
 from app.schemas.management_providers import (
     ProviderRevisionMetadata,
@@ -49,6 +50,7 @@ def row(owner, **changes):
         "id": uuid4(),
         "revision": 1,
         "capability": "llm_extract",
+        "slot": LEGACY_SLOT,
         "created_at": datetime.now(UTC),
         "data": {
             "provider": "openai",

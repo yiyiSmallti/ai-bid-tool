@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import ServiceError, not_found
 from app.core.security import TokenSigner
 from app.models.provider_configs import ProviderConfig
+from app.providers.configured import latest_revisions, live_slots
 from app.schemas.contracts import Cost, Result
 from app.schemas.management_pages import (
     DETAIL_BYTE_LIMIT,
@@ -51,6 +52,7 @@ def fail(code, message, status=400, exit_code=2) -> NoReturn:
 
 
 CONFIG_FIELDS = (
+    "name",
     "provider",
     "model",
     "base_url",
@@ -63,6 +65,7 @@ CONFIG_COLUMNS = (
     ProviderConfig.id,
     ProviderConfig.revision,
     ProviderConfig.capability,
+    ProviderConfig.slot,
     ProviderConfig.data,
     ProviderConfig.created_at,
 )
@@ -91,10 +94,14 @@ def metadata(actor, row) -> ProviderRevisionMetadata:
     saved = row["data"]
     try:
         configuration = ProviderConfigInput(
-            capability="llm_extract", **{key: saved.get(key) for key in CONFIG_FIELDS}
+            capability="llm_extract",
+            slot=row["slot"],
+            **{key: saved.get(key) for key in CONFIG_FIELDS},
         )
         return ProviderRevisionMetadata(
             id=row["id"],
+            slot=row["slot"],
+            name=saved.get("name"),
             revision=row["revision"],
             configuration=configuration,
             provider=saved["provider"],
@@ -111,18 +118,15 @@ def metadata(actor, row) -> ProviderRevisionMetadata:
 async def settings(session: AsyncSession, actor: Identity) -> ProviderSettingsData:
     async with read_budget(session, PageQuery()):
         actor = await reader(session, actor)
-        row = (
-            (
-                await session.execute(
-                    config_statement(actor)
-                    .order_by(ProviderConfig.revision.desc(), ProviderConfig.id.desc())
-                    .limit(1)
-                )
-            )
-            .mappings()
-            .first()
+        slots, default = await live_slots(session)
+        rows = (
+            (await session.execute(latest_revisions(CONFIG_COLUMNS, slots))).mappings().all()
+            if slots
+            else []
         )
-        current = metadata(actor, row) if row else None
+        rows = sorted(rows, key=lambda row: (row["slot"] != default, -row["revision"]))
+        models = [metadata(actor, row) for row in rows]
+        current = models[0] if models and models[0].slot == default else None
         write = (
             actor.actor_kind == "session"
             and actor.token_id is None
@@ -145,6 +149,8 @@ async def settings(session: AsyncSession, actor: Identity) -> ProviderSettingsDa
         value = ProviderSettingsData(
             configured=current is not None,
             current=current,
+            models=models,
+            default_slot=current.slot if current else None,
             reasoning=current.reasoning if current else [],
             actions=actions,
         )

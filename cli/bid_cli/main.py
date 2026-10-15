@@ -993,6 +993,9 @@ def card_generate(
     reasoning: Annotated[
         str | None, typer.Option(help="One of the model's official reasoning levels")
     ] = None,
+    model: Annotated[
+        UUID | None, typer.Option(help="A saved model's slot; omitted means the default model")
+    ] = None,
     expect_input_hash: Annotated[
         str | None, typer.Option(help="input_hash from the dry run this run must match")
     ] = None,
@@ -1006,11 +1009,15 @@ def card_generate(
         extraction_job_id=job,
         requirement_ids=requirement or None,
         reasoning=reasoning,
+        model=model,
         dry_run=dry_run,
         retry=retry,
         expected_input_hash=expect_input_hash,
     )
-    body = call("POST", f"/tasks/{task}/cards/generations", json=request.model_dump(mode="json"))
+    payload = request.model_dump(mode="json")
+    if model is None:
+        del payload["model"]
+    body = call("POST", f"/tasks/{task}/cards/generations", json=payload)
     if wait and not dry_run:
         terminal = asyncio.run(wait_for_job(UUID(body["data"]["job_id"]), timeout))
         body = merge_job_result(body, terminal)
@@ -1092,11 +1099,14 @@ def process(
     as_json: bool,
     retry: bool = False,
     reasoning: str | None = None,
+    model: UUID | None = None,
 ):
     command = "tender parse" if kind == "parse" else "req extract"
     request: dict = {"dry_run": dry_run, "retry": retry}
     if reasoning is not None:
         request["reasoning"] = reasoning
+    if model is not None:
+        request["model"] = str(model)
     body = call("POST", f"/documents/{document}/{kind}", json=request)
     if wait and not dry_run:
         terminal = asyncio.run(wait_for_job(UUID(body["data"]["job_id"]), timeout))
@@ -1135,9 +1145,12 @@ def req_extract(
     reasoning: Annotated[
         str | None, typer.Option(help="One of the model's official reasoning levels")
     ] = None,
+    model: Annotated[
+        UUID | None, typer.Option(help="A saved model's slot; omitted means the default model")
+    ] = None,
     json_output: JsonOption = False,
 ):
-    process(document, "extract", wait, dry_run, timeout, json_output, retry, reasoning)
+    process(document, "extract", wait, dry_run, timeout, json_output, retry, reasoning, model)
 
 
 @req_app.command("list")

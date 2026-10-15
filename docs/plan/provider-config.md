@@ -30,6 +30,8 @@ command returns the seven-field Result envelope.
 | `provider history-page` | `GET /management/providers/history` | `provider:read`; bounded keyset page |
 | `provider set` | `POST /providers` | Human `provider:write`; append revision with compare-and-swap |
 | `provider test` | `POST /providers/test` | Human `provider:write`; accounted taskless test job |
+| `provider default` | `POST /providers/models/{slot}/default` | Human `provider:write`; mark a saved model as the default |
+| `provider remove` | `DELETE /providers/models/{slot}` | Human `provider:write`; remove a saved model, keeping its history |
 
 ## Requirements
 
