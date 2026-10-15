@@ -204,6 +204,7 @@ from app.schemas.screenshot_contracts import (
     VendorSearchInput,
 )
 from app.schemas.simulation_contracts import ProductSimulationInput
+from app.schemas.source_contracts import SourceReadArguments, SourceSearchArguments
 from app.schemas.task_board import (
     BoardActivityView,
     BoardData,
@@ -362,6 +363,8 @@ COMMANDS = {
     "req repair-citations": CitationRepairRequest,
     "job status": None,
     "job wait": None,
+    "source search": None,
+    "source read": None,
     "job cancel": None,
     "token create": TokenCreate,
     "platform credential list": CredentialListQuery,
@@ -532,6 +535,8 @@ INVOCATION_INPUTS = {
     "draft": DraftArguments,
     "draft show": DraftShowArguments,
     "job status": JobStatusArguments,
+    "source search": SourceSearchArguments,
+    "source read": SourceReadArguments,
 }
 OUTPUTS = (
     EXPORT_OUTPUTS
