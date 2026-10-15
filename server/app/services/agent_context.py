@@ -7,7 +7,10 @@ not needed again on the very next step. Originals stay stored either way.
 """
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
+
+from app.models.agent import AgentMessage
 
 REPLY_RESERVE_TOKENS = 16_384
 RECENT_TOKENS = 20_000
@@ -43,18 +46,20 @@ def cut_to_tokens(text: str, tokens: int, hint: str) -> str:
 
 @dataclass(frozen=True)
 class ContextPlan:
-    summary: object | None
-    recent: list
+    summary: AgentMessage | None
+    recent: list[AgentMessage]
     # Ordinal range to summarize before the next decision, or None.
     covers: tuple[int, int] | None
-    covered: list
+    covered: list[AgentMessage]
 
 
-def plan(stored) -> ContextPlan:
+def plan(stored: Sequence[AgentMessage]) -> ContextPlan:
     """Split stored messages, in ordinal order, into summary, recent and to-cover."""
     summaries = [message for message in stored if message.role == "summary"]
     summary = summaries[-1] if summaries else None
-    after = summary.covers_to if summary is not None else 0
+    # agent_message_summary guarantees both ordinals on a summary.
+    start, after = (summary.covers_from, summary.covers_to) if summary is not None else (0, 0)
+    assert start is not None and after is not None
     candidates = [
         message for message in stored if message.role != "summary" and message.ordinal > after
     ]
@@ -73,6 +78,6 @@ def plan(stored) -> ContextPlan:
     older = candidates[: len(candidates) - len(kept)]
     if not older:
         return ContextPlan(summary, candidates, None, [])
-    start = summary.covers_from if summary is not None else older[0].ordinal
+    start = start or older[0].ordinal
     covered = ([summary] if summary is not None else []) + older
     return ContextPlan(summary, kept, (start, older[-1].ordinal), covered)
