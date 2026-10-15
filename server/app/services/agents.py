@@ -24,6 +24,7 @@ from app.models.agent import (
     AgentStep,
 )
 from app.models.entities import Document, Job, Requirement, Task
+from app.models.members import Member, TaskMember
 from app.models.response_cards import ResponseCard, ResponseCardRevision
 from app.providers.agent import reasoning_provider
 from app.providers.base import ProviderFailure
@@ -844,6 +845,19 @@ async def message(session, identity, session_id, body, settings):
     audit(session, actor, "agent.message.added", first.id, {"session_id": str(row.id)})
     await session.flush()
     return result
+
+
+async def member_removed(session, row: AgentSession) -> bool:
+    """On a gateway, whether the member who started the agent lost its project."""
+    principal = await session.get(AgentPrincipal, row.principal_id)
+    if principal is None or principal.member_id is None:
+        return False
+    member = await session.get(Member, principal.member_id, populate_existing=True)
+    if member is None or member.status != "active":
+        return True
+    if member.role == "admin":
+        return False
+    return await session.get(TaskMember, (row.task_id, member.id)) is None
 
 
 async def cancel(session, identity, session_id, body, settings):
