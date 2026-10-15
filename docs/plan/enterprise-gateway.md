@@ -473,7 +473,8 @@ Each item names what must not happen and the acceptance check that proves it.
 
 Each slice is one change; a slice merges only when its acceptance and the full
 personal-mode suites pass.
-Slices 0 and 1 are implemented; their mechanism is in
+Slices 0 and 1 are implemented, and slice 2 except the memory `private` scope;
+their mechanism is in
 [the enterprise gateway note](../notes/enterprise-gateway.md).
 
 | Slice | Content | Acceptance |

@@ -6,6 +6,21 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Gateway project visibility
+
+- On a gateway a project is visible only to administrators and its members;
+  to anyone else it and everything in it look missing.
+- The member who creates a project owns it. The owner or an administrator adds
+  and removes members and hands the project over in the API or with
+  `bid task member` and `bid task owner`; an administrator records with
+  `bid task sharing` whether the project may be exported to a personal
+  installation.
+- The `library:edit`, `memory:edit` and `confidential:reveal` grants now decide
+  who changes shared materials, changes memory and reveals confidential
+  values.
+- A member removed from a project, or disabled, has its agents on it cancelled
+  within 30 seconds.
+
 ## 2026-10-15: Gateway members
 
 - A gateway has member accounts. Administrators create members, reset
