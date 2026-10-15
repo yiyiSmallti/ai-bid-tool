@@ -31,8 +31,7 @@ type installation struct {
 	TokenKey      string `json:"token_key"`
 	SecretsKey    string `json:"secrets_key"`
 	AccessKey     string `json:"access_key"`
-	// Port stays the same across launches: the console keeps its session in
-	// localStorage, which belongs to the origin and so to the port.
+	// Port stays the same across launches for the installation's local API.
 	Port string `json:"port"`
 }
 
@@ -43,7 +42,7 @@ type Backend struct {
 	DataDir   string // user data: cluster, files, backups, installation.json
 	LogDir    string
 	SocketDir string // must be short and free of spaces; see socketDir
-	ServerDir string // holds alembic.ini, server/migrations and web/dist
+	ServerDir string // holds alembic.ini and server/migrations
 	Python    string // interpreter with the server installed
 	PGBin     string // initdb, pg_ctl, psql, createdb
 	Renderer  string // screenshot renderer; empty uses the server's default
@@ -388,7 +387,6 @@ func (b *Backend) baseEnv() []string {
 		"BID_TOKEN_KEY=" + b.install.TokenKey,
 		"BID_SECRETS_KEY=" + b.install.SecretsKey,
 		"BID_DATA_DIR=" + filepath.Join(b.DataDir, "files"),
-		"BID_WEB_DIR=" + filepath.Join(b.ServerDir, "web", "dist"),
 		// Vendor search needs no local service: it uses the Perplexity
 		// credential added under 服务凭据, and reports itself unavailable without one.
 		"BID_SEARCH_PROVIDER=perplexity",

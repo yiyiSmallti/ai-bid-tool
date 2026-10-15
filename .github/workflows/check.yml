@@ -24,29 +24,21 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.changes.outputs.code }}
-      web: ${{ steps.changes.outputs.web }}
       desktop: ${{ steps.changes.outputs.desktop }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # Required checks must still report, so a change only to Markdown, docs/ (including
-      # review-only contract modules, which nothing imports), the console, the desktop
-      # app or the pilot host's deploy scripts succeeds without the Python suite. A
-      # manual run has no base and checks everything.
-      - name: Detect changes outside documentation, the console, the desktop app and pilot deploy scripts
+      # Required checks still report when only documentation, the desktop app or
+      # pilot deploy scripts change. A manual run checks everything.
+      - name: Detect changes outside documentation, desktop and pilot deploy scripts
         id: changes
         run: |
           base="${{ github.event.pull_request.base.sha }}"
-          if [ -n "$base" ] && git diff --quiet "$base" HEAD -- . ':(exclude)*.md' ':(exclude)docs/**' ':(exclude)web/**' ':(exclude)desktop/**' ':(exclude)deploy/pilot/**'; then
+          if [ -n "$base" ] && git diff --quiet "$base" HEAD -- . ':(exclude)*.md' ':(exclude)docs/**' ':(exclude)desktop/**' ':(exclude)deploy/pilot/**'; then
             echo "code=false" >> "$GITHUB_OUTPUT"
           else
             echo "code=true" >> "$GITHUB_OUTPUT"
-          fi
-          if [ -n "$base" ] && git diff --quiet "$base" HEAD -- web; then
-            echo "web=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "web=true" >> "$GITHUB_OUTPUT"
           fi
           if [ -n "$base" ] && git diff --quiet "$base" HEAD -- desktop server/migrations server/app/admin.py alembic.ini; then
             echo "desktop=false" >> "$GITHUB_OUTPUT"
@@ -140,39 +132,6 @@ jobs:
           for result in "lint=${{ needs.lint.result }}" "tests=${{ needs.tests.result }}" "latency=${{ needs.latency.result }}"; do
             [ "${result#*=}" = "$want" ] || { echo "$result (expected $want)"; exit 1; }
           done
-  web:
-    needs: changes
-    if: always()
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
-    steps:
-      - name: Refuse draft pull requests
-        if: github.event_name == 'pull_request' && github.event.pull_request.draft
-        working-directory: .
-        run: |
-          echo "Draft pull requests are not checked; mark the pull request ready for review."
-          exit 1
-      - name: Require change detection
-        if: needs.changes.result != 'success'
-        working-directory: .
-        run: |
-          echo "change detection: ${{ needs.changes.result }}"
-          exit 1
-      # Same rule as Python: report success without building when web/ is unchanged.
-      - uses: actions/checkout@v4
-        if: needs.changes.outputs.web == 'true'
-      - uses: actions/setup-node@v4
-        if: needs.changes.outputs.web == 'true'
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
-        if: needs.changes.outputs.web == 'true'
-      - run: npm run build
-        if: needs.changes.outputs.web == 'true'
   # The desktop backend's startup, backup and data-directory lock against the
   # PostgreSQL tree the app bundles, built from source (packaging decision D4) and
   # cached until its build script changes. Not required: it runs only when the
@@ -191,21 +150,13 @@ jobs:
         with:
           version: "0.11.7"
           enable-cache: true
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
       - uses: actions/cache@v4
         with:
           path: data/work/desktop-stage/postgres/pgsql-*
           key: desktop-postgres-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('desktop/scripts/build-postgres.sh') }}
       - run: desktop/scripts/build-postgres.sh "$RUNNER_TEMP/pgsql"
       - run: uv sync --frozen --python 3.12
-      # The installation test serves the console build from the checkout.
-      - run: npm ci && npm run build
-        working-directory: web
-      - run: go vet ./... && go test -v -count=1 ./...
+      - run: go vet ./... && go test -race -v -count=1 ./... && go build ./...
         working-directory: desktop
         env:
           BID_DESKTOP_TEST_SERVER: ${{ github.workspace }}

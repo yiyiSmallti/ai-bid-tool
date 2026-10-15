@@ -73,10 +73,10 @@ new deliberate entry. Legacy setters still append without CAS.
 The UI and CLI send secret input once through dedicated transports. Generic checked
 command serialization and repr omit it; CLI reads it only from stdin. Forms never
 prefill a value or trigger reveal. Explicit reveal stays in the existing human-only
-audited route and clears on close, blur, hide, navigation, logout .
-No value, search text or field content enters URL state or persistent browser storage.
-Secret Playwright scenarios disable traces, screenshots and video, and artifact
-assertions record booleans rather than captured values. See the
+audited route and clears on close, blur, hide, minimize, navigation, logout or the
+30-second expiry. No value, search text or field content enters URL state or
+persistent UI storage. Native secret scenarios record only booleans and lifecycle
+events; screenshots and recordings must not capture revealed values. See the
 [management test plan](../plan/management-pages.md#test-plan-and-repeatable-artifacts).
 
 ### Outbound substitution
@@ -149,6 +149,10 @@ so a value changed after submission fails with `export_input_changed`.
 - [confidential.py](../../server/app/services/confidential.py), [confidential_contracts.py](../../server/app/schemas/confidential_contracts.py), [api/confidential.py](../../server/app/api/confidential.py) and [cli confidential.py](../../cli/bid_cli/confidential.py).
 - [redaction.py](../../server/app/services/redaction.py), [card_generation.py](../../server/app/services/card_generation.py) and [providers/drafting.py](../../server/app/providers/drafting.py).
 - [exports.py](../../server/app/services/exports.py), [export_render.py](../../server/app/jobs/export_render.py) and [export_renderer.py](../../server/app/services/export_renderer.py).
-- [SecretTextEditor.vue](../../web/src/components/SecretTextEditor.vue) (labelled blocks, drag and click insertion), [ConfidentialPanel.vue](../../web/src/components/ConfidentialPanel.vue), [CardEditor.vue](../../web/src/components/CardEditor.vue) and [OrgProfiles.vue](../../web/src/views/OrgProfiles.vue).
-- [management_confidential.py](../../server/app/api/management_confidential.py), [management CLI](../../cli/bid_cli/management_confidential.py), [OrgConfidential.vue](../../web/src/views/OrgConfidential.vue) and [confidential-management.spec.js](../../web/e2e/confidential-management.spec.js).
+- [Native confidential text blocks](../../desktop/native_management_editors.go),
+  [response editor](../../desktop/native_responses.go) and
+  [resource forms](../../desktop/native_management_resources.go).
+- [Management API](../../server/app/api/management_confidential.py),
+  [management CLI](../../cli/bid_cli/management_confidential.py) and
+  [native confidential fields](../../desktop/native_settings_confidential.go).
 - [test_confidential_values.py](../../server/tests/test_confidential_values.py): drafting, export, human/token permission scenarios with a repeatable DOCX artifact.

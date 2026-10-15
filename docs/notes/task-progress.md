@@ -119,5 +119,5 @@ are a separate transport and do not change CLI JSON output.
 - [task_events.py](../../server/app/services/task_events.py), [baseline SQL](../../server/migrations/baseline/00_functions_core.sql): replay and transactional event producers.
 - [task_board.py API](../../server/app/api/task_board.py): snapshot, poll and stream routes.
 - [task_board.py CLI](../../cli/bid_cli/task_board.py): bounded JSON commands.
-- [OrgTaskBoard.vue](../../web/src/views/OrgTaskBoard.vue), [task-live.js](../../web/src/task-live.js): browser board and reconnect behavior.
+- [Native board](../../desktop/native_board.go) and [API transport](../../desktop/native_client.go): bounded board reads, job monitoring and event reconnection.
 - [Board/event acceptance](../../server/tests/test_team_board_events.py), [CLI acceptance](../../server/tests/test_task_board_cli.py): retained runtime and command contracts.

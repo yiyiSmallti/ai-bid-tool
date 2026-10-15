@@ -103,5 +103,12 @@ overall percentage from elapsed time or an absent batch count.
 - [Rubric projections](../../server/app/services/assessment_rubrics.py) and [score projections](../../server/app/services/assessment_scores.py): bounded review/report reads.
 - [Check API](../../server/app/api/check.py), [score API](../../server/app/api/score.py) and [console API](../../server/app/api/org_console.py): existing writes and additive reads.
 - [CLI read adapter](../../cli/bid_cli/assessments.py) and [schema registry](../../cli/bid_cli/schema.py): remote/local parity and discovery.
-- [Console helpers](../../web/src/assessments.js), [check workspace](../../web/src/views/OrgChecks.vue), [rubric review](../../web/src/views/OrgRubricReview.vue) and [replacement editor](../../web/src/components/RubricReplacement.vue): explicit user transitions.
-- [Browser acceptance](../../web/e2e/console-assessments.spec.js), [single-user API acceptance](../../server/tests/test_console_assessments_db.py) and [task-authority acceptance](../../server/tests/test_console_task_authority.py): separate UI, task relationships and human/token/worker checks. Repeatable generated artifacts belong under `data/work/console-assessments-validation/`.
+- [Native launchers](../../desktop/native_assessments.go),
+  [report and rubric review](../../desktop/native_assessment_reports.go) and
+  [complete replacement editor](../../desktop/native_rubric_editor.go): explicit
+  user transitions and exact saved snapshots.
+- [Single-user API acceptance](../../server/tests/test_console_assessments_db.py)
+  and [task-authority acceptance](../../server/tests/test_console_task_authority.py):
+  task relationships and human/token/worker checks. Native acceptance follows the
+  [console boundary](org-console.md#native-rendering-boundary); generated artifacts
+  remain outside `docs/`.

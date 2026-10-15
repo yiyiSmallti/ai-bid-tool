@@ -96,7 +96,7 @@ is refused. Do not treat raw-original download as bid export or evidence approva
 - Service: server/app/services/certificate_files.py
 - API/CLI: server/app/api/resources.py; cli/bid_cli/main.py; cli/bid_cli/client.py
 - Schema and guards: server/migrations/baseline/
-- Console: web/src/components/CertificateSection.vue
+- Console: [native certificate resources](../../desktop/native_management_resources.go) and [task material selection](../../desktop/native_materials.go)
 - Tests: server/tests/test_certificate_files.py; test_certificate_images.py; test_certificate_file_client.py;
   test_resource_rls.py; test_cli_snapshots.py; test_runtime_integration.py
 - Real storage smoke: scripts/container_smoke.py

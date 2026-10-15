@@ -108,7 +108,7 @@ change, review event, audit and task-event head increment together.
   [HTTP routes](../../server/app/api/requirement_confirmation.py).
 - [Board projection](../../server/app/services/requirement_board.py),
   [CLI commands](../../cli/bid_cli/requirement_confirmation.py),
-  [console workspace](../../web/src/views/OrgRequirements.vue).
+  [native review workspace](../../desktop/native_requirements.go).
 - [API/database acceptance](../../server/tests/test_requirement_confirmation.py),
   [consumer acceptance](../../server/tests/test_requirement_consumption.py),
-  [browser acceptance](../../web/e2e/requirement-confirmation.spec.js).
+  [native acceptance boundary](org-console.md#native-rendering-boundary).

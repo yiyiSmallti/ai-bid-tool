@@ -101,8 +101,6 @@ class Settings(PDFSettings):
     )
     converter_timeout_seconds: float = Field(default=180, gt=0, le=600, allow_inf_nan=False)
     preview_max_pages: int = Field(default=1000, ge=1, le=2000)
-    # Built console from web/dist; served under /app when set.
-    web_dir: Path | None = None
 
     @classmethod
     def load(cls):

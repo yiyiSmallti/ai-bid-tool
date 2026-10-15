@@ -1,7 +1,7 @@
 #!/bin/sh
 # Stages what the app runs into resources/darwin-arm64, which `mygo build`
 # copies into Contents/Resources: a standalone Python with the server and its
-# locked dependencies installed, the files init-db and the console read from
+# locked dependencies installed, the migration files read from
 # the server directory, PostgreSQL, the screenshot renderer and the OCR
 # language data.
 set -eu
@@ -18,7 +18,7 @@ chi_sim_sha256=a5fcb6f0db1e1d6d8522f39db4e848f05984669172e584e8d76b6b3141e1f730
 eng_sha256=7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2
 
 rm -rf "$out"
-mkdir -p "$work_dir" "$out/bin" "$out/tessdata" "$out/server/server" "$out/server/web"
+mkdir -p "$work_dir" "$out/bin" "$out/tessdata" "$out/server/server"
 
 # A python-build-standalone interpreter finds its library relative to itself,
 # so the copy runs from wherever the app is installed.
@@ -66,8 +66,6 @@ PYTHONDONTWRITEBYTECODE=1 "$python" -m compileall -f -q -j 0 --invalidation-mode
 cp "$repository_dir/alembic.ini" "$out/server/"
 cp -R "$repository_dir/server/migrations" "$out/server/server/"
 find "$out/server" -name __pycache__ -type d -prune -exec rm -rf {} +
-(cd "$repository_dir/web" && npm ci --no-audit --no-fund && npm run build)
-cp -R "$repository_dir/web/dist" "$out/server/web/dist"
 
 "$desktop_dir/scripts/build-postgres.sh" "$out/pgsql"
 

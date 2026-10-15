@@ -57,9 +57,9 @@ built-in agent and external agents use the same commands.
 | Web screenshots | Playwright (the default BrowserProvider implementation) |
 | Export preview conversion | Gotenberg (LibreOffice in a separate container) |
 | Evidence annotation | Rust (clap, serde, image, sha2), compiled as a standalone executable |
-| Frontend | Vue 3 + Vite + Element Plus |
+| Frontend | MyGo 0.4.5 native Go UI; one rendering path for all console pages |
 | Local operation | Rootless PostgreSQL and local services; desktop packaging is a separate plan |
-| Quality | ruff, pyright, pytest, cargo test, GitHub Actions |
+| Quality | ruff, pyright, pytest, cargo test, go test -race, GitHub Actions |
 
 Explain the reason and obtain approval before introducing a major dependency outside this table.
 
@@ -85,7 +85,7 @@ Explain the reason and obtain approval before introducing a major dependency out
 │   └── tests/
 ├── cli/                  # bid CLI: API in remote mode; local PostgreSQL and files in local mode
 ├── stamp/                # Rust evidence annotation
-├── web/                  # Vue frontend
+├── desktop/              # MyGo native pages, HTTP client and local backend lifecycle
 ├── evals/                # Evaluation datasets and scripts (not run by default in CI)
 └── deploy/               # docker-compose and environment-variable templates
 ```

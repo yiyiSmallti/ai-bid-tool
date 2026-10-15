@@ -532,13 +532,13 @@ Bids contain quotes/customer information; false supporting material can cause re
 
 ## Technology choices
 
-Python handles most work; Rust owns the bounded annotation CLI; Vue handles the dashboard. Unresolved choices remain in the open decisions below.
+Python handles business services; Rust owns the bounded annotation CLI; MyGo renders the native dashboard. The rendering boundary is maintained in [Local task console](notes/org-console.md). Unresolved choices remain in the open decisions below.
 
 | Component | Choice | Notes |
 | --- | --- | --- |
 | CLI | Typer | Python, generated help |
 | Data | Pydantic | Structured-output validation and `bid schema` JSON Schema |
-| API | FastAPI | REST, SSE, loopback API for web/CLI |
+| API | FastAPI | REST, SSE, loopback API for native UI/CLI |
 | Database | PostgreSQL + pgvector | Local desktop uses a rootless socket; owner and `bid_app`; API setups use configured transport; memory retrieval follows its plan |
 | Storage | Local files; S3-compatible adapter | Protected files and signed downloads without org prefixes |
 | Jobs | Procrastinate | PostgreSQL queue; see [queue.py](../server/app/jobs/queue.py); parsing/verification/checks, retry/cancel |
@@ -548,9 +548,9 @@ Python handles most work; Rust owns the bounded annotation CLI; Vue handles the 
 | Screenshots | Playwright (BrowserProvider default) | Dynamic pages |
 | LLM/vision/embedding/search/OCR | Adapter configuration; defaults remain open decisions | Structured outputs, long context, image understanding, no API-data training |
 | Annotation | Rust clap/serde/image/sha2 | Crop/box/watermark/hash; independent job executable |
-| Frontend | Vue 3 + Vite + Element Plus | Dashboard/resources/providers/memory |
+| Frontend | MyGo 0.4.5 native Go UI | Task workflows, resources, settings and memory; no embedded web console |
 | Local operation | Local services; Compose for supporting development services | Desktop packaging, bundled runtimes and signing require a separate plan |
-| Tests/CI | pytest, cargo test, GitHub Actions | Single-user fixtures, actor/confirmation gates, evaluation scripts |
+| Tests/CI | pytest, cargo test, Go race tests, GitHub Actions | Single-user fixtures, native consumers, actor/confirmation gates and evaluation scripts |
 
 ## Implementation phases
 

@@ -455,18 +455,17 @@ complete. `BoardNextAction`/target/schema updates are implementation dependencie
 
 ## Console outline and bounded reads
 
-Console route: `/app/tasks/{task_id}/cards/{card_id}/annotation?job={extraction_job_id}`.
+Console route: `/org/tasks/{task_id}/cards/{card_id}/annotation?job={extraction_job_id}`.
 Enter from a card material panel/dashboard action with explicit extraction scope.
 Show required review, blocker and one primary next action. Keep unsent
-geometry only in current-tab memory; clear material/preview data on task switch.
+geometry only in current-page memory; clear material/preview data on task switch.
 
-Reuse [DocumentPreview.vue](../../web/src/components/DocumentPreview.vue) for tender
-citations beside the card and extend its source adapter/dialog with
-[PageViewer.vue](../../web/src/components/PageViewer.vue) for authorized source images.
-`DocumentPreview` currently takes a tender `documentId`; do not pass an EvidenceSource
-UUID as that ID. Add a typed adapter, retaining existing document routes and zoom/page/
-keyboard/error behavior. An overlay/numeric controls edit bounds; final pixels always
-come from the worker, never browser canvas export.
+Reuse the [native document viewer](../../desktop/native_documents.go) for tender
+citations beside the card and the [native image viewer](../../desktop/native_images.go)
+for authorized source images. Keep tender document IDs distinct from EvidenceSource
+IDs in the [annotation panel](../../desktop/native_annotations.go), retaining source
+routes, page selection, zoom, keyboard navigation and error states. Numeric controls
+edit bounds; final pixels always come from the worker.
 
 Page sections: paged source picker; page/hash/provenance/warnings; original and proposed/
 actual image; crop/boxes/reset; “预览标注” then “生成标注材料”; job status/cancel.
@@ -513,14 +512,13 @@ isolation, publication and browser path.
 One verified binding per published object. |
 | Draft/export | Unconfirmed material never reaches rows/files. Current B02 and human/material decisions admit canonical Evidence through the baseline human confirmation gates; B05 image export additionally requires release. Evidence hash unchanged. Pin replacement/B02 reopen/card relink/approval invalidation/tampering block consumption; non-B05/prototype paths unchanged. |
 | CLI/schema | Snapshot every new command and dry-run/queued/succeeded/duplicate/retry/cancel/error/empty/paged result; seven keys, resource counts and exit 0/2/3/4. No false partial image. Client never runs Rust or downloads image for processing. |
-| Browser end to end | Follow [requirement-confirmation.spec.js](../../web/e2e/requirement-confirmation.spec.js) Playwright mocked-API pattern: exact routes/bodies, bounded reads, preview/explicit use/review, human/B02/material blockers, cancellation/failure/retry, conflicts, release stale/wait, task-switch races and keyboard use.
-Retain screenshots, trace and JSON with seed, request counts and replay command. |
+| Native UI end to end | Exercise the [annotation panel](../../desktop/native_annotations.go) with synthetic authenticated API fixtures: exact routes/bodies, bounded reads, preview/explicit use/review, human/B02/material blockers, cancellation/failure/retry, conflicts, release stale/wait, task-switch races and keyboard use. Retain screenshots and JSON with seed, request counts and replay command outside documentation. |
 | Events/board | Correct blocker/next action on publish/review/release/invalidate; no success event after rollback; replay/reset/revocation observes task/source boundaries and frame caps. Board state never authorizes consumption. |
 
 Retain artifacts under ignored `data/work/annotation-acceptance/`: PNGs, hash manifest,
-CLI snapshots, Playwright screenshots/trace/result JSON and DB report, never under
-`docs/`. Browser mocks prove UI, not database isolation or Rust execution; keep separate
-real-service/renderer acceptance. Synthetic data/Providers only, no external services.
+CLI snapshots, native window screenshots/result JSON and DB report, never under
+`docs/`. Native UI checks do not establish database isolation or Rust execution;
+keep separate real-service/renderer acceptance. Use synthetic data/Providers only.
 Define failure scenarios and end-to-end cases first; do not add after-the-fact unit
 tests that merely repeat implementation.
 

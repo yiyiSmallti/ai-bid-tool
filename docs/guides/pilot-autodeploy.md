@@ -5,27 +5,29 @@ kind: howto
 # Deploy main automatically on a single Compose host
 
 [autodeploy.sh](../../deploy/pilot/autodeploy.sh) deploys the newest `main` commit
-that a pull request merged after its `python` and `web` checks passed. The host polls
+that a pull request merged after its `python` check passed. The host polls
 GitHub anonymously, so neither side holds the other's credentials. A commit pushed to
 `main` without a pull request is never deployed.
 
-Each run downloads the commit's source archive, builds the console and the `migrate`,
-`server` and `worker` images, backs up the database with `pg_dump` when the commit adds
+Each run downloads the commit's source archive, builds the `migrate`, `server`
+and `worker` images, backs up the database with `pg_dump` when the commit adds
 migrations, starts the services and checks `/health`. A failed deploy without new
-migrations rolls back to the previous images and console. A failed deploy with new
+migrations rolls back to the previous images. A failed deploy with new
 migrations stops with the backup kept, because the schema is not rolled back
 automatically. After a rollback the health check runs again; when the previous release
 cannot start either, the run reports the service as down. A failed commit is not retried; the next merge gets a new attempt.
+
+This workflow deploys the API and worker. The MyGo native application is built
+separately using [desktop development](desktop-development.md); the API does not
+serve frontend assets.
 
 ## Prepare the host
 
 1. Run the stack once by hand under `/opt/bid-tool` with Docker Compose project
    `bidtool`, a host `compose.override.yml` and `secrets/bid.env`. Give the deploy
-   user passwordless `sudo` for `docker`, and install `curl`, `rsync`, `python3`,
-   Node.js and npm.
+   user passwordless `sudo` for `docker`, and install `curl`, `rsync` and `python3`.
 2. Put the running sources under `releases/<commit sha>/`, make `src` a symbolic link
-   to it, and write that sha to `deploy-state/deployed`. Copy the served console to
-   `releases/<commit sha>/web/dist` as well.
+   to it, and write that sha to `deploy-state/deployed`.
 3. Install the script as `/opt/bid-tool/autodeploy.sh` (mode 0755) and the
    [service](../../deploy/pilot/bid-autodeploy.service) and
    [timer](../../deploy/pilot/bid-autodeploy.timer) units under `/etc/systemd/system/`.
