@@ -65,7 +65,7 @@ def create_router(
     async def member_password_reset(member_id: UUID, ctx=Depends(context, scope="function")):
         session, identity = ctx
         reset = await members.reset_password(session, attempts, settings, identity, member_id)
-        return result("member reset password", reset.model_dump(mode="json"))
+        return result("member reset-password", reset.model_dump(mode="json"))
 
     @router.delete(
         "/members/{member_id}/sessions", name="member_session_revoke", response_model=Result
@@ -73,6 +73,6 @@ def create_router(
     async def member_session_revoke(member_id: UUID, ctx=Depends(context, scope="function")):
         session, identity = ctx
         revoked = await members.revoke_member_sessions(session, identity, member_id)
-        return result("member revoke sessions", {"id": str(member_id), "revoked_sessions": revoked})
+        return result("member revoke-sessions", {"id": str(member_id), "revoked_sessions": revoked})
 
     return router

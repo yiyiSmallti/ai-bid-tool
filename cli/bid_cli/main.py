@@ -62,6 +62,7 @@ from bid_cli.management_products import register as register_management_product_
 from bid_cli.management_profiles import register as register_management_profile_commands
 from bid_cli.management_providers import register as register_management_provider_commands
 from bid_cli.management_templates import register as register_management_template_commands
+from bid_cli.members import register as register_member_commands
 from bid_cli.memory import app as memory_app
 from bid_cli.memory import memory_job_exit
 from bid_cli.platform_clef import app as platform_clef_app
@@ -1315,6 +1316,7 @@ platform_app.add_typer(platform_trust_anchor_app, name="trust-anchor")
 
 
 register_task_board_commands(task_app)
+register_member_commands(app)
 register_management_product_commands(product_app)
 register_management_feature_commands(feature_app)
 register_management_template_commands(template_app)
