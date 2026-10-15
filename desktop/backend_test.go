@@ -235,6 +235,8 @@ func TestStartBacksUpBeforeMigration(t *testing.T) {
 
 	// A new installation has nothing to back up, and owns its data directory.
 	b := start()
+	// Probe revisions build on whatever head the shipped migrations reach.
+	head := query(b, "SELECT version_num FROM alembic_version")
 	query(b, "CREATE TABLE desktop_backup_marker (note text); INSERT INTO desktop_backup_marker VALUES ('kept')")
 	expectBackups(b)
 	second := backend()
@@ -251,7 +253,7 @@ func TestStartBacksUpBeforeMigration(t *testing.T) {
 
 	// A failing migration leaves the database at its revision; retrying it
 	// replaces the backup taken at that revision.
-	setRevision("0002", "0001", "CREATE TABLE desktop_probe_0002 (id int); SELECT 1/0")
+	setRevision("9002", head, "CREATE TABLE desktop_probe_9002 (id int); SELECT 1/0")
 	var failed string
 	for attempt := 0; attempt < 2; attempt++ {
 		b = backend()
@@ -259,13 +261,13 @@ func TestStartBacksUpBeforeMigration(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "database migration:") {
 			t.Fatalf("expected the probe migration to fail, got %v", err)
 		}
-		if got := query(b, "SELECT version_num FROM alembic_version"); got != "0001" {
+		if got := query(b, "SELECT version_num FROM alembic_version"); got != head {
 			t.Fatalf("failed migration left revision %q", got)
 		}
-		if got := query(b, "SELECT to_regclass('desktop_probe_0002') IS NULL"); got != "t" {
+		if got := query(b, "SELECT to_regclass('desktop_probe_9002') IS NULL"); got != "t" {
 			t.Fatal("failed migration left its table")
 		}
-		backups := expectBackups(b, "0001")
+		backups := expectBackups(b, head)
 		if backups[0] == failed {
 			t.Fatal("the retry did not replace the backup")
 		}
@@ -274,17 +276,17 @@ func TestStartBacksUpBeforeMigration(t *testing.T) {
 	}
 
 	// Each update keeps its own backup and the one before it.
-	setRevision("0002", "0001", "CREATE TABLE desktop_probe_0002 (id int)")
+	setRevision("9002", head, "CREATE TABLE desktop_probe_9002 (id int)")
 	b = start()
-	expectBackups(b, "0001")
+	expectBackups(b, head)
 	b.Stop()
-	setRevision("0003", "0002", "CREATE TABLE desktop_probe_0003 (id int)")
+	setRevision("9003", "9002", "CREATE TABLE desktop_probe_9003 (id int)")
 	b = start()
-	expectBackups(b, "0001", "0002")
+	expectBackups(b, head, "9002")
 	b.Stop()
-	setRevision("0004", "0003", "CREATE TABLE desktop_probe_0004 (id int)")
+	setRevision("9004", "9003", "CREATE TABLE desktop_probe_9004 (id int)")
 	b = start()
-	backups := expectBackups(b, "0002", "0003")
+	backups := expectBackups(b, "9002", "9003")
 	b.Stop()
 
 	// Going back to the previous version: with the app quit, recreate the
@@ -305,17 +307,17 @@ func TestStartBacksUpBeforeMigration(t *testing.T) {
 	if restoreErr != nil {
 		t.Fatal(restoreErr)
 	}
-	if err := os.Remove(filepath.Join(versions, "0004_probe.py")); err != nil {
+	if err := os.Remove(filepath.Join(versions, "9004_probe.py")); err != nil {
 		t.Fatal(err)
 	}
 	b = start()
-	if got := query(b, "SELECT version_num FROM alembic_version"); got != "0003" {
+	if got := query(b, "SELECT version_num FROM alembic_version"); got != "9003" {
 		t.Fatalf("restored database is at revision %q", got)
 	}
 	if got := query(b, "SELECT note FROM desktop_backup_marker"); got != "kept" {
 		t.Fatalf("restored database lost its rows: %q", got)
 	}
-	if got := query(b, "SELECT to_regclass('desktop_probe_0004') IS NULL"); got != "t" {
+	if got := query(b, "SELECT to_regclass('desktop_probe_9004') IS NULL"); got != "t" {
 		t.Fatal("restored database has the later revision's table")
 	}
 	if got := listBackups(t, b); len(got) != 2 || got[0] != backups[0] || got[1] != backups[1] {
