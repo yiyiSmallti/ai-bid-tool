@@ -210,6 +210,8 @@ class AgentPrincipal(Base):
     scopes: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     authority_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The member who started the agent, filled by the attribution trigger.
+    member_id: Mapped[UUID | None] = mapped_column(nullable=True)
     id: Mapped[UUID] = mapped_column(
         nullable=False,
         primary_key=True,
