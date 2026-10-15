@@ -147,6 +147,47 @@ historical jobs add no new resource use. Unknown calls block unsafe replay;
 late real receipts may settle usage after cancellation but cannot publish work.
 The model receives bounded redacted projections; hidden reasoning is not stored.
 
+## Planned: tender source tools
+
+The agent sees requirements and cards but no tender text. Two read-only CLI
+commands, also exposed as tools under `task:read`, let it locate and read the
+parsed tender of its session task on demand instead of receiving whole documents:
+
+- `source search`: keyword search over the task's parsed sections. Returns
+  section and chunk identifiers with the matching line, at most 50 matches and
+  20 KB; longer lines are cut with a marker.
+- `source read`: one section or chunk from an offset, at most 8,000 characters
+  per call, with `next_offset` while text remains.
+
+Both results pass confidential-value redaction and are untrusted data like
+every tool result. Citations the agent reports must still resolve to stored
+chunks. The tool ceiling in `AgentDecisionRequest` rises from 7 to 9; the
+contract version, CLI registry and snapshot change with it.
+
+Acceptance: on a real tender, a session asked for the bid deadline and the
+document collection period answers with verbatim citations to the stored
+chunks; calls, tokens and duration are recorded under `data/work`.
+
+## Planned: long sessions
+
+A session currently fails with `agent_context_limit` at 40 stored messages.
+Replace the count with an estimated token budget per pinned model:
+
+- Keep a reserve for the reply (16,384 tokens) and the most recent messages up
+  to about 20,000 tokens verbatim.
+- When the budget would be exceeded, the pinned model at its lowest reasoning
+  level summarizes the older messages into one stored summary message that
+  records the message ordinals it covers. Originals remain stored; the summary
+  is redacted like other messages.
+- A summary is context only: it never satisfies a human gate, never stands in
+  for a citation, and must list open gaps and pending human actions. A summary
+  that fails validation pauses the session instead of dropping messages.
+- A single tool result longer than its bound is cut with a continuation hint,
+  as `source read` does.
+
+Acceptance: a session of more than 60 turns keeps working, its summary retains
+open gaps and pending human actions, and its usage is recorded under `data/work`.
+
 ## Audit and A02 provenance
 
 Audit distinguishes immediate human/agent/token/worker execution from built-in

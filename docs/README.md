@@ -79,6 +79,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [0009 Browser enrollment of platform operators](adr/0009-operator-enrollment.md) (adr)
 - [0011 Remove billing, prices and task budgets](adr/0011-remove-billing.md) (adr)
 - [0012 Single-user local installation](adr/0012-single-user-installation.md) (adr)
+- [0013 Enterprise gateway beside personal installations](adr/0013-enterprise-gateway.md) (adr)
 
 ## Plans and records
 
@@ -86,6 +87,7 @@ Implementation and acceptance status is maintained on each plan page; the
 [roadmap](plan/roadmap.md) links the remaining work and dependencies.
 
 - [Single-user local installation](plan/single-user.md) (plan): staged surface removal, access key and baseline schema.
+- [Enterprise gateway](plan/enterprise-gateway.md) (plan): deployment mode, member accounts, sharing rules, company and personal models, client workspaces and data import.
 - [Remaining scope and roadmap](plan/roadmap.md) (plan): coverage matrices, known defects and open decisions.
 - [Cloud annotation contract](plan/annotation.md) (plan): archived certificate pages, bounded server rendering, human response review and confirmed image releases.
 - [Org model configuration contract](plan/provider-config.md) (plan): org BYOK models and platform-model selection.
