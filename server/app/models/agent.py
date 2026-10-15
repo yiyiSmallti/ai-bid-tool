@@ -85,6 +85,8 @@ class AgentMessage(Base):
     idempotency_key: Mapped[UUID | None] = mapped_column(nullable=True)
     request_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     receipt_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    covers_from: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    covers_to: Mapped[int | None] = mapped_column(Integer, nullable=True)
     id: Mapped[UUID] = mapped_column(
         nullable=False,
         primary_key=True,
@@ -100,8 +102,12 @@ class AgentMessage(Base):
             name="agent_message_receipt",
         ),
         CheckConstraint(
-            "(((ordinal >= 1) AND ((role)::text = ANY ((ARRAY['human'::character varying, 'assistant'::character varying, 'tool'::character varying, 'system'::character varying])::text[])) AND (length(content) <= 8000)))",
+            "(((ordinal >= 1) AND ((role)::text = ANY ((ARRAY['human'::character varying, 'assistant'::character varying, 'tool'::character varying, 'system'::character varying, 'summary'::character varying])::text[])) AND (length(content) <= 8000)))",
             name="agent_message_shape",
+        ),
+        CheckConstraint(
+            "(((((role)::text = 'summary'::text) = (covers_from IS NOT NULL)) AND ((covers_from IS NULL) = (covers_to IS NULL)) AND ((covers_from IS NULL) OR ((covers_from >= 1) AND (covers_to >= covers_from) AND (covers_to < ordinal) AND (step_id IS NOT NULL)))))",
+            name="agent_message_summary",
         ),
         UniqueConstraint(
             "session_id", "idempotency_key", name="agent_messages_session_id_idempotency_key_key"
@@ -388,7 +394,7 @@ class AgentStep(Base):
     __table_args__ = (
         CheckConstraint("((exit_code = ANY (ARRAY[0, 2, 3, 4, 5])))", name="agent_step_exit"),
         CheckConstraint(
-            "(((ordinal >= 1) AND (revision >= 1) AND ((kind)::text = ANY ((ARRAY['decision'::character varying, 'tool'::character varying])::text[])) AND ((state)::text = ANY ((ARRAY['planned'::character varying, 'submitted'::character varying, 'waiting_job'::character varying, 'completed'::character varying, 'failed'::character varying, 'uncertain'::character varying])::text[]))))",
+            "(((ordinal >= 1) AND (revision >= 1) AND ((kind)::text = ANY ((ARRAY['decision'::character varying, 'tool'::character varying, 'summary'::character varying])::text[])) AND ((state)::text = ANY ((ARRAY['planned'::character varying, 'submitted'::character varying, 'waiting_job'::character varying, 'completed'::character varying, 'failed'::character varying, 'uncertain'::character varying])::text[]))))",
             name="agent_step_state",
         ),
         UniqueConstraint("invocation_id", name="agent_steps_invocation_id_key"),
