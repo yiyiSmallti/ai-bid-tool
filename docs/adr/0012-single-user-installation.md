@@ -4,7 +4,8 @@ kind: adr
 
 # 0012 Single-user local installation
 
-Status: accepted. Date: 2026-10-12.
+Status: accepted. Date: 2026-10-12. Personal installations only since
+[ADR 0013](0013-enterprise-gateway.md) added enterprise gateways.
 
 ## Context
 
@@ -64,6 +65,6 @@ fabrication prohibitions in [agent.md](../../agent.md) are unchanged. Two-org
 isolation tests are removed; human-versus-agent gate tests remain. A process
 running as the same operating system user can read the access key and act as
 the human; the product does not defend against the user's own account.
-Restoring multi-user or hosted operation requires a new decision. Historical
+Multi-person operation is decided by [ADR 0013](0013-enterprise-gateway.md). Historical
 migrations, changelog entries and superseded ADRs remain in version control as
 records of earlier decisions.

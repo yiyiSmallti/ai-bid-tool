@@ -8,8 +8,10 @@ This page lists unfinished parts of [the design](../design.md), open decisions a
 suggested order. Shipped behavior is defined in the [mechanism notes](../README.md#mechanism-notes)
 and their linked code; delivery history is in [changelog.md](../changelog.md).
 The [single-user installation plan](single-user.md) implements accepted
-[ADR 0012](../adr/0012-single-user-installation.md). Hosted and multi-person operation
-require a new decision; desktop packaging decisions and remaining slices are in [desktop packaging](desktop-packaging.md). The
+[ADR 0012](../adr/0012-single-user-installation.md). The
+[enterprise gateway plan](enterprise-gateway.md) implements
+[ADR 0013](../adr/0013-enterprise-gateway.md) for companies that share materials,
+projects and public memory on a privately deployed gateway; desktop packaging decisions and remaining slices are in [desktop packaging](desktop-packaging.md). The
 design's non-goals—fabricating materials, electronic bidding platform integration,
 pricing strategy and developing models in-house—are excluded.
 
@@ -125,7 +127,8 @@ memory CRUD and approval, public evaluation-set preparation.
 | Installation-wide vendor-capture rate limit (currently 60 requests per minute; large pages can be truncated as incomplete) | Before accepting sustained vendor-web capture |
 | Later memory scopes and retrieval | [Memory decisions and enablement conditions](memory.md#decisions) |
 | Dashboard response-card interaction and progress display | Before U02; service state machine in [response-cards.md](../notes/response-cards.md) |
-| Local backup/restore and release acceptance | Before desktop release; hosted deployment is outside ADR 0012 |
+| Local backup/restore and release acceptance | Before desktop release |
+| Gateway single sign-on providers (WeCom, DingTalk, OIDC) | After [enterprise gateway](enterprise-gateway.md) slice 1 |
 
 ## Known defects and acceptance gaps
 
@@ -146,3 +149,5 @@ memory CRUD and approval, public evaluation-set preparation.
 5. Complete [certificate-page annotation acceptance](annotation.md#failure-modes-and-test-plan) (B05); enable vendor renditions only after archive/privacy/mapping acceptance, and profile/contract annotation only after archive and B05 acceptance.
 6. Complete WPS visual pagination and protected-download acceptance for exports (B11), plus sandbox lease-expiry takeover, disconnect and storage-failure injection scenarios.
 7. Continue the [desktop packaging slices](desktop-packaging.md#delivery-slices): optional services, then signing and release.
+8. Add the agent [tender source tools](agent.md#planned-tender-source-tools), then [long-session summaries](agent.md#planned-long-sessions).
+9. Deliver the [enterprise gateway slices](enterprise-gateway.md) in order, starting with the deployment mode.
