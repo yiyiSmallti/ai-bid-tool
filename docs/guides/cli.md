@@ -90,6 +90,13 @@ a `location` with the block ID, the heading path, and a `label` such as
 files are not parsed; the parse result lists them under `warnings`. Details are
 in [docx-citations.md](../notes/docx-citations.md).
 
+To read the tender itself, `source search --document DOCUMENT_ID --query
+"TERMS"` lists the lines that contain every term, with their `chunk_id` and
+page or `block_id`. `source read --chunk CHUNK_ID` returns that chunk's text,
+or one Word block with `--block BLOCK_ID`, up to 8,000 characters per call;
+repeat with `--offset NEXT_OFFSET` while `next_offset` is set. Confidential
+values are masked in both.
+
 ## Repair legacy requirement citations
 
 Use a human organization administrator session and name both the task and the

@@ -6,6 +6,17 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Agent tender source tools
+
+- Search a parsed tender by keywords and read one page, chunk or Word block in
+  bounded parts with `bid source search` and `bid source read`; confidential
+  values are masked before searching.
+- The built-in agent uses both as tools under `task:read`, so it can quote the
+  tender with chunk and page or block citations; its tool set grows from seven
+  to nine.
+- A session that answers a question without assembling a draft keeps the answer
+  in its messages.
+
 ## 2026-10-15: Several extraction models
 
 - Save several models, each with its own provider, endpoint and key, mark one
