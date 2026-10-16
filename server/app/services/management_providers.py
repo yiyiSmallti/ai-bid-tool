@@ -103,7 +103,7 @@ def metadata(actor, row) -> ProviderRevisionMetadata:
         configuration = ProviderConfigInput(
             capability="llm_extract",
             slot=row["slot"],
-            owner="personal" if row["owner_member_id"] is not None else "company",
+            owner="personal" if row.get("owner_member_id") is not None else "company",
             **{key: saved.get(key) for key in CONFIG_FIELDS},
         )
         return ProviderRevisionMetadata(
