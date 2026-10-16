@@ -605,6 +605,7 @@ class Renderer:
                     deviation = None
                 elif form.kind == "scoring_index" and scoring:
                     self.grid(block, self.scoring_rows(block, scoring))
+                    self.scoring_pages(scoring)
                     scoring = []
                 else:
                     self.grid(block)
@@ -627,6 +628,24 @@ class Renderer:
             wanted = short_title(form.title)
             self.tally.copies.append(wanted)
             self.run(paragraph, f"【待附：{wanted}】", mark=True)
+
+    def scoring_pages(self, items: list[OutlineScoringItem]) -> None:
+        """Point each solution item's page cell at its chapter's first page; other
+        items keep an empty cell for the bidder."""
+        table = self.word.tables[-1]
+        header = [cell.text for cell in table.rows[0].cells]
+        page = next((index for index, text in enumerate(header) if "页" in text), None)
+        if page is None:
+            return
+        chapters = {
+            item.title: number
+            for number, item in enumerate((item for item in items if item.subjective), 1)
+        }
+        scored = [item for item in items if not PRICE_SCORE.fullmatch(item.title)]
+        for row, item in zip(table.rows[1:], scored, strict=False):
+            if item.title in chapters:
+                paragraph = row.cells[page].paragraphs[0]
+                self._field(paragraph, f"PAGEREF solution_{chapters[item.title]} \\h")
 
     @staticmethod
     def scoring_rows(grid: Grid, items: list[OutlineScoringItem]) -> list[list[str]]:
