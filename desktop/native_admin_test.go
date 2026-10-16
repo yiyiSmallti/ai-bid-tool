@@ -89,6 +89,25 @@ func realGateway(t *testing.T, root string) (*httptest.Server, string) {
 	return proxy, str(created, "initial_password")
 }
 
+// pumpRequests applies dispatched updates until no request is in flight. A
+// real server hashes passwords and runs migrations at its own pace, so it
+// waits for the in-flight requests rather than a quiet interval.
+func pumpRequests(t *testing.T, app *NativeApp, updates chan func()) {
+	t.Helper()
+	deadline := time.After(60 * time.Second)
+	for idle := 0; app.Busy || idle < 3; {
+		select {
+		case apply := <-updates:
+			apply()
+			idle = 0
+		case <-time.After(60 * time.Millisecond):
+			idle++
+		case <-deadline:
+			t.Fatalf("requests still running at %s", app.Route.Path)
+		}
+	}
+}
+
 // Failure matrix before implementation: a member reads the member list or
 // sees the administration pages; a created or reset password is not shown, or
 // stays after leaving the page; a saved quota or grant does not reach the
@@ -117,22 +136,7 @@ func TestEnterpriseAdminPages(t *testing.T) {
 	updates := make(chan func(), 64)
 	app.Dispatch = func(apply func()) { updates <- apply }
 	app.ConfirmDialog = func(string, string) (bool, error) { return true, nil }
-	// A real server hashes passwords and runs migrations at its own pace, so
-	// pumping waits for the in-flight requests rather than a quiet interval.
-	pump := func() {
-		deadline := time.After(60 * time.Second)
-		for idle := 0; app.Busy || idle < 3; {
-			select {
-			case apply := <-updates:
-				apply()
-				idle = 0
-			case <-time.After(60 * time.Millisecond):
-				idle++
-			case <-deadline:
-				t.Fatalf("requests still running at %s", app.Route.Path)
-			}
-		}
-	}
+	pump := func() { pumpRequests(t, app, updates) }
 	steps := []string{}
 	step := func(name string, ok bool, detail string) {
 		steps = append(steps, name)
@@ -155,6 +159,25 @@ func TestEnterpriseAdminPages(t *testing.T) {
 		change.current, change.next, change.confirm = password, next, next
 		change.change(app)
 		pump()
+	}
+
+	// addModel saves a model from the Zhipu template, whose endpoint the
+	// gateway allows for personal models by default; saving makes no provider call.
+	addModel := func(page *modelSettingsPage, owner, key string) {
+		page.startEdit(app, nil, owner)
+		page.template = "zhipu"
+		page.applyTemplate("zhipu")
+		page.name, page.key = "合成"+owner+"模型", key
+		page.save(app)
+		pump()
+	}
+	privateMemory := func(page *memoryPage) bool {
+		for _, item := range page.list.Items {
+			if str(object(object(item["current"])["content"]), "conflict_key") == "synthetic.private" {
+				return true
+			}
+		}
+		return false
 	}
 
 	opened, err := runner.Open(ctx, "6f1c2d3e-4a5b-4c6d-8e7f-8091a2b3c4d5")
@@ -241,6 +264,14 @@ func TestEnterpriseAdminPages(t *testing.T) {
 	pump()
 	step("the owner cannot be removed", app.Error == "请先把项目交给其他负责人，再移出原负责人" && len(project.items) == 2, "owner removed")
 
+	app.Navigate("/org/settings/models")
+	pump()
+	models, ok := app.page.(*modelSettingsPage)
+	step("administrator opens company models", ok && models.settings != nil && models.writable(app, "company") && models.testable(app), "company models not writable")
+	addModel(models, "company", "synthetic-company-key-0001")
+	company := models.owned("company")
+	step("administrator saves the company default", len(company) == 1 && str(models.settings, "default_slot") == str(company[0], "slot"), "company model not saved")
+
 	app.signOut()
 	pump()
 	signIn("synthetic.member", memberPassword, "synthetic-member-password")
@@ -259,6 +290,71 @@ func TestEnterpriseAdminPages(t *testing.T) {
 	app.Navigate("/org/members")
 	pump()
 	step("a member cannot read the member list", app.page == nil && app.Error == "当前内容不可访问，请返回任务或重新读取", "member list readable")
+
+	app.Navigate("/org/settings/models")
+	pump()
+	models, ok = app.page.(*modelSettingsPage)
+	companySlot := str(company[0], "slot")
+	step("a member reads company models without changing or testing them", ok && len(models.owned("company")) == 1 && !models.writable(app, "company") && !models.testable(app) && models.mine == companySlot, "company model writable")
+	models.startEdit(app, models.owned("company")[0], "")
+	step("a company model does not open for a member", !models.editing, "editor opened")
+	addModel(models, "personal", "synthetic-personal-key-0002")
+	personal := models.owned("personal")
+	step("a member saves a personal model", app.Error == "" && len(personal) == 1 && models.writable(app, "personal"), "personal model not saved")
+	models.setMine(app, personal[0])
+	pump()
+	personalSlot := str(personal[0], "slot")
+	step("the personal model becomes my default", models.mine == personalSlot && str(models.settings, "default_slot") == companySlot, "my default not set")
+	models.setMine(app, nil)
+	pump()
+	step("my default returns to the company default", models.mine == companySlot, "my default kept")
+
+	app.Navigate("/org/memory?scope=private")
+	pump()
+	memory, ok := app.page.(*memoryPage)
+	step("private memory opens", ok && memory.scope == "private" && !memory.publicLocked(app), "not the private scope")
+	memory.startEdit()
+	memory.kind, memory.key, memory.text = "规则", "synthetic.private", "合成私有记忆：报价单使用含税价。"
+	memory.save(app)
+	pump()
+	step("a member saves a private memory", app.Error == "" && privateMemory(memory), "private memory not listed")
+	app.Navigate("/org/memory")
+	pump()
+	memory, ok = app.page.(*memoryPage)
+	step("the company memory leaves out private memory", ok && memory.scope == "library" && !memory.publicLocked(app) && !privateMemory(memory), "private memory in the company list")
+
+	app.Navigate("/account/usage")
+	pump()
+	own, ok := app.page.(*usagePage)
+	step("a member reads their own usage", ok && !own.everyone && str(own.summary, "member_id") == memberID && integer(own.summary, "monthly_company_tokens") == 50000, "usage not read")
+	app.Navigate("/org/usage")
+	pump()
+	step("a member cannot read everyone's usage", app.Error == "当前内容不可访问，请返回任务或重新读取", "member list readable")
+
+	app.signOut()
+	pump()
+	login, ok := app.page.(*loginPage)
+	step("member signs out", ok, "not at sign-in")
+	login.login, login.password = "synthetic.admin", "synthetic-admin-password"
+	login.signIn(app)
+	pump()
+	step("administrator signs in again", app.admin() && app.Route.Path == "/org/tasks", "not signed in")
+	app.Navigate("/org/memory?scope=private")
+	pump()
+	memory, ok = app.page.(*memoryPage)
+	step("an administrator cannot see a member's private memory", ok && memory.list.Meta != nil && !privateMemory(memory), "private memory visible")
+	app.Navigate("/org/settings/models")
+	pump()
+	models, ok = app.page.(*modelSettingsPage)
+	step("an administrator cannot see a member's personal model", ok && len(models.owned("personal")) == 0 && models.saved(personalSlot) == nil && len(models.owned("company")) == 1, "personal model visible")
+	app.Navigate("/org/usage")
+	pump()
+	everyone, ok := app.page.(*usagePage)
+	step("an administrator reads usage by member", ok && everyone.everyone && len(everyone.memberChoices) == 2 && str(everyone.summary, "member_id") == self, "own usage not shown")
+	everyone.who = memberID
+	everyone.load(app)
+	pump()
+	step("an administrator reads a member's usage", str(everyone.summary, "member_id") == memberID, "member usage not shown")
 
 	dir := filepath.Join("..", "data", "work", "enterprise-admin")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

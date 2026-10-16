@@ -25,14 +25,17 @@ type modelSettingsPage struct {
 	history                                                                   managementListing
 	provider, model, endpoint, jsonMode, key, defaultReasoning, testReasoning string
 	name, template, editSlot, testModel, expanded                             string
-	editRevision                                                              any
-	levels                                                                    []modelReasoningEditor
-	testOptions, testModels                                                   settingsChoices
-	editing, conflict                                                         bool
-	preflight                                                                 Object
-	preflightCost                                                             map[string]int64
-	testReceipt                                                               *modelTestReceipt
-	saveReceipt                                                               string
+	// owner of the model being edited; mine is a gateway member's effective
+	// default model.
+	owner, mine             string
+	editRevision            any
+	levels                  []modelReasoningEditor
+	testOptions, testModels settingsChoices
+	editing, conflict       bool
+	preflight               Object
+	preflightCost           map[string]int64
+	testReceipt             *modelTestReceipt
+	saveReceipt             string
 }
 
 func newModelSettingsPage(route Route) *modelSettingsPage {
@@ -47,6 +50,7 @@ func (p *modelSettingsPage) Close() {
 	p.history = managementListing{}
 	p.key, p.model, p.endpoint, p.defaultReasoning, p.saveReceipt = "", "", "", "", ""
 	p.name, p.template, p.editSlot, p.testModel, p.expanded, p.editRevision = "", "", "", "", "", nil
+	p.owner, p.mine = "", ""
 	p.levels = nil
 	p.testReceipt = nil
 	p.preflightCost = nil
@@ -69,6 +73,23 @@ func (p *modelSettingsPage) saved(slot string) Object {
 		}
 	}
 	return nil
+}
+func modelOwner(model Object) string { return str(object(model["configuration"]), "owner") }
+
+// owned lists the models of one owner: the company's, or the caller's own.
+func (p *modelSettingsPage) owned(owner string) []Object {
+	var models []Object
+	for _, model := range p.models() {
+		if modelOwner(model) == owner {
+			models = append(models, model)
+		}
+	}
+	return models
+}
+
+// writable is false for a gateway member's view of a company model.
+func (p *modelSettingsPage) writable(a *NativeApp, owner string) bool {
+	return mgAllowed(p.settings, "configure") && (owner == "personal" || a.member() == nil || a.admin())
 }
 func modelTitle(model Object) string {
 	if name := str(model, "name"); name != "" {
@@ -127,6 +148,9 @@ func (p *modelSettingsPage) load(a *NativeApp, after func(bool)) {
 			p.testModel = ""
 		}
 		p.refreshTestOptions()
+		if a.member() != nil {
+			p.loadMine(a)
+		}
 		if after != nil {
 			after(true)
 		}
@@ -137,6 +161,40 @@ func (p *modelSettingsPage) load(a *NativeApp, after func(bool)) {
 		}
 	})
 }
+
+// loadMine reads which model a gateway member's runs use by default.
+func (p *modelSettingsPage) loadMine(a *NativeApp) {
+	settingsRead(a, &p.reads, "provider-mine", func(ctx context.Context) (Result, error) {
+		return a.Client.Request(ctx, "GET", "/providers", nil)
+	}, func(r Result) {
+		p.mine = ""
+		for _, item := range r.Items {
+			if item["is_member_default"] == true {
+				p.mine = str(item, "slot")
+			}
+		}
+	}, func(err error) { p.failed(a, err) })
+}
+
+// setMine sets or clears a gateway member's own default model.
+func (p *modelSettingsPage) setMine(a *NativeApp, model Object) {
+	if a.Busy {
+		return
+	}
+	var slot any
+	notice := "已恢复使用公司默认模型。"
+	if model != nil {
+		slot = str(model, "slot")
+		notice = "已将「" + modelTitle(model) + "」设为我的默认模型。"
+	}
+	settingsWrite(a, func(ctx context.Context) (Result, error) {
+		return a.Client.Request(ctx, "PUT", "/account/default-model", Object{"slot": slot})
+	}, func(Result) {
+		p.load(a, nil)
+		a.Notice = notice
+	}, func(error) { p.load(a, nil) })
+}
+
 func (p *modelSettingsPage) loadHistory(a *NativeApp, cursor string) {
 	p.history.Items, p.history.Rows, p.history.Meta = nil, nil, nil
 	body := Object{"cursor": mgNull(cursor), "limit": 25}
@@ -179,10 +237,14 @@ func (p *modelSettingsPage) revision(a *NativeApp, id string, tested bool) {
 }
 
 // startEdit opens the form for one saved model, or for a new one when model is nil.
-func (p *modelSettingsPage) startEdit(model Object) {
-	if !mgAllowed(p.settings, "configure") || model == nil && len(p.models()) >= 20 {
+func (p *modelSettingsPage) startEdit(a *NativeApp, model Object, owner string) {
+	if model != nil {
+		owner = modelOwner(model)
+	}
+	if !p.writable(a, owner) || model == nil && len(p.owned(owner)) >= 20 {
 		return
 	}
+	p.owner = owner
 	p.key, p.template, p.editSlot, p.editRevision, p.name = "", "", "", nil, ""
 	p.provider, p.model, p.endpoint, p.jsonMode, p.defaultReasoning = "openai", "", "", "json_schema", ""
 	p.levels = nil
@@ -229,9 +291,10 @@ func (p *modelSettingsPage) cancel(a *NativeApp) {
 	}
 }
 
-// The server reuses a saved key from any model with the same provider and endpoint.
+// The server reuses a saved key from a model of the same owner with the same
+// provider and endpoint; a personal model never reuses a company key.
 func (p *modelSettingsPage) reusable() bool {
-	for _, model := range p.models() {
+	for _, model := range p.owned(p.owner) {
 		if p.provider == str(model, "provider") && settingsEndpoint(p.endpoint) == str(object(model["configuration"]), "base_url") {
 			return true
 		}
@@ -257,7 +320,7 @@ func (p *modelSettingsPage) input() (Object, error) {
 	if len(levels) > 0 && !seen[p.defaultReasoning] || len(levels) == 0 && p.defaultReasoning != "" {
 		return nil, fmt.Errorf("请选择已配置的默认推理等级；未配置等级时应留空。")
 	}
-	body := Object{"capability": "llm_extract", "name": mgNull(strings.TrimSpace(p.name)), "provider": p.provider, "model": strings.TrimSpace(p.model), "base_url": mgNull(settingsEndpoint(p.endpoint)), "json_mode": p.jsonMode, "reasoning": levels, "default_reasoning": mgNull(p.defaultReasoning)}
+	body := Object{"capability": "llm_extract", "owner": p.owner, "name": mgNull(strings.TrimSpace(p.name)), "provider": p.provider, "model": strings.TrimSpace(p.model), "base_url": mgNull(settingsEndpoint(p.endpoint)), "json_mode": p.jsonMode, "reasoning": levels, "default_reasoning": mgNull(p.defaultReasoning)}
 	if p.editSlot == "" {
 		body["new"] = true
 	} else {
@@ -266,7 +329,7 @@ func (p *modelSettingsPage) input() (Object, error) {
 	return body, nil
 }
 func (p *modelSettingsPage) save(a *NativeApp) {
-	if !p.editing || !mgAllowed(p.settings, "configure") || a.Busy {
+	if !p.editing || !p.writable(a, p.owner) || a.Busy {
 		return
 	}
 	body, err := p.input()
@@ -458,7 +521,7 @@ func modelMetadataView(c *ui.Context, value Object) {
 	})
 }
 func (p *modelSettingsPage) setDefault(a *NativeApp, model Object) {
-	if a.Busy || !mgAllowed(p.settings, "configure") {
+	if a.Busy || !p.writable(a, "company") || modelOwner(model) != "company" {
 		return
 	}
 	slot := str(model, "slot")
@@ -467,10 +530,13 @@ func (p *modelSettingsPage) setDefault(a *NativeApp, model Object) {
 	}, func(Result) {
 		p.load(a, nil)
 		a.Notice = "已将「" + modelTitle(model) + "」设为默认模型。"
+		if a.member() != nil {
+			a.Notice = "已将「" + modelTitle(model) + "」设为公司默认模型。"
+		}
 	}, func(error) { p.load(a, nil) })
 }
 func (p *modelSettingsPage) remove(a *NativeApp, model Object) {
-	if a.Busy || !mgAllowed(p.settings, "configure") {
+	if a.Busy || !p.writable(a, modelOwner(model)) {
 		return
 	}
 	slot := str(model, "slot")
@@ -502,19 +568,34 @@ func (p *modelSettingsPage) modelRow(c *ui.Context, a *NativeApp, model Object) 
 			ui.Column(c).Grow(1).MinWidth(220).Gap(3).Children(func() {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, modelTitle(model)).FontSize(14.5).FontWeight(600).SingleLine()
-					if isDefault {
+					if isDefault && a.member() == nil {
 						nativeBadge(c, "默认", toneAccent)
+					} else if isDefault {
+						nativeBadge(c, "公司默认", toneNeutral)
+					}
+					if a.member() != nil && slot == p.mine {
+						nativeBadge(c, "我的默认", toneAccent)
 					}
 				})
 				ui.Text(c, nativeLabel(str(model, "provider"))+" · "+str(model, "model")+" · 密钥 ••••").FontSize(12.5).TextColor(palette.Muted).SingleLine()
 				ui.Text(c, endpoint).FontSize(12).Font("monospace").TextColor(palette.Subtle).SingleLine()
 			})
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				configure := !a.Busy && !p.editing && mgAllowed(p.settings, "configure")
-				if !isDefault {
-					nativeGhostButton(c, "star", "设为默认", !configure).OnClick(func() { p.setDefault(a, model) })
+				owner := modelOwner(model)
+				configure := !a.Busy && !p.editing && p.writable(a, owner)
+				if a.member() != nil && slot != p.mine {
+					nativeGhostButton(c, "star", "设为我的默认", a.Busy || p.editing).OnClick(func() { p.setMine(a, model) })
 				}
-				nativeGhostButton(c, "pencil", "编辑", !configure).OnClick(func() { p.startEdit(model) })
+				if !isDefault && owner == "company" && p.writable(a, owner) {
+					label := "设为默认"
+					if a.member() != nil {
+						label = "设为公司默认"
+					}
+					nativeGhostButton(c, "star", label, !configure).OnClick(func() { p.setDefault(a, model) })
+				}
+				if p.writable(a, owner) {
+					nativeGhostButton(c, "pencil", "编辑", !configure).OnClick(func() { p.startEdit(a, model, owner) })
+				}
 				detail := "详情"
 				if p.expanded == slot {
 					detail = "收起"
@@ -526,7 +607,9 @@ func (p *modelSettingsPage) modelRow(c *ui.Context, a *NativeApp, model Object) 
 						p.expanded = slot
 					}
 				})
-				nativeGhostButton(c, "trash-2", "删除", !configure).OnClick(func() { p.remove(a, model) })
+				if p.writable(a, owner) {
+					nativeGhostButton(c, "trash-2", "删除", !configure).OnClick(func() { p.remove(a, model) })
+				}
 			})
 		})
 		if p.expanded == slot {
@@ -543,21 +626,25 @@ func (p *modelSettingsPage) View(c *ui.Context, a *NativeApp) {
 		p.viewForm(c, a)
 		return
 	}
-	nativeText(c, "可保存多个模型，各自使用独立的供应商、端点与密钥；抽取和起草时可以选择本次使用的模型，未选择时使用默认模型。")
-	ui.Row(c).Wrap().Gap(8).Children(func() {
-		nativeIconButton(c, "plus", "添加模型", true).Disabled(a.Busy || p.editing || !mgAllowed(p.settings, "configure") || len(p.models()) >= 20).OnClick(func() { p.startEdit(nil) })
-		nativeGhostButton(c, "refresh-cw", "重新读取", a.Busy).OnClick(func() { p.load(a, nil) })
-	})
-	if p.settings == nil {
-		nativeText(c, "正在读取模型元数据。")
-	} else if len(p.models()) == 0 {
-		nativeEmpty(c, "cpu", "尚未添加模型。点击「添加模型」，选择厂商模板后填入密钥即可。", nil)
+	if a.member() != nil {
+		p.viewSections(c, a)
 	} else {
-		ui.Column(c.Key("model-list")).FillWidth().Gap(10).Children(func() {
-			for _, model := range p.models() {
-				p.modelRow(c, a, model)
-			}
+		nativeText(c, "可保存多个模型，各自使用独立的供应商、端点与密钥；抽取和起草时可以选择本次使用的模型，未选择时使用默认模型。")
+		ui.Row(c).Wrap().Gap(8).Children(func() {
+			nativeIconButton(c, "plus", "添加模型", true).Disabled(a.Busy || p.editing || !p.writable(a, "company") || len(p.owned("company")) >= 20).OnClick(func() { p.startEdit(a, nil, "company") })
+			nativeGhostButton(c, "refresh-cw", "重新读取", a.Busy).OnClick(func() { p.load(a, nil) })
 		})
+		if p.settings == nil {
+			nativeText(c, "正在读取模型元数据。")
+		} else if len(p.models()) == 0 {
+			nativeEmpty(c, "cpu", "尚未添加模型。点击「添加模型」，选择厂商模板后填入密钥即可。", nil)
+		} else {
+			ui.Column(c.Key("model-list")).FillWidth().Gap(10).Children(func() {
+				for _, model := range p.models() {
+					p.modelRow(c, a, model)
+				}
+			})
+		}
 	}
 	if p.saveReceipt != "" {
 		mgValue(c, "最近保存回执", p.saveReceipt)
@@ -565,35 +652,8 @@ func (p *modelSettingsPage) View(c *ui.Context, a *NativeApp) {
 	if p.editing {
 		p.viewForm(c, a)
 	}
-	ui.Divider(c)
-	nativeHeading(c, "连接测试")
-	if settingsChoice(c, "测试模型", &p.testModel, p.testModels) {
-		p.refreshTestOptions()
-		p.preflight, p.preflightCost = nil, nil
-	}
-	if settingsChoice(c, "测试推理等级", &p.testReasoning, p.testOptions) {
-		p.preflight, p.preflightCost = nil, nil
-	}
-	nativeButton(c, "预检连接测试").Disabled(a.Busy || p.editing || !mgAllowed(p.settings, "test")).OnClick(func() { p.test(a, true) })
-	if p.preflight != nil {
-		mgValue(c, "预计调用", fmt.Sprintf("%d 次 · %d tokens", p.preflightCost["calls"], p.preflightCost["llm_tokens"]))
-		if mgBool(p.preflight["blocked"]) {
-			nativeText(c, "本次预检存在阻塞，无法开始测试。")
-		}
-		nativePrimaryButton(c, "明确开始连接测试").Disabled(a.Busy || mgBool(p.preflight["blocked"])).OnClick(func() { p.test(a, false) })
-	}
-	if receipt := p.testReceipt; receipt != nil {
-		mgValue(c, "测试作业", receipt.Job)
-		mgValue(c, "实际配置修订 ID", receipt.Config)
-		mgValue(c, "作业状态", nativeLabel(receipt.Status))
-		mgValue(c, "实际供应商与模型", receipt.Provider+" · "+receipt.Model)
-		mgValue(c, "实际调用与用量", fmt.Sprintf("%d 次 · %d tokens", receipt.Cost["calls"], receipt.Cost["llm_tokens"]))
-		if receipt.Changed {
-			nativeText(c, "测试实际使用的配置与开始时显示的配置不同，请核对精确配置回执。")
-		}
-		if p.testedRevision != nil {
-			modelMetadataView(c.Key("tested-provider"), p.testedRevision)
-		}
+	if p.testable(a) {
+		p.viewTest(c, a)
 	}
 	ui.Divider(c)
 	nativeHeading(c, "配置修订历史")
@@ -605,8 +665,50 @@ func (p *modelSettingsPage) View(c *ui.Context, a *NativeApp) {
 		nativeButton(c, "关闭历史配置").OnClick(func() { p.selectedRevision = nil })
 	}
 }
+
+// viewSections shows a gateway's company models and the member's own
+// personal models; only an administrator changes company models.
+func (p *modelSettingsPage) viewSections(c *ui.Context, a *NativeApp) {
+	nativeText(c, "公司模型由管理员维护，调用计入每月公司模型上限；个人模型使用你自己的密钥，只有你能看到和使用，不计入上限。未选择模型的作业使用「我的默认」。")
+	ui.Row(c).Wrap().Gap(8).Children(func() {
+		nativeGhostButton(c, "refresh-cw", "重新读取", a.Busy).OnClick(func() { p.load(a, nil) })
+		if p.mine != "" && p.mine != str(p.settings, "default_slot") {
+			nativeGhostButton(c, "rotate-ccw", "恢复使用公司默认", a.Busy || p.editing).OnClick(func() { p.setMine(a, nil) })
+		}
+	})
+	if p.settings == nil {
+		nativeText(c, "正在读取模型元数据。")
+		return
+	}
+	for _, section := range []struct{ owner, title, add, empty string }{
+		{"company", "公司模型", "添加公司模型", "公司还没有模型，请联系管理员添加。"},
+		{"personal", "我的个人模型", "添加个人模型", "还没有个人模型。个人模型的端点需在企业允许的范围内。"},
+	} {
+		models := p.owned(section.owner)
+		ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, section.title).FontSize(15).FontWeight(600).Grow(1)
+			if p.writable(a, section.owner) {
+				nativeIconButton(c, "plus", section.add, section.owner == "personal").Disabled(a.Busy || p.editing || len(models) >= 20).OnClick(func() { p.startEdit(a, nil, section.owner) })
+			}
+		})
+		if len(models) == 0 {
+			nativeHint(c, section.empty)
+			continue
+		}
+		ui.Column(c.Key("model-list-" + section.owner)).FillWidth().Gap(10).Children(func() {
+			for _, model := range models {
+				p.modelRow(c, a, model)
+			}
+		})
+	}
+}
+
 func (p *modelSettingsPage) viewForm(c *ui.Context, a *NativeApp) {
-	if p.editSlot == "" {
+	if p.editSlot == "" && p.owner == "personal" {
+		nativeHeading(c, "添加个人模型")
+	} else if p.editSlot == "" && a.member() != nil {
+		nativeHeading(c, "添加公司模型")
+	} else if p.editSlot == "" {
 		nativeHeading(c, "添加模型")
 	} else {
 		nativeHeading(c, "编辑模型："+modelTitle(p.saved(p.editSlot)))
@@ -674,4 +776,41 @@ func (p *modelSettingsPage) viewForm(c *ui.Context, a *NativeApp) {
 			nativeButton(c, "取消模型编辑").OnClick(func() { p.cancel(a) })
 		})
 	})
+}
+
+// testable is false for a gateway member: testing the company default is an
+// administrator's.
+func (p *modelSettingsPage) testable(a *NativeApp) bool { return a.member() == nil || a.admin() }
+
+func (p *modelSettingsPage) viewTest(c *ui.Context, a *NativeApp) {
+	ui.Divider(c)
+	nativeHeading(c, "连接测试")
+	if settingsChoice(c, "测试模型", &p.testModel, p.testModels) {
+		p.refreshTestOptions()
+		p.preflight, p.preflightCost = nil, nil
+	}
+	if settingsChoice(c, "测试推理等级", &p.testReasoning, p.testOptions) {
+		p.preflight, p.preflightCost = nil, nil
+	}
+	nativeButton(c, "预检连接测试").Disabled(a.Busy || p.editing || !mgAllowed(p.settings, "test")).OnClick(func() { p.test(a, true) })
+	if p.preflight != nil {
+		mgValue(c, "预计调用", fmt.Sprintf("%d 次 · %d tokens", p.preflightCost["calls"], p.preflightCost["llm_tokens"]))
+		if mgBool(p.preflight["blocked"]) {
+			nativeText(c, "本次预检存在阻塞，无法开始测试。")
+		}
+		nativePrimaryButton(c, "明确开始连接测试").Disabled(a.Busy || mgBool(p.preflight["blocked"])).OnClick(func() { p.test(a, false) })
+	}
+	if receipt := p.testReceipt; receipt != nil {
+		mgValue(c, "测试作业", receipt.Job)
+		mgValue(c, "实际配置修订 ID", receipt.Config)
+		mgValue(c, "作业状态", nativeLabel(receipt.Status))
+		mgValue(c, "实际供应商与模型", receipt.Provider+" · "+receipt.Model)
+		mgValue(c, "实际调用与用量", fmt.Sprintf("%d 次 · %d tokens", receipt.Cost["calls"], receipt.Cost["llm_tokens"]))
+		if receipt.Changed {
+			nativeText(c, "测试实际使用的配置与开始时显示的配置不同，请核对精确配置回执。")
+		}
+		if p.testedRevision != nil {
+			modelMetadataView(c.Key("tested-provider"), p.testedRevision)
+		}
+	}
 }

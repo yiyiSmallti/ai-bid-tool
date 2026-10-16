@@ -33,8 +33,8 @@ func (a *NativeApp) mustChangePassword() bool {
 	return a.enterprise() && a.Workspace.Account != nil && a.Workspace.Account["must_change_password"] == true
 }
 
-// accountPage holds the enterprise pages: the member's own, company members,
-// project members, and adding a gateway.
+// accountPage holds the enterprise pages: the member's own, company members
+// and usage, project members, and adding a gateway.
 func accountPage(r Route) NativePage {
 	switch r.Path {
 	case "/workspaces/add":
@@ -45,6 +45,10 @@ func accountPage(r Route) NativePage {
 		return &sessionsPage{}
 	case "/org/members":
 		return newMembersPage()
+	case "/account/usage":
+		return &usagePage{}
+	case "/org/usage":
+		return &usagePage{everyone: true}
 	}
 	if parts := strings.Split(strings.Trim(r.Path, "/"), "/"); len(parts) == 4 && parts[0] == "org" && parts[1] == "tasks" && parts[3] == "members" {
 		return &projectMembersPage{task: parts[2]}

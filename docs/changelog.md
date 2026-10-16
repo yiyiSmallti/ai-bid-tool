@@ -6,6 +6,18 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Client models, memory and usage
+
+- On a gateway the model page separates company models, which only an
+  administrator changes, from a member's own personal models, and a member
+  picks their own default model.
+- The memory page has public and private tabs; private memory is visible only
+  to its owner.
+- Members see their monthly model usage; administrators see any member's.
+- Fixed: the desktop model page rejected every saved model as an invalid
+  response, in personal installations too, since the server started reporting
+  each model's owner.
+
 ## 2026-10-15: Client member administration
 
 - Administrators manage company members in the desktop client: create, edit

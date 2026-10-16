@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +14,9 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+// The management pages list public company memory and the member's own
+// private memory; project memory stays with its task.
+var memoryScopes = map[string]bool{"library": true, "private": true}
 var managementMemoryKey = regexp.MustCompile(`^[a-z0-9][a-z0-9_.\-]{0,99}$`)
 var managementMemoryKinds = []string{"规则", "偏好"}
 var managementMemoryKindCodes = map[string]string{"规则": "rule", "偏好": "preference"}
@@ -23,8 +27,10 @@ var managementMemoryExpiryCodes = map[string]string{"全部": "all", "尚未过�
 
 type memoryPage struct {
 	managementState
-	reads                                                      managementReads
-	id                                                         string
+	reads managementReads
+	id    string
+	// scope is library (public company memory) or, on a gateway, private.
+	scope                                                      string
 	list, history                                              managementListing
 	detail, conflict, receipt                                  Object
 	search, filterKind, filterStatus, filterExpiry, filterTags string
@@ -37,6 +43,10 @@ func newMemoryPage(route Route) *memoryPage {
 	p := &memoryPage{
 		managementState: managementState{route: route, title: "单位记忆库"},
 		filterKind:      "全部", filterStatus: "全部", filterExpiry: "全部", kind: "规则",
+		scope: "library",
+	}
+	if route.Query.Get("scope") == "private" {
+		p.scope = "private"
 	}
 	if len(parts) == 3 {
 		p.id = parts[2]
@@ -65,7 +75,7 @@ func (p *memoryPage) Close() {
 }
 
 func mgMemoryRevision(value Object, id string, number int) bool {
-	if str(value, "id") == "" || str(value, "memory_id") != id || integer(value, "revision") < 1 || number > 0 && integer(value, "revision") != number || str(object(value["target"]), "scope") != "library" {
+	if str(value, "id") == "" || str(value, "memory_id") != id || integer(value, "revision") < 1 || number > 0 && integer(value, "revision") != number || !memoryScopes[str(object(value["target"]), "scope")] {
 		return false
 	}
 	content := object(value["content"])
@@ -156,7 +166,7 @@ func (p *memoryPage) loadList(a *NativeApp, cursor string, outcome bool) {
 	p.list.Items, p.list.Rows, p.list.Meta = nil, nil, nil
 	p.outcomeChecked = false
 	body := Object{
-		"scope": "library", "q": mgNull(p.search), "kind": mgNull(managementMemoryKindCodes[p.filterKind]),
+		"scope": p.scope, "q": mgNull(p.search), "kind": mgNull(managementMemoryKindCodes[p.filterKind]),
 		"status": mgNull(managementMemoryStatusCodes[p.filterStatus]), "tags": tags,
 		"expiry": managementMemoryExpiryCodes[p.filterExpiry], "include_deleted": false,
 		"cursor": mgNull(cursor), "limit": 25,
@@ -304,7 +314,7 @@ func (p *memoryPage) save(a *NativeApp) {
 	method, path := "POST", "/memories"
 	previous := 0
 	if p.id == "" {
-		body["target"] = Object{"scope": "library"}
+		body["target"] = Object{"scope": p.scope}
 	} else {
 		method, path = "PUT", path+"/"+url.PathEscape(p.id)
 		previous = integer(p.current(), "revision")
@@ -498,7 +508,27 @@ func (p *memoryPage) View(c *ui.Context, a *NativeApp) {
 	p.viewReceipt(c, a)
 }
 
+// publicLocked is true when a gateway member may read public memory but not
+// propose to it.
+func (p *memoryPage) publicLocked(a *NativeApp) bool {
+	if p.scope != "library" || a.member() == nil || a.admin() {
+		return false
+	}
+	return !slices.Contains(stringList(a.member()["grants"]), "memory:edit")
+}
+
 func (p *memoryPage) viewList(c *ui.Context, a *NativeApp) {
+	if a.enterprise() {
+		ui.Row(c).Gap(8).Children(func() {
+			nativeIconButton(c, "building-2", "公共记忆", p.scope == "library").OnClick(func() { a.Navigate("/org/memory") })
+			nativeIconButton(c, "lock", "我的私有记忆", p.scope == "private").OnClick(func() { a.Navigate("/org/memory?scope=private") })
+		})
+		if p.scope == "private" {
+			nativeHint(c, "私有记忆只有本人能看到，起草时与公共记忆一起使用；管理员也看不到，也不会随项目包导出。")
+		} else if p.publicLocked(a) {
+			nativeHint(c, "公共记忆对全公司生效。新增或修改需要「编辑单位记忆」授权，请联系管理员。")
+		}
+	}
 	ui.Row(c).FillWidth().Wrap().Gap(12).AlignItems(ui.End).Children(func() {
 		ui.Column(c).Width(220).Children(func() { nativeField(c, "搜索记忆", &p.search, false) })
 		ui.Column(c).Width(220).Children(func() { mgChoice(c, "类型", &p.filterKind, []string{"全部", "规则", "偏好"}) })
@@ -508,7 +538,7 @@ func (p *memoryPage) viewList(c *ui.Context, a *NativeApp) {
 	})
 	ui.Row(c).Wrap().Gap(8).Children(func() {
 		nativeButton(c, "查询记忆").Disabled(a.Busy).OnClick(func() { p.list.Previous = nil; p.loadList(a, "", false) })
-		nativePrimaryButton(c, "新增候选记忆").Disabled(a.Busy || p.editing || p.outcomeUnknown).OnClick(p.startEdit)
+		nativePrimaryButton(c, "新增候选记忆").Disabled(a.Busy || p.editing || p.outcomeUnknown || p.publicLocked(a)).OnClick(p.startEdit)
 	})
 	if p.outcomeUnknown {
 		nativeText(c, "前次保存结果尚未确定，不能自动或直接再次提交。")
