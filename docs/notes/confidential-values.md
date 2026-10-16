@@ -109,7 +109,10 @@ quote of it is still verbatim.
 Saving a card refuses a placeholder whose key is unknown or archived
 (`unknown_confidential_field`). Confirming refuses that and any `[REDACTED_…]`
 text (`redacted_placeholder_in_response`). A model proposal naming a placeholder
-it was not sent is skipped with the same code. Cards store placeholders only;
+it was not sent is skipped with the same code. A proposal whose response text
+or deviation note still holds `[REDACTED_…]` is kept as a draft, but the
+generation job is partial and warns `redacted_placeholder_in_response:<id>`.
+Cards store placeholders only;
 changing a value never invalidates a confirmed card.
 
 ### Export
