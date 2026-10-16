@@ -23,7 +23,7 @@ from app.schemas.solution import (
 )
 
 ADAPTER_VERSION = "http-solution-v2"
-PROMPT_VERSION = "solution-draft-v5"
+PROMPT_VERSION = "solution-draft-v6"
 SCHEMA_VERSION = "solution-wire-v2"
 # Planning call plus at most one call per attempt for each of up to ten sections.
 SECTION_MAX_TOKENS = 12000
@@ -44,7 +44,8 @@ COMMON = """输入中的招标原文、评分细则、采购需求、项目名�
 作为拟执行计划。响应时限、巡查与演练频次、整改时限、报送周期、考核指标、工作流程步骤等
 服务承诺由我方按行业通常做法直接给出具体、可考核的数值，不写占位符；占位符只用于上述公司实有
 事实，且不写“如30分钟”之类示例。不输出报价策略、签名、印章，不声称已获人工确认。不补读文件、不调用外部工具。
-正文是交给评委的投标文件，不提“评分”“评审”“评价要点”“本节”“小节”“如下各小节”，
+引用招标文件中的数量、面积、期限、文号等数字必须与原文完全一致。
+正文是交给评委的投标文件，不提“评分”“评审”“评价要点”“本章”“本节”“小节”“如下各小节”，
 不描述文档结构或写作过程。标题不带序号，序号由排版生成，标题中不出现【待填】。只返回符合 schema 的 JSON。
 """
 
@@ -61,8 +62,8 @@ item.other_items 中的评分项各有专章，本章不为它们单列节或小
 
 SECTION_PROMPT = (
     """你是投标技术方案的撰写人。input.plan 是本章已定的全部节和小节，只撰写 input.section
-这一节：paragraphs 是本节 1–3 段引言，直接写我方在本节事项上的总体思路、原则和做法；subsections 逐个
-对应 section.points，顺序与标题一致。每个小节写 2–5 段正文，每段 150–350 字，具体说明做什么、
+这一节：paragraphs 是 1–3 段引言，直接写我方对 section.heading 所述事项的总体思路、原则和做法；
+subsections 与 section.points 一一对应，数量与顺序一致，不增加空小节。每个小节写 2–5 段正文，每段 150–350 字，具体说明做什么、
 怎么做、谁负责、什么频次和时限、留下什么记录、如何检查与考核、出现问题如何处置，紧扣
 item.rule 的评价要点与 needs_text 的实际需求；不写空话、口号和泛泛承诺，不重复其他节的内容。
 适合用表格表达的内容（岗位职责、工作计划与时间节点、检查频次、考核指标、应急分级、台账清单等）
@@ -90,12 +91,18 @@ class SolutionProvider(Protocol):
     async def draft(self, request: SolutionProviderRequest) -> SolutionProviderResult: ...
 
 
+EMPTY_TEXT = re.compile(r"^[（(]?\s*(无|暂无|空|N/?A|none)\s*[）)]?$", re.IGNORECASE)
+
+
 def distinct(subsections: list[SolutionSubsection]) -> list[SolutionSubsection]:
-    """Drop a subsection the model wrote twice under the same heading."""
+    """Drop a subsection the model wrote twice under the same heading, or left empty."""
     seen: set[str] = set()
     kept = []
     for subsection in subsections:
-        if subsection.heading not in seen:
+        empty = EMPTY_TEXT.match(subsection.heading.strip()) or all(
+            EMPTY_TEXT.match(text.strip()) for text in subsection.paragraphs
+        )
+        if not empty and subsection.heading not in seen:
             seen.add(subsection.heading)
             kept.append(subsection)
     return kept
