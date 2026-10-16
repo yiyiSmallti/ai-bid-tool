@@ -34,8 +34,9 @@ solution that answers each scoring item.
 4. **Deviation table.** Uses the header row of the tender's deviation form.
    Rows are the clauses of the procurement-needs chapter in source order, each
    under its nearest heading; a list table in that chapter is one row naming
-   its item count. Until a response is confirmed the row carries the drafted
-   `完全响应` and `无偏离`, highlighted. Scoring rules and format-chapter text
+   its item count. A row whose quoted requirements all have confirmed response
+   cards carries their response text and the worst of their deviations; until
+   then it carries the drafted `完全响应` and `无偏离`, highlighted. Scoring rules and format-chapter text
    are never rows.
 5. **Solution.** The scoring chapter's subjective items (方案, 措施, 人员管理,
    设施, 建议 and the like) each become a chapter. A model first plans the

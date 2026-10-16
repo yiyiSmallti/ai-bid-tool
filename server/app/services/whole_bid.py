@@ -25,7 +25,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError
-from app.models.entities import OrgProfileRevision, Task, TaskOrgProfile
+from app.models.entities import OrgProfileRevision, Requirement, Task, TaskOrgProfile
+from app.models.response_cards import ResponseCard, ResponseCardRevision
 from app.providers.storage import Storage
 from app.schemas.whole_bid import BidOutline, OutlineForm, OutlineScoringItem
 from app.services import bid_outline, documents
@@ -74,6 +75,53 @@ class Tally:
 class Clause:
     heading: str
     text: str
+
+
+@dataclass(frozen=True)
+class Response:
+    """The current response card of one extracted requirement."""
+
+    quote: str
+    text: str
+    deviation: str
+    confirmed: bool
+
+
+DEVIATION_LABELS = {"none": "无偏离", "positive": "正偏离", "negative": "负偏离"}
+SECRET_FIELD = re.compile(r"\{\{secret\.[^}]+\}\}")
+
+
+def compact(text: str) -> str:
+    return re.sub(r"\s", "", text)
+
+
+def clause_response(clause: Clause, responses: list[Response]) -> tuple[str, str] | None:
+    """The confirmed response and deviation of a clause, or None while any requirement
+    quoted from it is unconfirmed or none is. Several requirements in one clause keep
+    their responses in order and the clause takes the worst deviation."""
+    text = compact(clause.text)
+    matched = [
+        response
+        for response in responses
+        if (quote := compact(response.quote)) and (quote in text or text in quote)
+    ]
+    if not matched or not all(response.confirmed for response in matched):
+        return None
+    # A requirement extracted twice, or once inside a longer one, answers once.
+    quotes = [compact(response.quote) for response in matched]
+    matched = [
+        response
+        for position, response in enumerate(matched)
+        if not any(
+            quotes[position] in other and (quotes[position] != other or earlier < position)
+            for earlier, other in enumerate(quotes)
+            if earlier != position
+        )
+    ]
+    worst = max(matched, key=lambda response: list(DEVIATION_LABELS).index(response.deviation))
+    joined = "\n".join(dict.fromkeys(response.text for response in matched))
+    # Confidential values are filled at export from the encrypted library, never here.
+    return SECRET_FIELD.sub("【待填：保密字段】", joined), DEVIATION_LABELS[worst.deviation]
 
 
 # Field rules match the label just before a blank, or the hint printed on it.
@@ -183,11 +231,11 @@ def needs_clauses(blocks: list[Paragraph | Grid], chapter_title: str) -> list[Cl
 
 COLUMN_WEIGHTS = {
     "number": 1.0,
-    "topic": 2.2,
-    "requirement": 6.5,
-    "response": 2.2,
-    "deviation": 2.0,
-    "other": 2.0,
+    "topic": 1.6,
+    "requirement": 5.0,
+    "response": 5.0,
+    "deviation": 1.4,
+    "other": 1.6,
 }
 
 
@@ -368,9 +416,10 @@ class Renderer:
         grid: Grid,
         rows: list[list[str]] | None = None,
         weights: list[float] | None = None,
+        drafted: set[int] | None = None,
     ) -> None:
-        """A tender table with its spans; `rows` replaces the template rows under the header
-        and `weights` the tender's column widths."""
+        """A tender table with its spans; `rows` replaces the template rows under the header,
+        `weights` the tender's column widths, and `drafted` rows are highlighted."""
         header_rows = 1 if rows is not None else len(grid.heights)
         columns = len(grid.widths)
         if self.pending_break:
@@ -397,7 +446,7 @@ class Renderer:
         for offset, values in enumerate(rows or []):
             for column, value in enumerate(values[:columns]):
                 target = table.cell(header_rows + offset, column)
-                draft = value in {DRAFT_RESPONSE, DRAFT_DEVIATION}
+                draft = offset in (drafted or set()) and value in {DRAFT_RESPONSE, DRAFT_DEVIATION}
                 self._cell(target, value, None, mark=draft)
         self._new()
 
@@ -432,14 +481,15 @@ class Renderer:
         blocks: list[Paragraph | Grid],
         deviation: list[Clause] | None,
         scoring: list[OutlineScoringItem],
+        responses: list[Response],
     ) -> None:
         title_done = False
         for block in blocks:
             if isinstance(block, Grid):
                 if form.kind == "deviation" and deviation is not None:
-                    rows, weights = self.deviation_rows(block, deviation)
-                    self.grid(block, rows, weights)
-                    self.tally.unconfirmed_rows += len(deviation)
+                    rows, weights, drafted = self.deviation_rows(block, deviation, responses)
+                    self.grid(block, rows, weights, drafted)
+                    self.tally.unconfirmed_rows += len(drafted)
                     deviation = None
                 elif form.kind == "scoring_index" and scoring:
                     self.grid(block, self.scoring_rows(block, scoring))
@@ -478,26 +528,34 @@ class Renderer:
         ]
 
     @staticmethod
-    def deviation_rows(grid: Grid, clauses: list[Clause]) -> tuple[list[list[str]], list[float]]:
-        """Rows under the tender's own header, and column weights that give the
-        requirement text room; page references stay empty for the final layout."""
+    def deviation_rows(
+        grid: Grid, clauses: list[Clause], responses: list[Response]
+    ) -> tuple[list[list[str]], list[float], set[int]]:
+        """Rows under the tender's own header, column weights that give the requirement
+        text room, and the rows still drafted; page references stay empty for the final
+        layout."""
         headers = [
             cell.text for cell in sorted(grid.cells, key=lambda c: c.column) if cell.row == 0
         ]
         roles = [deviation_column(header) for header in headers]
         weights = [COLUMN_WEIGHTS[role] for role in roles]
         rows = []
+        drafted: set[int] = set()
         for number, clause in enumerate(clauses, start=1):
+            confirmed = clause_response(clause, responses)
+            if confirmed is None:
+                drafted.add(number - 1)
+            response, deviation = confirmed or (DRAFT_RESPONSE, DRAFT_DEVIATION)
             values = {
                 "number": str(number),
                 "topic": clause.heading,
                 "requirement": clause.text,
-                "response": DRAFT_RESPONSE,
-                "deviation": DRAFT_DEVIATION,
+                "response": response,
+                "deviation": deviation,
                 "other": "",
             }
             rows.append([values[role] for role in roles])
-        return rows, weights
+        return rows, weights, drafted
 
     def finish(self) -> bytes:
         buffer = io.BytesIO()
@@ -578,8 +636,33 @@ async def selected_bidder(session: AsyncSession, task_id: UUID) -> str | None:
     return (data or {}).get("name")
 
 
+async def card_responses(session: AsyncSession, document_id: UUID) -> list[Response]:
+    rows = (
+        await session.execute(
+            select(
+                Requirement.quote,
+                ResponseCardRevision.response_text,
+                ResponseCardRevision.deviation,
+                ResponseCardRevision.state,
+            )
+            .join(ResponseCard, ResponseCard.requirement_id == Requirement.id)
+            .join(ResponseCardRevision, ResponseCardRevision.id == ResponseCard.current_revision_id)
+            .where(Requirement.document_id == document_id)
+        )
+    ).all()
+    return [
+        Response(quote, text or "", deviation or "none", state == "confirmed")
+        for quote, text, deviation, state in rows
+    ]
+
+
 def build(
-    outline: BidOutline, chunks: list[dict], content: bytes | None, task: Task, bidder: str | None
+    outline: BidOutline,
+    chunks: list[dict],
+    content: bytes | None,
+    task: Task,
+    bidder: str | None,
+    responses: list[Response],
 ) -> tuple[bytes, Tally]:
     """The DOCX for an outline; `content` is the PDF, or None for a Word tender."""
     if not outline.forms:
@@ -605,7 +688,7 @@ def build(
     renderer.cover(outline, outline.forms)
     for form, blocks in zip(outline.forms, per_form, strict=True):
         renderer.page_break()
-        renderer.form(form, blocks or text_blocks(form), clauses, outline.scoring_items)
+        renderer.form(form, blocks or text_blocks(form), clauses, outline.scoring_items, responses)
     if tally.draft:
         first_paragraph = renderer.word.paragraphs[0]
         first_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -623,4 +706,5 @@ async def assemble(
     chunks = await bid_outline.load_chunks(session, document.id)
     is_pdf = document.media_type == "application/pdf"
     content = await storage.read(document.storage_key) if is_pdf else None
-    return build(outline, chunks, content, task, await selected_bidder(session, task.id))
+    bidder = await selected_bidder(session, task.id)
+    return build(outline, chunks, content, task, bidder, await card_responses(session, document.id))

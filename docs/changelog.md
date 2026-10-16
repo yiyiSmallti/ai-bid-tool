@@ -19,7 +19,9 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   The outline lists the scoring chapter's items with their score ranges, and
   the scoring index form lists every item except the price score. The
   deviation table uses the tender's header with one row per
-  needs-chapter clause, drafted as 完全响应/无偏离 and highlighted. The file
+  needs-chapter clause; a clause whose requirements all have confirmed response
+  cards carries their response text and deviation, and any other is drafted as
+  完全响应/无偏离 and highlighted. The file
   says 审阅稿 while anything is unfilled. Second slice of the
   [whole-bid plan](plan/whole-bid.md).
 - Desktop previews start each page split by docx-preview on a new printed
