@@ -11,6 +11,12 @@ KINDS = ("amount", "contact", "identity", "bank_account")
 PLACEHOLDER = re.compile(r"\[REDACTED_[A-Z_]+\]")
 # A confidential field reference. Cards keep it; only an export fills in the value.
 SECRET_PLACEHOLDER = re.compile(r"\{\{secret\.([a-z][a-z0-9_]{1,47})\}\}")
+# Record ids are not personal data. Their hyphenated digit groups can read as an
+# account or identity number, and masking one breaks the reference it carries.
+UUID = re.compile(
+    r"(?<![0-9A-Za-z-])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![0-9A-Za-z-])",
+    re.I,
+)
 NUMERIC_KINDS = {"identity", "bank_account", "contact"}
 
 
@@ -184,6 +190,8 @@ def redact(
             secrets.append((start, end, key))
             counts["confidential"] += 1
     secrets = [(*original(start, end), key) for start, end, key in sorted(secrets)]
+    ids = [original(*match.span()) for match in UUID.finditer(text)]
+    kept = sorted([(start, end) for start, end, _ in secrets] + ids)
     matches: list[tuple[int, int, str]] = []
     for kind, pattern in RULES:
         for match in pattern.finditer(text):
@@ -191,16 +199,19 @@ def redact(
             if start == end:
                 continue
             start, end = original(start, end)
+            if any(id_start <= start and end <= id_end for id_start, id_end in ids):
+                continue
             # Union overlapping detections: a broad labelled value must not leave
             # a sensitive suffix exposed because a numeric sub-pattern matched first.
             counts[kind] += 1
-            # A rule hit on a registered value keeps only the parts outside it, so a
-            # label rule cannot mask the placeholder or expose what surrounds it.
-            for secret_start, secret_end, _ in secrets:
-                if start < secret_end and secret_start < end:
-                    if start < secret_start:
-                        matches.append((start, secret_start, kind))
-                    start = max(start, secret_end)
+            # A rule hit on a registered value or a record id keeps only the parts
+            # outside it, so a label rule cannot mask the placeholder or the id, or
+            # expose what surrounds them.
+            for kept_start, kept_end in kept:
+                if start < kept_end and kept_start < end:
+                    if start < kept_start:
+                        matches.append((start, kept_start, kind))
+                    start = max(start, kept_end)
             if start < end:
                 matches.append((start, end, kind))
     if not enabled:

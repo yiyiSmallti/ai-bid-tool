@@ -6,6 +6,12 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Record ids survive outbound redaction
+
+- Redaction no longer masks digit groups inside a hyphenated UUID as an account
+  or identity number, so an agent's summarized pending actions keep the ids they
+  refer to.
+
 ## 2026-10-16: Personal workspace signs itself in
 
 - The desktop personal workspace no longer shows an access-key unlock page or
