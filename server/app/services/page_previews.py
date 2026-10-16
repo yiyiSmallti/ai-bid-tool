@@ -197,7 +197,7 @@ async def submit_export_preview(
     """Open (or reuse) the conversion for this exact export file; the download gate applies."""
     actor, row = await exports.get_export(session, actor, export_id)
     actor, _ = await exports.download_gate(session, actor, row, storage)
-    if not settings.converter_url:
+    if not (settings.converter_url or settings.preview_renderer):
         raise ServiceError("preview_unavailable", "Export previews are not configured", 503, 4)
     run = await session.get(ExportRun, row.run_id)
     if run is None:
