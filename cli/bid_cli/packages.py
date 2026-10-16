@@ -1,4 +1,4 @@
-"""Project package export, status and download over a `bid_` token."""
+"""Project package export, import, status and download over a `bid_` token."""
 
 from pathlib import Path
 from typing import Annotated
@@ -9,6 +9,7 @@ from app.schemas.packages import PackageExport
 
 COMMAND_INPUTS = {
     "package export": PackageExport,
+    "package import": None,
     "package status": None,
     "package download": None,
 }
@@ -26,6 +27,17 @@ def register(app: typer.Typer):
     def package_export(task: Annotated[UUID, typer.Option()], json_output: cli.JsonOption = False):
         body = PackageExport(task_id=task).model_dump(mode="json")
         cli.emit(cli.call("POST", "/packages/export", json=body), "package export", json_output)
+
+    @package_app.command("import")
+    def package_import(file: Annotated[Path, typer.Option()], json_output: cli.JsonOption = False):
+        from app.core.errors import ServiceError
+
+        try:
+            content = file.read_bytes()
+        except OSError as exc:
+            raise ServiceError("missing_file", "Cannot read the package file", 400, 2) from exc
+        files = {"file": (file.name, content, "application/zip")}
+        cli.emit(cli.call("POST", "/packages/import", files=files), "package import", json_output)
 
     @package_app.command("status")
     def package_status(job: Annotated[UUID, typer.Option()], json_output: cli.JsonOption = False):

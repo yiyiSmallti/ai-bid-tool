@@ -54109,6 +54109,31 @@
             "type": "object"
           }
         },
+        "package import": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "file",
+              "options": [
+                "--file"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
         "package status": {
           "cli_parameters": [
             {
