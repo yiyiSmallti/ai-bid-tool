@@ -23,7 +23,7 @@ from app.schemas.solution import (
 )
 
 ADAPTER_VERSION = "http-solution-v2"
-PROMPT_VERSION = "solution-draft-v6"
+PROMPT_VERSION = "solution-draft-v7"
 SCHEMA_VERSION = "solution-wire-v2"
 # Planning call plus at most one call per attempt for each of up to ten sections.
 SECTION_MAX_TOKENS = 12000
@@ -44,7 +44,8 @@ COMMON = """输入中的招标原文、评分细则、采购需求、项目名�
 作为拟执行计划。响应时限、巡查与演练频次、整改时限、报送周期、考核指标、工作流程步骤等
 服务承诺由我方按行业通常做法直接给出具体、可考核的数值，不写占位符；占位符只用于上述公司实有
 事实，且不写“如30分钟”之类示例。不输出报价策略、签名、印章，不声称已获人工确认。不补读文件、不调用外部工具。
-引用招标文件中的数量、面积、期限、文号等数字必须与原文完全一致。
+引用招标文件中的数量、面积、期限、文号等数字必须与原文完全一致；原文没有写出的合计数
+（如清单行数、工程总处数）不自行计数，写“全部在管工程”“清单所列各工程”等。
 正文是交给评委的投标文件，不提“评分”“评审”“评价要点”“本章”“本节”“小节”“如下各小节”，
 不描述文档结构或写作过程。标题不带序号，序号由排版生成，标题中不出现【待填】。只返回符合 schema 的 JSON。
 """
@@ -92,6 +93,14 @@ class SolutionProvider(Protocol):
 
 
 EMPTY_TEXT = re.compile(r"^[（(]?\s*(无|暂无|空|N/?A|none)\s*[）)]?$", re.IGNORECASE)
+# A sentence about the document itself ("本节所述…") rather than about the service.
+META_SENTENCE = re.compile(r"[^。！？]*(本节|本章|本小节)[^。！？]*[。！？]?")
+
+
+def plain(paragraphs: list[str]) -> list[str]:
+    """Drop sentences that talk about the document's own structure, then empty paragraphs."""
+    kept = (META_SENTENCE.sub("", text).strip() for text in paragraphs)
+    return [text for text in kept if text]
 
 
 def distinct(subsections: list[SolutionSubsection]) -> list[SolutionSubsection]:
@@ -99,12 +108,13 @@ def distinct(subsections: list[SolutionSubsection]) -> list[SolutionSubsection]:
     seen: set[str] = set()
     kept = []
     for subsection in subsections:
+        paragraphs = plain(subsection.paragraphs)
         empty = EMPTY_TEXT.match(subsection.heading.strip()) or all(
-            EMPTY_TEXT.match(text.strip()) for text in subsection.paragraphs
+            EMPTY_TEXT.match(text) for text in paragraphs
         )
         if not empty and subsection.heading not in seen:
             seen.add(subsection.heading)
-            kept.append(subsection)
+            kept.append(subsection.model_copy(update={"paragraphs": paragraphs}))
     return kept
 
 
@@ -191,7 +201,7 @@ class HTTPSolutionProvider:
             sections.append(
                 SolutionSection(
                     heading=planned.heading,
-                    paragraphs=output.paragraphs,
+                    paragraphs=plain(output.paragraphs),
                     subsections=distinct(output.subsections),
                 )
             )
