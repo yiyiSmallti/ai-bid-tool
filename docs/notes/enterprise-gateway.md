@@ -53,10 +53,10 @@ signs in as a member, and every human decision records which member made it.
   before any other route; until then the session reaches only
   `GET /auth/session`, `DELETE /auth/session` and the password route.
 - Administrators manage members over `/members` (create, update, password
-  reset, session revocation). The CLI does the same with
-  `bid member list|create|update|reset-password|revoke-sessions` and an
-  administrator's `bid_` token holding `member:manage`; a one-time password
-  goes to the new owner-only file named by `--output`.
+  reset, session revocation) in a signed-in session only. `member:manage` is
+  human-only: no `bid_` token may hold it (`token_forbidden_member_scope`,
+  [0017_token_member_scope.py](../../server/migrations/versions/0017_token_member_scope.py)),
+  so the CLI has no account commands.
 - `GET /installation` (and `bid installation show`) is unauthenticated and
   returns the mode, company name, server version and contract version.
 - A project is visible to administrators and its members only; anyone else
@@ -96,13 +96,13 @@ signs in as a member, and every human decision records which member made it.
   `provider_model_unavailable`. `PUT /account/default-model` with `{"slot"}`
   (or `null`) sets the model a member's runs use when none is named; a default
   that is no longer visible falls back to the company default.
-- `PUT /members/{id}/quota` with `{"monthly_company_tokens"}` (`bid member
-  quota --tokens N | --clear`) caps a member's company-model tokens per UTC
-  calendar month; a job whose next call would pass the cap fails with
-  `member_quota_exceeded`. Personal models are never capped.
-  `GET /members/{id}/usage?month=YYYY-MM` (`bid member usage`) returns calls
-  and tokens by owner and model to the member and to `member:manage`, which
-  sees another member's personal models without their slot, provider or model.
+- `PUT /members/{id}/quota` with `{"monthly_company_tokens"}` caps a member's
+  company-model tokens per UTC calendar month; a job whose next call would pass
+  the cap fails with `member_quota_exceeded`. Personal models are never capped.
+  `GET /members/{id}/usage?month=YYYY-MM` (`bid member usage` for one's own)
+  returns calls and tokens by owner and model to the member and to
+  `member:manage`, which sees another member's personal models without their
+  slot, provider or model.
 - `POST /packages/export` with `{"task_id"}` (`bid package export --task`)
   starts a `package_export` job for a project the caller can read with
   `package:export`; on a gateway the project must have
@@ -150,8 +150,7 @@ signs in as a member, and every human decision records which member made it.
 - `bid_` tokens and agent principals belong to the member who created them.
   Their scopes are intersected with the member's current role scopes, and they
   fail once the member is disabled; an agent step then ends with
-  `agent_authority_expired`. Agents never hold `member:manage`; a token may hold
-  it only when bound to a member (`token_forbidden_member_scope`).
+  `agent_authority_expired`. Agents and tokens never hold `member:manage`.
 - Sign-in runs in `PasswordAttempts`
   ([password_attempts.py](../../server/app/core/password_attempts.py)): under
   advisory locks on the source and the login, five failures per login or 30 per
@@ -341,7 +340,8 @@ signs in as a member, and every human decision records which member made it.
   personal.
 - `GET /members` needs `member:manage`, so only an administrator can add
   project members from the client; an owner who is not one can hand over and
-  remove but not add.
+  remove but not add, and gets no member directory
+  ([invariant 7](../plan/enterprise-gateway.md#invariants)).
 - A wrong current password on `POST /account/password` answers 401
   `invalid_login`; the client keeps the session for that route only.
 - The limiter keys on the client address the API sees. Behind a reverse proxy

@@ -6,6 +6,13 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Accounts managed in person only
+
+- `member:manage` is human-only: an administrator's `bid_` token can no longer
+  hold it, and existing tokens lose it on upgrade. The `bid member list`,
+  `create`, `update`, `reset-password`, `revoke-sessions` and `quota` commands
+  are removed; `bid member usage` still reads one's own usage.
+
 ## 2026-10-16: Enterprise end-to-end acceptance
 
 - `scripts/enterprise_e2e/run.py` starts a gateway and two personal

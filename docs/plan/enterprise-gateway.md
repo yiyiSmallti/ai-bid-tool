@@ -40,6 +40,11 @@ names may change in review, behavior may not change silently.
    authorized reveal), passwords and session secrets.
 6. A non-member of a project cannot learn that the project exists: every
    project-scoped request by a non-member returns `not_found`.
+7. Accounts and project data are separate. Members share project data through
+   project membership; accounts, roles, grants, quotas and passwords are managed
+   only by an administrator in a signed-in session. No `bid_` token or agent
+   manages members, and a project owner who is not an administrator gets no
+   member directory.
 
 ## Deployment mode
 
@@ -229,7 +234,7 @@ are absent and every check below is skipped.
 | `provider:write` on company models | No | Yes |
 | `provider:write` on own personal models | Yes, if personal models are enabled | Yes |
 | `credential:manage`, `clef:manage`, `trust-anchor:manage` | No | Yes |
-| `member:manage` (new) | No | Yes |
+| `member:manage` (new) | No | In a signed-in session only |
 | `token:create` | Yes, for themselves | Yes, for themselves |
 | `agent:run`, `agent:read`, `agent:cancel` | Inside their projects | Yes |
 
