@@ -210,6 +210,13 @@ signs in as a member, and every human decision records which member made it.
   public memory. 我的用量 ([native_usage.go](../../desktop/native_usage.go))
   shows the member's monthly usage, and an administrator's 用量 picks any
   member.
+- Uploads and downloads go through `APIClient.transfer` in
+  [native_client.go](../../desktop/native_client.go): no total timeout, and
+  a failure once neither side moves for 60 seconds; every other request keeps
+  the 90-second limit. A gateway that cannot be reached, at opening or on any
+  page, sets `Offline` instead of an error: the page stays, a banner offers
+  重试连接, and retrying checks the contract and session again before
+  reloading. Nothing falls back to the local stack.
 
 ## Pitfalls
 
@@ -234,6 +241,9 @@ signs in as a member, and every human decision records which member made it.
 - The client never uses a system proxy for a gateway, so a gateway reachable
   only through one cannot be added.
 - A pinned certificate that the gateway renews must be confirmed again.
+- An upload counts the wait for the gateway's answer as a stall, so an upload
+  route that works for more than 60 seconds after the last byte fails on the
+  client.
 - Each saved model's `configuration` carries its `owner` in personal
   installations too; the client rejects a model without it.
 - An administrator's model page and private-memory tab never show another
