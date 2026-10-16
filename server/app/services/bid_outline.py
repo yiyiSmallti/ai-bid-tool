@@ -9,6 +9,7 @@ guessed structure.
 
 import re
 from dataclasses import dataclass
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -16,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError
 from app.models.entities import Chunk
-from app.schemas.whole_bid import BidOutline, OutlineChapter, OutlineForm
+from app.schemas.whole_bid import BidOutline, ChapterRole, FormKind, OutlineChapter, OutlineForm
 from app.services import documents
 
 CHAPTER = re.compile(r"^第\s*[一二三四五六七八九十百零〇\d]+\s*[章篇部]分?\s*(.*)$")
@@ -113,10 +114,10 @@ def classify(title: str, rules: tuple[tuple[str, re.Pattern[str]], ...], default
     return default
 
 
-def chapter_role(title: str) -> str:
+def chapter_role(title: str) -> ChapterRole:
     if "合同" in title and not re.search(r"投标|响应", title):
         return "contract"
-    return classify(title, ROLE_RULES, "other")
+    return cast(ChapterRole, classify(title, ROLE_RULES, "other"))
 
 
 def chapter_heads(lines: list[Line]) -> list[tuple[int, str]]:
@@ -194,8 +195,9 @@ def split_forms(lines: list[Line]) -> list[OutlineForm]:
         end = marks[position + 1][0] if position + 1 < len(marks) else len(lines)
         body = lines[index + 1 : end]
         title, spaced = form_title(rest, body)
-        kind = (
-            "cover" if spaced or COVER_TITLE.match(title) else classify(title, KIND_RULES, "form")
+        kind = cast(
+            FormKind,
+            "cover" if spaced or COVER_TITLE.match(title) else classify(title, KIND_RULES, "form"),
         )
         forms.append(
             OutlineForm(
