@@ -140,6 +140,8 @@ def create_router(
         session, identity = ctx
         check_signature(crypto, signature, "whole_bid", document_id=document_id)
         content, tally = await whole_bid.assemble(session, document_id, storage)
+        if not tally.draft:
+            identity.require("export")
         response = attachment(content, whole_bid.DOCX, "投标文件.docx")
         response.headers.update(tally.headers())
         return response

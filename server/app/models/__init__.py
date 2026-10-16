@@ -27,4 +27,5 @@ from app.models import sandbox as sandbox
 from app.models import score as score
 from app.models import screenshots as screenshots
 from app.models import settings as settings
+from app.models import solution as solution
 from app.models import task_events as task_events

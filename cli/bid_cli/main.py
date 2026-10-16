@@ -76,6 +76,7 @@ from bid_cli.schema import command_schema
 from bid_cli.score import app as score_app
 from bid_cli.score import rubric_job_exit, score_job_exit
 from bid_cli.screenshots import register as register_screenshot_commands
+from bid_cli.solution import register as register_solution_commands
 from bid_cli.task_board import register as register_task_board_commands
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
@@ -1341,6 +1342,7 @@ platform_app.add_typer(platform_credential_app, name="credential")
 platform_app.add_typer(platform_trust_anchor_app, name="trust-anchor")
 
 
+register_solution_commands(app)
 register_task_board_commands(task_app)
 register_member_commands(app, task_app)
 register_package_commands(app)

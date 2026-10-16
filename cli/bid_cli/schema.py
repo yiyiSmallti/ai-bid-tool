@@ -204,6 +204,14 @@ from app.schemas.screenshot_contracts import (
     VendorSearchInput,
 )
 from app.schemas.simulation_contracts import ProductSimulationInput
+from app.schemas.solution import (
+    SolutionChapter,
+    SolutionConfirm,
+    SolutionDraftReceipt,
+    SolutionDraftRequest,
+    SolutionEdit,
+    SolutionList,
+)
 from app.schemas.source_contracts import SourceReadArguments, SourceSearchArguments
 from app.schemas.task_board import (
     BoardActivityView,
@@ -362,6 +370,11 @@ COMMANDS = {
     "tender parse": JobAction,
     "tender outline": None,
     "tender whole-bid": None,
+    "solution draft": SolutionDraftRequest,
+    "solution list": None,
+    "solution show": None,
+    "solution edit": SolutionEdit,
+    "solution confirm": SolutionConfirm,
     "req extract": JobAction,
     "req list": None,
     "req history": None,
@@ -528,6 +541,7 @@ AGENT_OUTPUTS = {
     },
 }
 AGENT_ITEMS = {
+    "solution list": SolutionChapter,
     "agent list": AgentSessionView,
     "agent messages": AgentMessageView,
     "agent steps": AgentStepView,
@@ -551,6 +565,13 @@ OUTPUTS = (
     | CREDENTIAL_OUTPUTS
     | AGENT_OUTPUTS
     | {"tender outline": TypeAdapter(BidOutline), "tender whole-bid": TypeAdapter(WholeBidReceipt)}
+    | {
+        "solution draft": TypeAdapter(SolutionDraftReceipt),
+        "solution list": TypeAdapter(SolutionList),
+        "solution show": TypeAdapter(SolutionChapter),
+        "solution edit": TypeAdapter(SolutionChapter),
+        "solution confirm": TypeAdapter(SolutionChapter),
+    }
 )
 
 

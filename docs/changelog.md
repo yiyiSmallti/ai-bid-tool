@@ -6,6 +6,24 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Solution chapter drafting and review
+
+- `bid solution draft` submits one model call per selected subjective scoring
+  item, with the item's complete rule, bounded procurement needs and project
+  facts. The response plans four to eight sections and drafts concrete bidder
+  methods, leaving unknown company facts as `【待填：…】`. Calls use the existing
+  admission, masking and usage-accounting path.
+- `bid solution list`, `show`, `edit` and `confirm` expose current chapters.
+  Editing appends a draft; confirmation appends a human decision. Expected
+  revisions reject stale writes, and database gates reject confirmation by
+  tokens, agents or workers. Migration `0018` retains the revision history.
+- Whole bids insert these chapters in scoring order after the technical cover,
+  solution form or last form. Missing chapters remain highlighted, and
+  unconfirmed chapters appear in the download receipt. A file with an
+  unconfirmed chapter or a placeholder stays an 审阅稿; submission copies
+  require a human. Implements slice 3 of the
+  [whole-bid plan](plan/whole-bid.md).
+
 ## 2026-10-16: Whole-bid assembly
 
 - `GET /documents/{id}/whole-bid-link` signs a download of the assembled whole

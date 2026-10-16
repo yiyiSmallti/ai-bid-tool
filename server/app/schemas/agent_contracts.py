@@ -20,6 +20,8 @@ AgentScope = Literal[
     "card:generate",
     "draft:read",
     "draft:run",
+    "solution:draft",
+    "solution:read",
     "resource:read",
     "certificate:read",
     "certificate:file:read",
@@ -64,7 +66,7 @@ class AgentLimits(Contract):
 class AgentStartRequest(Contract):
     extraction_job_id: UUID
     message: str = Field(min_length=1, max_length=8000)
-    requested_scopes: list[AgentScope] = Field(min_length=1, max_length=12)
+    requested_scopes: list[AgentScope] = Field(min_length=1, max_length=13)
     limits: AgentLimits
     idempotency_key: UUID
     dry_run: bool = False

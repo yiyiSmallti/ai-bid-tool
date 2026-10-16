@@ -115,6 +115,7 @@ class Settings(PDFSettings, DeploymentSettings):
     score_batch_chars: int = Field(default=64000, ge=1000)
     # Complete serialized rubric request, including prompts, schema and vendor options.
     rubric_max_request_bytes: int = Field(default=192 * 1024, ge=1000)
+    solution_needs_max_chars: int = Field(default=24000, ge=1000)
     llm_concurrency: int = 8
     # Drafting sends short requirement quotes, not document pages, so its batches may be
     # this many times the extraction budget of the reasoning level.

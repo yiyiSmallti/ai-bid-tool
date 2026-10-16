@@ -40,20 +40,30 @@ solution that answers each scoring item.
    are never rows.
 5. **Solution.** The scoring chapter's subjective items (方案, 措施, 人员管理,
    设施, 建议 and the like) each become a chapter. A model first plans the
-   chapter headings from the scoring text and the needs chapter, then drafts
-   each chapter. Drafts describe methods and plans; company facts the model
+   chapter headings from the scoring rule and the needs chapter, then drafts
+   the sections in the same call: one call per selected subjective item, with
+   four to eight sections. The needs text is bounded by
+   `Settings.solution_needs_max_chars` in
+   [config.py](../../server/app/core/config.py). Drafts describe methods and plans;
+   company facts the model
    cannot know (staff, certificates, past projects, equipment counts) are
    placeholders. A human confirms each chapter; editing a chapter replaces its
-   text and clears its confirmation.
+   text and clears its confirmation. Both editing and confirmation require
+   the expected current revision; model jobs never confirm a chapter.
 6. **File.** One DOCX: cover, table of contents, then every form in order, each
    starting a new page with its tender label and title as a heading, and the
-   solution in the tender's solution form or, without one, after the last
-   technical form. A4, 宋体 body, headings in 黑体, page numbers. The file is a
+   solution immediately after the technical cover form, or after the solution
+   form when there is no technical cover, or after the last form when neither
+   exists. Missing subjective chapters remain visible as `【待起草：…】`.
+   A4, 宋体 body, headings in 黑体, page numbers. The file is a
    draft (审阅稿) while any chapter is unconfirmed or any placeholder remains,
    and says so on its cover; otherwise it is a submission copy (提交稿).
 7. **Access.** Outline and assembly are human or agent reads; drafting is a
-   model job; chapter confirmation and assembling a submission copy are
-   human-only, like other confirmations.
+   model job available to the human and actors holding `solution:draft`;
+   chapter reads and exports containing chapter text require `solution:read`.
+   Editing and confirmation are
+   human-only (`solution:edit` and `solution:confirm`), as is assembling a
+   submission copy.
 
 ## Delivery slices
 
@@ -61,7 +71,7 @@ solution that answers each scoring item.
 | --- | --- | --- |
 | 1 | Outline service, API and CLI (`bid tender outline`) | Done |
 | 2 | Assembly of forms, copies placeholders and deviation table; download (`bid tender whole-bid`) | Done |
-| 3 | Solution planning and drafting job, chapter review and confirmation | Planned |
+| 3 | Solution planning and drafting job, chapter review and confirmation | Done |
 | 4 | Structured company fields for form filling | Planned |
 | 5 | Desktop page for outline, drafting, chapter review and assembly | Planned |
 | 6 | Acceptance on real tenders against the winning-bid reference | Planned |

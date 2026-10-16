@@ -43,6 +43,10 @@ class ApiToken(Base):
     )
     __table_args__ = (
         CheckConstraint(
+            "NOT (scopes ?| ARRAY['solution:confirm','solution:edit'])",
+            name="token_forbidden_solution_confirmation",
+        ),
+        CheckConstraint(
             "((NOT (scopes ?| ARRAY['agent:read'::text, 'agent:run'::text, 'agent:cancel'::text])))",
             name="token_forbidden_agent_scopes",
         ),

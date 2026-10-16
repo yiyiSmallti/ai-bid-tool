@@ -24,12 +24,13 @@ from docx.styles.style import CharacterStyle, ParagraphStyle
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ServiceError
+from app.core.errors import ServiceError, not_found
 from app.models.entities import OrgProfileRevision, Requirement, Task, TaskOrgProfile
 from app.models.response_cards import ResponseCard, ResponseCardRevision
 from app.providers.storage import Storage
+from app.schemas.solution import SolutionChapter
 from app.schemas.whole_bid import BidOutline, OutlineForm, OutlineScoringItem
-from app.services import bid_outline, documents
+from app.services import bid_outline, documents, task_access
 from app.services.form_layout import Blank, Cell, Grid, Paragraph, Text, form_blocks, plain
 
 BODY_FONT, HEADING_FONT = "宋体", "黑体"
@@ -56,17 +57,21 @@ class Tally:
 
     placeholders: list[str] = field(default_factory=list)
     unconfirmed_rows: int = 0
+    unconfirmed_chapters: int = 0
     copies: list[str] = field(default_factory=list)
 
     @property
     def draft(self) -> bool:
-        return bool(self.placeholders or self.unconfirmed_rows or self.copies)
+        return bool(
+            self.placeholders or self.unconfirmed_rows or self.unconfirmed_chapters or self.copies
+        )
 
     def headers(self) -> dict[str, str]:
         return {
             "X-Whole-Bid-Draft": "1" if self.draft else "0",
             "X-Whole-Bid-Placeholders": str(len(self.placeholders)),
             "X-Whole-Bid-Unconfirmed-Rows": str(self.unconfirmed_rows),
+            "X-Whole-Bid-Unconfirmed-Chapters": str(self.unconfirmed_chapters),
             "X-Whole-Bid-Copies": str(len(self.copies)),
         }
 
@@ -89,6 +94,7 @@ class Response:
 
 DEVIATION_LABELS = {"none": "无偏离", "positive": "正偏离", "negative": "负偏离"}
 SECRET_FIELD = re.compile(r"\{\{secret\.[^}]+\}\}")
+SOLUTION_PLACEHOLDER = re.compile(r"【待填：([^】]+)】")
 
 
 def compact(text: str) -> str:
@@ -336,7 +342,9 @@ class Renderer:
         self.tally.placeholders.append(label)
         self.run(paragraph, f"【{prefix}：{label}】", mark=True, underline=prefix == "待填")
 
-    def cover(self, outline: BidOutline, forms: list[OutlineForm]) -> None:
+    def cover(
+        self, outline: BidOutline, forms: list[OutlineForm], solution_after: int | None = None
+    ) -> None:
         for _ in range(6):
             self._new()
         for text, size in (
@@ -364,10 +372,46 @@ class Renderer:
         heading = self._new()
         heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
         self.run(heading, "目  录", size=16, bold=True)
-        for form in forms:
+        for position, form in enumerate(forms):
             entry = self._new()
             entry.paragraph_format.left_indent = Cm(0.5)
             self.run(entry, f"{form.label}  {short_title(form.title)}")
+            if position == solution_after:
+                for number, item in enumerate(
+                    (item for item in outline.scoring_items if item.subjective), 1
+                ):
+                    entry = self._new()
+                    entry.paragraph_format.left_indent = Cm(0.5)
+                    self.run(entry, f"{number}、{item.title}")
+
+    def solution(self, items: list[OutlineScoringItem], chapters: list[SolutionChapter]) -> None:
+        """Render the current revision in scoring order, keeping absent drafts visible."""
+        by_item = {(chapter.title, chapter.score_range): chapter for chapter in chapters}
+        for number, item in enumerate((item for item in items if item.subjective), 1):
+            self.pending_break = False
+            heading = self._new(f"{number}、{item.title}", style="Heading 1")
+            heading.paragraph_format.page_break_before = True
+            chapter = by_item.get((item.title, item.score_range))
+            if chapter is None:
+                self.tally.unconfirmed_chapters += 1
+                self.run(self._new(), f"【待起草：{item.title}】", mark=True)
+                continue
+            if chapter.current.state != "confirmed":
+                self.tally.unconfirmed_chapters += 1
+            for section in chapter.current.sections:
+                self.solution_text(self._new(style="Heading 2"), section.heading)
+                for text in section.paragraphs:
+                    paragraph = self._new()
+                    paragraph.paragraph_format.first_line_indent = Pt(24)
+                    self.solution_text(paragraph, text)
+
+    def solution_text(self, paragraph, text: str) -> None:
+        start = 0
+        for match in SOLUTION_PLACEHOLDER.finditer(text):
+            self.run(paragraph, text[start : match.start()])
+            self.placeholder(paragraph, match.group(1))
+            start = match.end()
+        self.run(paragraph, text[start:])
 
     def blank(self, paragraph, piece: Blank, label: str) -> None:
         name = field_of(label, piece.hint)
@@ -663,6 +707,7 @@ def build(
     task: Task,
     bidder: str | None,
     responses: list[Response],
+    chapters: list[SolutionChapter] | None = None,
 ) -> tuple[bytes, Tally]:
     """The DOCX for an outline; `content` is the PDF, or None for a Word tender."""
     if not outline.forms:
@@ -685,14 +730,30 @@ def build(
         per_form = split_by_form(blocks, outline.forms)
     else:
         per_form = [text_blocks(form) for form in outline.forms]
-    renderer.cover(outline, outline.forms)
-    for form, blocks in zip(outline.forms, per_form, strict=True):
+    technical_cover = next(
+        (
+            index
+            for index, form in enumerate(outline.forms)
+            if form.kind == "cover" and "技术" in form.title
+        ),
+        None,
+    )
+    solution_form = next(
+        (index for index, form in enumerate(outline.forms) if form.kind == "solution"),
+        len(outline.forms) - 1,
+    )
+    solution_after = technical_cover if technical_cover is not None else solution_form
+    renderer.cover(outline, outline.forms, solution_after)
+    for index, (form, blocks) in enumerate(zip(outline.forms, per_form, strict=True)):
         renderer.page_break()
         renderer.form(form, blocks or text_blocks(form), clauses, outline.scoring_items, responses)
-    if tally.draft:
-        first_paragraph = renderer.word.paragraphs[0]
-        first_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        renderer.run(first_paragraph, "审阅稿", size=14, bold=True, mark=True)
+        if index == solution_after:
+            renderer.solution(outline.scoring_items, chapters or [])
+    first_paragraph = renderer.word.paragraphs[0]
+    first_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    renderer.run(
+        first_paragraph, "审阅稿" if tally.draft else "提交稿", size=14, bold=True, mark=tally.draft
+    )
     renderer.word.core_properties.title = facts.project_name or "投标文件"
     return renderer.finish(), tally
 
@@ -700,11 +761,27 @@ def build(
 async def assemble(
     session: AsyncSession, document_id: UUID, storage: Storage
 ) -> tuple[bytes, Tally]:
+    from app.services import solution
+
     document = await documents.require_document(session, document_id)
     outline = await bid_outline.outline(session, document_id)
     task = await session.get_one(Task, document.task_id)
+    chapters = await solution.current_chapters(session, document.id)
+    if chapters:
+        actor = session.info.get("actor")
+        if actor is None:
+            raise not_found()
+        await task_access.access(session, actor, task.id, scope="solution:read")
     chunks = await bid_outline.load_chunks(session, document.id)
     is_pdf = document.media_type == "application/pdf"
     content = await storage.read(document.storage_key) if is_pdf else None
     bidder = await selected_bidder(session, task.id)
-    return build(outline, chunks, content, task, bidder, await card_responses(session, document.id))
+    return build(
+        outline,
+        chunks,
+        content,
+        task,
+        bidder,
+        await card_responses(session, document.id),
+        chapters,
+    )

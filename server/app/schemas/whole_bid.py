@@ -55,6 +55,8 @@ class OutlineScoringItem(Contract):
 
     title: str = Field(min_length=1)
     score_range: str
+    rule: str = ""
+    subjective: bool = False
 
 
 class BidOutline(Contract):
@@ -74,4 +76,5 @@ class WholeBidReceipt(Contract):
     draft: bool
     placeholders: int = Field(ge=0)
     unconfirmed_rows: int = Field(ge=0)
+    unconfirmed_chapters: int = Field(default=0, ge=0)
     copies: int = Field(ge=0)

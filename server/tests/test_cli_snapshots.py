@@ -13,6 +13,29 @@ IDENTIFIER = "00000000-0000-0000-0000-000000000001"
 IDENTIFIER_2 = "00000000-0000-0000-0000-000000000002"
 IDENTIFIER_3 = "00000000-0000-0000-0000-000000000003"
 IDENTIFIER_4 = "00000000-0000-0000-0000-000000000004"
+SOLUTION_SECTIONS = [{"heading": "Service methods", "paragraphs": ["Proposed delivery process."]}]
+SOLUTION_CHAPTER = {
+    "id": IDENTIFIER_3,
+    "task_id": IDENTIFIER,
+    "document_id": IDENTIFIER_2,
+    "title": "Service solution",
+    "score_range": "0-20",
+    "placeholder_count": 0,
+    "current": {
+        "id": IDENTIFIER_4,
+        "revision": 1,
+        "state": "draft",
+        "origin": "model",
+        "sections": SOLUTION_SECTIONS,
+        "actor_kind": "human",
+        "actor_token_id": None,
+        "agent_session_id": None,
+        "job_id": IDENTIFIER_4,
+        "created_at": "2027-01-02T03:04:05Z",
+        "confirmed_at": None,
+    },
+}
+
 TASK = {
     "id": IDENTIFIER,
     "name": "Synthetic task",
@@ -302,6 +325,7 @@ async def fake_whole_bid_download(client, document, output):
             "draft": True,
             "placeholders": 9,
             "unconfirmed_rows": 28,
+            "unconfirmed_chapters": 2,
             "copies": 3,
         },
     ).model_dump(mode="json")
@@ -604,7 +628,44 @@ CONFIDENTIAL_VALUE = {
 async def fake_request(self, method, path, **kwargs):
     # Contract fixtures only: no real service, provider or user data is involved.
     data, items, warnings = {}, [], []
-    if path == "/confidential-fields":
+    if path == f"/tasks/{IDENTIFIER}/solutions/draft":
+        assert method == "POST"
+        assert kwargs["json"] == {
+            "document_id": IDENTIFIER_2,
+            "titles": ["Service solution", "Staff management"],
+            "model": IDENTIFIER_4,
+        }
+        data = {
+            "job_id": IDENTIFIER_4,
+            "task_id": IDENTIFIER,
+            "document_id": IDENTIFIER_2,
+            "titles": ["Service solution", "Staff management"],
+        }
+    elif path == f"/tasks/{IDENTIFIER}/solutions":
+        assert method == "GET" and kwargs["params"] == {"document": IDENTIFIER_2}
+        data = {"task_id": IDENTIFIER, "document_id": IDENTIFIER_2, "total": 1}
+        items = [SOLUTION_CHAPTER]
+    elif path in {f"/solutions/{IDENTIFIER_3}", f"/solutions/{IDENTIFIER_3}/confirm"}:
+        data = SOLUTION_CHAPTER
+        if method == "PUT":
+            assert kwargs["json"] == {"expected_revision": 1, "sections": SOLUTION_SECTIONS}
+            data = {
+                **data,
+                "current": {**data["current"], "revision": 2, "origin": "human", "job_id": None},
+            }
+        elif method == "POST":
+            assert kwargs["json"] == {"expected_revision": 1}
+            data = {
+                **data,
+                "current": {
+                    **data["current"],
+                    "state": "confirmed",
+                    "confirmed_at": "2027-01-02T03:05:05Z",
+                },
+            }
+        else:
+            assert method == "GET"
+    elif path == "/confidential-fields":
         if method == "POST":
             assert kwargs["json"] == {
                 "key": "bid_total",
@@ -1042,6 +1103,8 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
     product_input, update_input, selection_input = (
         tmp_path / name for name in ("product.json", "update.json", "selection.json")
     )
+    sections_input = tmp_path / "solution-sections.json"
+    sections_input.write_text(json.dumps(SOLUTION_SECTIONS))
     product_input.write_text(json.dumps({"data": PRODUCT["data"]}))
     update_input.write_text(json.dumps({"expected_revision": 1, "data": PRODUCT["data"]}))
     selection_input.write_text(json.dumps({"product_id": IDENTIFIER}))
@@ -1444,6 +1507,11 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
             "--output",
             str(tmp_path / "whole-bid.docx"),
         ],
+        "solution draft": ["solution", "draft", "--task", IDENTIFIER, "--document", IDENTIFIER_2, "--title", "Service solution", "--title", "Staff management", "--model", IDENTIFIER_4],
+        "solution list": ["solution", "list", "--task", IDENTIFIER, "--document", IDENTIFIER_2],
+        "solution show": ["solution", "show", IDENTIFIER_3],
+        "solution edit": ["solution", "edit", IDENTIFIER_3, "--expected-revision", "1", "--sections", str(sections_input)],
+        "solution confirm": ["solution", "confirm", IDENTIFIER_3, "--expected-revision", "1"],
         "req extract": ["req", "extract", "--document", IDENTIFIER, "--reasoning", "high"],
         "req list": ["req", "list", "--task", IDENTIFIER, "--job", IDENTIFIER],
         "req history": ["req", "history", "--task", IDENTIFIER],
