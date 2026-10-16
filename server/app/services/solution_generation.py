@@ -12,6 +12,7 @@ from app.core.security import Secrets
 from app.models.entities import Document, Job
 from app.providers import llm as llm_providers
 from app.providers.configured import model_identity
+from app.providers.llm import with_reasoning
 from app.providers.solution import (
     ADAPTER_VERSION,
     PROMPT_VERSION,
@@ -65,7 +66,9 @@ def source_inputs(chunks: list[dict], titles: list[str] | None) -> dict:
     return {"items": scored, "needs_text": text}
 
 
-async def snapshot(session, actor, task_id, document_id, titles, provider, settings):
+async def snapshot(session, actor, task_id, document_id, titles, provider, settings, reasoning):
+    # The model's reasoning level is part of the fixed input, as for rubric scoring.
+    provider, level, _ = with_reasoning(provider, reasoning)
     task = await task_access.access(
         session, actor, task_id, "solution:draft", write=True, bind_context=False
     )
@@ -125,12 +128,13 @@ async def snapshot(session, actor, task_id, document_id, titles, provider, setti
         "redaction_rule_version": redaction.RULE_VERSION,
         "redacted_counts": counts,
         "model": model_identity(provider),
+        "reasoning": level,
         "provider_options": provider_options(provider),
         "adapter_version": ADAPTER_VERSION,
         "prompt_version": PROMPT_VERSION,
         "schema_version": SCHEMA_VERSION,
     }
-    return manifest, requests
+    return manifest, requests, provider
 
 
 async def target_revisions(session, document_id, titles, score_ranges):
@@ -172,8 +176,8 @@ async def target_revisions(session, document_id, titles, score_ranges):
 @task_authorized("solution:draft", write=True)
 async def submit(session, actor, task_id, body: SolutionDraftRequest, provider, settings):
     solution_provider(provider)
-    manifest, requests = await snapshot(
-        session, actor, task_id, body.document_id, body.titles, provider, settings
+    manifest, requests, _ = await snapshot(
+        session, actor, task_id, body.document_id, body.titles, provider, settings, body.reasoning
     )
     targets = await target_revisions(
         session, body.document_id, manifest["titles"], manifest["score_ranges"]
@@ -238,8 +242,15 @@ async def current_snapshot(session, actor, job, settings):
     submission = job.result["submission"]
     expected = submission["input_manifest"]
     provider = await llm_providers.resolve_llm(session, settings, job=job)
-    manifest, requests = await snapshot(
-        session, actor, job.task_id, job.document_id, expected["titles"], provider, settings
+    manifest, requests, provider = await snapshot(
+        session,
+        actor,
+        job.task_id,
+        job.document_id,
+        expected["titles"],
+        provider,
+        settings,
+        expected.get("reasoning"),
     )
     if manifest != expected or digest(manifest) != submission["input_hash"]:
         raise ServiceError(

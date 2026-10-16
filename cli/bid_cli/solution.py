@@ -22,12 +22,17 @@ def register(app: typer.Typer):
         document: Annotated[UUID, typer.Option()],
         title: Annotated[list[str] | None, typer.Option("--title")] = None,
         model: Annotated[UUID | None, typer.Option()] = None,
+        reasoning: Annotated[str | None, typer.Option()] = None,
         json_output: cli.JsonOption = False,
     ):
-        request = SolutionDraftRequest(document_id=document, titles=title, model=model)
+        request = SolutionDraftRequest(
+            document_id=document, titles=title, model=model, reasoning=reasoning
+        )
         cli.emit(
             cli.call(
-                "POST", f"/tasks/{task}/solutions/draft", json=request.model_dump(mode="json")
+                "POST",
+                f"/tasks/{task}/solutions/draft",
+                json=request.model_dump(mode="json", exclude_none=True),
             ),
             "solution draft",
             json_output,

@@ -82,6 +82,7 @@ class SolutionDraftRequest(Contract):
     document_id: UUID
     titles: list[str] | None = None
     model: UUID | None = None
+    reasoning: str | None = None
 
 
 class SolutionDraftReceipt(Contract):

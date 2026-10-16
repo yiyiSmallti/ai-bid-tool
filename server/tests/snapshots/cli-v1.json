@@ -103831,6 +103831,16 @@
               "type": "uuid"
             },
             {
+              "default": null,
+              "multiple": false,
+              "name": "reasoning",
+              "options": [
+                "--reasoning"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
               "default": "False",
               "multiple": false,
               "name": "json_output",
@@ -103861,6 +103871,18 @@
                 ],
                 "default": null,
                 "title": "Model"
+              },
+              "reasoning": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reasoning"
               },
               "titles": {
                 "anyOf": [
