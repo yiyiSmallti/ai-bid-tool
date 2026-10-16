@@ -1148,6 +1148,22 @@ def tender_outline(
     emit(call("GET", f"/documents/{document}/outline"), "tender outline", json_output)
 
 
+@tender_app.command("whole-bid")
+def tender_whole_bid(
+    document: Annotated[UUID, typer.Option()],
+    output: Annotated[Path, typer.Option()],
+    json_output: JsonOption = False,
+):
+    """Assemble the whole bid from the tender's format chapter into a new DOCX file."""
+    from bid_cli import whole_bid
+
+    emit(
+        asyncio.run(whole_bid.download(client(), document, output)),
+        "tender whole-bid",
+        json_output,
+    )
+
+
 @req_app.command("extract")
 def req_extract(
     document: Annotated[UUID, typer.Option()],

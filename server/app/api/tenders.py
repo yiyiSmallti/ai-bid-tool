@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import select
 
-from app.api.common import check_signature, result, serial, signed_link
+from app.api.common import attachment, check_signature, result, serial, signed_link
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.security import TokenSigner
@@ -24,6 +24,7 @@ from app.services import (
     requirements,
     sources,
     tender_jobs,
+    whole_bid,
 )
 
 CHUNK_FIELDS = ("id", "document_id", "seq", "page", "text", "ocr", "citation_verified", "blocks")
@@ -113,6 +114,35 @@ def create_router(
             await storage.read(document.storage_key),
             media_type=document.media_type,
         )
+
+    @router.get(
+        "/documents/{document_id}/whole-bid-link",
+        name="whole_bid_link",
+        response_model=Result,
+    )
+    async def whole_bid_link(document_id: UUID, ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        await documents.require_document(session, document_id)
+        return result(
+            "whole bid link",
+            signed_link(
+                crypto,
+                f"/documents/{document_id}/whole-bid",
+                "whole_bid",
+                document_id=document_id,
+            ),
+        )
+
+    @router.get("/documents/{document_id}/whole-bid", name="whole_bid_download")
+    async def whole_bid_download(
+        document_id: UUID, signature: str, ctx=Depends(context, scope="function")
+    ):
+        session, identity = ctx
+        check_signature(crypto, signature, "whole_bid", document_id=document_id)
+        content, tally = await whole_bid.assemble(session, document_id, storage)
+        response = attachment(content, whole_bid.DOCX, "投标文件.docx")
+        response.headers.update(tally.headers())
+        return response
 
     @router.get("/documents/{document_id}/pages/{page}/preview", name="document_page_preview")
     async def page_preview(

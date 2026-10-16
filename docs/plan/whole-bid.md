@@ -16,9 +16,14 @@ solution that answers each scoring item.
    keeps its label, title, source pages or Word location, verbatim text and a
    kind: `cover`, `letter`, `price`, `declaration`, `copy`, `deviation`,
    `scoring_index`, `roster`, `solution`, or `form` for any other form. A tender without a format chapter
-   has no forms in its outline; nothing is invented.
-2. **Forms.** A form is reproduced from its verbatim text: paragraphs stay
-   paragraphs, tab-separated rows become editable tables. Labels the
+   has no forms in its outline; nothing is invented. The outline also lists
+   the scoring chapter's items with their score ranges; the scoring index form
+   lists them, except the price score, with the page column left for the
+   final layout.
+2. **Forms.** A PDF form is rebuilt from its page layout: paragraphs with
+   their indents and alignment, drawn or typed blanks with the hint printed on
+   them, and tables with merged cells. A Word form is rebuilt from its verbatim
+   text, tab-separated rows becoming editable tables. Labels the
    installation can answer (bidder name, address, legal representative,
    project name and number, date) are filled from the task and the selected
    company profile. Unknown values, prices, signatures and seals stay
@@ -27,9 +32,11 @@ solution that answers each scoring item.
    confirmed certificate pages selected on the task, or a placeholder page
    `【待附：…】` naming what is required.
 4. **Deviation table.** Uses the header row of the tender's deviation form.
-   Rows are the requirements of the procurement-needs chapter in source order,
-   grouped by clause, with confirmed responses; a requirement without a
-   confirmed response shows `【待确认】`. Scoring rules and format-chapter text
+   Rows are the clauses of the procurement-needs chapter in source order, each
+   under its nearest heading; a list table in that chapter is one row naming
+   its item count. A row whose quoted requirements all have confirmed response
+   cards carries their response text and the worst of their deviations; until
+   then it carries the drafted `完全响应` and `无偏离`, highlighted. Scoring rules and format-chapter text
    are never rows.
 5. **Solution.** The scoring chapter's subjective items (方案, 措施, 人员管理,
    设施, 建议 and the like) each become a chapter. A model first plans the
@@ -53,7 +60,7 @@ solution that answers each scoring item.
 | Slice | Content | Status |
 | --- | --- | --- |
 | 1 | Outline service, API and CLI (`bid tender outline`) | Done |
-| 2 | Assembly of forms, copies placeholders and deviation table; download and online preview | Planned |
+| 2 | Assembly of forms, copies placeholders and deviation table; download (`bid tender whole-bid`) | Done |
 | 3 | Solution planning and drafting job, chapter review and confirmation | Planned |
 | 4 | Structured company fields for form filling | Planned |
 | 5 | Desktop page for outline, drafting, chapter review and assembly | Planned |
