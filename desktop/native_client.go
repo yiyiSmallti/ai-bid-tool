@@ -43,12 +43,46 @@ type APIClient struct {
 	HTTP    *http.Client
 	mu      sync.RWMutex
 	session string
+	// renew, when set, exchanges a new session by itself; renewing lets one
+	// exchange run at a time.
+	renew    func(context.Context) error
+	renewing sync.Mutex
 }
 
 func NewAPIClient(base string) *APIClient {
 	return &APIClient{BaseURL: strings.TrimRight(base, "/"), HTTP: &http.Client{Timeout: 90 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("请求重定向已拒绝") }}}
 }
 func (c *APIClient) SetSession(s string) { c.mu.Lock(); c.session = s; c.mu.Unlock() }
+
+// RenewWith lets the client exchange its own session whenever it has none or
+// the server refuses the one it sent. The personal workspace's local server
+// is signed in to this way with the installation key.
+func (c *APIClient) RenewWith(renew func(context.Context) error) { c.renew = renew }
+
+// ensureSession exchanges a session if the client renews its own and has none.
+func (c *APIClient) ensureSession(ctx context.Context) error {
+	if c.renew == nil {
+		return nil
+	}
+	c.renewing.Lock()
+	defer c.renewing.Unlock()
+	c.mu.RLock()
+	current := c.session
+	c.mu.RUnlock()
+	if current != "" {
+		return nil
+	}
+	return c.renew(ctx)
+}
+
+// expire forgets a refused session unless another request already replaced it.
+func (c *APIClient) expire(token string) {
+	c.mu.Lock()
+	if c.session == token {
+		c.session = ""
+	}
+	c.mu.Unlock()
+}
 func (c *APIClient) endpoint(path string) (string, error) {
 	u, err := url.Parse(path)
 	if err != nil || !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.Contains(path, "\\") || u.IsAbs() || u.Host != "" || u.Fragment != "" {
@@ -60,19 +94,49 @@ func (c *APIClient) send(ctx context.Context, method, path string, body io.Reade
 	return c.sendWith(ctx, c.HTTP, method, path, body, contentType)
 }
 func (c *APIClient) sendWith(ctx context.Context, client *http.Client, method, path string, body io.Reader, contentType string) (*http.Response, error) {
+	signIn := method == "POST" && path == "/auth/session"
+	response, token, err := c.sendOnce(ctx, client, method, path, body, contentType, signIn)
+	if err != nil || response.StatusCode != 401 || passwordCheck(method, path) {
+		return response, err
+	}
+	c.expire(token)
+	// A refused request did not run. One whose body can be read again is sent
+	// once more on a renewed session; a streamed upload is left to the user.
+	seeker, replayable := body.(io.Seeker)
+	if c.renew == nil || signIn || body != nil && !replayable {
+		return response, nil
+	}
+	if body != nil {
+		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			return response, nil
+		}
+	}
+	if err := c.ensureSession(ctx); err != nil {
+		return response, nil
+	}
+	response.Body.Close()
+	response, _, err = c.sendOnce(ctx, client, method, path, body, contentType, signIn)
+	return response, err
+}
+func (c *APIClient) sendOnce(ctx context.Context, client *http.Client, method, path string, body io.Reader, contentType string, signIn bool) (*http.Response, string, error) {
 	endpoint, err := c.endpoint(path)
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+	if !signIn {
+		if err := c.ensureSession(ctx); err != nil {
+			return nil, "", err
+		}
 	}
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	c.mu.RLock()
 	token := c.session
 	c.mu.RUnlock()
 	// Signing in sends credentials, never a previous session.
-	if token != "" && !(method == "POST" && path == "/auth/session") {
+	if token != "" && !signIn {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	req.Header.Set("Cache-Control", "no-store")
@@ -80,10 +144,7 @@ func (c *APIClient) sendWith(ctx context.Context, client *http.Client, method, p
 		req.Header.Set("Content-Type", contentType)
 	}
 	response, err := client.Do(req)
-	if err == nil && response.StatusCode == 401 && !passwordCheck(method, path) {
-		c.SetSession("")
-	}
-	return response, err
+	return response, token, err
 }
 
 // transferStall is how long an upload or download may go without moving a
@@ -259,9 +320,6 @@ func (c *APIClient) Request(ctx context.Context, method, path string, body any) 
 	if err != nil {
 		return Result{}, err
 	}
-	if response.StatusCode == 401 && !passwordCheck(method, path) {
-		c.SetSession("")
-	}
 	return decodeResult(response)
 }
 func (c *APIClient) Exchange(ctx context.Context, key string) error {
@@ -345,6 +403,9 @@ func (c *APIClient) Events(ctx context.Context, path, cursor string, onMessage f
 	if err != nil {
 		return err
 	}
+	if err := c.ensureSession(ctx); err != nil {
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
 		return err
@@ -364,7 +425,7 @@ func (c *APIClient) Events(ctx context.Context, path, cursor string, onMessage f
 		return err
 	}
 	if response.StatusCode == 401 {
-		c.SetSession("")
+		c.expire(token)
 	}
 	if response.StatusCode != 200 {
 		_, err = decodeResult(response)
@@ -478,7 +539,7 @@ func (c *APIClient) ProviderWrite(ctx context.Context, body any) (Result, error)
 	if err == nil && response.StatusCode >= 200 && response.StatusCode < 300 && receipt.OK && len(receipt.Data.ID) == 36 && receipt.Data.Revision > 0 {
 		return Result{OK: true, Data: Object{"id": receipt.Data.ID, "revision": receipt.Data.Revision}}, nil
 	}
-	messages := map[string]string{"revision_conflict": "修订已变化，请核对当前配置", "provider_key_required": "首次设置或更换供应商、端点需输入新密钥", "invalid_input": "配置参数无效", "forbidden": "当前身份无权维护配置", "human_required": "需要本人操作", "not_found": "模型不可访问", "session_required": "请重新输入访问密钥", "provider_model_limit": "最多保存 20 个模型，请先删除不用的模型", "provider_model_unavailable": "该模型已删除或不存在，请重新读取"}
+	messages := map[string]string{"revision_conflict": "修订已变化，请核对当前配置", "provider_key_required": "首次设置或更换供应商、端点需输入新密钥", "invalid_input": "配置参数无效", "forbidden": "当前身份无权维护配置", "human_required": "需要本人操作", "not_found": "模型不可访问", "session_required": "会话已失效，请重试", "provider_model_limit": "最多保存 20 个模型，请先删除不用的模型", "provider_model_unavailable": "该模型已删除或不存在，请重新读取"}
 	code := receipt.Data.Error.Code
 	message, ok := messages[code]
 	if !ok {

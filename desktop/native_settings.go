@@ -85,8 +85,8 @@ var settingsFailures = map[string]string{
 	"provider_default_personal": "个人模型不能设为公司默认，可以设为我的默认。",
 	"management_cursor_invalid": "分页已失效，请从第一页读取。", "management_cursor_expired": "分页已过期，请从第一页读取。",
 	"forbidden": "当前身份无权执行此操作。", "human_required": "需要本人登录后操作。",
-	"not_found": "记录不存在或不可访问。", "session_required": "会话已失效，请重新输入访问密钥。",
-	"invalid_session":            "会话已失效，请重新输入访问密钥。",
+	"not_found": "记录不存在或不可访问。", "session_required": "会话已失效，请重试。",
+	"invalid_session":            "会话已失效，请重试。",
 	"settings_operation_unknown": "操作结果尚未确定，请主动重新读取并核对；不会自动重试。",
 }
 

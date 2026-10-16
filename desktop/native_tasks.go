@@ -253,20 +253,20 @@ func (a *NativeApp) sidebar(c *ui.Context) {
 				item("/account/password", "key-round", "修改密码")
 			}
 		})
+		member := a.member()
+		if member == nil {
+			return
+		}
 		ui.Row(c).FillWidth().Padding(10, 12).Gap(8).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(p.Border).Children(func() {
-			if member := a.member(); member != nil {
-				ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-					ui.Text(c, str(member, "display_name")).FontSize(13).FontWeight(600).SingleLine()
-					role := "成员"
-					if a.admin() {
-						role = "管理员"
-					}
-					ui.Text(c, role).FontSize(11.5).TextColor(p.Muted)
-				})
-				nativeGhostButton(c, "log-out", "退出登录", a.Busy).Tooltip("结束本设备的登录").OnClick(a.signOut)
-				return
-			}
-			nativeGhostButton(c, "lock", "锁定安装", a.Client == nil).Tooltip("清除会话，需重新输入访问密钥").OnClick(a.lock)
+			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
+				ui.Text(c, str(member, "display_name")).FontSize(13).FontWeight(600).SingleLine()
+				role := "成员"
+				if a.admin() {
+					role = "管理员"
+				}
+				ui.Text(c, role).FontSize(11.5).TextColor(p.Muted)
+			})
+			nativeGhostButton(c, "log-out", "退出登录", a.Busy).Tooltip("结束本设备的登录").OnClick(a.signOut)
 		})
 	})
 }

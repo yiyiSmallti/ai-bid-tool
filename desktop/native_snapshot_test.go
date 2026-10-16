@@ -149,7 +149,6 @@ func TestNativeSnapshots(t *testing.T) {
 	server := snapServer(t)
 	defer server.Close()
 	routes := map[string]string{
-		"login":        "/login",
 		"tasks":        "/org/tasks",
 		"task-detail":  "/org/tasks/t-1",
 		"requirements": "/org/tasks/t-1/requirements?job=j-ext-2",

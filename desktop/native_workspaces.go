@@ -73,7 +73,7 @@ func (a *NativeApp) opened(opened *OpenWorkspace, err error) {
 	a.Workspace, a.Client = opened, opened.Client
 	a.history = nil
 	a.Route = Route{}
-	if err != nil || (opened.Workspace.Kind == "enterprise" && opened.Account == nil) {
+	if opened.Workspace.Kind == "enterprise" && (err != nil || opened.Account == nil) {
 		a.navigate("/login")
 		if opened.Workspace.Kind == "enterprise" && connectionLost(err) {
 			a.Offline = true
@@ -247,10 +247,9 @@ func (a *NativeApp) workspaceSwitcher(c *ui.Context) {
 	}
 }
 
-// signOut ends an enterprise session; a personal workspace locks instead.
+// signOut ends an enterprise session; the personal workspace has none to end.
 func (a *NativeApp) signOut() {
 	if !a.enterprise() {
-		a.lock()
 		return
 	}
 	out := func() {

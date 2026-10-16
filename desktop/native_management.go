@@ -130,7 +130,7 @@ func mgError(err error) string {
 		"not_found": "记录不存在或不可访问。",
 	}
 	if api.Status == 401 {
-		return "会话已失效，请重新输入访问密钥。"
+		return "会话已失效，请重试。"
 	}
 	if api.Status == 403 {
 		return "当前身份无权操作，页面内容已清空。"

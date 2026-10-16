@@ -43,10 +43,9 @@ func (r *WorkspaceRunner) Open(ctx context.Context, id string) (*OpenWorkspace, 
 		return nil, errors.New("工作区不存在")
 	}
 	opened := &OpenWorkspace{Workspace: workspace}
-	var unlocked error
 	if workspace.Kind == "personal" {
-		if opened.Client, unlocked = r.startLocal(ctx); opened.Client == nil {
-			return nil, unlocked
+		if opened.Client, err = r.startLocal(ctx); err != nil {
+			return nil, err
 		}
 	} else {
 		r.stopLocal()
@@ -61,7 +60,7 @@ func (r *WorkspaceRunner) Open(ctx context.Context, id string) (*OpenWorkspace, 
 	if workspace.Kind == "enterprise" {
 		return opened, r.Resume(ctx, opened)
 	}
-	return opened, unlocked
+	return opened, nil
 }
 
 // Resume checks the gateway's contract and the stored session. An expired or
@@ -163,6 +162,8 @@ func (r *WorkspaceRunner) startLocal(ctx context.Context) (*APIClient, error) {
 		return nil, err
 	}
 	client := NewAPIClient(url)
+	key := backend.install.AccessKey
+	client.RenewWith(func(ctx context.Context) error { return client.Exchange(ctx, key) })
 	r.mu.Lock()
 	if r.backend != backend {
 		r.mu.Unlock()
@@ -170,8 +171,13 @@ func (r *WorkspaceRunner) startLocal(ctx context.Context) (*APIClient, error) {
 	}
 	r.local = client
 	r.mu.Unlock()
-	// A refused key leaves the stack running for the user to enter it.
-	return client, client.Exchange(ctx, backend.install.AccessKey)
+	// The installation key is the only sign-in; a stack that refuses it is
+	// stopped rather than left waiting for input nobody has.
+	if err := client.Exchange(ctx, key); err != nil {
+		r.stopLocal()
+		return nil, err
+	}
+	return client, nil
 }
 
 func (r *WorkspaceRunner) stopLocal() {

@@ -6,6 +6,13 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Personal workspace signs itself in
+
+- The desktop personal workspace no longer shows an access-key unlock page or
+  a "锁定安装" button. It signs in with the installation key and renews a
+  refused local session on its own, replaying a request whose body can be read
+  again; a refused streamed upload is reported for the user to retry.
+
 ## 2026-10-16: Accounts managed in person only
 
 - `member:manage` is human-only: an administrator's `bid_` token can no longer
