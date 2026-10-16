@@ -62,6 +62,26 @@ signs in as a member, and every human decision records which member made it.
   `"scopes": ["library", "private"]` and a member's drafting read public memory
   plus the member's own private memory. A personal installation refuses the
   scope with `memory_scope_unavailable`.
+- On a gateway only an administrator saves, tests, removes or picks the
+  default among company models. A member saves a personal model with
+  `"owner": "personal"` in `POST /providers` from a signed-in session (a `bid_`
+  token never holds `provider:write`), with their own key: a key is reused only from a model of the same owner, so a personal
+  model on a company endpoint without a key fails with
+  `provider_key_required`. A personal endpoint must be an origin on
+  `BID_PERSONAL_MODEL_ENDPOINTS` (`provider_endpoint_not_allowed`); a personal
+  installation refuses the owner with `provider_owner_invalid`.
+- `GET /providers` lists the company models plus the caller's own personal
+  models; to anyone else, administrators included, a personal model is
+  `provider_model_unavailable`. `PUT /account/default-model` with `{"slot"}`
+  (or `null`) sets the model a member's runs use when none is named; a default
+  that is no longer visible falls back to the company default.
+- `PUT /members/{id}/quota` with `{"monthly_company_tokens"}` (`bid member
+  quota --tokens N | --clear`) caps a member's company-model tokens per UTC
+  calendar month; a job whose next call would pass the cap fails with
+  `member_quota_exceeded`. Personal models are never capped.
+  `GET /members/{id}/usage?month=YYYY-MM` (`bid member usage`) returns calls
+  and tokens by owner and model to the member and to `member:manage`, which
+  sees another member's personal models without their slot, provider or model.
 
 ## How it works
 
@@ -127,6 +147,21 @@ signs in as a member, and every human decision records which member made it.
   read predicate (`readable`, `visible`) and the public-memory grant check
   (`changeable`); `memory:edit` no longer removes `memory:write`,
   `memory:approve` or `memory:manage`, so members keep them for private memory.
+- Migration `0008` adds `provider_slots.owner_member_id` (null for a company
+  model), `member_settings` (the default model) and `member_quotas`. Its
+  `provider_slot_writable` check, run for slot and revision inserts and slot
+  updates, requires the owner to be `app.actor_member_id` for a personal model
+  and an administrator for a company model on a gateway; only a company model
+  can be the default (`provider_slot_default_company`). `hidden_slots` in
+  [configured.py](../../server/app/providers/configured.py) is the visibility
+  predicate, and `effective_default` resolves a run without a model.
+- Admission (`JobExecution.member_quota` in
+  [execution.py](../../server/app/jobs/execution.py)) takes a per-member
+  advisory lock and admits a company-model call only when used tokens, the
+  upper bounds of the member's unsettled calls and this call's upper bound fit
+  the cap, so parallel jobs never overrun it. Admission and receipt set
+  `app.actor_member_id` to the job's member, so `vendor_calls.member_id` and
+  `usage_records.member_id` attribute every call.
 - Every agent session wakes at least every 30 seconds, paused ones too. A wake
   whose member was disabled or, unless an administrator, removed from the
   project cancels the session and its own jobs and audits
@@ -152,6 +187,8 @@ signs in as a member, and every human decision records which member made it.
 - `export_to_personal_allowed` is stored for [packages](../plan/enterprise-gateway.md#packages);
   nothing reads it yet.
 - An agent of a removed member can run until its next wake, up to 30 seconds.
+- An admitted call reserves its full upper bound until its receipt, so a
+  member near the cap can be refused while earlier calls are still running.
 - The limiter keys on the client address the API sees. Behind a reverse proxy
   that is the proxy, so the 30-per-source limit then applies to everyone.
 
@@ -160,6 +197,10 @@ signs in as a member, and every human decision records which member made it.
 - [0004_installation_mode.py](../../server/migrations/versions/0004_installation_mode.py)
 - [0005_members.py](../../server/migrations/versions/0005_members.py)
 - [0006_project_members.py](../../server/migrations/versions/0006_project_members.py)
+- [0008_member_models.py](../../server/migrations/versions/0008_member_models.py),
+  [member_models.py](../../server/app/services/member_models.py) quota, usage
+  and default model, [provider_configs.py](../../server/app/services/provider_configs.py)
+  ownership
 - [project_members.py](../../server/app/services/project_members.py) service,
   [project_members.py](../../server/app/api/project_members.py) routes
 - [members.py](../../server/app/services/members.py) service,
@@ -171,4 +212,5 @@ signs in as a member, and every human decision records which member made it.
   `member_session_identity`, `agent_identity`
 - [test_deployment_mode.py](../../server/tests/test_deployment_mode.py),
   [test_members.py](../../server/tests/test_members.py),
-  [test_project_visibility.py](../../server/tests/test_project_visibility.py)
+  [test_project_visibility.py](../../server/tests/test_project_visibility.py),
+  [test_member_models.py](../../server/tests/test_member_models.py)

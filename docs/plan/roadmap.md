@@ -12,7 +12,7 @@ The [single-user installation plan](single-user.md) implements accepted
 [enterprise gateway plan](enterprise-gateway.md) implements
 [ADR 0013](../adr/0013-enterprise-gateway.md) for companies that share materials,
 projects and public memory on a privately deployed gateway, with
-[slices 0 to 2](../notes/enterprise-gateway.md) (the stored deployment mode, members and sign-in, project visibility, grants and private memory) implemented; desktop packaging decisions and remaining slices are in [desktop packaging](desktop-packaging.md). The
+[slices 0 to 3](../notes/enterprise-gateway.md) (the stored deployment mode, members and sign-in, project visibility, grants, private memory, company and personal models and quotas) implemented; desktop packaging decisions and remaining slices are in [desktop packaging](desktop-packaging.md). The
 design's non-goals—fabricating materials, electronic bidding platform integration,
 pricing strategy and developing models in-house—are excluded.
 
