@@ -320,7 +320,7 @@ response body; it is never stored in plaintext or logged.
 | `member quota`, `member usage` | quota and usage routes |
 | `task member list`, `task member add`, `task member remove`, `task owner` | `/tasks/{id}/members`, `/tasks/{id}/owner` |
 | `task sharing` | `PATCH /tasks/{id}/sharing` |
-| `package export`, `package import`, `package status` | `/packages` routes |
+| `package export`, `package import`, `package status`, `package download` | `/packages` routes |
 
 Each command is added to `COMMANDS` in `cli/bid_cli/schema.py` and to the CLI
 snapshot. Agent tools are unchanged.
