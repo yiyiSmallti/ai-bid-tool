@@ -115,8 +115,18 @@ async def require_dependencies(
             raise not_found()
     if manifest["confidential"]:
         actor.require("confidential:read")
+    items = {
+        row.id: row
+        for row in await session.scalars(
+            select(ResponseItem).where(
+                ResponseItem.id.in_(
+                    {UUID(entry["response_item_id"]) for entry in manifest["items"]}
+                )
+            )
+        )
+    }
     for entry in manifest["items"]:
-        row = await session.get(ResponseItem, UUID(entry["response_item_id"]))
+        row = items.get(UUID(entry["response_item_id"]))
         if (
             row is None
             or row.draft_id != draft.id
