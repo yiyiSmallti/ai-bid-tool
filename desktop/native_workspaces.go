@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
 	"regexp"
 	"slices"
 	"strconv"
@@ -73,12 +75,59 @@ func (a *NativeApp) opened(opened *OpenWorkspace, err error) {
 	a.Route = Route{}
 	if err != nil || (opened.Workspace.Kind == "enterprise" && opened.Account == nil) {
 		a.navigate("/login")
-		if err != nil {
+		if opened.Workspace.Kind == "enterprise" && connectionLost(err) {
+			a.Offline = true
+		} else if err != nil {
 			a.Error = err.Error()
 		}
 		return
 	}
 	a.home()
+}
+
+// connectionLost is a failure to reach the gateway, as opposed to an answer
+// from it or a certificate that failed.
+func connectionLost(err error) bool {
+	var op *net.OpError
+	var timeout interface{ Timeout() bool }
+	return errors.As(err, &op) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, errTransferStalled) || errors.As(err, &timeout) && timeout.Timeout()
+}
+
+// connectionBanner says the gateway cannot be reached. Nothing falls back to
+// local data; retrying reads the session again and reopens the page.
+func (a *NativeApp) connectionBanner(c *ui.Context) {
+	if !a.Offline || !a.enterprise() {
+		return
+	}
+	ui.Row(c).FillWidth().Wrap().Gap(10).AlignItems(ui.Center).Children(func() {
+		nativeCallout(c, toneWarning, "无法连接 "+a.Workspace.Workspace.Name+"，请检查网络后重试。连接恢复前不会改用本机数据。").Grow(1).MinWidth(240)
+		nativeIconButton(c, "refresh-cw", "重试连接", false).Disabled(a.Busy).OnClick(a.reconnect)
+	})
+}
+
+// reconnect checks the gateway and the session again. A session that ended
+// meanwhile returns to sign-in; otherwise the current page reloads.
+func (a *NativeApp) reconnect() {
+	if !a.enterprise() {
+		return
+	}
+	runner, workspace := a.Runner, *a.Workspace
+	a.Do(func(ctx context.Context) (func(), error) {
+		err := runner.Resume(ctx, &workspace)
+		return func() {
+			*a.Workspace = workspace
+			a.Offline = false
+			_, login := a.page.(*loginPage)
+			switch {
+			case workspace.Account == nil && !login:
+				a.navigate("/login")
+			case workspace.Account != nil && login:
+				a.home()
+			case workspace.Account != nil:
+				a.Reload()
+			}
+		}, err
+	})
 }
 
 // home opens the task list, or the password page a new or reset member must
@@ -107,6 +156,7 @@ func (a *NativeApp) switchWorkspace(id string) {
 		}
 		a.page, a.Client, a.Workspace = nil, nil, nil
 		a.Busy, a.pending, a.Error, a.Notice = false, 0, "", ""
+		a.Offline = false
 		a.Starting = "正在打开工作区…"
 		if list, err := a.Runner.Store.Load(); err == nil {
 			if target, ok := list.Find(id); ok && target.Kind == "personal" {
