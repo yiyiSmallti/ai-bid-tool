@@ -450,7 +450,8 @@ Import rules:
   database and checks row counts and file hashes.
 - **Upgrade**: take a backup, rehearse migrations on a clone, drop
   rehearsal-created roles, then migrate the live database
-  (see [production deployment](production-deployment.md)).
+  (see [production deployment](production-deployment.md) and
+  [gateway operations](../guides/gateway-operations.md)).
 - **Logs**: no tender text, keys, passwords, session tokens or confidential
   values; request logs carry member id, route and status.
 
@@ -482,7 +483,7 @@ Each item names what must not happen and the acceptance check that proves it.
 
 Each slice is one change; a slice merges only when its acceptance and the full
 personal-mode suites pass.
-Slices 0 to 5 are implemented; their mechanism is in
+Slices 0 to 6 are implemented; their mechanism is in
 [the enterprise gateway note](../notes/enterprise-gateway.md).
 
 | Slice | Content | Acceptance |

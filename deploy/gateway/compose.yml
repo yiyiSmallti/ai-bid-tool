@@ -1,0 +1,132 @@
+# Company gateway (docs/plan/enterprise-gateway.md#gateway-deployment). Only Caddy
+# publishes ports; the API, worker, database and converter share a private network.
+# Operator steps are in docs/guides/gateway-operations.md.
+name: bid-gateway
+x-image: &image
+  image: ${BID_IMAGE:-bid-gateway:local}
+x-runtime: &runtime
+  BID_DEPLOYMENT: enterprise
+  BID_PUBLIC_URL: ${BID_PUBLIC_URL:?Set the https origin members use}
+  BID_COMPANY_NAME: ${BID_COMPANY_NAME:?Set the company name}
+  BID_DATABASE_URL: postgresql+psycopg://bid_app:${BID_DATABASE_PASSWORD:?Set BID_DATABASE_PASSWORD}@postgres/bid
+  BID_ACCESS_KEY: ${BID_ACCESS_KEY:?Set the host access key}
+  BID_ENCRYPTION_KEY: ${BID_ENCRYPTION_KEY:?Set BID_ENCRYPTION_KEY}
+  BID_ENCRYPTION_KEY_PREVIOUS: ${BID_ENCRYPTION_KEY_PREVIOUS:-}
+  BID_TOKEN_KEY: ${BID_TOKEN_KEY:?Set BID_TOKEN_KEY}
+  BID_SECRETS_KEY: ${BID_SECRETS_KEY:?Set BID_SECRETS_KEY}
+  BID_SECRETS_KEY_PREVIOUS: ${BID_SECRETS_KEY_PREVIOUS:-}
+  BID_STORAGE: ${BID_STORAGE:-local}
+  BID_DATA_DIR: /app/data
+  BID_S3_ENDPOINT: ${BID_S3_ENDPOINT:-}
+  BID_S3_BUCKET: ${BID_S3_BUCKET:-bid}
+  BID_S3_ACCESS_KEY: ${BID_S3_ACCESS_KEY:-}
+  BID_S3_SECRET_KEY: ${BID_S3_SECRET_KEY:-}
+  BID_OCR_DATA_DIR: /usr/share/tesseract-ocr/5/tessdata
+  BID_OCR_LANGUAGE: chi_sim+eng
+  BID_LLM_PROVIDER: disabled
+  BID_SEARCH_PROVIDER: ${BID_SEARCH_PROVIDER:-disabled}
+  BID_CONVERTER_URL: http://converter:3000
+  BID_REVIEW_OFFICE_PROFILE: gotenberg-8.37.0-f29984bd1e226bf1-bundled-fonts-v1
+x-owner: &owner
+  BID_MIGRATION_DATABASE_URL: postgresql+psycopg://bid_owner:${BID_OWNER_PASSWORD:?Set BID_OWNER_PASSWORD}@postgres/${BID_MIGRATION_DB:-bid}
+  BID_DATABASE_PASSWORD: ${BID_DATABASE_PASSWORD}
+services:
+  postgres:
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bid
+      POSTGRES_USER: bid_owner
+      POSTGRES_PASSWORD: ${BID_OWNER_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bid_owner -d bid"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  migrate:
+    <<: *image
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+    command: python -m app.admin init-db
+    environment:
+      <<: [*runtime, *owner]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  server:
+    <<: *image
+    restart: unless-stopped
+    # Only Caddy reaches this port, so its X-Forwarded-For names the member's address.
+    command: uvicorn app.api.main:create_app --factory --host 0.0.0.0 --port 8000 --no-access-log --proxy-headers --forwarded-allow-ips=*
+    environment:
+      <<: *runtime
+    volumes:
+      - files:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  worker:
+    <<: *image
+    restart: unless-stopped
+    command: python -m app.jobs.worker
+    environment:
+      <<: *runtime
+    volumes:
+      - files:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  converter:
+    image: gotenberg/gotenberg:8.37.0@sha256:f29984bd1e226bf1b93ba90af06000afa8b315853e99d27b9aaa41b93f15c769
+    restart: unless-stopped
+    command:
+      - gotenberg
+      - --chromium-disable-routes=true
+      - --webhook-disable=true
+      - --api-timeout=180s
+  caddy:
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    restart: unless-stopped
+    environment:
+      BID_GATEWAY_HOST: ${BID_GATEWAY_HOST:?Set the gateway host name}
+      BID_TLS: ${BID_TLS:?Set an ACME contact email, or internal}
+    ports:
+      - "${BID_HTTPS_BIND:-0.0.0.0:443}:443"
+      - "${BID_HTTP_BIND:-0.0.0.0:80}:80"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - caddy:/data
+    depends_on:
+      - server
+  # Run on demand: `docker compose run --rm backup` (nightly through the timer).
+  backup:
+    <<: *image
+    profiles: [ops]
+    command: python -m app.admin backup --dir /backups --keep-days 14
+    environment:
+      <<: [*runtime, *owner]
+    volumes:
+      - files:/app/data:ro
+      - backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+# Inline, so the file reaches a Docker host that does not share this checkout.
+configs:
+  caddyfile:
+    content: |
+      {$$BID_GATEWAY_HOST} {
+      	tls {$$BID_TLS}
+      	encode zstd gzip
+      	reverse_proxy server:8000
+      }
+volumes:
+  postgres:
+  files:
+  backups:
+  caddy:
