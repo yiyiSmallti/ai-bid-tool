@@ -865,6 +865,9 @@ async def write(
         if not found:
             continue
         for row in found:
+            if table == "tasks":
+                # Sharing is the receiving installation's decision, not the sender's.
+                row["export_to_personal_allowed"] = False
             for sealed_table, column in SEALED:
                 if sealed_table == table and row.get(column) is not None:
                     row[column] = secrets.encrypt(row[column])

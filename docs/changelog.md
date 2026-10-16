@@ -6,6 +6,14 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Package round trip
+
+- A project taken personal → gateway → personal keeps its requirement and
+  card confirmations and its citations; the package that comes back holds the
+  same rows as the one that left.
+- An imported project no longer carries the sender's export setting: it
+  arrives not exportable until the receiving administrator allows it.
+
 ## 2026-10-15: Package pages in the client
 
 - 导入项目包 on the task list imports a package and shows its report,

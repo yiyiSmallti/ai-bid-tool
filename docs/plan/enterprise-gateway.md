@@ -482,8 +482,7 @@ Each item names what must not happen and the acceptance check that proves it.
 
 Each slice is one change; a slice merges only when its acceptance and the full
 personal-mode suites pass.
-Slices 0 to 4 and slice 5's package export and import, on the server and in
-the client, are implemented; their mechanism is in
+Slices 0 to 5 are implemented; their mechanism is in
 [the enterprise gateway note](../notes/enterprise-gateway.md).
 
 | Slice | Content | Acceptance |
