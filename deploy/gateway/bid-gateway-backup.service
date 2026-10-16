@@ -1,0 +1,10 @@
+[Unit]
+Description=Back up the bid gateway database and files
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+# The checkout holding deploy/gateway; adjust to the gateway host's path.
+WorkingDirectory=/opt/ai-bid-tool/deploy/gateway
+ExecStart=/usr/bin/docker compose -f compose.yml --env-file gateway.env run --rm -T backup
