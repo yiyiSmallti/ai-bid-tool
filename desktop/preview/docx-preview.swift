@@ -22,7 +22,8 @@ guard let docx = try? Data(contentsOf: URL(fileURLWithPath: args[1])) else { fai
 
 // The CSP keeps the page offline: nothing the document names is fetched.
 // Page margins come from the print margins, so sections drop their own top and
-// bottom padding and every printed page keeps the same space.
+// bottom padding and every printed page keeps the same space. Each section is a
+// page docx-preview split at a page break, so printing starts each on a new page.
 let html = """
 <!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:">
@@ -30,6 +31,7 @@ let html = """
 body { margin: 0; background: white }
 section.docx { min-height: 0 !important; height: auto !important; padding-top: 0 !important;
   padding-bottom: 0 !important; margin: 0 !important; box-shadow: none !important }
+section.docx + section.docx { break-before: page }
 </style>
 <script>\(script("jszip.min.js"))</script><script>\(script("docx-preview.min.js"))</script>
 </head><body><div id="out"></div><script>

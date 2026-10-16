@@ -1,4 +1,4 @@
-"""Whole-bid contracts: the outline of a tender's chapters and its format chapter forms."""
+"""Whole-bid contracts: a tender's outline, and the receipt of an assembled whole bid."""
 
 from typing import Literal
 from uuid import UUID
@@ -55,3 +55,15 @@ class BidOutline(Contract):
     chapters: list[OutlineChapter]
     format_chapter: str | None
     forms: list[OutlineForm]
+
+
+class WholeBidReceipt(Contract):
+    """A downloaded whole bid and what still needs a human before submission."""
+
+    document_id: UUID
+    output_path: str
+    size_bytes: int = Field(ge=1)
+    draft: bool
+    placeholders: int = Field(ge=0)
+    unconfirmed_rows: int = Field(ge=0)
+    copies: int = Field(ge=0)

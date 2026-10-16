@@ -109958,6 +109958,91 @@
           ],
           "input": null
         },
+        "tender whole-bid": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "document",
+              "options": [
+                "--document"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "additionalProperties": false,
+            "description": "A downloaded whole bid and what still needs a human before submission.",
+            "properties": {
+              "copies": {
+                "minimum": 0,
+                "title": "Copies",
+                "type": "integer"
+              },
+              "document_id": {
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "draft": {
+                "title": "Draft",
+                "type": "boolean"
+              },
+              "output_path": {
+                "title": "Output Path",
+                "type": "string"
+              },
+              "placeholders": {
+                "minimum": 0,
+                "title": "Placeholders",
+                "type": "integer"
+              },
+              "size_bytes": {
+                "minimum": 1,
+                "title": "Size Bytes",
+                "type": "integer"
+              },
+              "unconfirmed_rows": {
+                "minimum": 0,
+                "title": "Unconfirmed Rows",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "document_id",
+              "output_path",
+              "size_bytes",
+              "draft",
+              "placeholders",
+              "unconfirmed_rows",
+              "copies"
+            ],
+            "title": "WholeBidReceipt",
+            "type": "object"
+          }
+        },
         "token create": {
           "cli_parameters": [
             {
@@ -110920,6 +111005,30 @@
       "name": "fixture.pdf",
       "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "task_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "tender whole-bid": {
+    "command": "tender whole-bid",
+    "cost": {
+      "browser_units": 0,
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "unresolved_calls": 0
+    },
+    "data": {
+      "copies": 3,
+      "document_id": "00000000-0000-0000-0000-000000000001",
+      "draft": true,
+      "output_path": "<download-output>",
+      "placeholders": 9,
+      "size_bytes": 52000,
+      "unconfirmed_rows": 28
     },
     "duration_ms": 0,
     "items": [],

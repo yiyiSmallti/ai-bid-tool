@@ -54,6 +54,7 @@ def test_schema_tracks_actual_commands():
         (["tender", "upload"], "tender upload"),
         (["tender", "parse"], "tender parse"),
         (["tender", "outline"], "tender outline"),
+        (["tender", "whole-bid"], "tender whole-bid"),
         (["req", "extract"], "req extract"),
         (["req", "list"], "req list"),
         (["req", "repair-citations"], "req repair-citations"),

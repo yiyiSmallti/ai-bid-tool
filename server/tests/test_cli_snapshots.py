@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import bid_cli.export as export_cli
+import bid_cli.whole_bid as whole_bid_cli
 from app.schemas.contracts import Cost, Result
 from bid_cli.client import Client
 from bid_cli.main import main
@@ -286,6 +287,22 @@ async def fake_export_download(self, export_id, output):
             "completion": "partial",
             "validity": "current",
             "issues": [],
+        },
+    ).model_dump(mode="json")
+
+
+async def fake_whole_bid_download(client, document, output):
+    return Result(
+        ok=True,
+        command="tender whole-bid",
+        data={
+            "document_id": str(document),
+            "output_path": str(output),
+            "size_bytes": 52000,
+            "draft": True,
+            "placeholders": 9,
+            "unconfirmed_rows": 28,
+            "copies": 3,
         },
     ).model_dump(mode="json")
 
@@ -1018,6 +1035,7 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
     monkeypatch.setattr(Client, "download_certificate_file", fake_scan_download)
     monkeypatch.setattr(Client, "download_evidence_source", fake_source_download)
     monkeypatch.setattr(export_cli, "download_export", fake_export_download)
+    monkeypatch.setattr(whole_bid_cli, "download", fake_whole_bid_download)
     monkeypatch.setattr("bid_cli.sandbox.download_artifact", fake_sandbox_download)
     source = tmp_path / "fixture.pdf"
     source.write_bytes(b"Synthetic transport fixture")
@@ -1418,6 +1436,14 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "tender upload": ["tender", "upload", "--task", IDENTIFIER, "--file", str(source)],
         "tender parse": ["tender", "parse", "--document", IDENTIFIER],
         "tender outline": ["tender", "outline", "--document", IDENTIFIER],
+        "tender whole-bid": [
+            "tender",
+            "whole-bid",
+            "--document",
+            IDENTIFIER,
+            "--output",
+            str(tmp_path / "whole-bid.docx"),
+        ],
         "req extract": ["req", "extract", "--document", IDENTIFIER, "--reasoning", "high"],
         "req list": ["req", "list", "--task", IDENTIFIER, "--job", IDENTIFIER],
         "req history": ["req", "history", "--task", IDENTIFIER],
