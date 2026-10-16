@@ -6,6 +6,15 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Client member administration
+
+- Administrators manage company members in the desktop client: create, edit
+  role, grants, status and monthly company-model quota, reset a password
+  (shown once), and sign a member out everywhere.
+- Every gateway task has a project members page; the owner or an
+  administrator hands the project over and removes members, and an
+  administrator adds them.
+
 ## 2026-10-15: Client sign-in
 
 - The desktop sidebar switches between workspaces and adds a company gateway,

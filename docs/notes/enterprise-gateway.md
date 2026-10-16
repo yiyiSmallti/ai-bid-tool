@@ -194,6 +194,13 @@ signs in as a member, and every human decision records which member made it.
   the session on the gateway and removes it from the keychain. Any 401 except
   a refused current password on `POST /account/password` returns to sign-in
   and removes the stored session.
+- An administrator's sidebar adds 成员与权限
+  ([native_members.go](../../desktop/native_members.go)): create a member,
+  change name, role, grants, status and the monthly company-model quota,
+  reset a password, and sign a member out everywhere. A created or reset
+  password is shown once on that page and kept nowhere else. The task sidebar
+  of every member adds 项目成员, where the owner or an administrator hands the
+  project over and removes members.
 
 ## Pitfalls
 
@@ -218,6 +225,9 @@ signs in as a member, and every human decision records which member made it.
 - The client never uses a system proxy for a gateway, so a gateway reachable
   only through one cannot be added.
 - A pinned certificate that the gateway renews must be confirmed again.
+- `GET /members` needs `member:manage`, so only an administrator can add
+  project members from the client; an owner who is not one can hand over and
+  remove but not add.
 - A wrong current password on `POST /account/password` answers 401
   `invalid_login`; the client keeps the session for that route only.
 - The limiter keys on the client address the API sees. Behind a reverse proxy
@@ -246,7 +256,10 @@ signs in as a member, and every human decision records which member made it.
   [workspace_runner.go](../../desktop/workspace_runner.go),
   [workspace_switch_test.go](../../desktop/workspace_switch_test.go),
   [native_workspaces.go](../../desktop/native_workspaces.go),
-  [native_signin_test.go](../../desktop/native_signin_test.go)
+  [native_signin_test.go](../../desktop/native_signin_test.go),
+  [native_members.go](../../desktop/native_members.go),
+  [native_admin_test.go](../../desktop/native_admin_test.go) against a real
+  enterprise server
 - [test_deployment_mode.py](../../server/tests/test_deployment_mode.py),
   [test_members.py](../../server/tests/test_members.py),
   [test_project_visibility.py](../../server/tests/test_project_visibility.py),
