@@ -44,7 +44,7 @@ async def process(execution: JobExecution) -> None:
             if targets[title]["job_id"] == str(job.id):
                 continue
         output = await adapter.draft(request)
-        if len(output.usages) != 1 + len(output.sections):
+        if len(output.usages) < 1 + len(output.sections):
             raise ServiceError(
                 "solution_draft_usage_integrity",
                 "Each solution call requires one accounting receipt",

@@ -164,6 +164,7 @@ class SolutionSectionRequest(Contract):
     item: SolutionProviderRequest
     plan: list[SolutionPlanSection]
     section: SolutionPlanSection
+    retry: str | None = None
 
 
 class SolutionProviderResult(Contract):
