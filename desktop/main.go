@@ -80,7 +80,7 @@ func main() {
 	if !mygo.App.RequestSingleInstanceLock() {
 		return // the running instance owns the database
 	}
-	backend := &Backend{}
+	runner := &WorkspaceRunner{Secrets: Keychain{}, NewBackend: newBackend}
 	app := NewNativeApp()
 
 	mygo.App.WhenReady(func() {
@@ -99,46 +99,66 @@ func main() {
 		mygo.App.OnSecondInstance(func([]string, string) { win.Focus() })
 
 		go func() {
-			baseURL, err := start(backend)
+			data, err := mygo.App.Path(mygo.PathUserData)
+			if err == nil {
+				err = os.MkdirAll(data, 0o700)
+			}
 			if err != nil {
-				backend.Stop()
 				mygo.Dialog.Error("AI Bid 无法启动", err.Error())
 				mygo.App.Quit()
 				return
 			}
-			client := NewAPIClient(baseURL)
-			if err := client.Exchange(context.Background(), backend.install.AccessKey); err != nil {
-				win.Update(func() { app.Client = client; app.navigate("/login"); app.Error = err.Error() })
+			runner.Store = WorkspaceStore{Path: filepath.Join(data, "workspaces.json")}
+			list, err := runner.Store.Load()
+			if err != nil {
+				mygo.Dialog.Error("AI Bid 无法读取工作区", err.Error())
+				mygo.App.Quit()
 				return
 			}
-			win.Update(func() { app.Client = client; app.navigate("/org/tasks") })
+			opened, err := runner.Open(context.Background(), list.Current)
+			if opened == nil {
+				runner.Stop()
+				mygo.Dialog.Error("AI Bid 无法启动", err.Error())
+				mygo.App.Quit()
+				return
+			}
+			win.Update(func() {
+				app.Client = opened.Client
+				if err != nil || (opened.Workspace.Kind == "enterprise" && opened.Account == nil) {
+					app.navigate("/login")
+					if err != nil {
+						app.Error = err.Error()
+					}
+					return
+				}
+				app.navigate("/org/tasks")
+			})
 		}()
 	})
-	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { backend.Stop() })
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { runner.Stop() })
 
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func start(b *Backend) (string, error) {
+// newBackend prepares the local stack from the app's resources and user paths.
+func newBackend() (*Backend, error) {
 	p, err := locate()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	data, err := mygo.App.Path(mygo.PathUserData)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	logs, err := mygo.App.Path(mygo.PathLogs)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	socket, err := socketDir()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	b.DataDir, b.LogDir, b.SocketDir = data, logs, socket
-	b.ServerDir, b.Python, b.PGBin, b.Renderer, b.OCRData = p.server, p.python, p.pgBin, p.renderer, p.ocrData
-	return b.Start()
+	return &Backend{DataDir: data, LogDir: logs, SocketDir: socket, ServerDir: p.server, Python: p.python, PGBin: p.pgBin, Renderer: p.renderer, OCRData: p.ocrData}, nil
 }
