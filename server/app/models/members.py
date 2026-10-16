@@ -100,3 +100,18 @@ class MemberQuota(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
     )
+
+
+class PackageImport(Base):
+    """One package import: its job, the importing member and the task it creates."""
+
+    __tablename__ = "package_imports"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    job_id: Mapped[UUID] = mapped_column(ForeignKey("jobs.id"), nullable=False)
+    member_id: Mapped[UUID | None] = mapped_column(ForeignKey("members.id"), nullable=True)
+    package_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    task_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    state: Mapped[str] = mapped_column(String(12), nullable=False, default="queued")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
