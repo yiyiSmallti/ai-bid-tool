@@ -103639,6 +103639,7 @@
               },
               "SolutionSection": {
                 "additionalProperties": false,
+                "description": "A chapter section: lead paragraphs, then numbered subsections.",
                 "properties": {
                   "heading": {
                     "maxLength": 300,
@@ -103651,16 +103652,92 @@
                       "type": "string"
                     },
                     "maxItems": 100,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "subsections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSubsection"
+                    },
+                    "maxItems": 12,
+                    "title": "Subsections",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "heading"
+                ],
+                "title": "SolutionSection",
+                "type": "object"
+              },
+              "SolutionSubsection": {
+                "additionalProperties": false,
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 40,
                     "minItems": 1,
                     "title": "Paragraphs",
                     "type": "array"
+                  },
+                  "table": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SolutionTable"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   }
                 },
                 "required": [
                   "heading",
                   "paragraphs"
                 ],
-                "title": "SolutionSection",
+                "title": "SolutionSubsection",
+                "type": "object"
+              },
+              "SolutionTable": {
+                "additionalProperties": false,
+                "description": "A plain grid: a header row and body rows of the same width.",
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "minItems": 2,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "rows": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Rows",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "columns",
+                  "rows"
+                ],
+                "title": "SolutionTable",
                 "type": "object"
               }
             },
@@ -103890,6 +103967,7 @@
             "$defs": {
               "SolutionSection": {
                 "additionalProperties": false,
+                "description": "A chapter section: lead paragraphs, then numbered subsections.",
                 "properties": {
                   "heading": {
                     "maxLength": 300,
@@ -103902,16 +103980,92 @@
                       "type": "string"
                     },
                     "maxItems": 100,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "subsections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSubsection"
+                    },
+                    "maxItems": 12,
+                    "title": "Subsections",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "heading"
+                ],
+                "title": "SolutionSection",
+                "type": "object"
+              },
+              "SolutionSubsection": {
+                "additionalProperties": false,
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 40,
                     "minItems": 1,
                     "title": "Paragraphs",
                     "type": "array"
+                  },
+                  "table": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SolutionTable"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   }
                 },
                 "required": [
                   "heading",
                   "paragraphs"
                 ],
-                "title": "SolutionSection",
+                "title": "SolutionSubsection",
+                "type": "object"
+              },
+              "SolutionTable": {
+                "additionalProperties": false,
+                "description": "A plain grid: a header row and body rows of the same width.",
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "minItems": 2,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "rows": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Rows",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "columns",
+                  "rows"
+                ],
+                "title": "SolutionTable",
                 "type": "object"
               }
             },
@@ -104053,6 +104207,7 @@
               },
               "SolutionSection": {
                 "additionalProperties": false,
+                "description": "A chapter section: lead paragraphs, then numbered subsections.",
                 "properties": {
                   "heading": {
                     "maxLength": 300,
@@ -104065,16 +104220,92 @@
                       "type": "string"
                     },
                     "maxItems": 100,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "subsections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSubsection"
+                    },
+                    "maxItems": 12,
+                    "title": "Subsections",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "heading"
+                ],
+                "title": "SolutionSection",
+                "type": "object"
+              },
+              "SolutionSubsection": {
+                "additionalProperties": false,
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 40,
                     "minItems": 1,
                     "title": "Paragraphs",
                     "type": "array"
+                  },
+                  "table": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SolutionTable"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   }
                 },
                 "required": [
                   "heading",
                   "paragraphs"
                 ],
-                "title": "SolutionSection",
+                "title": "SolutionSubsection",
+                "type": "object"
+              },
+              "SolutionTable": {
+                "additionalProperties": false,
+                "description": "A plain grid: a header row and body rows of the same width.",
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "minItems": 2,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "rows": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Rows",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "columns",
+                  "rows"
+                ],
+                "title": "SolutionTable",
                 "type": "object"
               }
             },
@@ -104273,6 +104504,7 @@
               },
               "SolutionSection": {
                 "additionalProperties": false,
+                "description": "A chapter section: lead paragraphs, then numbered subsections.",
                 "properties": {
                   "heading": {
                     "maxLength": 300,
@@ -104285,16 +104517,92 @@
                       "type": "string"
                     },
                     "maxItems": 100,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "subsections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSubsection"
+                    },
+                    "maxItems": 12,
+                    "title": "Subsections",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "heading"
+                ],
+                "title": "SolutionSection",
+                "type": "object"
+              },
+              "SolutionSubsection": {
+                "additionalProperties": false,
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 40,
                     "minItems": 1,
                     "title": "Paragraphs",
                     "type": "array"
+                  },
+                  "table": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SolutionTable"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   }
                 },
                 "required": [
                   "heading",
                   "paragraphs"
                 ],
-                "title": "SolutionSection",
+                "title": "SolutionSubsection",
+                "type": "object"
+              },
+              "SolutionTable": {
+                "additionalProperties": false,
+                "description": "A plain grid: a header row and body rows of the same width.",
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "minItems": 2,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "rows": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Rows",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "columns",
+                  "rows"
+                ],
+                "title": "SolutionTable",
                 "type": "object"
               }
             },
@@ -104517,6 +104825,7 @@
               },
               "SolutionSection": {
                 "additionalProperties": false,
+                "description": "A chapter section: lead paragraphs, then numbered subsections.",
                 "properties": {
                   "heading": {
                     "maxLength": 300,
@@ -104529,16 +104838,92 @@
                       "type": "string"
                     },
                     "maxItems": 100,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "subsections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSubsection"
+                    },
+                    "maxItems": 12,
+                    "title": "Subsections",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "heading"
+                ],
+                "title": "SolutionSection",
+                "type": "object"
+              },
+              "SolutionSubsection": {
+                "additionalProperties": false,
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 40,
                     "minItems": 1,
                     "title": "Paragraphs",
                     "type": "array"
+                  },
+                  "table": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SolutionTable"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   }
                 },
                 "required": [
                   "heading",
                   "paragraphs"
                 ],
-                "title": "SolutionSection",
+                "title": "SolutionSubsection",
+                "type": "object"
+              },
+              "SolutionTable": {
+                "additionalProperties": false,
+                "description": "A plain grid: a header row and body rows of the same width.",
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "minItems": 2,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "rows": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Rows",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "columns",
+                  "rows"
+                ],
+                "title": "SolutionTable",
                 "type": "object"
               }
             },

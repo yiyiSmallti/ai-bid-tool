@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from app.core.errors import ServiceError
 from app.jobs.execution import JobExecution, authorized_job, job_cost
 from app.providers.calls import plan_calls
-from app.providers.solution import solution_provider
+from app.providers.solution import MAX_CALLS_PER_ITEM, solution_provider
 from app.services import solution_generation
 from app.services.score_generation import usage_integrity
 
@@ -29,7 +29,7 @@ async def process(execution: JobExecution) -> None:
     async with execution.db.transaction() as session:
         job, _, provider, requests, targets = await fixed(execution, session)
         titles = job.result["submission"]["input_manifest"]["titles"]
-    plan_calls(len(requests))
+    plan_calls(len(requests) * MAX_CALLS_PER_ITEM)
 
     async def before_admit(session):
         await fixed(execution, session)
@@ -44,10 +44,10 @@ async def process(execution: JobExecution) -> None:
             if targets[title]["job_id"] == str(job.id):
                 continue
         output = await adapter.draft(request)
-        if len(output.usages) != 1:
+        if len(output.usages) != 1 + len(output.sections):
             raise ServiceError(
                 "solution_draft_usage_integrity",
-                "Each solution chapter requires one accounting receipt",
+                "Each solution call requires one accounting receipt",
                 500,
                 4,
             )
@@ -67,7 +67,7 @@ async def process(execution: JobExecution) -> None:
                 job.document_id,
                 title,
                 manifest["score_ranges"][index],
-                [section.model_dump(mode="json") for section in output.output.sections],
+                [section.model_dump(mode="json") for section in output.sections],
                 job_id=job.id,
                 expected_revision=job.result["submission"]["target_revisions"][title],
             )

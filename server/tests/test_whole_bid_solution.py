@@ -18,7 +18,13 @@ from app.core.errors import ServiceError
 from app.core.security import TokenSigner
 from app.models.entities import Task
 from app.providers.storage import Storage
-from app.schemas.solution import SolutionChapter, SolutionRevision, SolutionSection
+from app.schemas.solution import (
+    SolutionChapter,
+    SolutionRevision,
+    SolutionSection,
+    SolutionSubsection,
+    SolutionTable,
+)
 from app.schemas.whole_bid import WholeBidReceipt
 from app.services import bid_outline, solution, task_access, whole_bid
 from app.services.auth import Identity
@@ -71,7 +77,19 @@ def chapter(
             revision=1,
             state=state,
             origin="model",
-            sections=[SolutionSection(heading="执行安排", paragraphs=[body])],
+            sections=[
+                SolutionSection(
+                    heading="一、执行安排",
+                    paragraphs=[body],
+                    subsections=[
+                        SolutionSubsection(
+                            heading="检查频次",
+                            paragraphs=["每周巡查一次。"],
+                            table=SolutionTable(columns=["事项", "频次"], rows=[["巡查", "每周"]]),
+                        )
+                    ],
+                )
+            ],
             actor_kind="session",
             actor_token_id=None,
             agent_session_id=None,
@@ -246,9 +264,14 @@ def test_solution_docx_order_styles_placeholders_and_missing_chapters(placement)
         assert texts.index("附件2") < first < texts.index("附件3")
     else:
         assert texts.index("附件2") < first
-    section = next(p for p in paragraphs if p.text == "执行安排")
+    number = texts[first].split("、")[0]
+    section = next(p for p in paragraphs if p.text == f"{number}.1 执行安排")
     assert section.style is not None
     assert section.style.name == "Heading 2"
+    sub = next(p for p in paragraphs if p.text == f"{number}.1.1 检查频次")
+    assert sub.style is not None and sub.style.name == "Heading 3"
+    grid = next(t for t in doc.tables if t.cell(0, 0).text == "事项")
+    assert [c.text for c in grid.rows[1].cells] == ["巡查", "每周"]
     body = next(p for p in paragraphs if "项目负责人】开展检查" in p.text)
     indent = body.paragraph_format.first_line_indent
     assert indent is not None and indent.pt == 24

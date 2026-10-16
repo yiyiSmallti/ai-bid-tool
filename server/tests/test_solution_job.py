@@ -27,29 +27,34 @@ from app.services import solution_generation
 from docx import Document
 from pydantic import SecretStr
 from sqlalchemy import select
-
 from tests.conftest import FakeQueue
 from tests.test_check_combined import SemanticVendor, semantic_llm
 from tests.test_response_cards import login
+from tests.test_solution_provider import synthetic_output
 
 
 class SolutionVendor:
     def __init__(self):
         self.requests = []
+        self.calls = 0
         self.fail_at: int | None = None
         self.entered: asyncio.Event | None = None
         self.release: asyncio.Event | None = None
 
     async def __call__(self, request):
         body = json.loads(request.content)
+        name = body["response_format"]["json_schema"]["name"]
         sent = json.loads(body["messages"][-1]["content"])
-        self.requests.append(sent)
-        if self.entered is not None:
-            self.entered.set()
-            assert self.release is not None
-            await self.release.wait()
-        if len(self.requests) == self.fail_at:
-            raise httpx.ConnectError("Synthetic temporary model outage", request=request)
+        self.calls += 1
+        if name == "solution_plan":
+            # Plan requests carry the item inputs; section calls follow each plan.
+            self.requests.append(sent)
+            if self.entered is not None:
+                self.entered.set()
+                assert self.release is not None
+                await self.release.wait()
+            if len(self.requests) == self.fail_at:
+                raise httpx.ConnectError("Synthetic temporary model outage", request=request)
         return httpx.Response(
             200,
             json={
@@ -57,26 +62,7 @@ class SolutionVendor:
                 "choices": [
                     {
                         "finish_reason": "stop",
-                        "message": {
-                            "content": json.dumps(
-                                {
-                                    "sections": [
-                                        {
-                                            "heading": heading,
-                                            "paragraphs": [
-                                                "我方建立交接台账，逐项检查并记录整改。负责人：【待填：人员姓名】。"
-                                            ],
-                                        }
-                                        for heading in (
-                                            "工作安排",
-                                            "执行方法",
-                                            "质量检查",
-                                            "问题闭环",
-                                        )
-                                    ]
-                                }
-                            )
-                        },
+                        "message": {"content": json.dumps(synthetic_output(name))},
                     }
                 ],
                 "usage": {"prompt_tokens": 120, "completion_tokens": 80},
@@ -186,8 +172,8 @@ async def test_token_solution_draft_job_persists_usage_and_scoped_inputs(
         assert status.status_code == 200, status.text
         assert status.json()["data"]["status"] == "succeeded", status.text
         assert "submission" not in status.json()["data"]["result"]
-        assert status.json()["cost"]["calls"] == 2
-        assert status.json()["cost"]["llm_tokens"] == 400
+        assert status.json()["cost"]["calls"] == 10
+        assert status.json()["cost"]["llm_tokens"] == 2000
         rows = await chapters(api, token, task)
         assert {row["title"] for row in rows} == {"整体服务方案", "快速切换的机制"}
         assert all(
@@ -214,8 +200,8 @@ async def test_token_solution_draft_job_persists_usage_and_scoped_inputs(
             usage = (
                 await session.scalars(select(UsageRecord).where(UsageRecord.job_id == UUID(job_id)))
             ).all()
-            assert len(usage) == 2
-            assert sum(row.tokens for row in usage) == 400
+            assert len(usage) == 10
+            assert sum(row.tokens for row in usage) == 2000
         (tmp_path / "solution-job-acceptance.json").write_text(
             json.dumps(
                 {
@@ -337,7 +323,7 @@ async def test_solution_publish_rejects_missing_or_reused_accounting(
             usages = (
                 await session.scalars(select(UsageRecord).where(UsageRecord.job_id == UUID(job_id)))
             ).all()
-            assert len(usages) == 1
+            assert len(usages) == 5
         (tmp_path / "solution-accounting-fence.json").write_text(
             json.dumps(
                 {"failure": failure, "status": status, "published_chapters": len(rows)},

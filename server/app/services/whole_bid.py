@@ -28,7 +28,7 @@ from app.core.errors import ServiceError, not_found
 from app.models.entities import OrgProfileRevision, Requirement, Task, TaskOrgProfile
 from app.models.response_cards import ResponseCard, ResponseCardRevision
 from app.providers.storage import Storage
-from app.schemas.solution import SolutionChapter
+from app.schemas.solution import SolutionChapter, SolutionTable
 from app.schemas.whole_bid import BidOutline, OutlineForm, OutlineScoringItem
 from app.services import bid_outline, documents, task_access
 from app.services.form_layout import Blank, Cell, Grid, Paragraph, Text, form_blocks, plain
@@ -95,6 +95,14 @@ class Response:
 DEVIATION_LABELS = {"none": "无偏离", "positive": "正偏离", "negative": "负偏离"}
 SECRET_FIELD = re.compile(r"\{\{secret\.[^}]+\}\}")
 SOLUTION_PLACEHOLDER = re.compile(r"【待填：([^】]+)】")
+# Numbering a model may still put on a heading; the renderer numbers headings itself.
+HEADING_NUMBER = re.compile(
+    r"^\s*(第[一二三四五六七八九十\d]+[章节]|[一二三四五六七八九十]+[、.．]|\d+(\.\d+)*([、.．]|\s)|[（(][一二三四五六七八九十\d]+[）)])\s*"
+)
+
+
+def unnumbered(heading: str) -> str:
+    return HEADING_NUMBER.sub("", heading, count=1) or heading
 
 
 def compact(text: str) -> str:
@@ -273,7 +281,7 @@ class Renderer:
         section.left_margin = section.right_margin = Cm(2.5)
         section.top_margin = section.bottom_margin = Cm(2.5)
         self._style("Normal", BODY_FONT, 12)
-        for level, size in ((1, 16), (2, 14)):
+        for level, size in ((1, 16), (2, 14), (3, 12)):
             style = self._style(f"Heading {level}", HEADING_FONT, size)
             style.font.bold = True
             # The linked character style carries the template's theme blue too, and
@@ -387,9 +395,9 @@ class Renderer:
     def solution(self, items: list[OutlineScoringItem], chapters: list[SolutionChapter]) -> None:
         """Render the current revision in scoring order, keeping absent drafts visible."""
         by_item = {(chapter.title, chapter.score_range): chapter for chapter in chapters}
-        for number, item in enumerate((item for item in items if item.subjective), 1):
+        for chapter_number, item in enumerate((item for item in items if item.subjective), 1):
             self.pending_break = False
-            heading = self._new(f"{number}、{item.title}", style="Heading 1")
+            heading = self._new(f"{chapter_number}、{item.title}", style="Heading 1")
             heading.paragraph_format.page_break_before = True
             chapter = by_item.get((item.title, item.score_range))
             if chapter is None:
@@ -398,20 +406,44 @@ class Renderer:
                 continue
             if chapter.current.state != "confirmed":
                 self.tally.unconfirmed_chapters += 1
-            for section in chapter.current.sections:
-                self.solution_text(self._new(style="Heading 2"), section.heading)
-                for text in section.paragraphs:
-                    paragraph = self._new()
-                    paragraph.paragraph_format.first_line_indent = Pt(24)
-                    self.solution_text(paragraph, text)
+            for position, section in enumerate(chapter.current.sections, 1):
+                number = f"{chapter_number}.{position}"
+                self.solution_text(
+                    self._new(style="Heading 2"), f"{number} {unnumbered(section.heading)}"
+                )
+                self.solution_paragraphs(section.paragraphs)
+                for sub_position, sub in enumerate(section.subsections, 1):
+                    self.solution_text(
+                        self._new(style="Heading 3"),
+                        f"{number}.{sub_position} {unnumbered(sub.heading)}",
+                    )
+                    self.solution_paragraphs(sub.paragraphs)
+                    if sub.table:
+                        self.solution_table(sub.table)
 
-    def solution_text(self, paragraph, text: str) -> None:
+    def solution_paragraphs(self, texts: list[str]) -> None:
+        for text in texts:
+            paragraph = self._new()
+            paragraph.paragraph_format.first_line_indent = Pt(24)
+            self.solution_text(paragraph, text)
+
+    def solution_table(self, grid: SolutionTable) -> None:
+        table = self.word.add_table(rows=1 + len(grid.rows), cols=len(grid.columns))
+        table.style = "Table Grid"
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        for row, values in enumerate([grid.columns, *grid.rows]):
+            for column, value in enumerate(values):
+                paragraph = table.cell(row, column).paragraphs[0]
+                self.solution_text(paragraph, value, size=10.5, bold=row == 0)
+        self._new()
+
+    def solution_text(self, paragraph, text: str, *, size=None, bold=False) -> None:
         start = 0
         for match in SOLUTION_PLACEHOLDER.finditer(text):
-            self.run(paragraph, text[start : match.start()])
+            self.run(paragraph, text[start : match.start()], size=size, bold=bold)
             self.placeholder(paragraph, match.group(1))
             start = match.end()
-        self.run(paragraph, text[start:])
+        self.run(paragraph, text[start:], size=size, bold=bold)
 
     def blank(self, paragraph, piece: Blank, label: str) -> None:
         name = field_of(label, piece.hint)

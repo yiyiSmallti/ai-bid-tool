@@ -70,7 +70,11 @@ def register(app: typer.Typer):
             raise ServiceError("input_too_large", "JSON input exceeds the command limit", 400, 2)
         request = SolutionEdit(expected_revision=expected_revision, sections=json.loads(content))
         cli.emit(
-            cli.call("PUT", f"/solutions/{chapter}", json=request.model_dump(mode="json")),
+            cli.call(
+                "PUT",
+                f"/solutions/{chapter}",
+                json=request.model_dump(mode="json", exclude_defaults=True),
+            ),
             "solution edit",
             json_output,
         )

@@ -34,7 +34,7 @@ def view(chapter: SolutionChapter, revision: SolutionRevision) -> ChapterView:
         placeholder_count=sum(
             len(PLACEHOLDER.findall(text))
             for section in current.sections
-            for text in [section.heading, *section.paragraphs]
+            for text in section.texts()
         ),
     )
 
@@ -108,11 +108,16 @@ def expected(chapter, number):
 
 
 async def append(session, actor, chapter, sections, *, origin, state="draft", job_id=None):
-    parsed = [SolutionSection.model_validate(section) for section in sections]
+    # Stored dicts are kept verbatim: confirmation compares them with the draft, and
+    # drafts written before subsections existed have no `subsections` key.
+    stored = []
+    for section in sections:
+        parsed = SolutionSection.model_validate(section)
+        stored.append(section if isinstance(section, dict) else parsed.model_dump(mode="json"))
     revision = SolutionRevision(
         chapter_id=chapter.id,
         revision=chapter.current_revision + 1,
-        sections=[section.model_dump(mode="json") for section in parsed],
+        sections=stored,
         origin=origin,
         state=state,
         actor_kind=actor.actor_kind,

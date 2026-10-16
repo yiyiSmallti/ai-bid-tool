@@ -15,7 +15,6 @@ from app.providers.calls import current_accounting
 from app.providers.solution import HTTPSolutionProvider
 from app.schemas.solution import SolutionProviderRequest
 from cryptography.fernet import Fernet
-
 from tests.test_check_combined import SemanticVendor, semantic_llm
 from tests.test_score_provider import Accounting
 
@@ -42,19 +41,33 @@ def draft_request():
     )
 
 
+def synthetic_output(name: str) -> dict:
+    """A plan of four sections, or one written section, by the requested schema."""
+    if name == "solution_plan":
+        return {
+            "sections": [
+                {"heading": title, "points": ["岗位安排", "检查记录"]}
+                for title in ("岗位安排", "培训实施", "考勤管理", "替补机制")
+            ]
+        }
+    return {
+        "paragraphs": ["我方建立交接台账。负责人：【待填：姓名】。"],
+        "subsections": [
+            {"heading": heading, "paragraphs": ["我方每周检查并记录整改。"], "table": None}
+            for heading in ("岗位安排", "检查记录")
+        ],
+    }
+
+
 @pytest.mark.parametrize("failure", [None, "short", "truncated", "malformed"])
-async def test_solution_one_item_one_accounted_call(tmp_path, failure):
+async def test_solution_plan_then_one_accounted_call_per_section(tmp_path, failure):
     sent = []
 
     async def vendor(request):
         body = json.loads(request.content)
         sent.append(body)
-        output = {
-            "sections": [
-                {"heading": title, "paragraphs": ["我方建立交接台账。负责人：【待填：姓名】。"]}
-                for title in ("岗位安排", "培训实施", "考勤管理", "替补机制")
-            ]
-        }
+        name = body["response_format"]["json_schema"]["name"]
+        output = synthetic_output(name)
         if failure == "short":
             output["sections"] = output["sections"][:3]
         return httpx.Response(
@@ -85,17 +98,25 @@ async def test_solution_one_item_one_accounted_call(tmp_path, failure):
             )
         else:
             result = await provider.draft(draft_request())
-            assert len(result.output.sections) == 4
-            assert len(result.usages) == 1
+            assert len(result.sections) == 4
+            assert all(len(section.subsections) == 2 for section in result.sections)
+            assert len(result.usages) == 5
             assert result.usages[0].input_tokens == 120
     finally:
         current_accounting.reset(token)
-    assert len(sent) == len(accounting.completed) == 1
+    calls = 1 if failure else 5
+    assert len(sent) == len(accounting.completed) == calls
     assert not accounting.unknown_calls
-    assert json.loads(sent[0]["messages"][-1]["content"]) == draft_request().model_dump(mode="json")
+    plan = json.loads(sent[0]["messages"][-1]["content"])
+    assert plan == draft_request().model_dump(mode="json") | {"sections_min": 6, "sections_max": 8}
     assert sent[0]["response_format"]["json_schema"]["strict"]
-    system = sent[0]["messages"][0]["content"]
-    assert "不可信" in system and "【待填：" in system and "我方" in system
+    for body in sent:
+        system = body["messages"][0]["content"]
+        assert "不可信" in system and "【待填：" in system and "我方" in system
+    if not failure:
+        written = json.loads(sent[1]["messages"][-1]["content"])
+        assert written["item"] == draft_request().model_dump(mode="json")
+        assert len(written["plan"]) == 4 and written["section"] in written["plan"]
     artifact = tmp_path / "solution-accounted-call.json"
     artifact.write_text(
         json.dumps(
@@ -109,7 +130,7 @@ async def test_solution_one_item_one_accounted_call(tmp_path, failure):
             indent=2,
         )
     )
-    assert json.loads(artifact.read_text())["receipts"] == 1
+    assert json.loads(artifact.read_text())["receipts"] == calls
 
 
 async def test_solution_requires_accounting_and_admission_before_outbound(tmp_path):

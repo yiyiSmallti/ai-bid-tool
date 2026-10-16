@@ -4,28 +4,78 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.schemas.contracts import Contract, ProviderUsage
 
 
-class SolutionSection(Contract):
+def _nonblank(values: list[str], name: str) -> list[str]:
+    if any(not value.strip() for value in values):
+        raise ValueError(f"{name} must contain text")
+    return values
+
+
+class SolutionTable(Contract):
+    """A plain grid: a header row and body rows of the same width."""
+
+    columns: list[str] = Field(min_length=2, max_length=8)
+    rows: list[list[str]] = Field(min_length=1, max_length=40)
+
+    @model_validator(mode="after")
+    def rectangular(self) -> "SolutionTable":
+        _nonblank(self.columns, "columns")
+        if any(len(row) != len(self.columns) for row in self.rows):
+            raise ValueError("every row must have one cell per column")
+        return self
+
+
+class SolutionSubsection(Contract):
     heading: str = Field(min_length=1, max_length=300)
-    paragraphs: list[str] = Field(min_length=1, max_length=100)
+    paragraphs: list[str] = Field(min_length=1, max_length=40)
+    table: SolutionTable | None = None
 
     @field_validator("heading")
     @classmethod
     def nonblank_heading(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("heading must contain text")
-        return value
+        return _nonblank([value], "heading")[0]
 
     @field_validator("paragraphs")
     @classmethod
     def nonblank_paragraphs(cls, value: list[str]) -> list[str]:
-        if any(not paragraph.strip() for paragraph in value):
-            raise ValueError("paragraphs must contain text")
-        return value
+        return _nonblank(value, "paragraphs")
+
+
+class SolutionSection(Contract):
+    """A chapter section: lead paragraphs, then numbered subsections."""
+
+    heading: str = Field(min_length=1, max_length=300)
+    paragraphs: list[str] = Field(default_factory=list, max_length=100)
+    subsections: list[SolutionSubsection] = Field(default_factory=list, max_length=12)
+
+    @field_validator("heading")
+    @classmethod
+    def nonblank_heading(cls, value: str) -> str:
+        return _nonblank([value], "heading")[0]
+
+    @field_validator("paragraphs")
+    @classmethod
+    def nonblank_paragraphs(cls, value: list[str]) -> list[str]:
+        return _nonblank(value, "paragraphs")
+
+    @model_validator(mode="after")
+    def has_body(self) -> "SolutionSection":
+        if not self.paragraphs and not self.subsections:
+            raise ValueError("a section needs paragraphs or subsections")
+        return self
+
+    def texts(self) -> list[str]:
+        """Every text of the section, for placeholder counting."""
+        out = [self.heading, *self.paragraphs]
+        for sub in self.subsections:
+            out += [sub.heading, *sub.paragraphs]
+            if sub.table:
+                out += sub.table.columns + [cell for row in sub.table.rows for cell in row]
+        return out
 
 
 class SolutionDraftRequest(Contract):
@@ -80,8 +130,22 @@ class SolutionList(Contract):
     total: int = Field(ge=0)
 
 
-class SolutionWireOutput(Contract):
-    sections: list[SolutionSection] = Field(min_length=4, max_length=8)
+class SolutionPlanSection(Contract):
+    heading: str = Field(min_length=1, max_length=120)
+    points: list[str] = Field(min_length=2, max_length=6)
+
+
+class SolutionPlanOutput(Contract):
+    """Stage one: the chapter's section headings and each section's subsection headings."""
+
+    sections: list[SolutionPlanSection] = Field(min_length=4, max_length=10)
+
+
+class SolutionSectionOutput(Contract):
+    """Stage two: one planned section written out, one subsection per planned point."""
+
+    paragraphs: list[str] = Field(min_length=1, max_length=3)
+    subsections: list[SolutionSubsection] = Field(min_length=2, max_length=6)
 
 
 class SolutionProviderRequest(Contract):
@@ -93,6 +157,14 @@ class SolutionProviderRequest(Contract):
     tenderee: str | None
 
 
+class SolutionSectionRequest(Contract):
+    """Stage-two input: the item and the whole plan, with one section to write."""
+
+    item: SolutionProviderRequest
+    plan: list[SolutionPlanSection]
+    section: SolutionPlanSection
+
+
 class SolutionProviderResult(Contract):
-    output: SolutionWireOutput
+    sections: list[SolutionSection]
     usages: list[ProviderUsage]
