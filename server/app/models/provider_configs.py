@@ -76,12 +76,17 @@ class ProviderSlot(Base):
         Boolean, nullable=False, default=False, server_default=sql_text("false")
     )
     removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Null is a company model; a member is the owner of a personal model.
+    owner_member_id: Mapped[UUID | None] = mapped_column(nullable=True)
     __table_args__ = (
         CheckConstraint(
             "((capability)::text = 'llm_extract'::text)", name="provider_slot_capability"
         ),
         CheckConstraint(
             "((NOT is_default) OR (removed_at IS NULL))", name="provider_slot_default_live"
+        ),
+        CheckConstraint(
+            "((NOT is_default) OR (owner_member_id IS NULL))", name="provider_slot_default_company"
         ),
         Index(
             "provider_slot_default",
