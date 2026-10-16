@@ -19,7 +19,13 @@ from app.core.config import Settings
 from app.core.errors import ServiceError, log_unexpected
 from app.core.llm_options import output_limits, validate_request_options
 from app.models.entities import Job
-from app.providers.base import ContentBlocked, MalformedOutput, ProviderFailure, TruncatedOutput
+from app.providers.base import (
+    ContentBlocked,
+    MalformedOutput,
+    NotDispatched,
+    ProviderFailure,
+    TruncatedOutput,
+)
 from app.providers.calls import accounted_call, plan_calls
 from app.providers.disabled import DisabledLLM
 from app.providers.quotes import serialized_request
@@ -752,11 +758,20 @@ class HTTPExtractor:
             try:
                 payload = response.json()
             except ValueError:
+                payload = None
+            if 400 <= response.status_code < 500 and not (
+                isinstance(payload, dict) and "usage" in payload
+            ):
+                # A client-error reply is the vendor refusing the request before any
+                # generation. Settle it at zero usage so a retry is not blocked as an
+                # unknown dispatch; the status is raised after accounting.
+                return (response, {}, True, False), self.usage(started, self.model, 0, 0)
+            if payload is None:
                 if response.status_code != 200:
                     self.check_status(response, key=key)
                 raise ProviderFailure(
                     "LLM service returned a non-JSON response", code="invalid_provider_output"
-                ) from None
+                )
             if not isinstance(payload, dict):
                 raise ProviderFailure(
                     "LLM response is not an object", code="invalid_provider_output"
@@ -835,6 +850,8 @@ class HTTPExtractor:
                     headers={"Content-Type": "application/json", **headers},
                     content=self.serialized_request(body),
                 )
+        except (httpx.ConnectError, httpx.ConnectTimeout):
+            raise NotDispatched("LLM service is unreachable or timed out", retryable=True) from None
         except (TimeoutError, httpx.TimeoutException, httpx.TransportError, ssl.SSLError):
             # httpx leaves a TLS connection dropped mid-response as a raw ssl.SSLError.
             raise ProviderFailure(

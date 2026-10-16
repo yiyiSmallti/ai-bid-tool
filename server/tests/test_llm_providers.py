@@ -270,13 +270,15 @@ async def test_pdf_items_keep_exact_source_spans_and_reject_unknown_and_ambiguou
     ]
 
 
+# The last field counts usage records: a 4xx reply settles at zero tokens, so a
+# retry is not blocked as an unknown dispatch; 5xx and timeouts stay unknown.
 FAILURES = {
     "rate_limited": (
         httpx.Response(429, json={"error": {"type": "rate_limit_error"}}),
         "queued",
         "provider_unavailable",
         3,
-        0,
+        1,
     ),
     "overloaded": (
         httpx.Response(529, json={"error": {"type": "overloaded_error"}}),
@@ -291,7 +293,7 @@ FAILURES = {
         "failed",
         "provider_unavailable",
         4,
-        0,
+        1,
     ),
     "refused": (anthropic_reply([], stop="refusal"), "failed", "provider_refused", 4, 1),
     # Zhipu rate limits stay retryable; its quota and plan codes do not recover in time.
@@ -300,28 +302,28 @@ FAILURES = {
         "queued",
         "provider_unavailable",
         3,
-        0,
+        1,
     ),
     "zhipu_quota_used_up": (
         httpx.Response(429, json={"error": {"code": "1308", "message": "limit reached"}}),
         "failed",
         "provider_quota_exhausted",
         4,
-        0,
+        1,
     ),
     "openai_insufficient_quota": (
         httpx.Response(429, json={"error": {"type": "insufficient_quota"}}),
         "failed",
         "provider_quota_exhausted",
         4,
-        0,
+        1,
     ),
     "payment_required": (
         httpx.Response(402, json={"error": {"message": "Insufficient Balance"}}),
         "failed",
         "provider_quota_exhausted",
         4,
-        0,
+        1,
     ),
     "unknown_page": (
         anthropic_reply([GOOD_ITEMS[0] | {"ref": "9"}]),
@@ -342,7 +344,7 @@ FAILURES = {
 
 @pytest.mark.parametrize("case", FAILURES)
 async def test_vendor_failures_map_to_job_states(case, database, tmp_path, pdf_bytes):
-    reply, job_status, code, exit_code, billed_calls = FAILURES[case]
+    reply, job_status, code, exit_code, usage_records = FAILURES[case]
     settings = settings_for(tmp_path, "anthropic")
     llm = AnthropicExtractor(settings, transport=Vendor(reply).transport())
     app = await credential_app(settings, llm=llm, queue=FakeQueue())
@@ -363,7 +365,10 @@ async def test_vendor_failures_map_to_job_states(case, database, tmp_path, pdf_b
         assert (status["error"]["code"], status["error"]["exit_code"]) == (code, exit_code)
         assert SYNTHETIC_KEY not in json.dumps(status)
         assert await requirement_rows(app) == []
-        assert len(await usage_rows(app)) == billed_calls
+        usage = await usage_rows(app)
+        assert len(usage) == usage_records
+        if isinstance(reply, httpx.Response) and 400 <= reply.status_code < 500:
+            assert [row.tokens for row in usage] == [0]
         if case == "unknown_page":
             assert status["result"]["rejected"] == [
                 {

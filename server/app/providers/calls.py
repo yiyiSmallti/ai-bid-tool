@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID
 
-from app.providers.base import ProviderFailure
+from app.providers.base import NotDispatched, ProviderFailure
 from app.schemas.contracts import ProviderUsage
 from app.schemas.preflight_contracts import CallPlan
 
@@ -106,6 +106,10 @@ async def accounted_call[T](
             await accounting.complete(call_id, usage)
             settled = True
             return result, usage
+        except NotDispatched:
+            # No connection opened, so the vendor cannot have received the request.
+            prepared = False
+            raise
         finally:
             if not settled:
                 # An absent response does not prove no dispatch. Retain the unknown outcome.

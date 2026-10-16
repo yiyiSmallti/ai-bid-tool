@@ -32,6 +32,10 @@ class ProviderFailure(Exception):
         self.usage = usage or []
 
 
+class NotDispatched(ProviderFailure):
+    """The connection never opened, so no request reached the vendor."""
+
+
 class MalformedOutput(ProviderFailure):
     """The model answered with text that is not the extraction schema; a smaller batch may parse."""
 
