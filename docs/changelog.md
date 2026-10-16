@@ -6,6 +6,14 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Package pages in the client
+
+- 导入项目包 on the task list imports a package and shows its report,
+  including confidential keys to fill in; 导出项目包 on the task page exports
+  and saves the zip after checking its size and SHA-256.
+- On a gateway the export shows only for projects that allow it, and an
+  administrator switches that on the project members page.
+
 ## 2026-10-15: Project package import
 
 - `POST /packages/import` and `bid package import --file` import a
@@ -25,7 +33,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   and confidential plaintext stay out.
 - `bid package status` shows the export report and `bid package download`
   saves the package after checking its hash. On a gateway a project exports
-  only while its owner allows export to personal installations.
+  only while an administrator allows export to personal installations.
 - Evidence that points at a screenshot is not packaged yet.
 
 ## 2026-10-15: Client network behavior on a gateway
