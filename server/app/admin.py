@@ -9,6 +9,7 @@ import asyncio
 import json
 import os
 import sys
+from pathlib import Path
 
 import procrastinate
 from alembic import command
@@ -429,8 +430,29 @@ def main():
     create.add_argument("--login", required=True)
     create.add_argument("--display-name")
     create.add_argument("--role", choices=("admin", "member"), default="member")
+    backup = commands.add_parser("backup")
+    backup.add_argument("--dir", type=Path, required=True)
+    backup.add_argument("--keep-days", type=int, default=14)
+    restore = commands.add_parser("restore")
+    restore.add_argument("--verify", type=Path, required=True, metavar="BACKUP")
     args = parser.parse_args()
-    if args.command == "init-db":
+    if args.command in {"backup", "restore"}:
+        from app.core.config import Settings
+        from app.services import backup as backups
+
+        try:
+            if args.command == "backup":
+                report = backups.backup(Settings.load(), args.dir, args.keep_days)
+            else:
+                report = backups.verify(args.verify)
+        except backups.BackupError as exc:
+            print(
+                json.dumps({"error": exc.code, "message": exc.message, **exc.details}),
+                file=sys.stderr,
+            )
+            raise SystemExit(exc.exit_code) from None
+        print(json.dumps(report))
+    elif args.command == "init-db":
         from app.core.errors import ServiceError
 
         try:
