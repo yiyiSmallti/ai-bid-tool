@@ -241,6 +241,32 @@ func TestWorkspaceSwitchLeavesLocalDataIntact(t *testing.T) {
 	if _, err := local.Client.Request(ctx, "POST", "/tasks", Object{"name": "合成工作区切换任务"}); err != nil {
 		t.Fatal(err)
 	}
+	// The model page saves a model on the local server and reads it back; the
+	// owner the server reports with each model is part of the contract.
+	app := NewNativeApp()
+	app.Client, app.Workspace = local.Client, local
+	updates := make(chan func(), 64)
+	app.Dispatch = func(apply func()) { updates <- apply }
+	app.ConfirmDialog = func(string, string) (bool, error) { return true, nil }
+	app.Navigate("/org/settings/models")
+	pumpRequests(t, app, updates)
+	models, ok := app.page.(*modelSettingsPage)
+	if !ok || app.Error != "" || models.settings == nil || !models.writable(app, "company") || !models.testable(app) {
+		t.Fatalf("local model page: %q", app.Error)
+	}
+	models.startEdit(app, nil, "company")
+	models.template = "zhipu"
+	models.applyTemplate("zhipu")
+	models.key = "synthetic-local-key-0003"
+	models.save(app)
+	pumpRequests(t, app, updates)
+	app.Navigate("/org/settings/models")
+	pumpRequests(t, app, updates)
+	models, ok = app.page.(*modelSettingsPage)
+	if !ok || app.Error != "" || len(models.owned("company")) != 1 || str(models.settings, "default_slot") != str(models.owned("company")[0], "slot") {
+		t.Fatalf("local model not saved and read back: %q", app.Error)
+	}
+	report["local_model_page"] = "saved and read back"
 	before := localData(t, latest)
 	localAddr := strings.TrimPrefix(local.Client.BaseURL, "http://")
 	localSession := local.Client.session
