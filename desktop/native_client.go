@@ -57,6 +57,9 @@ func (c *APIClient) endpoint(path string) (string, error) {
 	return c.BaseURL + path, nil
 }
 func (c *APIClient) send(ctx context.Context, method, path string, body io.Reader, contentType string) (*http.Response, error) {
+	return c.sendWith(ctx, c.HTTP, method, path, body, contentType)
+}
+func (c *APIClient) sendWith(ctx context.Context, client *http.Client, method, path string, body io.Reader, contentType string) (*http.Response, error) {
 	endpoint, err := c.endpoint(path)
 	if err != nil {
 		return nil, err
@@ -76,12 +79,85 @@ func (c *APIClient) send(ctx context.Context, method, path string, body io.Reade
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	response, err := c.HTTP.Do(req)
+	response, err := client.Do(req)
 	if err == nil && response.StatusCode == 401 && !passwordCheck(method, path) {
 		c.SetSession("")
 	}
 	return response, err
 }
+
+// transferStall is how long an upload or download may go without moving a
+// byte. A transfer has no total limit; every other request keeps the client's.
+var transferStall = 60 * time.Second
+
+var errTransferStalled = errors.New("传输长时间没有进展，请检查网络后重试")
+
+// transfer sends a request whose body or response may take longer than the
+// client's limit. It fails once neither side moves for transferStall; closing
+// the response body ends the watch.
+func (c *APIClient) transfer(ctx context.Context, method, path string, body io.Reader, contentType string) (*http.Response, error) {
+	ctx, cancel := context.WithCancelCause(ctx)
+	watch := &transferWatch{ctx: ctx, cancel: cancel}
+	watch.timer = time.AfterFunc(transferStall, func() { cancel(errTransferStalled) })
+	if body != nil {
+		body = &progressReader{Reader: body, watch: watch}
+	}
+	client := *c.HTTP
+	client.Timeout = 0
+	response, err := c.sendWith(ctx, &client, method, path, body, contentType)
+	if err != nil {
+		err = watch.cause(err)
+		watch.stop()
+		return nil, err
+	}
+	response.Body = &transferBody{ReadCloser: response.Body, watch: watch}
+	return response, nil
+}
+
+type transferWatch struct {
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+	timer  *time.Timer
+}
+
+func (w *transferWatch) progress() { w.timer.Reset(transferStall) }
+func (w *transferWatch) stop()     { w.timer.Stop(); w.cancel(nil) }
+func (w *transferWatch) cause(err error) error {
+	if errors.Is(context.Cause(w.ctx), errTransferStalled) {
+		return errTransferStalled
+	}
+	return err
+}
+
+type progressReader struct {
+	io.Reader
+	watch *transferWatch
+}
+
+func (r *progressReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if n > 0 {
+		r.watch.progress()
+	}
+	return n, err
+}
+
+type transferBody struct {
+	io.ReadCloser
+	watch *transferWatch
+}
+
+func (b *transferBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if n > 0 {
+		b.watch.progress()
+	}
+	if err != nil && err != io.EOF {
+		err = b.watch.cause(err)
+	}
+	return n, err
+}
+func (b *transferBody) Close() error { b.watch.stop(); return b.ReadCloser.Close() }
 
 // passwordCheck is a password change, whose 401 may refuse the current
 // password while the session stays valid.
@@ -234,7 +310,7 @@ func (c *APIClient) Upload(ctx context.Context, path string, fields map[string]s
 			}
 		}
 	}()
-	response, err := c.send(ctx, "POST", path, reader, multipartWriter.FormDataContentType())
+	response, err := c.transfer(ctx, "POST", path, reader, multipartWriter.FormDataContentType())
 	if err != nil {
 		_ = reader.CloseWithError(err)
 		return Result{}, err
@@ -242,7 +318,7 @@ func (c *APIClient) Upload(ctx context.Context, path string, fields map[string]s
 	return decodeResult(response)
 }
 func (c *APIClient) Binary(ctx context.Context, path string) ([]byte, error) {
-	response, err := c.send(ctx, "GET", path, nil, "")
+	response, err := c.transfer(ctx, "GET", path, nil, "")
 	if err != nil {
 		return nil, err
 	}

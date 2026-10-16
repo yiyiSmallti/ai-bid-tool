@@ -170,6 +170,8 @@ func TestNativeSnapshots(t *testing.T) {
 		"ent-memory-private":  "/org/memory?scope=private",
 		"ent-usage":           "/org/usage",
 		"ent-my-usage":        "/account/usage",
+		"ent-offline":         "/org/tasks",
+		"ent-login-offline":   "/login",
 	}
 	store := WorkspaceStore{Path: filepath.Join(t.TempDir(), "workspaces.json")}
 	gateway := Workspace{ID: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b", Kind: "enterprise", Name: "华东建设集团", URL: "https://bid.example.com"}
@@ -192,7 +194,7 @@ func TestNativeSnapshots(t *testing.T) {
 			if strings.HasPrefix(name, "ent-") {
 				app.Client = NewAPIClient(server.URL + "/ent")
 				app.Workspace = &OpenWorkspace{Workspace: gateway, Client: app.Client}
-				if name != "ent-login" {
+				if !strings.HasPrefix(name, "ent-login") {
 					role := "admin"
 					if name == "ent-sessions" || name == "ent-password" || name == "ent-models" || name == "ent-memory" || name == "ent-memory-private" || name == "ent-my-usage" {
 						role = "member"
@@ -224,6 +226,11 @@ func TestNativeSnapshots(t *testing.T) {
 				case <-time.After(60 * time.Millisecond):
 					idle++
 				}
+				tt.Frame()
+			}
+			// As a gateway that stopped answering.
+			if strings.HasSuffix(name, "-offline") {
+				app.Offline = true
 				tt.Frame()
 			}
 			// Opens the add-model form with a vendor template, as a click on 添加模型 would.

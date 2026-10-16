@@ -7,9 +7,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func nativeConsumerResult(ok bool, command string, data Object) Object {
@@ -151,5 +154,61 @@ func TestNativeClientRejectsTrailingResponseData(t *testing.T) {
 				t.Fatalf("complete response validation: got error %v, want rejection %v", err, scenario.wantError)
 			}
 		})
+	}
+}
+
+// Failure matrix before implementation: a download that keeps moving fails at
+// the client's total limit; a stalled download or a gateway that never answers
+// an upload hangs; a stall is reported as an unreadable response; an ordinary
+// request loses its total limit.
+func TestNativeTransfersFailOnlyWithoutProgress(t *testing.T) {
+	stall, limit := transferStall, 600*time.Millisecond
+	transferStall = 300 * time.Millisecond
+	t.Cleanup(func() { transferStall = stall })
+	done := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		flusher := w.(http.Flusher)
+		switch r.URL.Path {
+		case "/slow":
+			w.Header().Set("Content-Length", "12")
+			for i := 0; i < 12; i++ {
+				_, _ = w.Write([]byte("x"))
+				flusher.Flush()
+				time.Sleep(100 * time.Millisecond)
+			}
+			return
+		case "/stalled":
+			w.Header().Set("Content-Length", "12")
+			_, _ = w.Write([]byte("xxxxxx"))
+			flusher.Flush()
+		case "/upload":
+			_, _ = io.Copy(io.Discard, r.Body)
+		}
+		select {
+		case <-done:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { close(done) })
+	client := NewAPIClient(server.URL)
+	client.HTTP.Timeout = limit
+	data, err := client.Binary(context.Background(), "/slow")
+	if err != nil || len(data) != 12 {
+		t.Fatalf("a download that keeps moving must outlast the request limit: %d bytes, %v", len(data), err)
+	}
+	started := time.Now()
+	if _, err := client.Binary(context.Background(), "/stalled"); !errors.Is(err, errTransferStalled) || time.Since(started) > 2*time.Second {
+		t.Fatalf("a stalled download must fail as stalled: %v after %s", err, time.Since(started))
+	}
+	file := filepath.Join(t.TempDir(), "synthetic.pdf")
+	if err := os.WriteFile(file, []byte("%PDF-synthetic"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Upload(context.Background(), "/upload", nil, []UploadFile{{Field: "file", Path: file}}); !errors.Is(err, errTransferStalled) {
+		t.Fatalf("an unanswered upload must fail as stalled: %v", err)
+	}
+	if _, err := client.Request(context.Background(), "GET", "/other", nil); err == nil || errors.Is(err, errTransferStalled) {
+		t.Fatalf("an ordinary request keeps the total limit: %v", err)
 	}
 }

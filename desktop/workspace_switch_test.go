@@ -89,6 +89,8 @@ type fakeGateway struct {
 	// the password routes, as the gateway's auth gate does.
 	password   string
 	mustChange bool
+	// down drops every connection, as an unreachable gateway does.
+	down bool
 }
 
 func newFakeGateway(t *testing.T, mode, contract string) *fakeGateway {
@@ -96,6 +98,12 @@ func newFakeGateway(t *testing.T, mode, contract string) *fakeGateway {
 	g.Server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		defer g.mu.Unlock()
+		if g.down {
+			if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+				_ = conn.Close()
+			}
+			return
+		}
 		g.seen = append(g.seen, r.Method+" "+r.URL.Path+" "+r.Header.Get("Authorization"))
 		member := Object{"id": "11111111-2222-4333-8444-555555555555", "login": "synthetic.member", "display_name": "合成成员", "role": "member"}
 		switch {

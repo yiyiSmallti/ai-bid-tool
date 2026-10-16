@@ -6,6 +6,14 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Client network behavior on a gateway
+
+- Uploads and downloads no longer fail at the 90-second request limit; they
+  fail only after 60 seconds without progress.
+- A gateway that cannot be reached shows a banner with 重试连接 on the current
+  page or at sign-in, instead of a socket error; the client never switches to
+  local data. This completes slice 4 of the enterprise gateway plan.
+
 ## 2026-10-15: Client models, memory and usage
 
 - On a gateway the model page separates company models, which only an

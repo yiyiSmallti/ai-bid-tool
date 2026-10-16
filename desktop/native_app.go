@@ -29,10 +29,12 @@ type NativeApp struct {
 	Runner    *WorkspaceRunner
 	Workspace *OpenWorkspace
 	// Starting says what the startup screen waits for.
-	Starting        string
-	Window          *mygo.Window
-	Busy            bool
-	Error, Notice   string
+	Starting      string
+	Window        *mygo.Window
+	Busy          bool
+	Error, Notice string
+	// Offline is set while the open gateway cannot be reached.
+	Offline         bool
 	page            NativePage
 	cancel          context.CancelFunc
 	ctx             context.Context
@@ -202,6 +204,7 @@ func (a *NativeApp) Request(method, path string, body any, done func(Result)) {
 	a.Do(func(ctx context.Context) (func(), error) {
 		r, err := a.Client.Request(ctx, method, path, body)
 		return func() {
+			a.Offline = false
 			if len(r.Warnings) > 0 {
 				a.Notice = nativeWarnings(r.Warnings)
 			}
@@ -215,6 +218,7 @@ func (a *NativeApp) Upload(path string, fields map[string]string, files []Upload
 	a.Do(func(ctx context.Context) (func(), error) {
 		r, err := a.Client.Upload(ctx, path, fields, files)
 		return func() {
+			a.Offline = false
 			if done != nil {
 				done(r)
 			}
@@ -257,6 +261,10 @@ func (a *NativeApp) update(fn func()) {
 	a.Window.Update(fn)
 }
 func (a *NativeApp) handleError(err error) bool {
+	if a.enterprise() && connectionLost(err) {
+		a.Offline = true
+		return true
+	}
 	var api *APIError
 	if errors.As(err, &api) {
 		if api.Status == 401 && a.enterprise() {
@@ -361,8 +369,9 @@ func (a *NativeApp) View(c *ui.Context) {
 		a.sidebar(c)
 		ui.Column(c).Grow(1).MinWidth(0).FillHeight().Children(func() {
 			a.header(c)
-			if a.Error != "" || a.Notice != "" {
+			if a.Error != "" || a.Notice != "" || a.Offline {
 				ui.Column(c).FillWidth().Gap(8).Padding(0, 32, 10, 32).Children(func() {
+					a.connectionBanner(c)
 					if a.Error != "" {
 						nativeCallout(c, toneDanger, a.Error)
 					}
@@ -500,6 +509,7 @@ func (a *NativeApp) fullscreen(c *ui.Context) {
 			if a.Error != "" {
 				nativeCallout(c, toneDanger, a.Error)
 			}
+			a.connectionBanner(c)
 			a.page.View(c, a)
 			if _, login := a.page.(*loginPage); login {
 				a.fullscreenSwitcher(c)
