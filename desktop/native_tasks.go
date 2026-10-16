@@ -244,10 +244,12 @@ func (a *NativeApp) sidebar(c *ui.Context) {
 			if a.admin() {
 				groupTitle("企业管理", nil)
 				item("/org/members", "users-round", "成员与权限")
+				item("/org/usage", "chart-column", "用量")
 			}
 			if a.member() != nil {
 				groupTitle("我的账号", nil)
 				item("/account/sessions", "monitor-smartphone", "我的登录")
+				item("/account/usage", "chart-column", "我的用量")
 				item("/account/password", "key-round", "修改密码")
 			}
 		})
