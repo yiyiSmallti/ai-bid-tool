@@ -40,9 +40,14 @@ solution that answers each scoring item.
    are never rows.
 5. **Solution.** The scoring chapter's subjective items (方案, 措施, 人员管理,
    设施, 建议 and the like) each become a chapter. A model first plans the
-   chapter headings from the scoring rule and the needs chapter, then drafts
-   the sections in the same call: one call per selected subjective item, with
-   four to eight sections. The needs text is bounded by
+   chapter's sections and their points from the scoring rule and the needs
+   chapter: four to six sections, six to eight from 10 points, eight to ten
+   from 20 points. Each section is then drafted in its own call as an
+   introduction and one subsection per point, with a table where one fits.
+   A section call has a bounded output and is retried once when cut off.
+   Service commitments (response times, frequencies, deadlines) are concrete
+   numbers. Headings carry no numbering; the file numbers them
+   (`N、`, `N.M`, `N.M.K`). The needs text is bounded by
    `Settings.solution_needs_max_chars` in
    [config.py](../../server/app/core/config.py). Drafts describe methods and plans;
    company facts the model

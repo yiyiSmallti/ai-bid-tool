@@ -8,10 +8,13 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 ## 2026-10-16: Solution chapter drafting and review
 
-- `bid solution draft` submits one model call per selected subjective scoring
-  item, with the item's complete rule, bounded procurement needs and project
-  facts. The response plans four to eight sections and drafts concrete bidder
-  methods, leaving unknown company facts as `【待填：…】`. Calls use the existing
+- `bid solution draft` plans each selected subjective scoring item from its
+  complete rule, bounded procurement needs and project facts, then drafts each
+  planned section in its own call: an introduction and subsections with
+  tables where they fit. Higher-scored items get more sections. Service
+  commitments carry concrete numbers; unknown company facts stay
+  `【待填：…】`. A section cut off at its output cap is retried once. Drafting
+  uses the model's default reasoning level, and calls use the existing
   admission, masking and usage-accounting path.
 - `bid solution list`, `show`, `edit` and `confirm` expose current chapters.
   Editing appends a draft; confirmation appends a human decision. Expected
