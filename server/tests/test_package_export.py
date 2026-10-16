@@ -22,10 +22,10 @@ import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from app.services import packages
-from sqlalchemy import text
 from app.core.config import Settings
+from app.services import packages
 from bid_cli import main as cli
+from sqlalchemy import text
 from test_check import (  # noqa: F401
     LiveCheckClient,
     check_case,
