@@ -6,6 +6,14 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Tender outline
+
+- `GET /documents/{id}/outline` and `bid tender outline` list a parsed
+  tender's chapters with their role (format, scoring, needs, contract,
+  instructions) and split its format chapter into numbered forms, each with
+  its label, title, pages or Word blocks, verbatim text and kind. This is the
+  first slice of the [whole-bid plan](plan/whole-bid.md).
+
 ## 2026-10-16: Export previews in the desktop app
 
 - The macOS app bundles `bid-docx-preview`, a small helper that renders an

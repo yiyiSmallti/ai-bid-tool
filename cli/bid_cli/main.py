@@ -1139,6 +1139,15 @@ def tender_parse(
     process(document, "parse", wait, dry_run, timeout, json_output, retry)
 
 
+@tender_app.command("outline")
+def tender_outline(
+    document: Annotated[UUID, typer.Option()],
+    json_output: JsonOption = False,
+):
+    """Chapters of a parsed tender and the numbered forms of its format chapter."""
+    emit(call("GET", f"/documents/{document}/outline"), "tender outline", json_output)
+
+
 @req_app.command("extract")
 def req_extract(
     document: Annotated[UUID, typer.Option()],

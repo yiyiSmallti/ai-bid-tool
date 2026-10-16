@@ -82,6 +82,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [0012 Single-user local installation](adr/0012-single-user-installation.md) (adr)
 - [0013 Enterprise gateway beside personal installations](adr/0013-enterprise-gateway.md) (adr)
 - [0014 Scoped authority for package imports](adr/0014-package-import-authority.md) (adr)
+- [0015 Whole bids assembled from the tender's own format chapter](adr/0015-whole-bid-assembly.md) (adr)
 
 ## Plans and records
 
@@ -93,6 +94,7 @@ Implementation and acceptance status is maintained on each plan page; the
 - [Remaining scope and roadmap](plan/roadmap.md) (plan): coverage matrices, known defects and open decisions.
 - [Cloud annotation contract](plan/annotation.md) (plan): archived certificate pages, bounded server rendering, human response review and confirmed image releases.
 - [Org model configuration contract](plan/provider-config.md) (plan): org BYOK models and platform-model selection.
+- [Whole-bid assembly](plan/whole-bid.md) (plan): every form of the tender's format chapter in order, filled, with a drafted solution per scoring item.
 - [Export contract](plan/export.md) (plan): human export of deviation (偏离) tables and evidence attachments using org Word templates; Word/WPS visual pagination acceptance.
 - [Screenshot and evidence-image contract](plan/screenshots.md) (plan): screenshots, vendor-material capture, redaction, model prototypes and response evidence.
 - [Sandbox contract](plan/sandbox.md) (plan): isolated execution for untrusted generated content and built-in agents; isolation, proxy and lifecycle acceptance.

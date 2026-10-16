@@ -220,6 +220,7 @@ from app.schemas.task_board import (
 )
 from app.schemas.task_board import PageData as BoardPageData
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
+from app.schemas.whole_bid import BidOutline
 from pydantic import TypeAdapter
 
 from bid_cli.attachments import COMMAND_DATA as ATTACHMENT_DATA
@@ -359,6 +360,7 @@ COMMANDS = {
     "resource template download": None,
     "tender upload": None,
     "tender parse": JobAction,
+    "tender outline": None,
     "req extract": JobAction,
     "req list": None,
     "req history": None,
@@ -547,6 +549,7 @@ OUTPUTS = (
     | MEMORY_OUTPUTS
     | CREDENTIAL_OUTPUTS
     | AGENT_OUTPUTS
+    | {"tender outline": TypeAdapter(BidOutline)}
 )
 
 
