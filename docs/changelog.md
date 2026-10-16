@@ -6,6 +6,18 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Refused model calls no longer block a retry
+
+- A 4xx reply without usage, or a connection that never opened, settles the
+  vendor call instead of leaving it unknown, so the job can be retried. Read
+  timeouts and 5xx replies stay unknown.
+
+## 2026-10-16: Score schemas accepted by grammar-constrained models
+
+- Structured-output schemas send decimal fields as numbers only. The string
+  branch's look-ahead pattern made self-hosted grammar engines refuse rubric
+  generation with HTTP 400; answers are still checked for digits and places.
+
 ## 2026-10-16: Task progress within its snapshot budget
 
 - Reading an extraction's requirements loads each chunk once instead of once
