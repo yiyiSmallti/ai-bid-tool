@@ -411,7 +411,7 @@ func settingsProviderMetadata(value Object, id string) bool {
 		return false
 	}
 	configuration := object(value["configuration"])
-	if !settingsKeys(configuration, "capability", "slot", "new", "name", "provider", "model", "base_url", "json_mode", "reasoning", "default_reasoning", "expected_revision") || str(configuration, "capability") != "llm_extract" || configuration["expected_revision"] != nil || str(configuration, "slot") != str(value, "slot") || configuration["new"] != false || configuration["name"] != value["name"] || str(configuration, "provider") != str(value, "provider") || !settingsString(configuration["model"], 1, 100) || str(configuration, "model") != str(value, "model") || !settingsHTTPS(configuration["base_url"]) || !containsString([]string{"json_schema", "json_object"}, str(configuration, "json_mode")) || !settingsObjectArray(configuration["reasoning"], 8) {
+	if !settingsKeys(configuration, "capability", "slot", "new", "name", "owner", "provider", "model", "base_url", "json_mode", "reasoning", "default_reasoning", "expected_revision") || str(configuration, "capability") != "llm_extract" || !containsString([]string{"company", "personal"}, str(configuration, "owner")) || configuration["expected_revision"] != nil || str(configuration, "slot") != str(value, "slot") || configuration["new"] != false || configuration["name"] != value["name"] || str(configuration, "provider") != str(value, "provider") || !settingsString(configuration["model"], 1, 100) || str(configuration, "model") != str(value, "model") || !settingsHTTPS(configuration["base_url"]) || !containsString([]string{"json_schema", "json_object"}, str(configuration, "json_mode")) || !settingsObjectArray(configuration["reasoning"], 8) {
 		return false
 	}
 	for _, level := range objects(configuration["reasoning"]) {
@@ -422,10 +422,11 @@ func settingsProviderMetadata(value Object, id string) bool {
 	return settingsProviderChoices(value["reasoning"], value["default_reasoning"], true)
 }
 func settingsProviderSettings(value Object) bool {
-	if !settingsKeys(value, "capability", "configured", "current", "models", "default_slot", "reasoning", "actions", "connection_status") || !settingsObjectArray(value["models"], 20) || value["default_slot"] != nil && str(value, "default_slot") != str(object(value["current"]), "slot") || value["default_slot"] == nil && value["current"] != nil || str(value, "capability") != "llm_extract" || str(value, "connection_status") != "not_checked" || !settingsBoolean(value["configured"]) || mgBool(value["configured"]) != (value["current"] != nil) || value["current"] != nil && !settingsProviderMetadata(object(value["current"]), "") || !settingsProviderChoices(value["reasoning"], nil, false) || !settingsObjectArray(value["actions"], 2) || len(objects(value["actions"])) != 2 {
+	if !settingsKeys(value, "capability", "configured", "current", "models", "default_slot", "reasoning", "actions", "connection_status") || !settingsObjectArray(value["models"], 40) || value["default_slot"] != nil && str(value, "default_slot") != str(object(value["current"]), "slot") || value["default_slot"] == nil && value["current"] != nil || str(value, "capability") != "llm_extract" || str(value, "connection_status") != "not_checked" || !settingsBoolean(value["configured"]) || mgBool(value["configured"]) != (value["current"] != nil) || value["current"] != nil && !settingsProviderMetadata(object(value["current"]), "") || !settingsProviderChoices(value["reasoning"], nil, false) || !settingsObjectArray(value["actions"], 2) || len(objects(value["actions"])) != 2 {
 		return false
 	}
-	slots := make(map[string]bool, 20)
+	// Up to twenty company models and, on a gateway, twenty of the caller's own.
+	slots := make(map[string]bool, 40)
 	for _, model := range objects(value["models"]) {
 		if !settingsProviderMetadata(model, "") || slots[str(model, "slot")] {
 			return false
@@ -438,7 +439,7 @@ func settingsProviderSettings(value Object) bool {
 	seen := make(map[string]bool, 2)
 	for _, hint := range objects(value["actions"]) {
 		action := str(hint, "action")
-		if !settingsKeys(hint, "action", "allowed", "reason") || (action != "configure" && action != "test") || seen[action] || !settingsBoolean(hint["allowed"]) || mgBool(hint["allowed"]) && hint["reason"] != nil || !mgBool(hint["allowed"]) && !containsString([]string{"human_required", "provider_unavailable"}, str(hint, "reason")) {
+		if !settingsKeys(hint, "action", "allowed", "reason") || (action != "configure" && action != "test") || seen[action] || !settingsBoolean(hint["allowed"]) || mgBool(hint["allowed"]) && hint["reason"] != nil || !mgBool(hint["allowed"]) && !containsString([]string{"human_required", "provider_unavailable", "scope_required"}, str(hint, "reason")) {
 			return false
 		}
 		seen[action] = true
