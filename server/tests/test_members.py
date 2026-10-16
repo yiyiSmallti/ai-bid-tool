@@ -69,6 +69,19 @@ def bearer(token):
     return {"Authorization": f"Bearer {token}"}
 
 
+async def mint_token(api, headers, scopes):
+    """POST /tokens for a day as the caller in `headers`; returns the response."""
+    return await api.post(
+        "/tokens",
+        headers=headers,
+        json={
+            "name": "synthetic",
+            "scopes": scopes,
+            "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+        },
+    )
+
+
 async def sign_in(api, login, password, label=None):
     body = {"login": login, "password": password}
     if label is not None:
@@ -273,15 +286,7 @@ async def test_member_sessions_passwords_and_attribution(gateway, database, tmp_
     )
 
     # A token and an agent work only while their member does.
-    token = await api.post(
-        "/tokens",
-        headers=alice_session,
-        json={
-            "name": "synthetic",
-            "scopes": ["task:read"],
-            "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
-        },
-    )
+    token = await mint_token(api, alice_session, ["task:read"])
     alice_token = bearer(token.json()["data"]["token"])
     assert code(await api.get("/tasks", headers=alice_token)) == [200, None]
     principal = AgentPrincipal(
@@ -403,24 +408,8 @@ async def test_member_sessions_passwords_and_attribution(gateway, database, tmp_
 
     # Accounts are managed in person: an administrator cannot mint a token that
     # manages members, and a token the administrator holds is refused there.
-    refused = await api.post(
-        "/tokens",
-        headers=root_a,
-        json={
-            "name": "synthetic cli",
-            "scopes": ["member:manage", "task:read"],
-            "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
-        },
-    )
-    token = await api.post(
-        "/tokens",
-        headers=root_a,
-        json={
-            "name": "synthetic cli",
-            "scopes": ["task:read"],
-            "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
-        },
-    )
+    refused = await mint_token(api, root_a, ["member:manage", "task:read"])
+    token = await mint_token(api, root_a, ["task:read"])
     assert token.status_code == 200, token.text
     root_token = token.json()["data"]["token"]
     server, address = start_gateway(tmp_path)

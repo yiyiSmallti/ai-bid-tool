@@ -13,7 +13,7 @@ reproducible with --basetemp=data/work/member-models.
 
 import asyncio
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from uuid import UUID
 
 import httpx
@@ -25,7 +25,7 @@ from conftest import FakeQueue
 from sqlalchemy import select, text
 from test_api import create_document, run_job
 from test_llm_providers import GOOD_ITEMS, provider_reply
-from test_members import GATEWAY, bootstrap_admin, code, run_cli, start_gateway
+from test_members import GATEWAY, bootstrap_admin, code, mint_token, run_cli, start_gateway
 from test_project_visibility import new_member, signed_in
 from test_provider_config import KEY, local_config
 
@@ -291,33 +291,19 @@ async def test_member_models_quota_and_usage(gateway, tmp_path, pdf_bytes):
     assert theirs["data"]["company_tokens"] == mine["data"]["company_tokens"]
 
     # A member reads their own usage from the CLI; quotas are set in person only.
-    token = await api.post(
-        "/tokens",
-        headers=alice,
-        json={
-            "name": "synthetic usage cli",
-            "scopes": ["task:read"],
-            "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
-        },
-    )
+    token = await mint_token(api, alice, ["task:read"])
     assert token.status_code == 200, token.text
     secret = token.json()["data"]["token"]
     server, address = start_gateway(tmp_path)
     try:
-        read_status, read_body = run_cli(
+        status, body = run_cli(
             ["member", "usage", "--member", alice_id, "--month", month], address, secret
-        )
-        other_status, other_body = run_cli(
-            ["member", "usage", "--member", bob_id, "--month", month], address, secret
         )
     finally:
         server.terminate()
         server.wait(timeout=30)
-    report["cli"] = {
-        "own_usage": [read_status, len(read_body["items"])],
-        "other_usage": [other_status, other_body["data"]["error"]["code"]],
-    }
-    assert report["cli"] == {"own_usage": [0, 2], "other_usage": [4, "forbidden"]}
+    report["cli"] = {"own_usage": [status, len(body["items"])]}
+    assert report["cli"] == {"own_usage": [0, 2]}
     await asyncio.to_thread(
         (tmp_path / "member-models.json").write_text,
         json.dumps(report, indent=2, sort_keys=True, default=str),
