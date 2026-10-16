@@ -6,6 +6,13 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Gateway Compose deployment
+
+- `deploy/gateway` runs a company gateway with Caddy as the only published
+  service, a nightly backup timer and `upgrade.sh`, which backs up, verifies,
+  rehearses the migrations on a clone and then upgrades.
+- The image carries the PostgreSQL 16 client tools that backups need.
+
 ## 2026-10-16: Backup and restore verify
 
 - `python -m app.admin backup --dir` writes a database dump, a snapshot of

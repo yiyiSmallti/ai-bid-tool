@@ -42,6 +42,12 @@ signs in as a member, and every human decision records which member made it.
   every file with its hash, then drops the scratch database. A changed dump
   fails with `backup_dump_altered`; changed, missing or unlisted files and
   differing row counts fail with `backup_verify_failed` listing them (exit 4).
+- A gateway runs from [deploy/gateway](../../deploy/gateway/compose.yml); install,
+  backup and upgrade steps are in
+  [the gateway operations guide](../guides/gateway-operations.md).
+  [upgrade.sh](../../deploy/gateway/upgrade.sh) stops the API and worker, takes
+  and verifies a backup, rehearses the migrations on a `TEMPLATE` clone, drops
+  the roles the rehearsal created, then starts the new image.
 - Members sign in with `POST /auth/session` and `{"login", "password"}`. An
   initial or reset password must be changed with `POST /account/password`
   before any other route; until then the session reaches only
@@ -296,6 +302,12 @@ signs in as a member, and every human decision records which member made it.
   runs refuse it. Drop and recreate that empty database.
 - `env_ignore_empty` turns empty settings into defaults, except
   `BID_PERSONAL_MODEL_ENDPOINTS`, where an empty value means no personal models.
+- The sign-in limiter counts per `request.client.host`. Behind Caddy that is
+  the proxy unless uvicorn runs with `--proxy-headers` and trusts the proxy,
+  as the Compose server does; publish no other path to port 8000.
+- Database roles are cluster-wide. A rehearsal on a clone that creates a role
+  leaves it for the live migration, which then skips creating it; upgrade.sh
+  drops every role that appeared during the rehearsal.
 - The mode never changes in place; moving a project between modes uses
   [packages](../plan/enterprise-gateway.md#packages).
 - A saved retrieval that read private memory holds its text, so
@@ -358,6 +370,9 @@ signs in as a member, and every human decision records which member made it.
 - [admin.py](../../server/app/admin.py) `initialize_database`, `installation_mode`
 - [backup.py](../../server/app/services/backup.py) `backup`, `verify`;
   [test_backup.py](../../server/tests/test_backup.py)
+- [compose.yml](../../deploy/gateway/compose.yml),
+  [upgrade.sh](../../deploy/gateway/upgrade.sh);
+  [gateway_deploy_acceptance.py](../../scripts/gateway_deploy_acceptance.py)
 - [db.py](../../server/app/core/db.py) `Database.verify_role`
 - [auth.py](../../server/app/services/auth.py) `authenticate`, `access_key_refused`,
   `member_session_identity`, `agent_identity`
