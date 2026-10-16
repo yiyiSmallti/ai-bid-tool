@@ -94,6 +94,18 @@ func snapFixtures() map[string]snapFixture {
 			{"id": "s-1", "created_at": "2026-10-15T01:00:00Z", "expires_at": "2026-10-15T13:00:00Z", "last_seen_at": "2026-10-15T06:40:00Z", "client_label": "AI Bid 桌面客户端", "current": true},
 			{"id": "s-2", "created_at": "2026-10-14T09:00:00Z", "expires_at": "2026-10-14T21:00:00Z", "last_seen_at": "2026-10-14T11:20:00Z", "client_label": "AI Bid 桌面客户端", "current": false},
 		}},
+		"/members": {data: Object{}, items: []Object{
+			{"id": "m-1", "login": "zhangwei", "display_name": "张伟", "role": "admin", "grants": []any{}, "status": "active"},
+			{"id": "m-2", "login": "lina", "display_name": "李娜", "role": "member", "grants": []any{"library:edit", "memory:edit"}, "status": "active"},
+			{"id": "m-3", "login": "wangqiang", "display_name": "王强", "role": "member", "grants": []any{}, "status": "active"},
+			{"id": "m-4", "login": "zhaomin", "display_name": "赵敏", "role": "member", "grants": []any{"confidential:reveal"}, "status": "disabled"},
+		}},
+		"/members/m-2/usage": {data: Object{"member_id": "m-2", "month": "2026-10", "timezone": "UTC", "monthly_company_tokens": 2000000, "company_tokens": 486320}, items: []Object{}},
+		"/tasks/t-1/members": {data: Object{}, items: []Object{
+			{"member_id": "m-2", "login": "lina", "display_name": "李娜", "role": "owner", "status": "active", "added_at": "2026-10-10T08:00:00Z"},
+			{"member_id": "m-1", "login": "zhangwei", "display_name": "张伟", "role": "member", "status": "active", "added_at": "2026-10-11T02:30:00Z"},
+			{"member_id": "m-3", "login": "wangqiang", "display_name": "王强", "role": "member", "status": "active", "added_at": "2026-10-12T06:10:00Z"},
+		}},
 	}
 }
 
@@ -138,6 +150,8 @@ func TestNativeSnapshots(t *testing.T) {
 		"ent-password":        "/account/password",
 		"ent-sessions":        "/account/sessions",
 		"ent-tasks":           "/org/tasks",
+		"ent-members":         "/org/members",
+		"ent-project-members": "/org/tasks/t-1/members",
 	}
 	store := WorkspaceStore{Path: filepath.Join(t.TempDir(), "workspaces.json")}
 	gateway := Workspace{ID: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b", Kind: "enterprise", Name: "华东建设集团", URL: "https://bid.example.com"}
@@ -205,6 +219,19 @@ func TestNativeSnapshots(t *testing.T) {
 				page.address = "https://10.8.0.12:8443"
 				page.untrusted = strings.Repeat("3fa9", 16)
 				tt.Frame()
+			}
+			// As an administrator who just created a member and opened another.
+			if page, ok := app.page.(*membersPage); ok {
+				page.oneTime = &oneTimePassword{login: "wangqiang", name: "王强", password: "Tq7-vR2k-Lm9x-Pe4w"}
+				page.choose(app, "m-2")
+				for idle := 0; idle < 4; idle++ {
+					select {
+					case apply := <-updates:
+						apply()
+					case <-time.After(60 * time.Millisecond):
+					}
+					tt.Frame()
+				}
 			}
 			tt.Frame()
 			suffix := ""

@@ -130,6 +130,7 @@ memory CRUD and approval, public evaluation-set preparation.
 | Dashboard response-card interaction and progress display | Before U02; service state machine in [response-cards.md](../notes/response-cards.md) |
 | Local backup/restore and release acceptance | Before desktop release |
 | Gateway single sign-on providers (WeCom, DingTalk, OIDC) | After [enterprise gateway](enterprise-gateway.md) slice 1 |
+| A member directory that project owners who are not administrators can read, so they can add project members | Before owners other than administrators add members from the client |
 
 ## Known defects and acceptance gaps
 

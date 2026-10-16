@@ -224,6 +224,9 @@ func (a *NativeApp) sidebar(c *ui.Context) {
 					for _, entry := range group.items {
 						item(base+entry.path, entry.icon, entry.label)
 					}
+					if group.title == "任务记录" && a.member() != nil {
+						item(base+"/members", "users-round", "项目成员")
+					}
 				}
 			}
 			for i, group := range nativeShellGroups {
@@ -237,6 +240,10 @@ func (a *NativeApp) sidebar(c *ui.Context) {
 						item(entry.path, entry.icon, entry.label)
 					}
 				}
+			}
+			if a.admin() {
+				groupTitle("企业管理", nil)
+				item("/org/members", "users-round", "成员与权限")
 			}
 			if a.member() != nil {
 				groupTitle("我的账号", nil)
