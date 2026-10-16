@@ -2,8 +2,8 @@
 # Stages what the app runs into resources/darwin-arm64, which `mygo build`
 # copies into Contents/Resources: a standalone Python with the server and its
 # locked dependencies installed, the migration files read from
-# the server directory, PostgreSQL, the screenshot renderer and the OCR
-# language data.
+# the server directory, PostgreSQL, the screenshot renderer, the export
+# page-preview renderer and the OCR language data.
 set -eu
 
 desktop_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -71,6 +71,8 @@ find "$out/server" -name __pycache__ -type d -prune -exec rm -rf {} +
 
 "$repository_dir/scripts/build_screenshot_renderer.sh"
 install -m 0755 "$repository_dir/data/work/bin/bid-screenshot-renderer" "$out/bin/"
+
+"$desktop_dir/scripts/build-docx-preview.sh" "$out/preview"
 
 for language in chi_sim eng; do
     curl -fsSL -o "$out/tessdata/$language.traineddata" \
