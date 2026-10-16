@@ -91,6 +91,16 @@ signs in as a member, and every human decision records which member made it.
   returns the zip to the member who started it, checking the setting and the
   stored hash again. The CLI saves it only after its size and sha256 match the
   report.
+- `POST /packages/import` with a multipart `file` (`bid package import
+  --file`) needs `package:import` and starts a `package_import` job; `bid
+  package status` shows its report: the task, row counts per table, files,
+  reused library items and `needs_value`, the confidential keys the project
+  names that this installation has no value for. A file or table hash that
+  does not match the manifest is refused at once (`package_integrity_failed`);
+  `package_task_exists`, `package_row_conflict`, `package_library_forbidden`,
+  `package_citation_unresolved` and `package_reference_unresolved` fail the
+  job with nothing written. A repeat of the same package by the same member
+  returns the first import unless it failed.
 
 ## How it works
 
@@ -238,6 +248,18 @@ signs in as a member, and every human decision records which member made it.
   listed in `sealed_columns`, and stored run inputs are replaced by
   `{"omitted": "bid-package/1"}`. Entries use a fixed timestamp and sorted
   order, so the same data gives the same bytes.
+- An import ([ADR 0014](../adr/0014-package-import-authority.md)) stores the
+  zip, then its job binds a `package_imports` row to its running execution
+  and sets `app.package_import_id`; `package_import_task()` returns the task
+  only while that row is `importing` and the job holds its lease. Each
+  included table's guards admit inserts for that task in migrations `0010` to
+  `0015`. The job writes every row with its original id in one transaction
+  without savepoints, because guards compare a parent's `xmin` with
+  `pg_current_xact_id()`; sealed columns are encrypted with this
+  installation's key, and created library rows are touched once so their
+  root guard builds the search vector. The importing member becomes the
+  project owner on a gateway. Exporting the imported project gives the same
+  table hashes as the package.
 
 ## Pitfalls
 
@@ -258,6 +280,11 @@ signs in as a member, and every human decision records which member made it.
   was already built; a file already downloaded stays valid.
 - Evidence that points at a screenshot asset is left out of a package, with
   its links, until screenshot assets are packaged.
+- An imported project must be deleted before the same project can be imported
+  again; a copy of a package with another digest fails with
+  `package_task_exists`.
+- Confidential values never travel; `needs_value` lists what an administrator
+  must fill before drafts and exports that use them can finish.
 - An agent of a removed member can run until its next wake, up to 30 seconds.
 - An admitted call reserves its full upper bound until its receipt, so a
   member near the cap can be refused while earlier calls are still running.
@@ -295,6 +322,8 @@ signs in as a member, and every human decision records which member made it.
   [members.py](../../server/app/api/members.py) routes,
   [members.py](../../cli/bid_cli/members.py) CLI
 - [0009_package_jobs.py](../../server/migrations/versions/0009_package_jobs.py),
+  [0010_package_imports.py](../../server/migrations/versions/0010_package_imports.py)
+  to [0015_package_import_library.py](../../server/migrations/versions/0015_package_import_library.py),
   [packages.py](../../server/app/services/packages.py) service,
   [packages.py](../../server/app/api/packages.py) routes,
   [packages.py](../../cli/bid_cli/packages.py) CLI
@@ -316,4 +345,5 @@ signs in as a member, and every human decision records which member made it.
   [test_members.py](../../server/tests/test_members.py),
   [test_project_visibility.py](../../server/tests/test_project_visibility.py),
   [test_member_models.py](../../server/tests/test_member_models.py),
-  [test_package_export.py](../../server/tests/test_package_export.py)
+  [test_package_export.py](../../server/tests/test_package_export.py),
+  [test_package_import.py](../../server/tests/test_package_import.py)

@@ -1,11 +1,12 @@
-"""Project package routes: export, status and download (docs/plan/enterprise-gateway.md#packages)."""
+"""Project package routes: export, import, status and download (docs/plan/enterprise-gateway.md#packages)."""
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import Response
 
 from app.api.common import result
+from app.core.errors import ServiceError
 from app.jobs.queue import dispatch_process_job
 from app.schemas.contracts import Result
 from app.schemas.packages import PackageExport
@@ -21,6 +22,17 @@ def create_router(context, storage, queue, settings) -> APIRouter:
         job = await packages.submit_export(session, identity, body.task_id, settings)
         await dispatch_process_job(session, queue, job)
         return result("package export", packages.job_view(job))
+
+    @router.post("/packages/import", name="package_import", response_model=Result)
+    async def package_import(file: UploadFile = File(...), ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        content = await file.read(settings.max_upload_bytes + 1)
+        if len(content) > settings.max_upload_bytes:
+            raise ServiceError("package_too_large", "The package exceeds the upload limit", 413, 2)
+        job = await packages.submit_import(session, identity, content, storage, settings)
+        if job.status == "queued":
+            await dispatch_process_job(session, queue, job)
+        return result("package import", packages.job_view(job))
 
     @router.get("/packages/{job_id}", name="package_status", response_model=Result)
     async def package_status(job_id: UUID, ctx=Depends(context, scope="function")):

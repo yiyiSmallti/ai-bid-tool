@@ -11,17 +11,23 @@ import io
 import json
 import zipfile
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import text
+from sqlalchemy import select, text, update
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets
+from app.models.confidential import ConfidentialField, ConfidentialValue
 from app.models.entities import Job, Task
+from app.models.members import MemberGrant, PackageImport, TaskMember
+from app.models.task_events import TaskEventHead
 from app.providers.storage import Storage
 from app.schemas.contracts import CONTRACT_VERSION
+from app.services import redaction
 from app.services.auth import Identity, set_actor_context
 from app.services.versioned import audit
 
@@ -108,6 +114,7 @@ LIBRARY_TABLES = (
     "templates",
     "template_revisions",
 )
+SEARCHABLE = ("certificates", "products", "features", "org_profiles", "templates")
 # Library files belong to the revision they were uploaded for.
 LIBRARY_CHILDREN = {
     "certificate_files": ("certificate_revision_id", "certificate_revisions"),
@@ -232,11 +239,12 @@ async def job_access(session: AsyncSession, actor: Identity, job: Job) -> None:
 
 
 def job_view(job: Job) -> dict:
+    report = job.result.get("report") or {}
     return {
         "id": str(job.id),
         "kind": job.kind,
         "status": job.status,
-        "task_id": str(job.task_id) if job.task_id else None,
+        "task_id": str(job.task_id) if job.task_id else report.get("task_id"),
         "error": job.error,
         "report": job.result.get("report"),
     }
@@ -548,3 +556,405 @@ async def run_export(execution, storage: Storage) -> None:
                 "cleared": manifest["cleared"],
             },
         }
+
+
+# Imports: the package is checked whole before any row is written, then written in
+# one transaction under the import authority of ADR 0014.
+IMPORT_KEY = "packages/imports/{}.zip"
+# Uncompressed entries may not exceed this many upload limits together.
+EXPANSION_LIMIT = 20
+
+
+def integrity(message: str) -> ServiceError:
+    return ServiceError("package_integrity_failed", message, 422, 4)
+
+
+@dataclass
+class Package:
+    manifest: dict
+    rows: dict[str, list[dict]]
+    files: dict[str, bytes]
+
+    @property
+    def task_id(self) -> str:
+        return self.manifest["task"]["id"]
+
+
+def read_package(content: bytes, max_bytes: int) -> Package:
+    """The package's manifest, rows and files, each checked against the manifest."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            infos = archive.infolist()
+            if sum(info.file_size for info in infos) > EXPANSION_LIMIT * max_bytes:
+                raise integrity("The package expands beyond the size limit")
+            entries = {info.filename: archive.read(info) for info in infos}
+    except (zipfile.BadZipFile, zipfile.LargeZipFile, EOFError, ValueError) as exc:
+        raise integrity("The package is not a readable archive") from exc
+    try:
+        manifest = json.loads(entries["manifest.json"])
+    except (KeyError, ValueError) as exc:
+        raise integrity("The package manifest is missing or unreadable") from exc
+    if not isinstance(manifest, dict) or manifest.get("format") != FORMAT:
+        raise ServiceError("package_format_unsupported", f"Only {FORMAT} is read", 422, 4)
+    version = str(manifest.get("contract_version", ""))
+    if version.split(".")[0] != CONTRACT_VERSION.split(".")[0]:
+        raise ServiceError(
+            "package_contract_unsupported",
+            f"Contract {version or 'unknown'} cannot be read by contract {CONTRACT_VERSION}",
+            422,
+            4,
+        )
+    try:
+        tables = {table["name"]: table for table in manifest["tables"]}
+        listed = {item["sha256"]: item for item in manifest["files"]}
+        task_id = str(UUID(manifest["task"]["id"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise integrity("The package manifest is incomplete") from exc
+    expected = {
+        "manifest.json",
+        *(f"data/{name}.jsonl" for name in tables),
+        *(f"files/{digest}" for digest in listed),
+    }
+    if set(entries) != expected or not set(tables) <= set(TABLES):
+        raise integrity("The package entries differ from its manifest")
+    rows: dict[str, list[dict]] = {}
+    for name, table in tables.items():
+        body = entries[f"data/{name}.jsonl"]
+        if hashlib.sha256(body).hexdigest() != table.get("sha256"):
+            raise integrity(f"Table {name} differs from its manifest hash")
+        try:
+            rows[name] = [json.loads(line) for line in body.splitlines()]
+        except ValueError as exc:
+            raise integrity(f"Table {name} is unreadable") from exc
+        if len(rows[name]) != table.get("rows") or not all(
+            isinstance(row, dict) and isinstance(row.get("id"), str) for row in rows[name]
+        ):
+            raise integrity(f"Table {name} differs from its manifest row count")
+    files: dict[str, bytes] = {}
+    for digest, item in listed.items():
+        body = entries[f"files/{digest}"]
+        if hashlib.sha256(body).hexdigest() != digest or len(body) != item.get("size"):
+            raise integrity("A package file differs from its manifest hash")
+        files[digest] = body
+    if [row["id"] for row in rows.get("tasks", [])] != [task_id]:
+        raise integrity("The package must hold exactly its own task")
+    for name, found in rows.items():
+        if name in TASK_TABLES[1:] and any(row.get("task_id") != task_id for row in found):
+            raise integrity(f"Table {name} holds rows of another task")
+        column = STORED.get(name)
+        keys = {item["key"] for item in manifest["files"]}
+        if column and any(row.get(column) and row[column] not in keys for row in found):
+            raise integrity(f"Table {name} names a file the package does not carry")
+    return Package(manifest, rows, files)
+
+
+async def submit_import(
+    session: AsyncSession, actor: Identity, content: bytes, storage: Storage, settings
+) -> Job:
+    from app.services.task_access import live_actor
+
+    live = await live_actor(session, actor)
+    live.require("task:create")
+    live.require("package:import")
+    digest = hashlib.sha256(content).hexdigest()
+    previous = await session.scalar(
+        select(PackageImport).where(
+            PackageImport.package_sha256 == digest,
+            PackageImport.member_id.is_not_distinct_from(live.member_id),
+            PackageImport.state != "failed",
+        )
+    )
+    if previous is not None:
+        job = await session.get(Job, previous.job_id)
+        assert job is not None
+        return job
+    read_package(content, settings.max_upload_bytes)
+    await set_actor_context(session, live)
+    job_id = uuid4()
+    key = IMPORT_KEY.format(job_id)
+    await storage.put(key, content)
+    job = Job(
+        id=job_id,
+        task_id=None,
+        kind="package_import",
+        cache_key=uuid4().hex,
+        status="queued",
+        result={
+            "submission": {
+                "actor_token_id": str(live.token_id) if live.token_id else None,
+                "scopes": sorted(live.scopes),
+            },
+            "package": {"storage_key": key, "sha256": digest, "size": len(content)},
+        },
+    )
+    session.add(job)
+    await session.flush()
+    session.add(PackageImport(job_id=job.id, member_id=live.member_id, package_sha256=digest))
+    await session.flush()
+    audit(session, live, "package.import", job.id, {"sha256": digest})
+    return job
+
+
+def walk(value) -> list:
+    """Every value nested in a row's JSON, for the citation and placeholder scans."""
+    found = [value]
+    for item in found:
+        if isinstance(item, dict):
+            found.extend(item.items())
+        elif isinstance(item, list | tuple):
+            found.extend(item)
+    return found
+
+
+def cited_chunks(rows: dict[str, list[dict]]) -> set[str]:
+    cited = set()
+    for found in rows.values():
+        for item in walk(found):
+            if isinstance(item, tuple) and len(item) == 2:
+                key, value = item
+                if key == "chunk_id" and isinstance(value, str):
+                    cited.add(value)
+                elif key == "chunk_ids" and isinstance(value, list):
+                    cited.update(v for v in value if isinstance(v, str))
+    return cited
+
+
+def placeholders(rows: dict[str, list[dict]]) -> set[str]:
+    return {
+        key
+        for found in rows.values()
+        for item in walk(found)
+        if isinstance(item, str)
+        for key in redaction.secret_keys(item)
+    }
+
+
+async def existing(session: AsyncSession, table: str, ids: list[str]) -> set[str]:
+    if not ids:
+        return set()
+    found = await session.scalars(
+        text(f'SELECT id::text FROM public."{table}" WHERE id::text = ANY(:ids)'), {"ids": ids}
+    )
+    return set(found)
+
+
+async def generated_columns(session: AsyncSession) -> dict[str, set[str]]:
+    result = await session.execute(
+        text(
+            """
+SELECT c.relname, a.attname FROM pg_attribute a
+JOIN pg_class c ON c.oid = a.attrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+WHERE c.relname = ANY(:tables) AND a.attgenerated <> '' AND a.attnum > 0
+"""
+        ),
+        {"tables": list(TABLES)},
+    )
+    columns: dict[str, set[str]] = defaultdict(set)
+    for table, column in result:
+        columns[table].add(column)
+    return columns
+
+
+async def needs_value(session: AsyncSession, keys: set[str], task_id: str) -> list[str]:
+    """Placeholders the project names that this installation cannot fill."""
+    if not keys:
+        return []
+    filled = set(
+        (
+            await session.scalars(
+                select(ConfidentialField.key)
+                .join(ConfidentialValue, ConfidentialValue.field_id == ConfidentialField.id)
+                .where(
+                    ConfidentialField.key.in_(keys),
+                    ConfidentialField.archived.is_(False),
+                    ConfidentialValue.task_id.is_(None)
+                    | (ConfidentialValue.task_id == UUID(task_id)),
+                )
+            )
+        ).all()
+    )
+    return sorted(keys - filled)
+
+
+def unresolved(rows: dict[str, list[dict]], foreign_keys: list[dict]) -> str | None:
+    """The first reference that no package row satisfies; a package is closed, as export made it."""
+    for key in foreign_keys:
+        present = {key_of(row, key["referenced"]) for row in rows.get(key["target"], [])}
+        for row in rows.get(key["source"], []):
+            values = key_of(row, key["columns"])
+            if values is not None and values not in present:
+                return f"{key['source']}.{','.join(key['columns'])}"
+    return None
+
+
+def rejected(table: str, exc: DBAPIError) -> ServiceError:
+    cause = getattr(exc.orig, "__cause__", None) or exc.orig
+    message = str(getattr(cause, "message", None) or cause).splitlines()[0]
+    return ServiceError("package_rejected", f"{table}: {message}", 422, 4)
+
+
+async def write(
+    session: AsyncSession, execution, job: Job, record: PackageImport, package: Package, storage
+) -> dict:
+    task_id = package.task_id
+    if await session.get(Task, UUID(task_id)) is not None:
+        raise ServiceError(
+            "package_task_exists",
+            "This project already exists here; delete it before importing again",
+            409,
+            4,
+        )
+    reused: dict[str, set[str]] = {}
+    for table, found in package.rows.items():
+        present = await existing(session, table, [row["id"] for row in found])
+        if present and table not in LIBRARY_TABLES:
+            raise ServiceError(
+                "package_row_conflict", f"Rows of {table} already exist here", 409, 4
+            )
+        reused[table] = present
+    created = sum(
+        len(found) - len(reused[table])
+        for table, found in package.rows.items()
+        if table in LIBRARY_TABLES
+    )
+    if created and record.member_id is not None and execution.settings.deployment == "enterprise":
+        from app.models.members import Member
+
+        member = await session.get(Member, record.member_id)
+        grant = await session.get(MemberGrant, (record.member_id, "library:edit"))
+        if member is None or (member.role != "admin" and grant is None):
+            raise ServiceError(
+                "package_library_forbidden",
+                "Creating library items needs the library:edit grant",
+                403,
+                4,
+            )
+    foreign_keys, _ = await schema(session)
+    if dangling := unresolved(package.rows, foreign_keys):
+        raise ServiceError(
+            "package_reference_unresolved", f"{dangling} names a row the package lacks", 422, 4
+        )
+    chunks = {row["id"] for row in package.rows.get("chunks", [])}
+    if not cited_chunks(package.rows) <= chunks:
+        raise ServiceError(
+            "package_citation_unresolved", "A citation names a chunk the package lacks", 422, 4
+        )
+
+    actor = Identity(
+        scopes=set(job.actor_scopes or []),
+        token_id=job.actor_token_id,
+        actor_kind="worker",
+        job_id=job.id,
+        run_id=job.run_id,
+        member_id=record.member_id,
+    )
+    await set_actor_context(session, actor)
+    record.task_id, record.state = UUID(task_id), "importing"
+    await session.flush()
+    await session.execute(
+        text("SELECT set_config('app.package_import_id', :id, true)"), {"id": str(record.id)}
+    )
+    await session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
+    generated = await generated_columns(session)
+    secrets = Secrets.for_data(execution.settings)
+    by_key = {item["key"]: item["sha256"] for item in package.manifest["files"]}
+    counts: dict[str, int] = {}
+    for table in import_order(foreign_keys):
+        found = [row for row in package.rows.get(table, []) if row["id"] not in reused[table]]
+        if not found:
+            continue
+        for row in found:
+            for sealed_table, column in SEALED:
+                if sealed_table == table and row.get(column) is not None:
+                    row[column] = secrets.encrypt(row[column])
+            column = STORED.get(table)
+            if column and row.get(column):
+                await storage.put(row[column], package.files[by_key[row[column]]])
+        columns = ", ".join(
+            f'"{column}"' for column in sorted(found[0]) if column not in generated[table]
+        )
+        # No savepoint: guards compare a parent row's xmin with the top transaction.
+        try:
+            await session.execute(
+                text(
+                    f'INSERT INTO public."{table}" ({columns}) SELECT {columns} FROM '
+                    f'jsonb_populate_recordset(NULL::public."{table}", CAST(:rows AS jsonb))'
+                ),
+                {"rows": json.dumps(found)},
+            )
+        except DBAPIError as exc:
+            raise rejected(table, exc) from exc
+        counts[table] = len(found)
+        if table == "tasks":
+            session.add(TaskEventHead(task_id=UUID(task_id)))
+            if record.member_id is not None:
+                session.add(
+                    TaskMember(task_id=UUID(task_id), member_id=record.member_id, role="owner")
+                )
+            await session.flush()
+    audit(
+        session,
+        actor,
+        "package.imported",
+        UUID(task_id),
+        {
+            "imported_from": {
+                "source_mode": package.manifest.get("source_mode"),
+                "exported_at": package.manifest.get("created_at"),
+                "package_sha256": record.package_sha256,
+            }
+        },
+    )
+    # A new library item arrives with an empty search vector; its root guard
+    # rebuilds the vector from the current revision on update.
+    for table in SEARCHABLE:
+        created_ids = [
+            row["id"] for row in package.rows.get(table, []) if row["id"] not in reused[table]
+        ]
+        if created_ids:
+            await session.execute(
+                text(f'UPDATE public."{table}" SET id = id WHERE id::text = ANY(:ids)'),
+                {"ids": created_ids},
+            )
+    try:
+        await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+    except DBAPIError as exc:
+        raise rejected("deferred", exc) from exc
+    return {
+        "task_id": task_id,
+        "source_mode": package.manifest.get("source_mode"),
+        "tables": counts,
+        "reused": {table: len(ids) for table, ids in reused.items() if ids},
+        "files": len(package.files),
+        "needs_value": await needs_value(session, placeholders(package.rows), task_id),
+    }
+
+
+async def run_import(execution, storage: Storage) -> None:
+    async with execution.db.transaction() as session:
+        job = await execution.owned_job(session)
+        record = await session.scalar(select(PackageImport).where(PackageImport.job_id == job.id))
+        assert record is not None
+        record_id, stored = record.id, job.result["package"]
+    try:
+        content = await storage.read(stored["storage_key"])
+        if hashlib.sha256(content).hexdigest() != stored["sha256"]:
+            raise integrity("The stored package changed")
+        package = read_package(content, execution.settings.max_upload_bytes)
+        async with execution.db.transaction() as session:
+            job = await execution.owned_job(session)
+            record = await session.get(PackageImport, record_id, populate_existing=True)
+            assert record is not None
+            report = await write(session, execution, job, record, package, storage)
+            record.state = "succeeded"
+            job.status, job.error, job.finished_at = "succeeded", None, datetime.now(UTC)
+            job.result = {**job.result, "report": report}
+    except Exception:
+        async with execution.db.transaction() as session:
+            await session.execute(
+                update(PackageImport)
+                .where(PackageImport.id == record_id)
+                .values(state="failed", task_id=None)
+            )
+        raise

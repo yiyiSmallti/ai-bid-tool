@@ -366,10 +366,11 @@ Import rules:
   without it the import fails before writing.
 - Consistency triggers still check every imported row; only the lease and
   actor checks are passed by the import authority.
-- Every citation must resolve to an imported chunk; every confirmation keeps
-  its original timestamp and is marked `imported` with the source mode. Imported
-  human decisions are attributed to the importing member with
-  `details.imported_from` recording the source.
+- Every citation must resolve to an imported chunk, and every other reference
+  to an imported row. Confirmations and decisions keep their original
+  timestamps; the `package.imported` audit entry, attributed to the importing
+  member, marks the project as imported and records the source mode, export
+  time and package hash in `details.imported_from`.
 - Confidential fields referenced by the project are listed in the import
   report as `needs_value`; drafts and exports that need them stay blocked until
   an administrator supplies values.
@@ -481,7 +482,8 @@ Each item names what must not happen and the acceptance check that proves it.
 
 Each slice is one change; a slice merges only when its acceptance and the full
 personal-mode suites pass.
-Slices 0 to 4 are implemented; their mechanism is in
+Slices 0 to 4 and the server side of slice 5 (package export and import) are
+implemented; their mechanism is in
 [the enterprise gateway note](../notes/enterprise-gateway.md).
 
 | Slice | Content | Acceptance |
