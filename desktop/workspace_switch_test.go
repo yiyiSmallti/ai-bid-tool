@@ -66,6 +66,15 @@ func resultJSON(w http.ResponseWriter, status int, command string, data Object) 
 	})
 }
 
+func resultItems(w http.ResponseWriter, command string, items []Object) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(Object{
+		"ok": true, "command": command, "data": Object{}, "items": items,
+		"warnings": []string{}, "duration_ms": 0,
+		"cost": Object{"calls": 0, "llm_tokens": 0, "ocr_pages": 0, "search_requests": 0, "browser_units": 0, "unresolved_calls": 0},
+	})
+}
+
 // fakeGateway answers the probe and session routes of an enterprise
 // installation over TLS with its own self-signed certificate.
 type fakeGateway struct {
@@ -76,10 +85,14 @@ type fakeGateway struct {
 	valid    string   // the session the gateway accepts
 	seen     []string // Authorization headers, in order
 	signIns  []Object
+	// password is the member's; mustChange holds a new or reset member to
+	// the password routes, as the gateway's auth gate does.
+	password   string
+	mustChange bool
 }
 
 func newFakeGateway(t *testing.T, mode, contract string) *fakeGateway {
-	g := &fakeGateway{mode: mode, contract: contract}
+	g := &fakeGateway{mode: mode, contract: contract, password: "synthetic-password"}
 	g.Server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		defer g.mu.Unlock()
@@ -92,18 +105,40 @@ func newFakeGateway(t *testing.T, mode, contract string) *fakeGateway {
 			var body Object
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			g.signIns = append(g.signIns, body)
-			if str(body, "login") != "synthetic.member" || str(body, "password") != "synthetic-password" {
+			if str(body, "login") != "synthetic.member" || str(body, "password") != g.password {
 				resultJSON(w, 401, "auth session create", Object{"error": Object{"code": "invalid_credentials", "message": "Invalid login or password"}})
 				return
 			}
 			g.valid = "synthetic-session.1"
-			resultJSON(w, 200, "auth session create", Object{"session": g.valid, "expires_in": 3600, "member": member, "must_change_password": false})
+			resultJSON(w, 200, "auth session create", Object{"session": g.valid, "expires_in": 3600, "member": member, "must_change_password": g.mustChange})
 		case r.Method == "GET" && r.URL.Path == "/auth/session":
 			if g.valid == "" || r.Header.Get("Authorization") != "Bearer "+g.valid {
 				resultJSON(w, 401, "auth session show", Object{"error": Object{"code": "unauthorized", "message": "Session expired"}})
 				return
 			}
-			resultJSON(w, 200, "auth session show", Object{"mode": "enterprise", "actor_kind": "member", "scopes": []string{}, "expires_at": nil, "member": member, "must_change_password": false})
+			resultJSON(w, 200, "auth session show", Object{"mode": "enterprise", "actor_kind": "member", "scopes": []string{}, "expires_at": nil, "member": member, "must_change_password": g.mustChange})
+		case g.valid == "" || r.Header.Get("Authorization") != "Bearer "+g.valid:
+			resultJSON(w, 401, "session", Object{"error": Object{"code": "unauthorized", "message": "Session expired"}})
+		case r.Method == "DELETE" && r.URL.Path == "/auth/session":
+			g.valid = ""
+			resultJSON(w, 200, "auth session delete", Object{"revoked": true})
+		case r.Method == "POST" && r.URL.Path == "/account/password":
+			var body Object
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if str(body, "current") != g.password {
+				resultJSON(w, 401, "account password change", Object{"error": Object{"code": "invalid_login", "message": "The current password is wrong"}})
+				return
+			}
+			g.password, g.mustChange = str(body, "new"), false
+			resultJSON(w, 200, "account password change", Object{"changed": true, "revoked_sessions": 1})
+		case g.mustChange:
+			resultJSON(w, 403, "forbidden", Object{"error": Object{"code": "password_change_required", "message": "Change the password first"}})
+		case r.Method == "GET" && r.URL.Path == "/account/sessions":
+			resultItems(w, "account session list", []Object{
+				{"id": "aaaaaaaa-2222-4333-8444-555555555555", "created_at": "2026-10-15T01:00:00Z", "expires_at": "2026-10-15T13:00:00Z", "last_seen_at": "2026-10-15T01:05:00Z", "client_label": "AI Bid 桌面客户端", "current": true},
+			})
+		case r.Method == "GET" && r.URL.Path == "/tasks":
+			resultItems(w, "task list", []Object{})
 		default:
 			resultJSON(w, 404, "not found", Object{"error": Object{"code": "not_found", "message": "Not found"}})
 		}
