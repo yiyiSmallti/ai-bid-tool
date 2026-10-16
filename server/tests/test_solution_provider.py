@@ -120,7 +120,7 @@ async def test_solution_plan_then_one_accounted_call_per_section(tmp_path, failu
         first, retried = (json.loads(sent[i]["messages"][-1]["content"]) for i in (1, 5))
         assert "retry" not in first and retried["retry"]
         assert retried["section"] == first["section"]
-        assert all(body["max_tokens"] <= 12000 for body in sent[1:])
+        assert all(body["max_tokens"] <= 12000 and body["temperature"] > 0 for body in sent[1:])
     if failure in (None, "looped"):
         written = json.loads(sent[1]["messages"][-1]["content"])
         assert written["item"] == draft_request().model_dump(mode="json")
