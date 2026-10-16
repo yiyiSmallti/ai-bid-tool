@@ -47,6 +47,7 @@ type Backend struct {
 	PGBin     string // initdb, pg_ctl, psql, createdb
 	Renderer  string // screenshot renderer; empty uses the server's default
 	OCRData   string // tessdata directory; empty leaves OCR to the server's default
+	Preview   string // bid-docx-preview binary; empty leaves export previews unavailable
 
 	install           *installation
 	installationDirty bool
@@ -396,6 +397,9 @@ func (b *Backend) baseEnv() []string {
 	}
 	if b.OCRData != "" {
 		env = append(env, "BID_OCR_DATA_DIR="+b.OCRData)
+	}
+	if b.Preview != "" {
+		env = append(env, "BID_PREVIEW_RENDERER="+b.Preview)
 	}
 	return env
 }
