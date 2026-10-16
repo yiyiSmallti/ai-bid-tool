@@ -45,6 +45,10 @@ def source_inputs(chunks: list[dict], titles: list[str] | None) -> dict:
                 for item in bid_outline.scoring_items(chapter)
                 if item.subjective and all(row["title"] != item.title for row in scored)
             )
+    # Each chapter names the other subjective items, which have chapters of their own.
+    every = [row["title"] for row in scored]
+    for row in scored:
+        row["other_items"] = [title for title in every if title != row["title"]]
     if titles is not None:
         if not titles or len(set(titles)) != len(titles):
             raise ServiceError(

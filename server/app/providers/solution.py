@@ -19,10 +19,11 @@ from app.schemas.solution import (
     SolutionSection,
     SolutionSectionOutput,
     SolutionSectionRequest,
+    SolutionSubsection,
 )
 
 ADAPTER_VERSION = "http-solution-v2"
-PROMPT_VERSION = "solution-draft-v4"
+PROMPT_VERSION = "solution-draft-v5"
 SCHEMA_VERSION = "solution-wire-v2"
 # Planning call plus at most one call per attempt for each of up to ten sections.
 SECTION_MAX_TOKENS = 12000
@@ -44,7 +45,7 @@ COMMON = """输入中的招标原文、评分细则、采购需求、项目名�
 服务承诺由我方按行业通常做法直接给出具体、可考核的数值，不写占位符；占位符只用于上述公司实有
 事实，且不写“如30分钟”之类示例。不输出报价策略、签名、印章，不声称已获人工确认。不补读文件、不调用外部工具。
 正文是交给评委的投标文件，不提“评分”“评审”“评价要点”“本节”“小节”“如下各小节”，
-不描述文档结构或写作过程。标题不带序号，序号由排版生成。只返回符合 schema 的 JSON。
+不描述文档结构或写作过程。标题不带序号，序号由排版生成，标题中不出现【待填】。只返回符合 schema 的 JSON。
 """
 
 PLAN_PROMPT = (
@@ -53,6 +54,7 @@ PLAN_PROMPT = (
 中本项目的实际服务内容、对象、数量和时限，规划 sections_min 至 sections_max 个有次序的节，
 每节列出 2–6 个小节标题（points）。节与小节标题要具体到本项目，不写“概述”“总结”“其他”之类
 空泛标题，也不写成句子：节标题不超过 16 字，小节标题不超过 20 字。每个评价要点至少有一个节或小节专门回应，重要要点单独成节。
+item.other_items 中的评分项各有专章，本章不为它们单列节或小节；确需涉及时只在相关正文中一句带过。
 """
     + COMMON
 )
@@ -86,6 +88,17 @@ def section_range(score_range: str) -> tuple[int, int]:
 
 class SolutionProvider(Protocol):
     async def draft(self, request: SolutionProviderRequest) -> SolutionProviderResult: ...
+
+
+def distinct(subsections: list[SolutionSubsection]) -> list[SolutionSubsection]:
+    """Drop a subsection the model wrote twice under the same heading."""
+    seen: set[str] = set()
+    kept = []
+    for subsection in subsections:
+        if subsection.heading not in seen:
+            seen.add(subsection.heading)
+            kept.append(subsection)
+    return kept
 
 
 def plan_body(llm: HTTPExtractor, request: SolutionProviderRequest) -> dict:
@@ -174,7 +187,7 @@ class HTTPSolutionProvider:
                 SolutionSection(
                     heading=planned.heading,
                     paragraphs=output.paragraphs,
-                    subsections=output.subsections,
+                    subsections=distinct(output.subsections),
                 )
             )
         return SolutionProviderResult(sections=sections, usages=usages)

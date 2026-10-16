@@ -153,6 +153,7 @@ class SolutionProviderRequest(Contract):
     title: str
     score_range: str
     rule: str
+    other_items: list[str] = []
     needs_text: str
     project_name: str | None
     tenderee: str | None
