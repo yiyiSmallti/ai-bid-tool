@@ -97,3 +97,45 @@ class ProjectOwnerChange(Contract):
 
 class ProjectSharingUpdate(Contract):
     export_to_personal_allowed: bool
+
+
+class MemberQuotaSet(Contract):
+    # Null clears the cap; personal models are never capped.
+    monthly_company_tokens: int | None = Field(ge=0, le=10**15)
+
+
+class MemberQuotaView(Contract):
+    member_id: UUID
+    monthly_company_tokens: int | None
+    updated_at: datetime | None
+
+
+class DefaultModelSet(Contract):
+    # Null returns the member to the company default.
+    slot: UUID | None
+
+
+class DefaultModelView(Contract):
+    default_slot: UUID | None
+    # What a run without a model uses now.
+    effective_slot: UUID | None
+
+
+class ModelUsage(Contract):
+    owner: Literal["company", "personal"]
+    # Absent for another member's personal models, which only their owner sees.
+    slot: UUID | None
+    provider: str | None
+    model: str | None
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    tokens: int
+
+
+class MemberUsageView(Contract):
+    member_id: UUID
+    month: str
+    timezone: Literal["UTC"] = "UTC"
+    monthly_company_tokens: int | None
+    company_tokens: int

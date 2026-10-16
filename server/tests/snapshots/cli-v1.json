@@ -48029,6 +48029,73 @@
           ],
           "input": null
         },
+        "member quota": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "member",
+              "options": [
+                "--member"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "tokens",
+              "options": [
+                "--tokens"
+              ],
+              "required": false,
+              "type": "integer"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "clear",
+              "options": [
+                "--clear"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "monthly_company_tokens": {
+                "anyOf": [
+                  {
+                    "maximum": 1000000000000000,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Monthly Company Tokens"
+              }
+            },
+            "required": [
+              "monthly_company_tokens"
+            ],
+            "title": "MemberQuotaSet",
+            "type": "object"
+          }
+        },
         "member reset-password": {
           "cli_parameters": [
             {
@@ -48236,6 +48303,41 @@
             "title": "MemberUpdate",
             "type": "object"
           }
+        },
+        "member usage": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "member",
+              "options": [
+                "--member"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "month",
+              "options": [
+                "--month"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
         },
         "memory add": {
           "cli_parameters": [
@@ -58266,6 +58368,15 @@
                     "title": "New",
                     "type": "boolean"
                   },
+                  "owner": {
+                    "default": "company",
+                    "enum": [
+                      "company",
+                      "personal"
+                    ],
+                    "title": "Owner",
+                    "type": "string"
+                  },
                   "provider": {
                     "enum": [
                       "anthropic",
@@ -58681,6 +58792,15 @@
                     "title": "New",
                     "type": "boolean"
                   },
+                  "owner": {
+                    "default": "company",
+                    "enum": [
+                      "company",
+                      "personal"
+                    ],
+                    "title": "Owner",
+                    "type": "string"
+                  },
                   "provider": {
                     "enum": [
                       "anthropic",
@@ -59073,6 +59193,15 @@
                 "title": "New",
                 "type": "boolean"
               },
+              "owner": {
+                "default": "company",
+                "enum": [
+                  "company",
+                  "personal"
+                ],
+                "title": "Owner",
+                "type": "string"
+              },
               "provider": {
                 "enum": [
                   "anthropic",
@@ -59272,6 +59401,15 @@
                     "default": false,
                     "title": "New",
                     "type": "boolean"
+                  },
+                  "owner": {
+                    "default": "company",
+                    "enum": [
+                      "company",
+                      "personal"
+                    ],
+                    "title": "Owner",
+                    "type": "string"
                   },
                   "provider": {
                     "enum": [
@@ -59548,7 +59686,7 @@
                 "items": {
                   "$ref": "#/$defs/ProviderRevisionMetadata"
                 },
-                "maxItems": 20,
+                "maxItems": 40,
                 "title": "Models",
                 "type": "array"
               },

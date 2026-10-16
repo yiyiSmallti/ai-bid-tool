@@ -4,14 +4,20 @@ from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.common import result
 from app.core.config import Settings
 from app.core.password_attempts import PasswordAttempts
 from app.schemas.contracts import Result
-from app.schemas.members import MemberCreate, MemberUpdate, PasswordChange
-from app.services import members
+from app.schemas.members import (
+    DefaultModelSet,
+    MemberCreate,
+    MemberQuotaSet,
+    MemberUpdate,
+    PasswordChange,
+)
+from app.services import member_models, members
 
 
 def create_router(
@@ -74,5 +80,33 @@ def create_router(
         session, identity = ctx
         revoked = await members.revoke_member_sessions(session, identity, member_id)
         return result("member revoke-sessions", {"id": str(member_id), "revoked_sessions": revoked})
+
+    @router.put("/members/{member_id}/quota", name="member_quota", response_model=Result)
+    async def member_quota(
+        member_id: UUID, body: MemberQuotaSet, ctx=Depends(context, scope="function")
+    ):
+        session, identity = ctx
+        quota = await member_models.set_quota(session, identity, member_id, body)
+        return result("member quota", quota.model_dump(mode="json"))
+
+    @router.get("/members/{member_id}/usage", name="member_usage", response_model=Result)
+    async def member_usage(
+        member_id: UUID,
+        month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+        ctx=Depends(context, scope="function"),
+    ):
+        session, identity = ctx
+        data, rows = await member_models.usage(session, identity, member_id, month)
+        return result(
+            "member usage",
+            data.model_dump(mode="json"),
+            items=[row.model_dump(mode="json") for row in rows],
+        )
+
+    @router.put("/account/default-model", name="account_default_model", response_model=Result)
+    async def account_default_model(body: DefaultModelSet, ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        chosen = await member_models.set_default_model(session, identity, body)
+        return result("account default-model", chosen.model_dump(mode="json"))
 
     return router

@@ -13,6 +13,7 @@ import typer
 from app.core.errors import ServiceError
 from app.schemas.members import (
     MemberCreate,
+    MemberQuotaSet,
     MemberUpdate,
     ProjectMemberAdd,
     ProjectOwnerChange,
@@ -27,6 +28,8 @@ COMMAND_INPUTS = {
     "member update": MemberUpdate,
     "member reset-password": None,
     "member revoke-sessions": None,
+    "member quota": MemberQuotaSet,
+    "member usage": None,
     "task member list": None,
     "task member add": ProjectMemberAdd,
     "task member remove": None,
@@ -129,6 +132,31 @@ def register(app: typer.Typer, task_app: typer.Typer):
     ):
         result = cli.call("DELETE", f"/members/{member}/sessions")
         cli.emit(result, "member revoke-sessions", json_output)
+
+    @member_app.command("quota")
+    def member_quota(
+        member: Annotated[UUID, typer.Option()],
+        tokens: Annotated[int | None, typer.Option(help="Monthly company-model token cap")] = None,
+        clear: Annotated[bool, typer.Option(help="Remove the cap")] = False,
+        json_output: cli.JsonOption = False,
+    ):
+        if clear == (tokens is not None):
+            raise ServiceError("invalid_input", "Use exactly one of --tokens or --clear", 400, 2)
+        body = MemberQuotaSet(monthly_company_tokens=tokens).model_dump(mode="json")
+        result = cli.call("PUT", f"/members/{member}/quota", json=body)
+        cli.emit(result, "member quota", json_output)
+
+    @member_app.command("usage")
+    def member_usage(
+        member: Annotated[UUID, typer.Option()],
+        month: Annotated[
+            str | None, typer.Option(help="YYYY-MM in UTC; default this month")
+        ] = None,
+        json_output: cli.JsonOption = False,
+    ):
+        params = {"month": month} if month else None
+        result = cli.call("GET", f"/members/{member}/usage", params=params)
+        cli.emit(result, "member usage", json_output)
 
     @project_app.command("list")
     def task_member_list(
