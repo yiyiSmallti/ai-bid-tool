@@ -18,7 +18,7 @@ import (
 
 // realGateway runs the Python server in enterprise mode on a disposable
 // cluster, behind a TLS proxy the client pins, as a company would behind its
-// reverse proxy. It returns the gateway origin and the bootstrap
+// reverse proxy, with its worker. It returns the gateway origin and the bootstrap
 // administrator's one-time password.
 func realGateway(t *testing.T, root string) (*httptest.Server, string) {
 	server, pgBin := os.Getenv("BID_DESKTOP_TEST_SERVER"), os.Getenv("BID_DESKTOP_TEST_PG_BIN")
@@ -65,16 +65,19 @@ func realGateway(t *testing.T, root string) (*httptest.Server, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	api := exec.Command(b.Python, "-m", "uvicorn", "app.api.main:create_app", "--factory", "--host", "127.0.0.1", "--port", port, "--no-access-log")
-	api.Dir, api.Env, api.Stdout, api.Stderr = server, append(b.baseEnv(), enterprise...), log, log
-	if err := api.Start(); err != nil {
-		t.Fatal(err)
+	t.Cleanup(func() { log.Close() })
+	// The worker runs package jobs; the API answers everything else.
+	for _, args := range [][]string{{"-m", "uvicorn", "app.api.main:create_app", "--factory", "--host", "127.0.0.1", "--port", port, "--no-access-log"}, {"-m", "app.jobs.worker"}} {
+		process := exec.Command(b.Python, args...)
+		process.Dir, process.Env, process.Stdout, process.Stderr = server, append(b.baseEnv(), enterprise...), log, log
+		if err := process.Start(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			_ = process.Process.Signal(syscall.SIGTERM)
+			_ = process.Wait()
+		})
 	}
-	t.Cleanup(func() {
-		_ = api.Process.Signal(syscall.SIGTERM)
-		_ = api.Wait()
-		log.Close()
-	})
 	for deadline := time.Now().Add(90 * time.Second); ; time.Sleep(300 * time.Millisecond) {
 		if resp, err := http.Get(target.String() + "/health"); err == nil {
 			resp.Body.Close()
