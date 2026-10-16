@@ -109562,6 +109562,257 @@
           ],
           "input": null
         },
+        "tender outline": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "document",
+              "options": [
+                "--document"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "ChapterRole": {
+                "enum": [
+                  "format",
+                  "scoring",
+                  "needs",
+                  "contract",
+                  "instructions",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "FormKind": {
+                "enum": [
+                  "cover",
+                  "letter",
+                  "price",
+                  "declaration",
+                  "copy",
+                  "deviation",
+                  "scoring_index",
+                  "roster",
+                  "solution",
+                  "form"
+                ],
+                "type": "string"
+              },
+              "OutlineChapter": {
+                "additionalProperties": false,
+                "properties": {
+                  "block_end": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Block End"
+                  },
+                  "block_start": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Block Start"
+                  },
+                  "page_end": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page End"
+                  },
+                  "page_start": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page Start"
+                  },
+                  "role": {
+                    "$ref": "#/$defs/ChapterRole"
+                  },
+                  "title": {
+                    "minLength": 1,
+                    "title": "Title",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "role"
+                ],
+                "title": "OutlineChapter",
+                "type": "object"
+              },
+              "OutlineForm": {
+                "additionalProperties": false,
+                "description": "One numbered form of the format chapter, kept verbatim.\n\n`text` holds the form's lines in source order; a table row is one line with\ntab-separated cells, as parsing stores it.",
+                "properties": {
+                  "block_end": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Block End"
+                  },
+                  "block_start": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Block Start"
+                  },
+                  "index": {
+                    "minimum": 1,
+                    "title": "Index",
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "$ref": "#/$defs/FormKind"
+                  },
+                  "label": {
+                    "title": "Label",
+                    "type": "string"
+                  },
+                  "page_end": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page End"
+                  },
+                  "page_start": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page Start"
+                  },
+                  "text": {
+                    "title": "Text",
+                    "type": "string"
+                  },
+                  "title": {
+                    "minLength": 1,
+                    "title": "Title",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "index",
+                  "label",
+                  "title",
+                  "kind",
+                  "text"
+                ],
+                "title": "OutlineForm",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "chapters": {
+                "items": {
+                  "$ref": "#/$defs/OutlineChapter"
+                },
+                "title": "Chapters",
+                "type": "array"
+              },
+              "document_id": {
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "format_chapter": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Format Chapter"
+              },
+              "forms": {
+                "items": {
+                  "$ref": "#/$defs/OutlineForm"
+                },
+                "title": "Forms",
+                "type": "array"
+              }
+            },
+            "required": [
+              "document_id",
+              "chapters",
+              "format_chapter",
+              "forms"
+            ],
+            "title": "BidOutline",
+            "type": "object"
+          }
+        },
         "tender parse": {
           "cli_parameters": [
             {
@@ -110616,6 +110867,22 @@
     "warnings": [
       "Template metadata is a declaration; chapter matching and export adaptation have not been verified"
     ]
+  },
+  "tender outline": {
+    "command": "tender outline",
+    "cost": {
+      "browser_units": 0,
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "unresolved_calls": 0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
   },
   "tender parse": {
     "command": "tender parse",

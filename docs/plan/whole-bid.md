@@ -15,8 +15,8 @@ solution that answers each scoring item.
    split into its numbered forms (附件 N, 格式 N or a numbered list). Each form
    keeps its label, title, source pages or Word location, verbatim text and a
    kind: `cover`, `letter`, `price`, `declaration`, `copy`, `deviation`,
-   `scoring_index`, `roster` or `solution`. A tender without a format chapter
-   reports `format_chapter_missing`; nothing is invented.
+   `scoring_index`, `roster`, `solution`, or `form` for any other form. A tender without a format chapter
+   has no forms in its outline; nothing is invented.
 2. **Forms.** A form is reproduced from its verbatim text: paragraphs stay
    paragraphs, tab-separated rows become editable tables. Labels the
    installation can answer (bidder name, address, legal representative,
@@ -52,7 +52,7 @@ solution that answers each scoring item.
 
 | Slice | Content | Status |
 | --- | --- | --- |
-| 1 | Outline service, API and CLI | Planned |
+| 1 | Outline service, API and CLI (`bid tender outline`) | Done |
 | 2 | Assembly of forms, copies placeholders and deviation table; download and online preview | Planned |
 | 3 | Solution planning and drafting job, chapter review and confirmation | Planned |
 | 4 | Structured company fields for form filling | Planned |

@@ -17,7 +17,14 @@ from app.providers.storage import Storage
 from app.schemas.citation_repair_contracts import CitationRepairRequest
 from app.schemas.contracts import JobAction, Result, TaskCreate
 from app.schemas.source_contracts import READ_CHARS, SEARCH_MATCH_LIMIT
-from app.services import citation_repair, documents, requirements, sources, tender_jobs
+from app.services import (
+    bid_outline,
+    citation_repair,
+    documents,
+    requirements,
+    sources,
+    tender_jobs,
+)
 
 CHUNK_FIELDS = ("id", "document_id", "seq", "page", "text", "ocr", "citation_verified", "blocks")
 
@@ -162,6 +169,11 @@ def create_router(
             )
         ).all()
         return result("chunk list", items=[serial(row, CHUNK_FIELDS) for row in chunks])
+
+    @router.get("/documents/{document_id}/outline", name="document_outline", response_model=Result)
+    async def document_outline(document_id: UUID, ctx=Depends(context, scope="function")):
+        outline = await bid_outline.outline(ctx[0], document_id)
+        return result("tender outline", outline.model_dump(mode="json"))
 
     @router.get(
         "/documents/{document_id}/source/search", name="source_search", response_model=Result
