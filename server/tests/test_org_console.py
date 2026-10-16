@@ -78,6 +78,7 @@ async def test_g1_views_return_stable_recovery_shapes_and_worker_state(
         "created_at",
         "model_redaction_enabled",
         "model_redaction_revision",
+        "export_to_personal_allowed",
     }
     assert detail["id"] == task_id
     assert detail["tender_number"] == "SYNTHETIC-001"
