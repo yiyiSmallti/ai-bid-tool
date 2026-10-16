@@ -80,11 +80,11 @@ SCOPES = {
 }
 
 SCOPES.update(BID_REVIEW_TOKEN_SCOPES)
-# A gateway administrator's `bid_` token may manage members, since the CLI signs
-# in with tokens only; agents never hold it (AGENT_SCOPES).
-SCOPES.add("member:manage")
 
+# Accounts are managed only by an administrator signed in in person; a token or
+# an agent never holds `member:manage`.
 HUMAN_ONLY_SCOPES = {
+    "member:manage",
     "credential:manage",
     "clef:manage",
     "trust-anchor:manage",

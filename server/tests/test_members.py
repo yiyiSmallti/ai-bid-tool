@@ -4,9 +4,10 @@ Failure matrix before implementation: wrong login and wrong password answer
 differently; a must_change_password session reaches other routes; another
 session survives a password change or a reset; a disabled member keeps access
 through a session, a token or an agent; an idle or expired session still
-works; the last active administrator is disabled or demoted; a human write on
-a gateway carries no member, or a decision table lacks the column; the sixth
-failed sign-in still checks the password. Artifacts are synthetic and
+works; the last active administrator is disabled or demoted; an
+administrator's token manages accounts; a human write on a gateway carries no
+member, or a decision table lacks the column; the sixth failed sign-in still
+checks the password. Artifacts are synthetic and
 reproducible with --basetemp=data/work/members.
 """
 
@@ -14,7 +15,6 @@ import json
 import os
 import runpy
 import socket
-import stat
 import subprocess
 import sys
 import time
@@ -401,9 +401,9 @@ async def test_member_sessions_passwords_and_attribution(gateway, database, tmp_
         "demote_with_second": [200, None],
     }
 
-    # The CLI manages members with an administrator's `bid_` token; one-time
-    # passwords land in owner-only files, never on stdout.
-    token = await api.post(
+    # Accounts are managed in person: an administrator cannot mint a token that
+    # manages members, and a token the administrator holds is refused there.
+    refused = await api.post(
         "/tokens",
         headers=root_a,
         json={
@@ -412,56 +412,40 @@ async def test_member_sessions_passwords_and_attribution(gateway, database, tmp_
             "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
         },
     )
+    token = await api.post(
+        "/tokens",
+        headers=root_a,
+        json={
+            "name": "synthetic cli",
+            "scopes": ["task:read"],
+            "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+        },
+    )
     assert token.status_code == 200, token.text
     root_token = token.json()["data"]["token"]
     server, address = start_gateway(tmp_path)
     try:
-        password_file = tmp_path / "cli-user.password"
         status, shown = run_cli(["installation", "show"], address, "bid_invalid")
-        assert status == 0 and shown["data"]["mode"] == "enterprise"
-        status, created = run_cli(
-            ["member", "create", "--login", "cli.user", "--display-name", "CLI user"]
-            + ["--grant", "memory:edit", "--output", str(password_file)],
-            address,
-            root_token,
-        )
-        assert status == 0, created
-        secret = password_file.read_text()
-        assert stat.S_IMODE(password_file.stat().st_mode) == 0o600
-        assert secret not in json.dumps(created) and "initial_password" not in created["data"]
-        cli_member = created["data"]["member"]["id"]
-        await session_for(api, "cli.user", secret)
-        status, again = run_cli(
-            ["member", "reset-password", "--member", cli_member, "--output", str(password_file)],
-            address,
-            root_token,
-        )
-        report["cli"] = {
-            "existing_password_file": [status, again["data"]["error"]["code"]],
-            "list": sorted(
-                row["login"] for row in run_cli(["member", "list"], address, root_token)[1]["items"]
+        report["token_accounts"] = {
+            "mint_member_manage": code(refused),
+            "admin_token_list": code(await api.get("/members", headers=bearer(root_token))),
+            "admin_token_create": code(
+                await api.post(
+                    "/members",
+                    headers=bearer(root_token),
+                    json={"login": "token.made", "display_name": "Token made", "grants": []},
+                )
             ),
-            "revoke_sessions": run_cli(
-                ["member", "revoke-sessions", "--member", cli_member], address, root_token
-            )[1]["data"]["revoked_sessions"],
-            "disable": run_cli(
-                ["member", "update", "--member", cli_member, "--status", "disabled"],
-                address,
-                root_token,
-            )[1]["data"]["status"],
-            "member_token": run_cli(["member", "list"], address, alice_token["Authorization"][7:])[
-                1
-            ]["data"]["error"]["code"],
+            "cli_installation": [status, shown["data"]["mode"]],
         }
     finally:
         server.terminate()
         server.wait(timeout=30)
-    assert report["cli"] == {
-        "existing_password_file": [2, "existing_password_file"],
-        "list": ["alice", "cli.user", "root.admin", "second.admin"],
-        "revoke_sessions": 1,
-        "disable": "disabled",
-        "member_token": "forbidden",
+    assert report["token_accounts"] == {
+        "mint_member_manage": [403, "forbidden_scopes"],
+        "admin_token_list": [403, "forbidden"],
+        "admin_token_create": [403, "forbidden"],
+        "cli_installation": [0, "enterprise"],
     }
 
     # Five failures lock a login (this one has none yet); the sixth attempt is
