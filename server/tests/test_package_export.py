@@ -13,6 +13,7 @@ reads or downloads another member's package, or a token without
 The archive and report land in data/work/package-export.
 """
 
+import asyncio
 import hashlib
 import io
 import json
@@ -23,7 +24,16 @@ from pathlib import Path
 
 from app.services import packages
 from sqlalchemy import text
-from test_check import check_case, preview_check, process_check, submit_check  # noqa: F401
+from app.core.config import Settings
+from bid_cli import main as cli
+from test_check import (  # noqa: F401
+    LiveCheckClient,
+    check_case,
+    invoke_live_cli,
+    preview_check,
+    process_check,
+    submit_check,
+)
 from test_members import bootstrap_admin, code
 from test_project_visibility import gateway, new_member, signed_in  # noqa: F401
 from test_response_cards import create_tender
@@ -140,7 +150,7 @@ async def verify(app, content: bytes, task: str, secrets: list[str]) -> dict:
     return {"manifest": manifest, "data": data}
 
 
-async def test_package_export_personal(check_case, database, tmp_path):  # noqa: F811
+async def test_package_export_personal(check_case, database, tmp_path, monkeypatch):  # noqa: F811
     case = check_case
     api, app, header, task = case["api"], case["app"], case["header"], case["task"]
     report: dict = {
@@ -231,6 +241,39 @@ async def test_package_export_personal(check_case, database, tmp_path):  # noqa:
         )
     )
     assert report["token_without_scope_status"] == [403, "forbidden"]
+
+    # The CLI exports, reads the status and saves the package with a token.
+    monkeypatch.setenv("BID_ACCESS_KEY", exporter_secret)
+    cli_settings = Settings(data_dir=tmp_path)
+    monkeypatch.setattr(
+        cli, "Client", lambda mode, server: LiveCheckClient(mode, server, cli_settings)
+    )
+    exit_code, started = await asyncio.to_thread(
+        invoke_live_cli, ["package", "export", "--task", task]
+    )
+    assert exit_code == 0 and started["data"]["status"] == "queued", started
+    saved = tmp_path / "cli-package.zip"
+    exit_code, early = await asyncio.to_thread(
+        invoke_live_cli,
+        ["package", "download", "--job", started["data"]["id"], "--output", str(saved)],
+    )
+    assert exit_code == 4 and early["data"]["error"]["code"] == "package_not_ready", early
+    await app.state.processor(started["data"]["id"])
+    exit_code, status = await asyncio.to_thread(
+        invoke_live_cli, ["package", "status", "--job", started["data"]["id"]]
+    )
+    assert exit_code == 0 and status["data"]["status"] == "succeeded", status
+    exit_code, receipt = await asyncio.to_thread(
+        invoke_live_cli,
+        ["package", "download", "--job", started["data"]["id"], "--output", str(saved)],
+    )
+    assert exit_code == 0 and receipt["data"]["sha256"] == status["data"]["report"]["sha256"]
+    await verify(app, saved.read_bytes(), task, secrets)
+    report["cli"] = {
+        "export": 0,
+        "status": status["data"]["status"],
+        "download": receipt["data"]["size"],
+    }
 
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
     (ARTIFACTS / "personal.zip").write_bytes(content)
