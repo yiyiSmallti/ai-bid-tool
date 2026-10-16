@@ -135,6 +135,8 @@ class Processor:
                 "bid_review_prepare",
                 "bid_review_report",
                 "bid_review",
+                "package_export",
+                "package_import",
             }:
                 raise ServiceError("missing_document", "Resource not found", 404, 4)
             task_id, kind, document_id = current.task_id, current.kind, current.document_id
@@ -171,6 +173,8 @@ class Processor:
                     "bid_review_prepare",
                     "bid_review_report",
                     "bid_review",
+                    "package_export",
+                    "package_import",
                 }
                 else [
                     dict(
@@ -196,6 +200,11 @@ class Processor:
             rejected: list[dict[str, str]] = []
 
             try:
+                if kind == "package_export":
+                    from app.services.packages import run_export
+
+                    await run_export(execution, self.storage)
+                    return
                 if kind == "bid_review_report":
                     from app.jobs.bid_review_report import process as report_bid
 

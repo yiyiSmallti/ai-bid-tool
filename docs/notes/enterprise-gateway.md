@@ -82,6 +82,15 @@ signs in as a member, and every human decision records which member made it.
   `GET /members/{id}/usage?month=YYYY-MM` (`bid member usage`) returns calls
   and tokens by owner and model to the member and to `member:manage`, which
   sees another member's personal models without their slot, provider or model.
+- `POST /packages/export` with `{"task_id"}` (`bid package export --task`)
+  starts a `package_export` job for a project the caller can read with
+  `package:export`; on a gateway the project must have
+  `export_to_personal_allowed` (`package_export_not_allowed`).
+  `GET /packages/{job_id}` (`bid package status`) shows the job and its
+  report, and `GET /packages/{job_id}/file` (`bid package download --output`)
+  returns the zip to the member who started it, checking the setting and the
+  stored hash again. The CLI saves it only after its size and sha256 match the
+  report.
 
 ## How it works
 
@@ -217,6 +226,18 @@ signs in as a member, and every human decision records which member made it.
   page, sets `Offline` instead of an error: the page stays, a banner offers
   重试连接, and retrying checks the contract and session again before
   reloading. Nothing falls back to the local stack.
+- An export ([packages.py](../../server/app/services/packages.py)) reads
+  the live schema: foreign keys from `pg_constraint` and NOT NULL columns
+  decide the row closure from the task and the library items it binds, and
+  the import order is a topological sort that skips deferrable and self
+  references. A row whose required reference falls outside the package is
+  dropped and a nullable one is cleared; both are counted in the manifest's
+  `omitted_rows` and `cleared`. Installation-bound columns (members, tokens,
+  provider configuration, agents, queue leases) are nulled, agent-initiated
+  jobs become `legacy_unknown`, sealed columns are written as plaintext and
+  listed in `sealed_columns`, and stored run inputs are replaced by
+  `{"omitted": "bid-package/1"}`. Entries use a fixed timestamp and sorted
+  order, so the same data gives the same bytes.
 
 ## Pitfalls
 
@@ -233,8 +254,10 @@ signs in as a member, and every human decision records which member made it.
   other viewers only the public references.
 - A duplicate conflict key across public and private memory omits both from
   retrieval (`same_priority_conflict`); private memory does not shadow public.
-- `export_to_personal_allowed` is stored for [packages](../plan/enterprise-gateway.md#packages);
-  nothing reads it yet.
+- Withdrawing `export_to_personal_allowed` blocks downloading a package that
+  was already built; a file already downloaded stays valid.
+- Evidence that points at a screenshot asset is left out of a package, with
+  its links, until screenshot assets are packaged.
 - An agent of a removed member can run until its next wake, up to 30 seconds.
 - An admitted call reserves its full upper bound until its receipt, so a
   member near the cap can be refused while earlier calls are still running.
@@ -271,6 +294,10 @@ signs in as a member, and every human decision records which member made it.
 - [members.py](../../server/app/services/members.py) service,
   [members.py](../../server/app/api/members.py) routes,
   [members.py](../../cli/bid_cli/members.py) CLI
+- [0009_package_jobs.py](../../server/migrations/versions/0009_package_jobs.py),
+  [packages.py](../../server/app/services/packages.py) service,
+  [packages.py](../../server/app/api/packages.py) routes,
+  [packages.py](../../cli/bid_cli/packages.py) CLI
 - [admin.py](../../server/app/admin.py) `initialize_database`, `installation_mode`
 - [db.py](../../server/app/core/db.py) `Database.verify_role`
 - [auth.py](../../server/app/services/auth.py) `authenticate`, `access_key_refused`,
@@ -288,4 +315,5 @@ signs in as a member, and every human decision records which member made it.
 - [test_deployment_mode.py](../../server/tests/test_deployment_mode.py),
   [test_members.py](../../server/tests/test_members.py),
   [test_project_visibility.py](../../server/tests/test_project_visibility.py),
-  [test_member_models.py](../../server/tests/test_member_models.py)
+  [test_member_models.py](../../server/tests/test_member_models.py),
+  [test_package_export.py](../../server/tests/test_package_export.py)

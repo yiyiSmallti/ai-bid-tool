@@ -17,6 +17,7 @@ from starlette.exceptions import HTTPException
 
 from app.api.account import create_router as create_account_router
 from app.api.members import create_router as create_member_router
+from app.api.packages import create_router as create_package_router
 from app.api.project_members import create_router as create_project_member_router
 from app.core.config import Settings
 from app.core.db import Database
@@ -481,6 +482,7 @@ def create_app(
     app.include_router(create_account_router(context, settings, db, crypto, llm, resolve, attempts))
     app.include_router(create_member_router(context, settings, attempts))
     app.include_router(create_project_member_router(context))
+    app.include_router(create_package_router(context, storage, queue, settings))
     app.include_router(
         create_tender_router(context, settings, db, storage, queue, crypto, llm, resolve, ocr)
     )

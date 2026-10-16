@@ -54035,6 +54035,105 @@
             "type": "object"
           }
         },
+        "package download": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "package export": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "task_id"
+            ],
+            "title": "PackageExport",
+            "type": "object"
+          }
+        },
+        "package status": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
         "platform clef check": {
           "cli_parameters": [
             {

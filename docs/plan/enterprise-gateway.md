@@ -306,6 +306,7 @@ All responses use the existing seven-field Result envelope.
 | `POST /packages/export` | project member | Start a package export job for one task |
 | `POST /packages/import` | `task:create` | Upload a package; starts an import job |
 | `GET /packages/{job_id}` | job owner | Import or export status and report |
+| `GET /packages/{job_id}/file` | job owner | Download a finished export package |
 
 `POST /members` and password reset return the initial password once in the
 response body; it is never stored in plaintext or logged.
@@ -319,7 +320,7 @@ response body; it is never stored in plaintext or logged.
 | `member quota`, `member usage` | quota and usage routes |
 | `task member list`, `task member add`, `task member remove`, `task owner` | `/tasks/{id}/members`, `/tasks/{id}/owner` |
 | `task sharing` | `PATCH /tasks/{id}/sharing` |
-| `package export`, `package import`, `package status` | `/packages` routes |
+| `package export`, `package import`, `package status`, `package download` | `/packages` routes |
 
 Each command is added to `COMMANDS` in `cli/bid_cli/schema.py` and to the CLI
 snapshot. Agent tools are unchanged.
@@ -355,11 +356,16 @@ Import rules:
 - Verify every file hash and table hash against the manifest; any mismatch
   rejects the whole package with `package_integrity_failed`.
 - The package's `contract_version` must be one the server can read.
-- All row identifiers are remapped to new UUIDs; the task becomes a new project
-  owned by the importing member.
-- Library items whose content hash already exists are reused; others are
+- Row identifiers are kept, so row hashes and encryption envelopes stay valid;
+  only ciphertext is re-encrypted with the installation's key. The task becomes
+  a project owned by the importing member. A package whose task already exists
+  on the installation fails with `package_task_exists`; the existing project
+  must be deleted first.
+- A library row whose identifier already exists is reused; others are
   created. On a gateway, creating library items requires `library:edit`;
   without it the import fails before writing.
+- Consistency triggers still check every imported row; only the lease and
+  actor checks are passed by the import authority.
 - Every citation must resolve to an imported chunk; every confirmation keeps
   its original timestamp and is marked `imported` with the source mode. Imported
   human decisions are attributed to the importing member with
@@ -370,6 +376,8 @@ Import rules:
 - An import is idempotent per package hash and member: a repeat returns the
   first import's result.
 - The whole import commits in one transaction or not at all.
+- Rows pass the workflow guards through the scoped import authority of
+  [ADR 0014](../adr/0014-package-import-authority.md).
 
 ## Desktop client
 
