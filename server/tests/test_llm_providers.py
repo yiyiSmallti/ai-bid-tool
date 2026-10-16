@@ -326,7 +326,7 @@ FAILURES = {
         1,
     ),
     "unknown_page": (
-        anthropic_reply([GOOD_ITEMS[0] | {"ref": "9"}]),
+        anthropic_reply([GOOD_ITEMS[0] | {"ref": "9", "quote": "Minimum memory is 128 GB."}]),
         "failed",
         "invalid_citation",
         4,
@@ -373,7 +373,7 @@ async def test_vendor_failures_map_to_job_states(case, database, tmp_path, pdf_b
             assert status["result"]["rejected"] == [
                 {
                     "position": "9",
-                    "quote": "Minimum memory is 64 GB.",
+                    "quote": "Minimum memory is 128 GB.",
                     "reason": "unknown_position",
                 }
             ]

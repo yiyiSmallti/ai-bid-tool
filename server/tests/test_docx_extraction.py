@@ -131,9 +131,9 @@ async def test_word_extraction_cites_blocks_and_adds_starred_cells(database, tmp
         ([item("p4", "核心数不少于 32 核")], "invalid_citation"),
         ([item("p4", "服务器内存不低于 64GB。参数")], "invalid_citation"),  # spans two blocks
         (
-            [item("p999", "投标人须具备有效的营业执照。")],
+            [item("p999", "投标人须具备有效的资质证书。")],
             "invalid_citation",
-        ),  # unknown block
+        ),  # unknown block holding a quote found nowhere
     ],
 )
 async def test_word_citations_must_sit_inside_the_cited_block(items, code, database, tmp_path):
@@ -155,7 +155,7 @@ async def test_word_citations_must_sit_inside_the_cited_block(items, code, datab
             assert status["result"]["rejected"] == [
                 {
                     "position": "p999",
-                    "quote": "投标人须具备有效的营业执照。",
+                    "quote": "投标人须具备有效的资质证书。",
                     "reason": "unknown_position",
                 }
             ]

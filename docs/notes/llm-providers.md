@@ -140,7 +140,7 @@ actually answered.
 | Refusal | Failed, `provider_refused` |
 | Output limit reached on an unsplittable batch | Failed, `provider_output_truncated`; lower the reasoning level or raise `BID_LLM_MAX_OUTPUT_TOKENS` |
 | Malformed output on an unsplittable batch | Failed, `invalid_provider_output` |
-| Some items have an empty quote or text, an unknown `ref`, no unique source match, or a quote not found at the cited position | Succeeded; those items are listed in `result.rejected` with a reason and not saved |
+| Some items have an empty quote or text, an unknown `ref`, no unique source match, or a quote not found at the cited position | Succeeded; those items are listed in `result.rejected` with a reason and not saved. A page `ref` written as `page 3`, `p3` or `第 3 页` reads as `3` when no block has that ID, and an item whose `ref` names no position of its batch is placed at the one page or block of that batch holding its quote; a `ref` naming another position is never moved |
 | No item passes | Failed, `invalid_citation`; nothing saved |
 | An unexpected error while assembling results | Failed, `processing_failed`; every finished call is still recorded, and the log holds the exception type and stack without its message |
 | Attempt cancelled, superseded or expired | `job_attempt_stopped` fences further calls; it cannot overwrite a newer attempt or cancellation |
