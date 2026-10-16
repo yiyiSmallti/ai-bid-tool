@@ -90,6 +90,10 @@ func snapFixtures() map[string]snapFixture {
 		"/management/resources/products/query": {data: Object{"limit": 25, "next_cursor": ""}, items: products},
 		"/tasks/t-1/extractions/j-ext-2/requirement-reviews": {data: Object{"scope": Object{"task_id": "t-1", "extraction_job_id": "j-ext-2", "revision": 4, "confirmation_sha256": "c0ffee"}, "next_cursor": ""}, items: requirements},
 		"/confidential-fields":                               {data: Object{}, items: []Object{}},
+		"/account/sessions": {data: Object{}, items: []Object{
+			{"id": "s-1", "created_at": "2026-10-15T01:00:00Z", "expires_at": "2026-10-15T13:00:00Z", "last_seen_at": "2026-10-15T06:40:00Z", "client_label": "AI Bid 桌面客户端", "current": true},
+			{"id": "s-2", "created_at": "2026-10-14T09:00:00Z", "expires_at": "2026-10-14T21:00:00Z", "last_seen_at": "2026-10-14T11:20:00Z", "client_label": "AI Bid 桌面客户端", "current": false},
+		}},
 	}
 }
 
@@ -127,6 +131,18 @@ func TestNativeSnapshots(t *testing.T) {
 		"products":     "/org/products",
 		"models":       "/org/settings/models",
 		"models-add":   "/org/settings/models#add",
+		"add-gateway":  "/workspaces/add",
+		// Enterprise workspace pages; the ent- prefix opens the gateway workspace.
+		"ent-login":           "/login",
+		"ent-password-forced": "/account/password",
+		"ent-password":        "/account/password",
+		"ent-sessions":        "/account/sessions",
+		"ent-tasks":           "/org/tasks",
+	}
+	store := WorkspaceStore{Path: filepath.Join(t.TempDir(), "workspaces.json")}
+	gateway := Workspace{ID: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b", Kind: "enterprise", Name: "华东建设集团", URL: "https://bid.example.com"}
+	if err := store.Save(Workspaces{Current: personalWorkspace, Workspaces: []Workspace{{ID: personalWorkspace, Kind: "personal", Name: "本机"}, gateway}}); err != nil {
+		t.Fatal(err)
 	}
 	if only := os.Getenv("BID_UI_SNAP_ONLY"); only != "" {
 		for name := range routes {
@@ -139,6 +155,19 @@ func TestNativeSnapshots(t *testing.T) {
 		for name, route := range routes {
 			app := NewNativeApp()
 			app.Client = NewAPIClient(server.URL)
+			app.Runner = &WorkspaceRunner{Store: store, Secrets: &memorySecrets{items: map[string]string{}}}
+			app.Workspace = &OpenWorkspace{Workspace: Workspace{ID: personalWorkspace, Kind: "personal", Name: "本机"}, Client: app.Client}
+			if strings.HasPrefix(name, "ent-") {
+				app.Workspace = &OpenWorkspace{Workspace: gateway, Client: app.Client}
+				if name != "ent-login" {
+					role := "admin"
+					if name == "ent-sessions" || name == "ent-password" {
+						role = "member"
+					}
+					app.Workspace.Account = Object{"mode": "enterprise", "actor_kind": "user", "must_change_password": name == "ent-password-forced",
+						"member": Object{"id": "m-1", "login": "zhangwei", "display_name": "张伟", "role": role, "grants": []any{}, "status": "active"}}
+				}
+			}
 			updates := make(chan func(), 64)
 			app.Dispatch = func(apply func()) { updates <- apply }
 			width, height := 1360, 880
@@ -169,6 +198,12 @@ func TestNativeSnapshots(t *testing.T) {
 				page.startEdit(nil)
 				page.template = "zhipu"
 				page.applyTemplate("zhipu")
+				tt.Frame()
+			}
+			// As a gateway whose self-signed certificate awaits confirmation.
+			if page, ok := app.page.(*addGatewayPage); ok {
+				page.address = "https://10.8.0.12:8443"
+				page.untrusted = strings.Repeat("3fa9", 16)
 				tt.Frame()
 			}
 			tt.Frame()

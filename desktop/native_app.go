@@ -23,8 +23,13 @@ type NativePage interface {
 	Close()
 }
 type NativeApp struct {
-	Route           Route
-	Client          *APIClient
+	Route  Route
+	Client *APIClient
+	// Runner opens workspaces; Workspace is the one open, nil while starting.
+	Runner    *WorkspaceRunner
+	Workspace *OpenWorkspace
+	// Starting says what the startup screen waits for.
+	Starting        string
 	Window          *mygo.Window
 	Busy            bool
 	Error, Notice   string
@@ -130,6 +135,9 @@ func (a *NativeApp) navigate(path string) {
 	}
 	a.Route = parseRoute(path)
 	a.page = managementPage(a.Route)
+	if a.page == nil {
+		a.page = accountPage(a.Route)
+	}
 	if a.page == nil {
 		a.page = settingsPage(a.Route)
 	}
@@ -251,6 +259,10 @@ func (a *NativeApp) update(fn func()) {
 func (a *NativeApp) handleError(err error) bool {
 	var api *APIError
 	if errors.As(err, &api) {
+		if api.Status == 401 && a.enterprise() {
+			a.expired()
+			return true
+		}
 		if api.Status == 401 {
 			a.Client.SetSession("")
 			a.navigate("/login")
@@ -340,7 +352,8 @@ type nativeCardless interface{ Cardless() }
 func (a *NativeApp) View(c *ui.Context) {
 	nativeTheme(c)
 	p := nativePalette(c)
-	if _, ok := a.page.(*loginPage); ok || a.Client == nil {
+	full, ok := a.page.(nativeFullscreen)
+	if _, login := a.page.(*loginPage); login || a.Client == nil || ok && full.Fullscreen(a) {
 		a.fullscreen(c)
 		return
 	}
@@ -469,9 +482,18 @@ func (a *NativeApp) fullscreen(c *ui.Context) {
 			nativeBrandMark(c, 44)
 			if a.Client == nil {
 				ui.Text(c, "AI 标书").FontSize(22).FontWeight(650)
+				if a.Starting == "" && a.Error != "" {
+					nativeCallout(c, toneDanger, a.Error)
+					a.fullscreenSwitcher(c)
+					return
+				}
+				starting := a.Starting
+				if starting == "" {
+					starting = "正在启动本地服务…"
+				}
 				ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c).Label("正在启动本地服务")
-					ui.Text(c, "正在启动本地服务…").FontSize(13.5).TextColor(p.Muted)
+					ui.Spinner(c).Label(starting)
+					ui.Text(c, starting).FontSize(13.5).TextColor(p.Muted)
 				})
 				return
 			}
@@ -479,6 +501,9 @@ func (a *NativeApp) fullscreen(c *ui.Context) {
 				nativeCallout(c, toneDanger, a.Error)
 			}
 			a.page.View(c, a)
+			if _, login := a.page.(*loginPage); login {
+				a.fullscreenSwitcher(c)
+			}
 		})
 	})
 }
@@ -492,13 +517,17 @@ func nativeBrandMark(c *ui.Context, size float32) {
 	})
 }
 
-type loginPage struct{ key string }
+type loginPage struct{ key, login, password string }
 
-func (*loginPage) Title() string   { return "访问密钥" }
+func (*loginPage) Title() string   { return "登录" }
 func (*loginPage) Dirty() bool     { return false }
-func (p *loginPage) Close()        { p.key = "" }
+func (p *loginPage) Close()        { *p = loginPage{} }
 func (*loginPage) Open(*NativeApp) {}
 func (p *loginPage) View(c *ui.Context, a *NativeApp) {
+	if a.enterprise() {
+		p.enterpriseSignIn(c, a)
+		return
+	}
 	palette := nativePalette(c)
 	ui.Column(c).FillWidth().Gap(6).Children(func() {
 		ui.Text(c, "解锁 AI 标书").FontSize(22).FontWeight(650)

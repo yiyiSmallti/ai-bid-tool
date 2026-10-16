@@ -77,10 +77,16 @@ func (c *APIClient) send(ctx context.Context, method, path string, body io.Reade
 		req.Header.Set("Content-Type", contentType)
 	}
 	response, err := c.HTTP.Do(req)
-	if err == nil && response.StatusCode == 401 {
+	if err == nil && response.StatusCode == 401 && !passwordCheck(method, path) {
 		c.SetSession("")
 	}
 	return response, err
+}
+
+// passwordCheck is a password change, whose 401 may refuse the current
+// password while the session stays valid.
+func passwordCheck(method, path string) bool {
+	return method == "POST" && path == "/account/password"
 }
 func decodeResult(response *http.Response) (Result, error) {
 	defer response.Body.Close()
@@ -177,7 +183,7 @@ func (c *APIClient) Request(ctx context.Context, method, path string, body any) 
 	if err != nil {
 		return Result{}, err
 	}
-	if response.StatusCode == 401 {
+	if response.StatusCode == 401 && !passwordCheck(method, path) {
 		c.SetSession("")
 	}
 	return decodeResult(response)
