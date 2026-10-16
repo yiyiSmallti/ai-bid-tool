@@ -77,6 +77,16 @@ elsewhere on the page. Image metadata is read without extracting image binary co
 when no native text exists or when the uncovered image area occupies at least
 20% of the page. Pure-text pages retain their native text without an OCR call.
 
+Native text is stored as paragraphs. `page_text` in
+[pdf_reading.py](../../server/app/core/pdf_reading.py) rebuilds each ruled table one
+row per line with tab-separated cells, and rejoins a line with the next when the next
+line's first word would not have fit before the right edge, the line ends no
+sentence or clause, and the next line has the same size and indent and opens no list
+item. Justified segments on one baseline become one line. A page whose rebuilt
+text would not hold exactly the same characters as layout-sorted text keeps the
+layout-sorted text. Without this, padded table columns and every wrap split one
+clause into fragments that models cite by a single line.
+
 The stored text keeps native spans and appends additional OCR text. Native spans
 already present in OCR are removed using the normalization and boundary rules
 from [extraction.py](../../server/app/services/extraction.py). No provenance

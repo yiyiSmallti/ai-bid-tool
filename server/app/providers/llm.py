@@ -39,9 +39,16 @@ from app.schemas.contracts import (
     Source,
 )
 from app.schemas.preflight_contracts import CallPlan, Capability
-from app.services.extraction import cited, fingerprint, locate_span, location_of, normalize
+from app.services.extraction import (
+    cited,
+    fingerprint,
+    locate_quote,
+    locate_span,
+    location_of,
+    normalize,
+)
 
-ADAPTER_VERSION = "http-extract-v6"
+ADAPTER_VERSION = "http-extract-v7"
 logger = logging.getLogger(__name__)
 RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 # Exhausted quota, unpaid accounts and expired plans do not recover within the retry
@@ -51,6 +58,8 @@ QUOTA_CODES = {"1113", "1308", "1309", "1310", "1311", "1313", "1314", "1315"} |
     str(code) for code in range(1316, 1322)
 }
 QUOTA_TYPES = {"insufficient_quota", "billing_error"}
+# Page refs the model writes in prose form ("page 33", "p53", "第 33 页") instead of "33".
+PAGE_REF = re.compile(r"(?:第|page|p\.?)?\s*(\d+)\s*页?", re.IGNORECASE)
 RESET_TIME = re.compile(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?")
 
 SYSTEM_PROMPT = """你是招标文件分析助手。从用户给出的招标文件内容中，抽取投标人必须响应的全部要求：
@@ -318,6 +327,10 @@ def halve(batch: list[dict]) -> list[list[dict]] | None:
     return [[{**chunk, "text": part}] for part in halves]
 
 
+def quoted(chunk: dict, block: dict | None, quote: str) -> bool:
+    return locate_quote(block["text"] if block else chunk["text"], quote)[0] is not None
+
+
 def blocked(chunk: dict) -> dict[str, str]:
     """The rejection receipt for a part the vendor's content review would not process."""
     blocks = chunk.get("blocks") or []
@@ -542,16 +555,28 @@ class HTTPExtractor:
             for chunk in batch
             for block in chunk.get("blocks") or []
         }
+        units = [
+            (chunk, block)
+            for chunk in batch
+            if chunk["citation_verified"]
+            for block in chunk.get("blocks") or [None]
+        ]
         output, rejected = [], []
         for item in wire.items:
             ref = str(item.ref).strip()
-            if ref in by_block:
-                chunk, block = by_block[ref]
+            if ref not in by_block and (page_ref := PAGE_REF.fullmatch(ref)):
+                ref = page_ref[1]
+            unit = by_block.get(ref) or ((by_page[ref], None) if ref in by_page else None)
+            if unit is None:
+                # A malformed ref is placed where the quote proves it, when exactly one
+                # position of this batch holds it. A ref naming another position stays wrong.
+                found = [candidate for candidate in units if quoted(*candidate, item.quote)]
+                unit = found[0] if len(found) == 1 else None
+            if unit is not None:
+                chunk, block = unit
                 # Location fields come from the parsed block, never from the model.
-                page, location = None, location_of(block)
-            elif ref in by_page:
-                chunk = by_page[ref]
-                page, location = chunk["page"], None
+                page = None if block else chunk["page"]
+                location = location_of(block) if block else None
             else:
                 rejected.append(
                     {

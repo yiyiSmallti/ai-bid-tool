@@ -19,7 +19,7 @@ from app.schemas.contracts import PageText, ProviderUsage, SectionText
 from app.services.docx_blocks import parse_docx
 from app.services.extraction import at_boundary, locate_span, normalize
 
-PARSER_VERSION = "parse-v4"
+PARSER_VERSION = "parse-v5"
 
 
 def validate_document(

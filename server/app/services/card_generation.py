@@ -921,6 +921,12 @@ async def publish(session, actor, job, output, secret, storage, settings):
             requirement_calls[key] = str(batch.call_id) if batch.call_id else None
             if proposal.deviation == "negative":
                 warnings.append(f"negative_deviation:{key}")
+            if any(
+                redaction.PLACEHOLDER.search(text or "")
+                for text in (proposal.response_text, proposal.deviation_note)
+            ):
+                # Confirmation refuses masked text; flag it now instead of at the confirm gate.
+                warnings.append(f"redacted_placeholder_in_response:{key}")
     for key in selected - seen - set(skipped):
         skipped[key] = "generation_stopped" if output.failure else "missing_proposal"
     from app.jobs.execution import ADMISSION_STOPS
@@ -933,7 +939,10 @@ async def publish(session, actor, job, output, secret, storage, settings):
         or needs_material
         or any(reason not in PROTECTED for reason in skipped.values())
         or output.failure
-        or any(warning.startswith("unknown_requirement:") for warning in warnings)
+        or any(
+            warning.startswith(("unknown_requirement:", "redacted_placeholder_in_response:"))
+            for warning in warnings
+        )
     )
     usages = list(
         (

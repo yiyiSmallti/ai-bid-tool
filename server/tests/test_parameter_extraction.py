@@ -274,7 +274,7 @@ async def test_gap_call_outcomes_keep_all_billed_usage(failure, database, tmp_pa
         "truncated": anthropic_reply([], stop="max_tokens"),
         "malformed": not_json(),
         "refused": anthropic_reply([], stop="refusal"),
-        "bad_ref": anthropic_reply([item("p999", "容量：≥512 GB")]),
+        "bad_ref": anthropic_reply([item("p999", "容量：≥1 TB")]),
     }
     recoverable = failure in {"truncated", "malformed"}
     vendor = Vendor(
@@ -320,7 +320,7 @@ async def test_gap_call_outcomes_keep_all_billed_usage(failure, database, tmp_pa
         assert status["result"]["rejected"] == [
             {
                 "position": "p999",
-                "quote": "容量：≥512 GB",
+                "quote": "容量：≥1 TB",
                 "reason": "unknown_position",
             }
         ]

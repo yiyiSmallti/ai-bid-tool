@@ -6,6 +6,20 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: PDF text in paragraphs and table rows
+
+- Parsing (`parse-v5`) stores PDF text as paragraphs and ruled tables as one
+  row per line with tab-separated cells, instead of padded columns broken at
+  every wrap. Requirement quotes, card text and exported DOCX no longer carry
+  the PDF's line breaks, and price and scoring rows stay whole. Documents
+  already parsed keep their text; upload them in a new task to use it.
+- Extraction (`http-extract-v7`) reads page refs written as `page 3`, `p3` or
+  `第 3 页`, and places an item whose ref names no position of its batch at the
+  one position holding its quote. Fewer items are rejected at low reasoning.
+- Card generation keeps a draft whose response still holds `[REDACTED_…]` text
+  but marks the job partial with `redacted_placeholder_in_response:<id>`, so
+  the reviewer sees it before the confirm step refuses it.
+
 ## 2026-10-16: Refused model calls no longer block a retry
 
 - A 4xx reply without usage, or a connection that never opened, settles the
