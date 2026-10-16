@@ -14,6 +14,7 @@ Bid preparation is repetitive and time-consuming, and a single omission can caus
 
 - Extract all qualification (资格) requirements, technical parameters, scoring items, and starred (★) mandatory clauses (★条款), each with a verifiable original location; PDF pages and Word structural locations follow [ADR 0003](adr/0003-word-structural-citations.md).
 - Collect screenshot evidence (证据) for hardware parameters from official vendor (厂家) sites or white papers; generate functional UI screenshots for in-house software.
+- Assemble whole bids from the tender's format chapter, with drafted solution chapters a human confirms ([ADR 0015](adr/0015-whole-bid-assembly.md)).
 - Check bids against tender documents for bid-rejection and point-deduction (扣分) risks.
 - Estimate scores item by item against scoring criteria (评分标准) and explain lost points.
 - Connect these tasks in a dashboard where humans and agents collaborate.

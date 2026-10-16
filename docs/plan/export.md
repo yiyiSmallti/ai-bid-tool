@@ -393,7 +393,7 @@ GET /exports/{id}/provenance (`bid export provenance --id ID --json`) returns pu
 
 ## Explicitly out of scope
 
-- Automatic whole-bid assembly/bid-authorization letters/164-page solution drafting/price strategy/automatic commitments-response rewriting/semantic check-score/missing-requirement entry/multiple extraction-document-package merging.
+- Whole-bid assembly, bid letters and solution drafting, which [ADR 0015](../adr/0015-whole-bid-assembly.md) moves to the [whole-bid plan](whole-bid.md)/price strategy/automatic commitments-response rewriting/semantic check-score/missing-requirement entry/multiple extraction-document-package merging.
 - Vendor (厂家)/web evidence generation-capture/new screenshots-diagrams/prototypes/Rust annotations/OCR-transcription/new contract-award-social-insurance types or packaging unconfirmed materials as “已附证明”.
 - Arbitrary Word matching/public-template sharing/DOCM/PDF final export/full-original-PDF concatenation/final-page guarantees/automatic compliance-seal verification/multiple signers/bulk automatic release.
 - Electronic/handwritten signatures/page-by-page-cross-page seals/government clients/encrypted bid packages/platform upload-submission/API integration. Humans merge full bids/check layouts/sign/upload after export.
