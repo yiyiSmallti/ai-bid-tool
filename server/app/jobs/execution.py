@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select, update
+from sqlalchemy import Integer, Text, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +31,7 @@ from app.schemas.preflight_contracts import CallPlan
 from app.services.auth import HUMAN_SCOPES, SCOPES, Identity, set_actor_context
 
 ADMISSION_STOPS = {"job_call_limit_exceeded"}
+QUOTA_LOCK = "member-quota:{}"
 JOB_SCOPES = {
     "annotation_render": "evidence:annotate",
     "annotation_release": "card:read",
@@ -129,6 +130,68 @@ async def authorized_job(session: AsyncSession, job: Job, *, bind_context=True) 
             session, replace(actor, actor_kind="worker", job_id=job.id, run_id=job.run_id)
         )
     return actor
+
+
+async def bind_member(session: AsyncSession, job: Job) -> None:
+    """Attribute this transaction's calls and usage to the member the job runs for."""
+    await session.execute(
+        text("SELECT set_config('app.actor_member_id', :member, true)"),
+        {"member": str(job.actor_member_id) if job.actor_member_id else ""},
+    )
+
+
+def month_start() -> datetime:
+    return datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def personal_configs():
+    """Revisions of personal models, whose calls no company quota counts."""
+    from app.models.provider_configs import ProviderConfig, ProviderSlot
+
+    return (
+        select(ProviderConfig.id)
+        .join(ProviderSlot, ProviderSlot.slot == ProviderConfig.slot)
+        .where(ProviderSlot.owner_member_id.is_not(None))
+    )
+
+
+async def company_tokens(session: AsyncSession, member: UUID, start: datetime) -> int:
+    """A member's company-model tokens since `start`: used, plus the upper bound
+    of every admitted call without a receipt yet."""
+    used = await session.scalar(
+        select(
+            func.coalesce(func.sum(UsageRecord.input_tokens + UsageRecord.output_tokens), 0)
+        ).where(
+            UsageRecord.member_id == member,
+            UsageRecord.created_at >= start,
+            or_(
+                UsageRecord.provider_config_id.is_(None),
+                UsageRecord.provider_config_id.not_in(personal_configs()),
+            ),
+        )
+    )
+    plan = VendorCall.provider_identity
+    config = plan["provider_config_id"].astext
+    reserved = await session.scalar(
+        select(
+            func.coalesce(
+                func.sum(
+                    func.coalesce(plan["input_tokens_upper_bound"].astext.cast(Integer), 0)
+                    + func.coalesce(plan["output_tokens_upper_bound"].astext.cast(Integer), 0)
+                ),
+                0,
+            )
+        ).where(
+            VendorCall.member_id == member,
+            VendorCall.created_at >= start,
+            VendorCall.state.in_(["pending", "unknown"]),
+            or_(
+                config.is_(None),
+                config.not_in(select(personal_configs().subquery().c.id.cast(Text))),
+            ),
+        )
+    )
+    return (used or 0) + (reserved or 0)
 
 
 async def job_cost(session: AsyncSession, job_id: UUID) -> dict:
@@ -324,10 +387,41 @@ class JobExecution:
                 await self.audit_stop("job.call.admission_denied", error.code)
             raise
 
+    async def member_quota(self, session: AsyncSession, job: Job, quote: CallPlan) -> None:
+        """Admit a company-model call only while the member's month stays within the cap."""
+        from app.models.members import MemberQuota
+        from app.models.provider_configs import ProviderConfig, ProviderSlot
+
+        member = job.actor_member_id
+        assert member is not None
+        cap = await session.scalar(
+            select(MemberQuota.monthly_company_tokens).where(MemberQuota.member_id == member)
+        )
+        if cap is None:
+            return
+        if quote.provider_config_id is not None and await session.scalar(
+            select(ProviderSlot.owner_member_id)
+            .join(ProviderConfig, ProviderConfig.slot == ProviderSlot.slot)
+            .where(ProviderConfig.id == quote.provider_config_id)
+        ):
+            return  # Personal models are not capped.
+        # Every capped admission for this member serializes here, after its
+        # Task -> Job locks, so parallel jobs cannot each see room for the same tokens.
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": QUOTA_LOCK.format(member)},
+        )
+        planned = quote.input_tokens_upper_bound + quote.output_tokens_upper_bound
+        if await company_tokens(session, member, month_start()) + planned > cap:
+            raise self.stop(
+                "member_quota_exceeded", "The member's monthly company-model tokens are used up"
+            )
+
     async def _admit_once(self, quote: CallPlan) -> UUID:
         call_id = uuid4()
         async with self.db.transaction() as session:
             job = await self.owned_job(session)
+            await bind_member(session, job)
             if job.agent_session_id is not None:
                 from app.services.agent_limits import guard_job
 
@@ -367,6 +461,8 @@ class JobExecution:
                     "unresolved_call",
                     "Verify the previous identical request before dispatching again",
                 )
+            if job.actor_member_id is not None:
+                await self.member_quota(session, job, quote)
             session.add(
                 VendorCall(
                     id=call_id,
@@ -404,6 +500,7 @@ class JobExecution:
                 raise ProviderFailure(
                     "Unsent calls cannot complete", code="usage_accounting_failed"
                 )
+            await bind_member(session, job)
             quote = CallPlan.model_validate(call.provider_identity)
             fields = (
                 "capability",
