@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -210,5 +212,113 @@ func TestNativeTransfersFailOnlyWithoutProgress(t *testing.T) {
 	}
 	if _, err := client.Request(context.Background(), "GET", "/other", nil); err == nil || errors.Is(err, errTransferStalled) {
 		t.Fatalf("an ordinary request keeps the total limit: %v", err)
+	}
+}
+
+// The local client signs itself in with the installation key. It must renew a
+// refused session without looping on a refused key, replay only a body it can
+// read again, leave a password check's 401 alone and let concurrent refusals
+// share one renewal.
+func TestNativeLocalClientRenewsItsSession(t *testing.T) {
+	var current atomic.Value
+	current.Store("")
+	var exchanges, uploads atomic.Int32
+	var bodies []string
+	var bodiesMu sync.Mutex
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		data, _ := io.ReadAll(r.Body)
+		if r.URL.Path == "/auth/session" {
+			var body Object
+			_ = json.Unmarshal(data, &body)
+			exchanges.Add(1)
+			if str(body, "access_key") != "installation-key" {
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(nativeConsumerResult(false, "session", Object{"error": Object{"code": "invalid_access_key", "message": "refused"}}))
+				return
+			}
+			session := fmt.Sprintf("s-%d", exchanges.Load())
+			current.Store(session)
+			_ = json.NewEncoder(w).Encode(nativeConsumerResult(true, "session", Object{"session": session, "expires_in": 3600}))
+			return
+		}
+		if r.URL.Path == "/upload" {
+			uploads.Add(1)
+		}
+		if r.URL.Path == "/account/password" || r.Header.Get("Authorization") != "Bearer "+current.Load().(string) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(nativeConsumerResult(false, "session", Object{"error": Object{"code": "session_required", "message": "expired"}}))
+			return
+		}
+		bodiesMu.Lock()
+		bodies = append(bodies, string(data))
+		bodiesMu.Unlock()
+		_ = json.NewEncoder(w).Encode(nativeConsumerResult(true, "echo", Object{"body": string(data)}))
+	}))
+	defer server.Close()
+	ctx := context.Background()
+	local := func(key string) *APIClient {
+		client := NewAPIClient(server.URL)
+		client.RenewWith(func(ctx context.Context) error { return client.Exchange(ctx, key) })
+		return client
+	}
+	client := local("installation-key")
+
+	if _, err := client.Request(ctx, "GET", "/echo", nil); err != nil || exchanges.Load() != 1 {
+		t.Fatalf("first request signs in: %v, %d exchanges", err, exchanges.Load())
+	}
+	current.Store("revoked")
+	result, err := client.Request(ctx, "POST", "/echo", Object{"n": 1})
+	if err != nil || exchanges.Load() != 2 || str(result.Data, "body") != `{"n":1}` {
+		t.Fatalf("refused request is replayed whole on a renewed session: %v, %d exchanges, %q", err, exchanges.Load(), str(result.Data, "body"))
+	}
+
+	current.Store("revoked")
+	file := filepath.Join(t.TempDir(), "synthetic.txt")
+	if err := os.WriteFile(file, []byte("synthetic"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Upload(ctx, "/upload", nil, []UploadFile{{Field: "file", Path: file}})
+	var problem *APIError
+	if !errors.As(err, &problem) || problem.Status != http.StatusUnauthorized || uploads.Load() != 1 {
+		t.Fatalf("streamed upload is refused, not replayed: %v, %d uploads", err, uploads.Load())
+	}
+	if _, err := client.Request(ctx, "GET", "/echo", nil); err != nil || exchanges.Load() != 3 {
+		t.Fatalf("next request renews after the refused upload: %v, %d exchanges", err, exchanges.Load())
+	}
+
+	session := current.Load().(string)
+	_, err = client.Request(ctx, "POST", "/account/password", Object{"current": "wrong"})
+	if !errors.As(err, &problem) || exchanges.Load() != 3 || client.session != session {
+		t.Fatalf("password refusal keeps the session: %v, %d exchanges", err, exchanges.Load())
+	}
+
+	current.Store("revoked")
+	var wg sync.WaitGroup
+	failures := make(chan error, 8)
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := client.Request(ctx, "GET", "/echo", nil); err != nil {
+				failures <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(failures)
+	if err := <-failures; err != nil || exchanges.Load() != 4 {
+		t.Fatalf("concurrent refusals share one renewal: %v, %d exchanges", err, exchanges.Load())
+	}
+
+	refused := local("wrong-key")
+	before := exchanges.Load()
+	for range 2 {
+		if _, err := refused.Request(ctx, "GET", "/echo", nil); !errors.As(err, &problem) || problem.Code != "invalid_access_key" {
+			t.Fatalf("refused key surfaces its error: %v", err)
+		}
+	}
+	if exchanges.Load()-before != 2 {
+		t.Fatalf("a refused key is tried once per request, not in a loop: %d", exchanges.Load()-before)
 	}
 }

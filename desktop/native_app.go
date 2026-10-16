@@ -271,10 +271,10 @@ func (a *NativeApp) handleError(err error) bool {
 			a.expired()
 			return true
 		}
+		// The local client renews its own session; only a streamed upload
+		// can still be refused, and trying it again succeeds.
 		if api.Status == 401 {
-			a.Client.SetSession("")
-			a.navigate("/login")
-			a.Error = "会话已失效，请重新输入访问密钥"
+			a.Error = "会话已失效，请重试刚才的操作"
 			return true
 		}
 		// A removed model is a stale choice on the page, not an inaccessible page.
@@ -308,20 +308,6 @@ func (a *NativeApp) PrivacyBlur() {
 func (a *NativeApp) nativeFocus() {
 	if page, ok := a.page.(interface{ NativeFocus(*NativeApp) }); ok {
 		page.NativeFocus(a)
-	}
-}
-func (a *NativeApp) lock() {
-	lock := func() {
-		a.PrivacyBlur()
-		if a.Client != nil {
-			a.Client.SetSession("")
-		}
-		a.navigate("/login")
-	}
-	if a.page != nil && a.page.Dirty() {
-		a.Confirm("锁定安装", "锁定将丢弃未保存更改，继续？", lock)
-	} else {
-		lock()
 	}
 }
 func (a *NativeApp) bindWindow(win *mygo.Window) {
@@ -482,7 +468,7 @@ func (a *NativeApp) breadcrumbs() []nativeCrumb {
 	return nil
 }
 
-// fullscreen shows the unlock page and the startup screen without the
+// fullscreen shows enterprise sign-in and the startup screen without the
 // workspace shell, since neither has a session to navigate with.
 func (a *NativeApp) fullscreen(c *ui.Context) {
 	p := nativePalette(c)
@@ -527,7 +513,9 @@ func nativeBrandMark(c *ui.Context, size float32) {
 	})
 }
 
-type loginPage struct{ key, login, password string }
+// loginPage is an enterprise workspace's sign-in; the personal workspace signs
+// in with its installation key and has none.
+type loginPage struct{ login, password string }
 
 func (*loginPage) Title() string   { return "登录" }
 func (*loginPage) Dirty() bool     { return false }
@@ -536,31 +524,7 @@ func (*loginPage) Open(*NativeApp) {}
 func (p *loginPage) View(c *ui.Context, a *NativeApp) {
 	if a.enterprise() {
 		p.enterpriseSignIn(c, a)
-		return
 	}
-	palette := nativePalette(c)
-	ui.Column(c).FillWidth().Gap(6).Children(func() {
-		ui.Text(c, "解锁 AI 标书").FontSize(22).FontWeight(650)
-		ui.Text(c, "输入本安装的访问密钥，以本人身份操作。密钥仅在本地交换会话。").FontSize(13.5).LineHeight(1.5).TextColor(palette.Muted)
-	})
-	unlock := func() {
-		if a.Busy || p.key == "" {
-			return
-		}
-		key := p.key
-		p.key = ""
-		a.Do(func(ctx context.Context) (func(), error) {
-			err := a.Client.Exchange(ctx, key)
-			return func() { a.navigate("/org/tasks") }, err
-		})
-	}
-	ui.Column(c).FillWidth().Gap(6).Children(func() {
-		ui.Text(c, "访问密钥").FontSize(13).FontWeight(500)
-		if ui.TextInput(c, &p.key).Password().Label("访问密钥").Placeholder("粘贴或输入访问密钥").AutoFocus().Height(40).FillWidth().Radius(8).Submitted() {
-			unlock()
-		}
-	})
-	nativeIconButton(c, "lock", "解锁安装", true).FillWidth().AlignSelf(ui.Stretch).MinHeight(40).Justify(ui.Center).Disabled(a.Busy || p.key == "").OnClick(unlock)
 }
 
 // rememberTask caches what the shell shows of a loaded task.

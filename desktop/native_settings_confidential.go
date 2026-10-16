@@ -557,7 +557,7 @@ func (p *confidentialPanel) View(c *ui.Context, a *NativeApp) {
 	}
 	if p.shown != "" {
 		nativeHeading(c, "查看保密值")
-		nativeText(c, "此次查看已记入审计，30 秒后自动隐藏。关闭、窗口失焦、隐藏、离开页面或锁定安装也会清空。")
+		nativeText(c, "此次查看已记入审计，30 秒后自动隐藏。关闭、窗口失焦、隐藏或离开页面也会清空。")
 		ui.Text(c, p.shown).Label("已揭示的保密值")
 		nativeButton(c, "关闭明文").OnClick(p.PrivacyBlur)
 	}
