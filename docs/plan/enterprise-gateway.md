@@ -370,6 +370,8 @@ Import rules:
 - An import is idempotent per package hash and member: a repeat returns the
   first import's result.
 - The whole import commits in one transaction or not at all.
+- Rows pass the workflow guards through the scoped import authority of
+  [ADR 0014](../adr/0014-package-import-authority.md).
 
 ## Desktop client
 

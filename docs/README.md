@@ -81,6 +81,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [0011 Remove billing, prices and task budgets](adr/0011-remove-billing.md) (adr)
 - [0012 Single-user local installation](adr/0012-single-user-installation.md) (adr)
 - [0013 Enterprise gateway beside personal installations](adr/0013-enterprise-gateway.md) (adr)
+- [0014 Scoped authority for package imports](adr/0014-package-import-authority.md) (adr)
 
 ## Plans and records
 
