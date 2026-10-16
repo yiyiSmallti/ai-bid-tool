@@ -168,6 +168,23 @@ signs in as a member, and every human decision records which member made it.
   `agent.session.cancelled` with `member_removed`
   (`agents.member_removed`, `wake` in
   [agent.py](../../server/app/jobs/agent.py)).
+- The desktop client keeps its workspaces in `workspaces.json` in its user
+  data directory, owner-only, with the shape in
+  [the gateway plan](../plan/enterprise-gateway.md#desktop-client).
+  `WorkspaceRunner` in [workspace_runner.go](../../desktop/workspace_runner.go)
+  opens one at a time: the personal workspace starts the local server and
+  database, and an enterprise workspace stops them and talks to its gateway
+  only. An enterprise session is kept in the login keychain under the service
+  `io.github.yiyismallti.aibid.session` and the workspace id; the password is
+  never kept.
+- `ProbeGateway` in [gateway.go](../../desktop/gateway.go) accepts an `https://`
+  origin without path, reads `GET /installation` and refuses a personal
+  installation or an unreadable contract version. A certificate the system
+  does not trust fails with its SHA-256 fingerprint; once confirmed it is
+  stored as `pin_sha256`, and that workspace then accepts that certificate
+  only. Opening and signing in check the contract's major version against the
+  client's: a newer gateway asks for a newer client, an older one for an
+  upgraded gateway.
 
 ## Pitfalls
 
@@ -189,6 +206,9 @@ signs in as a member, and every human decision records which member made it.
 - An agent of a removed member can run until its next wake, up to 30 seconds.
 - An admitted call reserves its full upper bound until its receipt, so a
   member near the cap can be refused while earlier calls are still running.
+- The client never uses a system proxy for a gateway, so a gateway reachable
+  only through one cannot be added.
+- A pinned certificate that the gateway renews must be confirmed again.
 - The limiter keys on the client address the API sees. Behind a reverse proxy
   that is the proxy, so the 30-per-source limit then applies to everyone.
 
@@ -210,6 +230,10 @@ signs in as a member, and every human decision records which member made it.
 - [db.py](../../server/app/core/db.py) `Database.verify_role`
 - [auth.py](../../server/app/services/auth.py) `authenticate`, `access_key_refused`,
   `member_session_identity`, `agent_identity`
+- [workspaces.go](../../desktop/workspaces.go), [gateway.go](../../desktop/gateway.go),
+  [keychain.go](../../desktop/keychain.go),
+  [workspace_runner.go](../../desktop/workspace_runner.go),
+  [workspace_switch_test.go](../../desktop/workspace_switch_test.go)
 - [test_deployment_mode.py](../../server/tests/test_deployment_mode.py),
   [test_members.py](../../server/tests/test_members.py),
   [test_project_visibility.py](../../server/tests/test_project_visibility.py),

@@ -6,6 +6,17 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Client workspaces
+
+- The desktop client keeps a personal workspace and any number of company
+  gateways in `workspaces.json`. Switching to a gateway stops the local server
+  and database; switching back starts them on unchanged local data.
+- A gateway is added only over HTTPS and only as an enterprise installation;
+  a certificate the system does not trust is accepted by confirming its
+  SHA-256 fingerprint, which the workspace then pins.
+- An enterprise session is kept in the macOS Keychain; the password is not
+  stored.
+
 ## 2026-10-15: Gateway models and quotas
 
 - On a gateway administrators manage company models; each member can add
