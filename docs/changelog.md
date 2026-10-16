@@ -6,6 +6,17 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Project package import
+
+- `POST /packages/import` and `bid package import --file` import a
+  `bid-package/1` zip as a new project with its original ids, history and
+  decisions; sealed values are re-encrypted with this installation's key.
+- An altered package, a citation or reference to a row it lacks, a project
+  that already exists or, on a gateway, new library items without
+  `library:edit` fail with nothing written. A repeat returns the first import.
+- The report lists confidential keys the project names that this
+  installation has no value for.
+
 ## 2026-10-15: Project package export
 
 - `POST /packages/export` and `bid package export` build a `bid-package/1`
