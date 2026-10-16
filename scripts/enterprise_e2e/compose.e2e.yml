@@ -1,0 +1,18 @@
+# Test-only additions to deploy/gateway/compose.yml for enterprise_e2e/run.py:
+# a synthetic model service, trusted through the test image's CA bundle, and the
+# deployment mode, so the same files also start a personal installation.
+services:
+  migrate:
+    environment:
+      BID_DEPLOYMENT: ${BID_E2E_DEPLOYMENT:-enterprise}
+  server:
+    environment:
+      BID_DEPLOYMENT: ${BID_E2E_DEPLOYMENT:-enterprise}
+      BID_PERSONAL_MODEL_ENDPOINTS: https://vendor:8443
+  worker:
+    environment:
+      BID_DEPLOYMENT: ${BID_E2E_DEPLOYMENT:-enterprise}
+      BID_PERSONAL_MODEL_ENDPOINTS: https://vendor:8443
+  vendor:
+    image: ${BID_IMAGE}
+    command: python /e2e/vendor.py

@@ -363,7 +363,7 @@ signs in as a member, and every human decision records which member made it.
   [members.py](../../cli/bid_cli/members.py) CLI
 - [0009_package_jobs.py](../../server/migrations/versions/0009_package_jobs.py),
   [0010_package_imports.py](../../server/migrations/versions/0010_package_imports.py)
-  to [0015_package_import_library.py](../../server/migrations/versions/0015_package_import_library.py),
+  to [0016_package_import_memory.py](../../server/migrations/versions/0016_package_import_memory.py),
   [packages.py](../../server/app/services/packages.py) service,
   [packages.py](../../server/app/api/packages.py) routes,
   [packages.py](../../cli/bid_cli/packages.py) CLI
@@ -373,6 +373,10 @@ signs in as a member, and every human decision records which member made it.
 - [compose.yml](../../deploy/gateway/compose.yml),
   [upgrade.sh](../../deploy/gateway/upgrade.sh);
   [gateway_deploy_acceptance.py](../../scripts/gateway_deploy_acceptance.py)
+- [enterprise_e2e/run.py](../../scripts/enterprise_e2e/run.py) runs the
+  [end-to-end acceptance](../plan/enterprise-gateway.md#end-to-end-acceptance)
+  against Compose projects, with the synthetic model in
+  [vendor.py](../../scripts/enterprise_e2e/vendor.py)
 - [db.py](../../server/app/core/db.py) `Database.verify_role`
 - [auth.py](../../server/app/services/auth.py) `authenticate`, `access_key_refused`,
   `member_session_identity`, `agent_identity`

@@ -12,7 +12,7 @@ The [single-user installation plan](single-user.md) implements accepted
 [enterprise gateway plan](enterprise-gateway.md) implements
 [ADR 0013](../adr/0013-enterprise-gateway.md) for companies that share materials,
 projects and public memory on a privately deployed gateway, with
-[slices 0 to 4](../notes/enterprise-gateway.md) (the stored deployment mode, members and sign-in, project visibility, grants, private memory, company and personal models and quotas, and the client's workspaces and enterprise pages) implemented; desktop packaging decisions and remaining slices are in [desktop packaging](desktop-packaging.md). The
+[slices 0 to 6 and the end-to-end acceptance](../notes/enterprise-gateway.md) (the stored deployment mode, members and sign-in, project visibility, grants, private memory, company and personal models and quotas, the client's workspaces and enterprise pages, project packages and the Compose deployment) implemented; desktop packaging decisions and remaining slices are in [desktop packaging](desktop-packaging.md). The
 design's non-goals—fabricating materials, electronic bidding platform integration,
 pricing strategy and developing models in-house—are excluded.
 
@@ -152,4 +152,3 @@ memory CRUD and approval, public evaluation-set preparation.
 6. Complete WPS visual pagination and protected-download acceptance for exports (B11), plus sandbox lease-expiry takeover, disconnect and storage-failure injection scenarios.
 7. Continue the [desktop packaging slices](desktop-packaging.md#delivery-slices): optional services, then signing and release.
 8. Run the agent [tender source tools](agent.md#tender-source-tools) and [long-session](agent.md#long-sessions) acceptance on a real tender.
-9. Deliver the [enterprise gateway slices](enterprise-gateway.md) in order, starting with the deployment mode.

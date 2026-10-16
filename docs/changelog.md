@@ -6,6 +6,16 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Enterprise end-to-end acceptance
+
+- `scripts/enterprise_e2e/run.py` starts a gateway and two personal
+  installations from the Compose files and walks members, shared library,
+  personal models, the non-member route sweep, human-only confirmation, the
+  package round trip and disabling a member, writing `report.json` under
+  `data/work/enterprise-e2e/`.
+- A gateway whose library memory changed since the source confirmed a model
+  proposal now imports that project; the confirmation keeps its source's check.
+
 ## 2026-10-16: Gateway Compose deployment
 
 - `deploy/gateway` runs a company gateway with Caddy as the only published

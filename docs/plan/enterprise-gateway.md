@@ -501,7 +501,8 @@ Slices 0 to 6 are implemented; their mechanism is in
 One scripted run against a gateway started from the Compose files under
 `data/work/enterprise-e2e/`, with two members (A, B) and one administrator:
 
-1. The administrator creates A and B, gives A `library:edit`, sets B's quota.
+1. The administrator creates A and B, gives A `library:edit` and `memory:edit`,
+   sets B's quota.
 2. A adds a certificate and a public memory entry, creates a project, uploads a
    tender, extracts with a company model and adds B to the project.
 3. B sees the certificate and memory, drafts in the shared project with a
