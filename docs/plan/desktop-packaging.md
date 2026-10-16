@@ -63,7 +63,7 @@ Each row records the accepted option.
 | D2 | Runtime distribution | Everything inside the app bundle; small app that downloads runtimes on first launch | Everything inside the bundle: offline install, one signature and notarization unit |
 | D3 | Python runtime | Standalone relocatable CPython with wheels installed at build time; frozen executable (PyInstaller-style) | Standalone relocatable CPython: keeps the module layout migrations and workers expect |
 | D4 | PostgreSQL binaries | Build from source with bundle-relative library paths; repackage a vendor distribution | Build from source in CI, so the build controls library paths and signing |
-| D5 | Office conversion without containers | Call a user-installed LibreOffice directly; bundle LibreOffice; mark conversion unavailable | Detect a user-installed LibreOffice through a new local converter provider; otherwise unavailable |
+| D5 | Office conversion without containers | Call a user-installed LibreOffice directly; bundle LibreOffice; render with docx-preview in the system WebKit; mark conversion unavailable | Export previews use a bundled helper that lays the DOCX out with docx-preview in the system WebKit and prints it to PDF; bid review conversion, which needs the LibreOffice profile, stays unavailable. Windows needs a WebView2 helper under D10 |
 | D6 | Browser sandbox on desktop | Unavailable in desktop builds; require a user-managed Linux VM with gVisor | Unavailable in the first release; the sandbox's containment requirements are not relaxed |
 | D7 | Installer form | Disk image with drag-to-Applications; flat installer package | Disk image, which MyGo's build already produces |
 | D8 | Signing identity and notarization | Apple Developer Program account and Developer ID Application certificate owned by the project; ad hoc signature for testers only | Developer ID with hardened runtime and notarization; testers can use ad hoc builds meanwhile |
@@ -72,7 +72,7 @@ Each row records the accepted option.
 
 ## Delivery slices
 
-1. **Optional services.** Implement the D5 and D6 outcomes and the console's
+1. **Optional services.** Implement the D6 outcome and the console's
    unavailable states.
 2. **Signing and notarization.** Sign every nested binary, notarize and staple
    the disk image; verify with `codesign --verify --deep --strict` and
