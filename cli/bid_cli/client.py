@@ -495,6 +495,54 @@ class Client:
             warnings=SOURCE_WARNINGS,
         ).model_dump(mode="json")
 
+    async def download_package(self, job_id: UUID, output: Path) -> dict:
+        """Save a finished export package after checking its size and hash."""
+        output = await asyncio.to_thread(new_output_path, output)
+        status = await self.request("GET", f"/packages/{job_id}")
+        try:
+            report = status["data"]["report"]
+            size, digest = int(report["size"]), str(report["sha256"])
+        except (KeyError, TypeError, ValueError):
+            raise ServiceError("package_not_ready", "The package is not ready", 409, 4) from None
+        headers = {"Authorization": f"Bearer {credential()}"}
+        content = bytearray()
+        try:
+            async with self.transport() as http:
+                async with http.stream(
+                    "GET", f"/packages/{job_id}/file", headers=headers, follow_redirects=False
+                ) as response:
+                    if not response.is_success:
+                        await response.aread()
+                        try:
+                            error = response.json()["data"]["error"]
+                            code, message = str(error["code"]), str(error["message"])
+                        except (ValueError, KeyError, TypeError):
+                            code, message = "download_unavailable", "Download request failed"
+                        raise ServiceError(code, message, response.status_code, 4)
+                    async for chunk in response.aiter_bytes():
+                        content.extend(chunk)
+                        if len(content) > size:
+                            break
+        except httpx.TransportError as exc:
+            raise ServiceError(
+                "network_unavailable", "Server is unavailable or timed out", 503, 3
+            ) from exc
+        if len(content) != size or hashlib.sha256(content).hexdigest() != digest:
+            raise ServiceError(
+                "package_integrity_failed", "Downloaded package failed integrity checks", 502, 4
+            )
+        await asyncio.to_thread(save_download, output, content)
+        return Result(
+            ok=True,
+            command="package download",
+            data={
+                "job_id": str(job_id),
+                "output_path": str(output),
+                "sha256": digest,
+                "size": size,
+            },
+        ).model_dump(mode="json")
+
     async def upload(self, task_id: UUID, path: Path) -> dict:
         with path.open("rb") as content:
             return await self.request(
