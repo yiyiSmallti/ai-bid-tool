@@ -4,6 +4,7 @@ import json
 from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
+from pydantic.json_schema import GenerateJsonSchema
 
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.schemas.contracts import Contract, ProviderUsage
@@ -12,9 +13,17 @@ if TYPE_CHECKING:
     from app.providers.llm import HTTPExtractor
 
 
+class WireSchema(GenerateJsonSchema):
+    def decimal_schema(self, schema):
+        # Keep only the number branch. Pydantic's string branch carries a look-ahead
+        # pattern that vendor grammar engines reject with HTTP 400; the contract still
+        # enforces digits and places when the answer is validated.
+        return super().decimal_schema(schema)["anyOf"][0]
+
+
 def strict_schema(model: type[Contract]) -> dict:
     """The contract's JSON schema with every object closed and every property required."""
-    schema = model.model_json_schema()
+    schema = model.model_json_schema(schema_generator=WireSchema)
 
     def close(node):
         if isinstance(node, dict):

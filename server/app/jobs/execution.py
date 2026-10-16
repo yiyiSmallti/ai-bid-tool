@@ -596,10 +596,11 @@ class JobExecution:
             ) from None
 
     async def not_sent(self, call_id: UUID) -> None:
-        """Release this attempt's pending admission after credential preparation failed.
+        """Release this attempt's pending admission when no request left this process.
 
-        The call boundary invokes this only before starting the HTTP operation, so no
-        usage exists and the admission cannot represent an unknown dispatch.
+        The call boundary invokes this after credential preparation failed or when the
+        connection never opened, so no usage exists and the admission cannot represent
+        an unknown dispatch.
         """
         try:
             async with self.db.transaction() as session:
