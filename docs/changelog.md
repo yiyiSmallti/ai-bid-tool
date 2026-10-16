@@ -15,7 +15,10 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   merged table cells. Project name and number, tenderee and the selected
   profile's bidder name fill their blanks; other known fields are
   `【待填：…】`, copies are `【待附：…】`, and prices, signatures and dates
-  stay blank. The deviation table uses the tender's header with one row per
+  stay blank; signature lines such as 投标人名称（盖章） carry the bidder name.
+  The outline lists the scoring chapter's items with their score ranges, and
+  the scoring index form lists every item except the price score. The
+  deviation table uses the tender's header with one row per
   needs-chapter clause, drafted as 完全响应/无偏离 and highlighted. The file
   says 审阅稿 while anything is unfilled. Second slice of the
   [whole-bid plan](plan/whole-bid.md).

@@ -16,7 +16,10 @@ solution that answers each scoring item.
    keeps its label, title, source pages or Word location, verbatim text and a
    kind: `cover`, `letter`, `price`, `declaration`, `copy`, `deviation`,
    `scoring_index`, `roster`, `solution`, or `form` for any other form. A tender without a format chapter
-   has no forms in its outline; nothing is invented.
+   has no forms in its outline; nothing is invented. The outline also lists
+   the scoring chapter's items with their score ranges; the scoring index form
+   lists them, except the price score, with the page column left for the
+   final layout.
 2. **Forms.** A PDF form is rebuilt from its page layout: paragraphs with
    their indents and alignment, drawn or typed blanks with the hint printed on
    them, and tables with merged cells. A Word form is rebuilt from its verbatim

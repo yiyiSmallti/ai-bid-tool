@@ -20,14 +20,14 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
-from docx.styles.style import ParagraphStyle
+from docx.styles.style import CharacterStyle, ParagraphStyle
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError
 from app.models.entities import OrgProfileRevision, Task, TaskOrgProfile
 from app.providers.storage import Storage
-from app.schemas.whole_bid import BidOutline, OutlineForm
+from app.schemas.whole_bid import BidOutline, OutlineForm, OutlineScoringItem
 from app.services import bid_outline, documents
 from app.services.form_layout import Blank, Cell, Grid, Paragraph, Text, form_blocks, plain
 
@@ -35,6 +35,7 @@ BODY_FONT, HEADING_FONT = "宋体", "黑体"
 HEADING = re.compile(r"^([一二三四五六七八九十]+、|（[一二三四五六七八九十]+）)\s*(.{1,30})$")
 SENTENCE_END = re.compile(r"[。；]")
 DRAFT_RESPONSE, DRAFT_DEVIATION = "完全响应", "无偏离"
+PRICE_SCORE = re.compile(r"(投标)?(报价|价格)(分|得分)?")
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
@@ -76,7 +77,9 @@ class Clause:
 
 
 # Field rules match the label just before a blank, or the hint printed on it.
+# The bidder's name is typed even where a seal goes over it, so it comes before signatures.
 FIELD_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("bidder", re.compile(r"^(投标人|供应商|企业|单位)(全称|名称)?(（[^）]*）)?[：:]?$")),
     ("signature", re.compile(r"签字|签名|盖章|公章|签章|印刷体")),
     ("price", re.compile(r"总价|报价|保证金|金额|人民币|万元|元整")),
     ("project_both", re.compile(r"项目名称、项目编号|项目名称及编号")),
@@ -90,6 +93,8 @@ FIELD_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("credit_code", re.compile(r"统一社会信用代码[：:]?$")),
     ("date", re.compile(r"(日期|时\s*间)[：:]?$")),
 )
+# A signature line printed without a blank, like 投标人名称（盖章） or 投标人名称：（盖章）.
+SIGN_LINE = re.compile(r"^(?P<label>[^（）：:\s]{2,10}(（[^）]*）)?)[：:]?(?P<tail>（[^）]*）)?$")
 FIELD_NAMES = {
     "project_both": "项目名称、项目编号",
     "project_number": "项目编号",
@@ -102,6 +107,11 @@ FIELD_NAMES = {
     "credit_code": "统一社会信用代码",
     "date": "日期",
 }
+
+
+def short_title(title: str) -> str:
+    """A long form title such as a list of acceptable copies, cut at its first clause."""
+    return re.split(r"[；;。]", title)[0]
 
 
 def field_of(label: str, hint: str) -> str | None:
@@ -212,7 +222,14 @@ class Renderer:
         for level, size in ((1, 16), (2, 14)):
             style = self._style(f"Heading {level}", HEADING_FONT, size)
             style.font.bold = True
-            style.font.color.rgb = RGBColor(0, 0, 0)
+            # The linked character style carries the template's theme blue too, and
+            # renderers apply it to heading runs.
+            char = cast(CharacterStyle, self.word.styles[f"Heading {level} Char"])
+            for target in (style, char):
+                target.font.color.rgb = RGBColor(0, 0, 0)
+                color = target.element.get_or_add_rPr().find(qn("w:color"))
+                for name in ("w:themeColor", "w:themeShade", "w:themeTint"):
+                    color.attrib.pop(qn(name), None)
             style.paragraph_format.space_before = Pt(6)
             style.paragraph_format.space_after = Pt(6)
         for name, base in (("Form Start", "Normal"), ("Form Start Heading", "Heading 1")):
@@ -302,7 +319,7 @@ class Renderer:
         for form in forms:
             entry = self._new()
             entry.paragraph_format.left_indent = Cm(0.5)
-            self.run(entry, f"{form.label}  {form.title}")
+            self.run(entry, f"{form.label}  {short_title(form.title)}")
 
     def blank(self, paragraph, piece: Blank, label: str) -> None:
         name = field_of(label, piece.hint)
@@ -328,6 +345,14 @@ class Renderer:
             fmt = paragraph.paragraph_format
             fmt.left_indent = Pt(min(block.indent, 300))
             fmt.first_line_indent = Pt(max(-block.indent, min(block.first_line, 300)))
+        line = SIGN_LINE.match(re.sub(r"\s", "", plain(block)))
+        if line and not heading and not any(isinstance(p, Blank) for p in block.pieces):
+            value = value_of(field_of(line["label"], ""), self.facts)
+            if value:
+                self.run(paragraph, f"{line['label']}：")
+                self.run(paragraph, f" {value} ", underline=True)
+                self.run(paragraph, line["tail"] or "")
+                return
         label = ""
         for piece in block.pieces:
             if isinstance(piece, Text):
@@ -402,7 +427,11 @@ class Renderer:
                 self.run(paragraph, value, size=10.5)
 
     def form(
-        self, form: OutlineForm, blocks: list[Paragraph | Grid], deviation: list[Clause] | None
+        self,
+        form: OutlineForm,
+        blocks: list[Paragraph | Grid],
+        deviation: list[Clause] | None,
+        scoring: list[OutlineScoringItem],
     ) -> None:
         title_done = False
         for block in blocks:
@@ -412,6 +441,9 @@ class Renderer:
                     self.grid(block, rows, weights)
                     self.tally.unconfirmed_rows += len(deviation)
                     deviation = None
+                elif form.kind == "scoring_index" and scoring:
+                    self.grid(block, self.scoring_rows(block, scoring))
+                    scoring = []
                 else:
                     self.grid(block)
                 continue
@@ -430,9 +462,20 @@ class Renderer:
         if form.kind == "copy":
             paragraph = self._new()
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            wanted = re.split(r"[；;。]", form.title)[0]
+            wanted = short_title(form.title)
             self.tally.copies.append(wanted)
             self.run(paragraph, f"【待附：{wanted}】", mark=True)
+
+    @staticmethod
+    def scoring_rows(grid: Grid, items: list[OutlineScoringItem]) -> list[list[str]]:
+        """Scored items other than the price score, in the item column; the page
+        column stays empty until the final layout is known."""
+        columns = len(grid.widths)
+        return [
+            [f"{item.title}（{item.score_range}分）"] + [""] * (columns - 1)
+            for item in items
+            if not PRICE_SCORE.fullmatch(item.title)
+        ]
 
     @staticmethod
     def deviation_rows(grid: Grid, clauses: list[Clause]) -> tuple[list[list[str]], list[float]]:
@@ -562,7 +605,7 @@ def build(
     renderer.cover(outline, outline.forms)
     for form, blocks in zip(outline.forms, per_form, strict=True):
         renderer.page_break()
-        renderer.form(form, blocks or text_blocks(form), clauses)
+        renderer.form(form, blocks or text_blocks(form), clauses, outline.scoring_items)
     if tally.draft:
         first_paragraph = renderer.word.paragraphs[0]
         first_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT

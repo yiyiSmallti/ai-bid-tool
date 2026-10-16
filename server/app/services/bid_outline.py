@@ -17,7 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError
 from app.models.entities import Chunk
-from app.schemas.whole_bid import BidOutline, ChapterRole, FormKind, OutlineChapter, OutlineForm
+from app.schemas.whole_bid import (
+    BidOutline,
+    ChapterRole,
+    FormKind,
+    OutlineChapter,
+    OutlineForm,
+    OutlineScoringItem,
+)
 from app.services import documents
 
 CHAPTER = re.compile(r"^第\s*[一二三四五六七八九十百零〇\d]+\s*[章篇部]分?\s*(.*)$")
@@ -33,6 +40,11 @@ DATE_CHARS = set("年月日时地址间")
 SENTENCE = re.compile(r"[，。；！？]")
 COVER_TITLE = re.compile(
     r"^((商务|技术|资格|资信|报价|价格|经济|商务技术)(及|和|与)?\S{0,6}|投标|响应)文件(正本|副本)?$"
+)
+
+# A scoring rule row: item, score range such as 0~25 or 0-10分, then the rule.
+SCORING_ROW = re.compile(
+    r"^([^\t\d][^\t]{1,40})\t\s*(\d+(?:\.\d+)?\s*[~～\-—至]\s*\d+(?:\.\d+)?)\s*分?\s*(?:\t|$)"
 )
 
 KIND_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -212,16 +224,30 @@ def split_forms(lines: list[Line]) -> list[OutlineForm]:
     return forms
 
 
+def scoring_items(lines: list[Line]) -> list[OutlineScoringItem]:
+    items: list[OutlineScoringItem] = []
+    for line in lines:
+        match = SCORING_ROW.match(line.text.strip("\t"))
+        if match and not SENTENCE.search(match.group(1)):
+            title = re.sub(r"\s+", "", match.group(1))
+            if all(item.title != title for item in items):
+                items.append(OutlineScoringItem(title=title, score_range=match.group(2)))
+    return items
+
+
 def build_outline(document_id: UUID, chunks: list[dict]) -> BidOutline:
     lines = lines_of(chunks)
     heads = chapter_heads(lines)
     chapters: list[OutlineChapter] = []
     forms: list[OutlineForm] = []
+    scoring: list[OutlineScoringItem] = []
     format_titles: list[str] = []
     for position, (index, title) in enumerate(heads):
         end = heads[position + 1][0] if position + 1 < len(heads) else len(lines)
         role = chapter_role(title)
         chapters.append(OutlineChapter(title=title, role=role, **place(lines[index:end])))
+        if role == "scoring":
+            scoring.extend(scoring_items(lines[index + 1 : end]))
         if role == "format":
             format_titles.append(title)
             for form in split_forms(lines[index + 1 : end]):
@@ -231,6 +257,7 @@ def build_outline(document_id: UUID, chunks: list[dict]) -> BidOutline:
         chapters=chapters,
         format_chapter="；".join(format_titles) or None,
         forms=forms,
+        scoring_items=scoring,
     )
 
 

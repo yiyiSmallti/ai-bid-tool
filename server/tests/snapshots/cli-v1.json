@@ -109768,6 +109768,27 @@
                 ],
                 "title": "OutlineForm",
                 "type": "object"
+              },
+              "OutlineScoringItem": {
+                "additionalProperties": false,
+                "description": "One row of the scoring chapter's rule table: the item and its score range.",
+                "properties": {
+                  "score_range": {
+                    "title": "Score Range",
+                    "type": "string"
+                  },
+                  "title": {
+                    "minLength": 1,
+                    "title": "Title",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "score_range"
+                ],
+                "title": "OutlineScoringItem",
+                "type": "object"
               }
             },
             "additionalProperties": false,
@@ -109801,13 +109822,21 @@
                 },
                 "title": "Forms",
                 "type": "array"
+              },
+              "scoring_items": {
+                "items": {
+                  "$ref": "#/$defs/OutlineScoringItem"
+                },
+                "title": "Scoring Items",
+                "type": "array"
               }
             },
             "required": [
               "document_id",
               "chapters",
               "format_chapter",
-              "forms"
+              "forms",
+              "scoring_items"
             ],
             "title": "BidOutline",
             "type": "object"

@@ -14,7 +14,13 @@ from typing import Any, cast
 
 import pymupdf
 
-LIST_MARK = re.compile(r"^(\d+[、.．]|（\d+）|\(\d+\)|[一二三四五六七八九十]+、|注[:：])")
+# Rows that always open a paragraph: list items, notes, and form labels such as 附件15：,
+# which a page break would otherwise join to the previous form's last sentence.
+LIST_MARK = re.compile(
+    r"^(\d+[、.．]|（\d+）|\(\d+\)|[一二三四五六七八九十]+、|注[:：]|(附件|附表|格式)\s*\d)"
+)
+# A short signature row, like 投标人名称（盖章）, never continues the note above it.
+SIGN_ROW = re.compile(r"^(投标人|供应商|法定代表人|授权|单位|企业|日\s*期)\S{0,20}$")
 FOOTER_ZONE = 0.9
 ROW_TOLERANCE = 3.0
 RULE_BELOW = 4.0
@@ -293,7 +299,7 @@ def _starts_new(row: list[_Line], previous: list[_Line] | None, left: float, rig
     if row[0].x0 > left + 40 or previous[0].x0 > left + 40:
         return True
     text = "".join(line.text for line in row).strip()
-    if LIST_MARK.match(text):
+    if LIST_MARK.match(text) or SIGN_ROW.match(text):
         return True
     if previous[-1].x1 < right - RIGHT_SLACK:
         return True

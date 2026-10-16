@@ -50,11 +50,19 @@ class OutlineForm(OutlinePlace):
     text: str
 
 
+class OutlineScoringItem(Contract):
+    """One row of the scoring chapter's rule table: the item and its score range."""
+
+    title: str = Field(min_length=1)
+    score_range: str
+
+
 class BidOutline(Contract):
     document_id: UUID
     chapters: list[OutlineChapter]
     format_chapter: str | None
     forms: list[OutlineForm]
+    scoring_items: list[OutlineScoringItem]
 
 
 class WholeBidReceipt(Contract):
