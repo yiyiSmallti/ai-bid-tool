@@ -205,6 +205,11 @@ class Processor:
 
                     await run_export(execution, self.storage)
                     return
+                if kind == "package_import":
+                    from app.services.packages import run_import
+
+                    await run_import(execution, self.storage)
+                    return
                 if kind == "bid_review_report":
                     from app.jobs.bid_review_report import process as report_bid
 
