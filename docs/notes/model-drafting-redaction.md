@@ -55,7 +55,9 @@ values and tender quotes remain unchanged.
 | bank_account | Account labels followed by a number of at least eight digits, spaces, hyphens or `*`; labelled IBANs; unlabelled long account-number patterns |
 
 A label word alone is never a detection, so tender wording such as "刷身份证登录"
-or "管理员账号" is sent unchanged. English labels must be whole words.
+or "管理员账号" is sent unchanged. English labels must be whole words. A
+hyphenated UUID is a record id, not a number: no rule masks any part of it, so
+references such as an agent's pending actions stay intact.
 
 Registered confidential values are replaced by their `{{secret.<key>}}`
 placeholders before these rules run; see
