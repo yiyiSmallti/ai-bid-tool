@@ -6,6 +6,17 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Client sign-in
+
+- The desktop sidebar switches between workspaces and adds a company gateway,
+  showing the certificate fingerprint to confirm when the system does not
+  trust it.
+- On a gateway the client signs in with login and password, holds a new or
+  reset member at the password page until the password is changed, lists the
+  member's own sessions and revokes other ones, and signs out.
+- An expired gateway session returns to sign-in and is removed from the
+  keychain.
+
 ## 2026-10-15: Client workspaces
 
 - The desktop client keeps a personal workspace and any number of company

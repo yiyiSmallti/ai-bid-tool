@@ -185,6 +185,15 @@ signs in as a member, and every human decision records which member made it.
   only. Opening and signing in check the contract's major version against the
   client's: a newer gateway asks for a newer client, an older one for an
   upgraded gateway.
+- The sidebar's workspace switcher in
+  [native_workspaces.go](../../desktop/native_workspaces.go) lists every
+  workspace and adds a gateway. An enterprise workspace signs in with login and
+  password instead of the access key; while `must_change_password` is set the
+  password page is shown full screen, since the gateway answers nothing else.
+  Its sidebar adds 我的登录 and 修改密码 and ends with 退出登录, which revokes
+  the session on the gateway and removes it from the keychain. Any 401 except
+  a refused current password on `POST /account/password` returns to sign-in
+  and removes the stored session.
 
 ## Pitfalls
 
@@ -209,6 +218,8 @@ signs in as a member, and every human decision records which member made it.
 - The client never uses a system proxy for a gateway, so a gateway reachable
   only through one cannot be added.
 - A pinned certificate that the gateway renews must be confirmed again.
+- A wrong current password on `POST /account/password` answers 401
+  `invalid_login`; the client keeps the session for that route only.
 - The limiter keys on the client address the API sees. Behind a reverse proxy
   that is the proxy, so the 30-per-source limit then applies to everyone.
 
@@ -233,7 +244,9 @@ signs in as a member, and every human decision records which member made it.
 - [workspaces.go](../../desktop/workspaces.go), [gateway.go](../../desktop/gateway.go),
   [keychain.go](../../desktop/keychain.go),
   [workspace_runner.go](../../desktop/workspace_runner.go),
-  [workspace_switch_test.go](../../desktop/workspace_switch_test.go)
+  [workspace_switch_test.go](../../desktop/workspace_switch_test.go),
+  [native_workspaces.go](../../desktop/native_workspaces.go),
+  [native_signin_test.go](../../desktop/native_signin_test.go)
 - [test_deployment_mode.py](../../server/tests/test_deployment_mode.py),
   [test_members.py](../../server/tests/test_members.py),
   [test_project_visibility.py](../../server/tests/test_project_visibility.py),
