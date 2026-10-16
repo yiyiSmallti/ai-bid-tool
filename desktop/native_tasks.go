@@ -300,6 +300,7 @@ type tasksPage struct {
 	name, number, deadline string
 	query                  string
 	creating               bool
+	imported               packagePanel
 }
 
 func (*tasksPage) Title() string { return "招标任务" }
@@ -307,7 +308,7 @@ func (*tasksPage) Cardless()     {}
 func (p *tasksPage) Dirty() bool {
 	return p.creating && (p.name != "" || p.number != "" || p.deadline != "")
 }
-func (p *tasksPage) Close() { p.name = ""; p.number = ""; p.deadline = "" }
+func (p *tasksPage) Close() { p.name = ""; p.number = ""; p.deadline = ""; p.imported.Close() }
 func (p *tasksPage) Open(a *NativeApp) {
 	a.Request("GET", "/tasks", nil, func(r Result) {
 		p.items = r.Items
@@ -316,6 +317,25 @@ func (p *tasksPage) Open(a *NativeApp) {
 		}
 	})
 }
+
+// importPackage uploads a project package; the task appears once the import
+// job has written it.
+func (p *tasksPage) importPackage(a *NativeApp, path string) {
+	a.Do(func(ctx context.Context) (func(), error) {
+		r, err := a.Client.Upload(ctx, "/packages/import", nil, []UploadFile{{Field: "file", Path: path}})
+		if err != nil {
+			return nil, packageFailure(err)
+		}
+		return func() {
+			p.imported.Follow(a, r.Data, func(job Object) {
+				if str(job, "status") == "succeeded" {
+					p.Open(a)
+				}
+			})
+		}, nil
+	})
+}
+
 func (p *tasksPage) View(c *ui.Context, a *NativeApp) {
 	palette := nativePalette(c)
 	now := time.Now()
@@ -356,6 +376,14 @@ func (p *tasksPage) View(c *ui.Context, a *NativeApp) {
 			shown = append(shown, item)
 		}
 	}
+	if p.imported.id != "" {
+		nativeCard(c.Key("import")).Children(func() {
+			p.imported.View(c, a, "导入项目包", func() {
+				task := str(p.imported.data, "task_id")
+				nativeIconButton(c, "chevron-right", "打开任务", true).OnClick(func() { a.Navigate("/org/tasks/" + task) })
+			})
+		})
+	}
 	nativeCard(c).Padding(0).Gap(0).Children(func() {
 		ui.Row(c).FillWidth().Wrap().Padding(16, 20).Gap(12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(palette.Border).Children(func() {
 			ui.Column(c).Grow(1).Gap(2).Children(func() {
@@ -363,6 +391,9 @@ func (p *tasksPage) View(c *ui.Context, a *NativeApp) {
 				ui.Text(c, "上传招标文件，核对要求，逐条审阅响应与证据。").FontSize(12.5).TextColor(palette.Muted)
 			})
 			nativeSearch(c, &p.query, "搜索任务", "搜索名称或招标编号", nil).Width(260)
+			nativeIconButton(c, "upload", "导入项目包", false).Disabled(a.Busy || p.imported.id != "" && !p.imported.done()).OnClick(func() {
+				a.PickFiles(false, func(files []string) { p.importPackage(a, files[0]) })
+			})
 			nativeIconButton(c, "plus", "新建任务", true).OnClick(func() { p.creating = true })
 		})
 		if len(p.items) == 0 {
@@ -490,6 +521,7 @@ var nativeJobKinds = map[string]string{
 	"parse": "原文解析", "extract": "要求抽取", "check": "合规检查", "score_rubric": "评分规则生成", "score": "评分",
 	"annotation_render": "批注渲染", "annotation_release": "批注发布", "product_simulation": "模拟拟投",
 	"screenshot_search": "截图检索", "prototype_generate": "原型生成", "provider_test": "模型连接测试",
+	"package_export": "导出项目包", "package_import": "导入项目包",
 }
 
 type jobPanel struct {

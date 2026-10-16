@@ -164,41 +164,7 @@ func (a *NativeApp) DownloadVerified(linkPath, expectedPath, filename string, me
 		if err != nil {
 			return nil, err
 		}
-		var destination string
-		if a.SaveDestination != nil {
-			destination, err = a.SaveDestination(filepath.Base(filename))
-		} else {
-			destination, err = mygo.Dialog.Save(mygo.SaveDialogOptions{Parent: a.Window, Title: "保存文件", DefaultPath: filepath.Base(filename)})
-		}
-		if err != nil || destination == "" {
-			return nil, err
-		}
-		if err = ctx.Err(); err != nil {
-			return nil, err
-		}
-		file, err := os.CreateTemp(filepath.Dir(destination), ".aibid-download-*")
-		if err != nil {
-			return nil, err
-		}
-		temporary := file.Name()
-		defer os.Remove(temporary)
-		if err = file.Chmod(0600); err == nil {
-			_, err = file.Write(data)
-		}
-		if err == nil {
-			err = file.Sync()
-		}
-		closeErr := file.Close()
-		if err == nil {
-			err = closeErr
-		}
-		if err == nil {
-			err = ctx.Err()
-		}
-		if err == nil {
-			err = os.Rename(temporary, destination)
-		}
-		if err != nil {
+		if saved, err := a.saveDownload(ctx, filename, data); !saved || err != nil {
 			return nil, err
 		}
 		return func() {
@@ -212,6 +178,48 @@ func (a *NativeApp) DownloadVerified(linkPath, expectedPath, filename string, me
 		}, nil
 	})
 }
+
+// saveDownload writes verified bytes where the member chooses, owner-only and
+// whole: a cancelled dialog saves nothing and a failed write leaves no file.
+func (a *NativeApp) saveDownload(ctx context.Context, filename string, data []byte) (bool, error) {
+	var destination string
+	var err error
+	if a.SaveDestination != nil {
+		destination, err = a.SaveDestination(filepath.Base(filename))
+	} else {
+		destination, err = mygo.Dialog.Save(mygo.SaveDialogOptions{Parent: a.Window, Title: "保存文件", DefaultPath: filepath.Base(filename)})
+	}
+	if err != nil || destination == "" {
+		return false, err
+	}
+	if err = ctx.Err(); err != nil {
+		return false, err
+	}
+	file, err := os.CreateTemp(filepath.Dir(destination), ".aibid-download-*")
+	if err != nil {
+		return false, err
+	}
+	temporary := file.Name()
+	defer os.Remove(temporary)
+	if err = file.Chmod(0600); err == nil {
+		_, err = file.Write(data)
+	}
+	if err == nil {
+		err = file.Sync()
+	}
+	closeErr := file.Close()
+	if err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = ctx.Err()
+	}
+	if err == nil {
+		err = os.Rename(temporary, destination)
+	}
+	return err == nil, err
+}
+
 func expectedDownloadPath(link string) string {
 	return strings.ReplaceAll(strings.SplitN(link, "?", 2)[0], "download-link", "download")
 }

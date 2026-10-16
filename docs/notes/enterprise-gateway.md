@@ -47,7 +47,8 @@ signs in as a member, and every human decision records which member made it.
   (`DELETE /tasks/{id}/members/{member_id}`) and hands the project to another
   member (`POST /tasks/{id}/owner`); the owner cannot be removed
   (`owner_not_removable`). An administrator sets
-  `PATCH /tasks/{id}/sharing` (`export_to_personal_allowed`). The CLI does the
+  `PATCH /tasks/{id}/sharing` (`export_to_personal_allowed`), which
+  `GET /tasks/{id}` returns. The CLI does the
   same with `bid task member list|add|remove`, `bid task owner` and
   `bid task sharing` and a `bid_` token holding `task:create`.
 - Grants open the shared library: `library:edit` (materials, certificates,
@@ -236,6 +237,17 @@ signs in as a member, and every human decision records which member made it.
   page, sets `Offline` instead of an error: the page stays, a banner offers
   重试连接, and retrying checks the contract and session again before
   reloading. Nothing falls back to the local stack.
+- The client's package pages are in
+  [native_packages.go](../../desktop/native_packages.go). 导入项目包 on the
+  task list uploads a zip and follows the job through `GET /packages/{id}`,
+  which an import reads before it has a task; the report lists row counts,
+  reused library items and the confidential keys to fill in. 导出项目包 on
+  the task page shows only while the project may leave the installation:
+  always in a personal one, on a gateway while `export_to_personal_allowed`
+  is set, which an administrator switches on the project members page. The
+  saved zip must match the report's size and sha256 before it is written,
+  owner-only, through a temporary file. Package refusals stay on the page with
+  their reason instead of closing it as inaccessible.
 - An export ([packages.py](../../server/app/services/packages.py)) reads
   the live schema: foreign keys from `pg_constraint` and NOT NULL columns
   decide the row closure from the task and the library items it binds, and
@@ -339,8 +351,10 @@ signs in as a member, and every human decision records which member made it.
   [native_signin_test.go](../../desktop/native_signin_test.go),
   [native_members.go](../../desktop/native_members.go),
   [native_usage.go](../../desktop/native_usage.go),
-  [native_admin_test.go](../../desktop/native_admin_test.go) against a real
-  enterprise server
+  [native_packages.go](../../desktop/native_packages.go),
+  [native_admin_test.go](../../desktop/native_admin_test.go) and
+  [native_packages_test.go](../../desktop/native_packages_test.go) against a
+  real enterprise server
 - [test_deployment_mode.py](../../server/tests/test_deployment_mode.py),
   [test_members.py](../../server/tests/test_members.py),
   [test_project_visibility.py](../../server/tests/test_project_visibility.py),

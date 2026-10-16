@@ -49,6 +49,7 @@ def create_router(
                     "created_at",
                     "model_redaction_enabled",
                     "model_redaction_revision",
+                    "export_to_personal_allowed",
                 ),
             ),
         )

@@ -419,16 +419,35 @@ type projectMembersPage struct {
 	items     []Object
 	directory []Object
 	add       string
+	// exportable is the project's export_to_personal_allowed, which only an
+	// administrator changes.
+	exportable, sharingLoaded bool
 }
 
 func (*projectMembersPage) Title() string { return "项目成员" }
 func (*projectMembersPage) Dirty() bool   { return false }
-func (p *projectMembersPage) Close()      { p.items, p.directory, p.add = nil, nil, "" }
+func (p *projectMembersPage) Close() {
+	p.items, p.directory, p.add, p.exportable, p.sharingLoaded = nil, nil, "", false, false
+}
 func (p *projectMembersPage) Open(a *NativeApp) {
 	a.Request("GET", "/tasks/"+p.task+"/members", nil, func(r Result) { p.items = r.Items })
 	if a.admin() {
 		a.Request("GET", "/members", nil, func(r Result) { p.directory = r.Items })
+		a.Request("GET", "/tasks/"+p.task, nil, func(r Result) {
+			p.exportable, p.sharingLoaded = r.Data["export_to_personal_allowed"] == true, true
+		})
 	}
+}
+
+// share sets whether the project may leave the gateway as a package.
+func (p *projectMembersPage) share(a *NativeApp, allowed bool) {
+	a.Request("PATCH", "/tasks/"+p.task+"/sharing", Object{"export_to_personal_allowed": allowed}, func(r Result) {
+		p.exportable = r.Data["export_to_personal_allowed"] == true
+		a.Notice = "已禁止导出到个人版"
+		if p.exportable {
+			a.Notice = "已允许导出到个人版"
+		}
+	})
 }
 
 // manages is whether the signed-in member may change this project's members.
@@ -486,6 +505,12 @@ func (p *projectMembersPage) View(c *ui.Context, a *NativeApp) {
 		})
 	} else if manages {
 		nativeHint(c, "成员名单只对管理员开放；需要加入新成员时，请联系管理员。")
+	}
+	if a.admin() && p.sharingLoaded {
+		allowed := p.exportable
+		if ui.Checkbox(c.Key("sharing"), &allowed, "允许项目成员导出到个人版").Disabled(a.Busy).Changed() {
+			p.share(a, allowed)
+		}
 	}
 	if len(p.items) == 0 {
 		return

@@ -25,6 +25,7 @@ type taskDetailPage struct {
 	exportPreview                                       exportPreviewPanel
 	confidential                                        NativePage
 	models                                              modelPicker
+	exported                                            packagePanel
 }
 
 func (p *taskDetailPage) Title() string {
@@ -45,6 +46,7 @@ func (p *taskDetailPage) Close() {
 	p.document.Close()
 	p.job.Close()
 	p.exportPreview.Close()
+	p.exported.Close()
 	if p.confidential != nil {
 		p.confidential.Close()
 	}
@@ -124,6 +126,13 @@ func (p *taskDetailPage) run(a *NativeApp, kind string, dry, retry bool) {
 func (p *taskDetailPage) View(c *ui.Context, a *NativeApp) {
 	palette := nativePalette(c)
 	p.summaryView(c, a)
+	if p.exported.id != "" {
+		nativeCard(c.Key("package")).Children(func() {
+			p.exported.View(c, a, "导出项目包", func() {
+				nativeIconButton(c, "download", "保存项目包", true).Disabled(a.Busy).OnClick(func() { p.exported.Save(a, p.packageName()) })
+			})
+		})
+	}
 	p.stepsView(c, a)
 	if p.job.id != "" {
 		nativeCard(c.Key("job")).Children(func() { p.job.View(c, a) })
@@ -318,8 +327,44 @@ func (p *taskDetailPage) summaryView(c *ui.Context, a *NativeApp) {
 			for _, item := range []struct{ label, path, icon string }{{"选产品", "products", "package"}, {"选功能", "features", "puzzle"}, {"选模板", "templates", "layout-template"}, {"选单位资料与证照", "profiles", "building-2"}} {
 				nativeIconButton(c.Key(item.path), item.icon, item.label, false).MinHeight(30).Padding(4, 12).OnClick(func() { a.Navigate("/org/" + item.path + "?task=" + p.id) })
 			}
+			ui.Row(c).Grow(1)
+			if p.exportable(a) {
+				nativeIconButton(c.Key("export-package"), "package", "导出项目包", false).MinHeight(30).Padding(4, 12).Disabled(a.Busy || p.task == nil || p.exported.id != "" && !p.exported.done()).OnClick(func() { p.exportPackage(a) })
+			} else if p.task != nil {
+				ui.Text(c, "本项目未允许导出到个人版").FontSize(12.5).TextColor(palette.Subtle)
+			}
 		})
 	})
+}
+
+// exportable is whether this installation lets the task leave as a package:
+// always from a personal one, on a gateway only when the project allows it.
+func (p *taskDetailPage) exportable(a *NativeApp) bool {
+	return !a.enterprise() || p.task["export_to_personal_allowed"] == true
+}
+
+func (p *taskDetailPage) exportPackage(a *NativeApp) {
+	a.Do(func(ctx context.Context) (func(), error) {
+		r, err := a.Client.Request(ctx, "POST", "/packages/export", Object{"task_id": p.id})
+		if err != nil {
+			return nil, packageFailure(err)
+		}
+		return func() { p.exported.Follow(a, r.Data, nil) }, nil
+	})
+}
+
+// packageName is the suggested file name: the task name, or its id.
+func (p *taskDetailPage) packageName() string {
+	name := strings.TrimSpace(strings.Map(func(r rune) rune {
+		if strings.ContainsRune(`/\:*?"<>|`, r) || r < 32 {
+			return '_'
+		}
+		return r
+	}, str(p.task, "name")))
+	if name == "" {
+		name = p.id
+	}
+	return name + ".bidpkg.zip"
 }
 
 // stepsView is the task's preparation flow. The first three steps are done
