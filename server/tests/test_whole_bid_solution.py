@@ -248,12 +248,15 @@ def test_solution_docx_order_styles_placeholders_and_missing_chapters(placement)
         p
         for p in paragraphs
         if p.style is not None
-        and p.style.name == "Heading 1"
+        and p.style.name == "Form Start Heading"
         and p.text in [f"{n}、{title}" for n, title in enumerate(TITLES, 1)]
     ]
     assert [p.text for p in headings] == [f"{n}、{title}" for n, title in enumerate(TITLES, 1)]
     assert all(
-        p.style is not None and p.style.name == "Heading 1" and p.paragraph_format.page_break_before
+        p.style is not None
+        and p.style.base_style is not None
+        and p.style.base_style.name == "Heading 1"
+        and p.style.paragraph_format.page_break_before
         for p in headings
     )
     texts = [p.text for p in paragraphs]

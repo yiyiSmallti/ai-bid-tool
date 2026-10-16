@@ -7,7 +7,7 @@ from typing import Protocol, cast
 
 import httpx
 
-from app.providers.base import ProviderFailure, TruncatedOutput
+from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.calls import current_accounting
 from app.providers.llm import HTTPExtractor
 from app.providers.structured import json_call_with_usage, json_request, strict_schema
@@ -28,11 +28,11 @@ SCHEMA_VERSION = "solution-wire-v2"
 # Planning call plus at most one call per attempt for each of up to ten sections.
 SECTION_MAX_TOKENS = 12000
 SECTION_TEMPERATURE = 0.7
-# A sampled reply can still loop, most often by repeating table rows, so a section
-# cut off at its cap is retried with a shorter brief and then without a table.
+# A sampled reply can still loop, most often by repeating table rows, or break the
+# schema, so such a section is retried with a shorter brief and then without a table.
 SECTION_RETRIES = (
-    "上一稿超长或出现重复。本稿全节控制在 2500 字以内，不重复句子。",
-    "上一稿超长或出现重复。本稿全节控制在 2000 字以内，不重复句子，所有 table 为 null。",
+    "上一稿超长、重复或不符合 schema。本稿全节控制在 2500 字以内，不重复句子。",
+    "上一稿超长、重复或不符合 schema。本稿全节控制在 2000 字以内，不重复句子，所有 table 为 null。",
 )
 MAX_CALLS_PER_ITEM = 1 + (1 + len(SECTION_RETRIES)) * 10
 
@@ -171,10 +171,8 @@ class HTTPSolutionProvider:
                             return output, [*spent, usage]
                         except ProviderFailure as failure:
                             failure.usage = [*spent, *failure.usage]
-                            if (
-                                not isinstance(failure, TruncatedOutput)
-                                or retry == SECTION_RETRIES[-1]
-                            ):
+                            retryable = isinstance(failure, TruncatedOutput | MalformedOutput)
+                            if not retryable or retry == SECTION_RETRIES[-1]:
                                 raise
                             spent = failure.usage
                 raise AssertionError("unreachable")

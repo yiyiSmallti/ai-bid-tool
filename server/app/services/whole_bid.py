@@ -16,7 +16,7 @@ from uuid import UUID
 from docx import Document as WordDocument
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
@@ -97,7 +97,7 @@ SECRET_FIELD = re.compile(r"\{\{secret\.[^}]+\}\}")
 SOLUTION_PLACEHOLDER = re.compile(r"【待填：([^】]+)】")
 # Numbering a model may still put on a heading; the renderer numbers headings itself.
 HEADING_NUMBER = re.compile(
-    r"^\s*(第[一二三四五六七八九十\d]+[章节]|[一二三四五六七八九十]+[、.．]|\d+(\.\d+)*([、.．]|\s)|[（(][一二三四五六七八九十\d]+[）)])\s*"
+    r"^\s*(第[一二三四五六七八九十\d]+[章节]|[一二三四五六七八九十]+[、.．]|\d+(\.\d+)*(、|[.．](?!\d)|\s)|[（(][一二三四五六七八九十\d]+[）)])\s*"
 )
 
 
@@ -269,12 +269,19 @@ def deviation_column(header: str) -> str:
     return "other"
 
 
+def form_anchor(form: OutlineForm) -> str:
+    return f"form_{form.index}"
+
+
 class Renderer:
     """Writes outline forms into one DOCX in the house style: A4, 宋体 body, 黑体 headings."""
 
     def __init__(self, facts: Facts, tally: Tally):
         self.facts, self.tally = facts, tally
         self.pending_break = False
+        # A bookmark for the next page's first paragraph, which contents entries point at.
+        self.pending_anchor: str | None = None
+        self.bookmarks = 0
         self.word = WordDocument()
         section = self.word.sections[0]
         section.page_width, section.page_height = Cm(21), Cm(29.7)
@@ -325,8 +332,29 @@ class Renderer:
                 element.text = f" {text} "
             run._r.append(element)
 
-    def page_break(self) -> None:
+    def page_break(self, anchor: str | None = None) -> None:
         self.pending_break = True
+        self.pending_anchor = anchor
+
+    def bookmark(self, paragraph, name: str) -> None:
+        start, end = OxmlElement("w:bookmarkStart"), OxmlElement("w:bookmarkEnd")
+        start.set(qn("w:id"), str(self.bookmarks))
+        start.set(qn("w:name"), name)
+        end.set(qn("w:id"), str(self.bookmarks))
+        self.bookmarks += 1
+        paragraph._p.append(start)
+        paragraph._p.append(end)
+
+    def contents_entry(self, text: str, anchor: str) -> None:
+        """A contents line whose page number is a PAGEREF field; Word and WPS fill it in
+        when fields update, which the document asks for on opening."""
+        entry = self._new()
+        entry.paragraph_format.left_indent = Cm(0.5)
+        entry.paragraph_format.tab_stops.add_tab_stop(
+            Cm(16), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS
+        )
+        self.run(entry, f"{text}\t")
+        self._field(entry, f"PAGEREF {anchor} \\h")
 
     def _new(self, text: str = "", style: str | None = None):
         """A paragraph that starts a new page after `page_break`. The break is a style's
@@ -334,7 +362,11 @@ class Renderer:
         if self.pending_break:
             style = "Form Start Heading" if style == "Heading 1" else "Form Start"
             self.pending_break = False
-        return self.word.add_paragraph(text, style=style)
+        paragraph = self.word.add_paragraph(text, style=style)
+        if self.pending_anchor:
+            self.bookmark(paragraph, self.pending_anchor)
+            self.pending_anchor = None
+        return paragraph
 
     def run(self, paragraph, text: str, *, size=None, bold=False, underline=False, mark=False):
         run = paragraph.add_run(text)
@@ -381,24 +413,19 @@ class Renderer:
         heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
         self.run(heading, "目  录", size=16, bold=True)
         for position, form in enumerate(forms):
-            entry = self._new()
-            entry.paragraph_format.left_indent = Cm(0.5)
-            self.run(entry, f"{form.label}  {short_title(form.title)}")
+            self.contents_entry(f"{form.label}  {short_title(form.title)}", form_anchor(form))
             if position == solution_after:
                 for number, item in enumerate(
                     (item for item in outline.scoring_items if item.subjective), 1
                 ):
-                    entry = self._new()
-                    entry.paragraph_format.left_indent = Cm(0.5)
-                    self.run(entry, f"{number}、{item.title}")
+                    self.contents_entry(f"{number}、{item.title}", f"solution_{number}")
 
     def solution(self, items: list[OutlineScoringItem], chapters: list[SolutionChapter]) -> None:
         """Render the current revision in scoring order, keeping absent drafts visible."""
         by_item = {(chapter.title, chapter.score_range): chapter for chapter in chapters}
         for chapter_number, item in enumerate((item for item in items if item.subjective), 1):
-            self.pending_break = False
-            heading = self._new(f"{chapter_number}、{item.title}", style="Heading 1")
-            heading.paragraph_format.page_break_before = True
+            self.page_break(f"solution_{chapter_number}")
+            self._new(f"{chapter_number}、{item.title}", style="Heading 1")
             chapter = by_item.get((item.title, item.score_range))
             if chapter is None:
                 self.tally.unconfirmed_chapters += 1
@@ -643,6 +670,10 @@ class Renderer:
         return rows, weights, drafted
 
     def finish(self) -> bytes:
+        # Contents page numbers are fields; ask Word and WPS to compute them on opening.
+        update = OxmlElement("w:updateFields")
+        update.set(qn("w:val"), "true")
+        self.word.settings.element.append(update)
         buffer = io.BytesIO()
         self.word.save(buffer)
         return buffer.getvalue()
@@ -786,7 +817,7 @@ def build(
     solution_after = technical_cover if technical_cover is not None else solution_form
     renderer.cover(outline, outline.forms, solution_after)
     for index, (form, blocks) in enumerate(zip(outline.forms, per_form, strict=True)):
-        renderer.page_break()
+        renderer.page_break(form_anchor(form))
         renderer.form(form, blocks or text_blocks(form), clauses, outline.scoring_items, responses)
         if index == solution_after:
             renderer.solution(outline.scoring_items, chapters or [])

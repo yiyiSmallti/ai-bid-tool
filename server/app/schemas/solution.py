@@ -21,6 +21,24 @@ class SolutionTable(Contract):
     columns: list[str] = Field(min_length=2, max_length=8)
     rows: list[list[str]] = Field(min_length=1, max_length=40)
 
+    @model_validator(mode="before")
+    @classmethod
+    def pad_short_rows(cls, data):
+        # Models sometimes leave a trailing cell out; an empty cell keeps the grid.
+        if isinstance(data, dict) and isinstance(data.get("columns"), list):
+            width = len(data["columns"])
+            rows = data.get("rows")
+            if isinstance(rows, list):
+                data = data | {
+                    "rows": [
+                        row + [""] * (width - len(row))
+                        if isinstance(row, list) and len(row) < width
+                        else row
+                        for row in rows
+                    ]
+                }
+        return data
+
     @model_validator(mode="after")
     def rectangular(self) -> "SolutionTable":
         _nonblank(self.columns, "columns")
@@ -145,7 +163,7 @@ class SolutionPlanOutput(Contract):
 class SolutionSectionOutput(Contract):
     """Stage two: one planned section written out, one subsection per planned point."""
 
-    paragraphs: list[str] = Field(min_length=1, max_length=3)
+    paragraphs: list[str] = Field(min_length=1, max_length=6)
     subsections: list[SolutionSubsection] = Field(min_length=2, max_length=6)
 
 
