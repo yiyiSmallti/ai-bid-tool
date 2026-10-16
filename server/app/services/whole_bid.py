@@ -431,10 +431,19 @@ class Renderer:
         table = self.word.add_table(rows=1 + len(grid.rows), cols=len(grid.columns))
         table.style = "Table Grid"
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        # The header row repeats on each page a long table spans.
+        repeat = OxmlElement("w:tblHeader")
+        repeat.set(qn("w:val"), "true")
+        table.rows[0]._tr.get_or_add_trPr().append(repeat)
         for row, values in enumerate([grid.columns, *grid.rows]):
             for column, value in enumerate(values):
-                paragraph = table.cell(row, column).paragraphs[0]
-                self.solution_text(paragraph, value, size=10.5, bold=row == 0)
+                cell = table.cell(row, column)
+                if row == 0:
+                    shading = OxmlElement("w:shd")
+                    shading.set(qn("w:val"), "clear")
+                    shading.set(qn("w:fill"), "D9D9D9")
+                    cell._tc.get_or_add_tcPr().append(shading)
+                self.solution_text(cell.paragraphs[0], value, size=10.5, bold=row == 0)
         self._new()
 
     def solution_text(self, paragraph, text: str, *, size=None, bold=False) -> None:
