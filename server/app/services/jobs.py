@@ -94,6 +94,10 @@ async def read_access(
         from app.services.bid_preparation import job_access
 
         await job_access(session, identity, job)
+    if job.kind in {"package_export", "package_import"}:
+        from app.services.packages import job_access as package_access
+
+        await package_access(session, identity, job)
     if job.kind == "export_render":
         from app.services.exports import job_access
 
