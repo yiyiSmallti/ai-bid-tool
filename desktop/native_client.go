@@ -68,7 +68,8 @@ func (c *APIClient) send(ctx context.Context, method, path string, body io.Reade
 	c.mu.RLock()
 	token := c.session
 	c.mu.RUnlock()
-	if token != "" && path != "/auth/session" {
+	// Signing in sends credentials, never a previous session.
+	if token != "" && !(method == "POST" && path == "/auth/session") {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	req.Header.Set("Cache-Control", "no-store")
