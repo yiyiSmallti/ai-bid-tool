@@ -221,10 +221,9 @@ GRANTED_SCOPES = {
         "attachment:manage",
         "attachment:privacy",
     },
+    # Members always write, approve and manage their own private memory; the
+    # grant for public memory is checked by `memory.access.changeable`.
     "memory:edit": {
-        "memory:write",
-        "memory:approve",
-        "memory:manage",
         "memory:candidate:run",
         "memory:eval:review",
     },

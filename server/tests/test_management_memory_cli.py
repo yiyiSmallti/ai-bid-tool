@@ -234,7 +234,7 @@ def test_memory_browse_schema_and_legacy_preservation(monkeypatch, capsys):
     assert "MemoryQuery" in json.dumps(entry["input"])
     assert "PageData" in json.dumps(entry["output"])
     assert "MemoryView" in json.dumps(entry["items"])
-    assert entry["input"]["properties"]["scope"]["const"] == "library"
+    assert entry["input"]["properties"]["scope"]["enum"] == ["library", "private"]
     rejected = invoke(capsys, ["--contract-version", "3.0", "schema"], 2)
     assert rejected["data"]["error"]["code"] == "invalid_input"
     calls = []

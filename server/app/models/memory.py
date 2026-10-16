@@ -29,6 +29,8 @@ class Memory(Base):
     __tablename__ = "memories"
     scope: Mapped[str] = mapped_column(String(20), nullable=False)
     task_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    # Set exactly for `private` memory; library memory has no owner.
+    owner_member_id: Mapped[UUID | None] = mapped_column(nullable=True)
     current_revision_id: Mapped[UUID] = mapped_column(nullable=False)
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -51,7 +53,10 @@ class Memory(Base):
     )
     __table_args__ = (
         CheckConstraint(
-            "((((scope)::text = 'library'::text) AND (task_id IS NULL)))", name="memories_check"
+            "(((task_id IS NULL) AND ((((scope)::text = 'library'::text) AND "
+            "(owner_member_id IS NULL)) OR (((scope)::text = 'private'::text) AND "
+            "(owner_member_id IS NOT NULL)))))",
+            name="memories_check",
         ),
         CheckConstraint(
             "(((source_feedback_event_id IS NULL) = (generator_version IS NULL)))",
@@ -498,12 +503,22 @@ class MemoryRevision(Base):
 
 class MemoryScopeEpoch(Base):
     __tablename__ = "memory_scope_epochs"
-    scope: Mapped[str] = mapped_column(String(20), nullable=False, primary_key=True)
+    scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    owner_member_id: Mapped[UUID | None] = mapped_column(nullable=True)
     epoch: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     __table_args__ = (
         CheckConstraint(
-            "((((scope)::text = 'library'::text) AND (epoch >= 0)))",
+            "(((epoch >= 0) AND ((((scope)::text = 'library'::text) AND "
+            "(owner_member_id IS NULL)) OR (((scope)::text = 'private'::text) AND "
+            "(owner_member_id IS NOT NULL)))))",
             name="memory_scope_epochs_check",
         ),
-        PrimaryKeyConstraint("scope", name="memory_scope_epochs_pkey"),
+        UniqueConstraint(
+            "scope",
+            "owner_member_id",
+            name="memory_scope_epochs_key",
+            postgresql_nulls_not_distinct=True,
+        ),
     )
+    # The table has no primary key: library's epoch row has a null owner.
+    __mapper_args__ = {"primary_key": [scope, owner_member_id]}

@@ -1,4 +1,4 @@
-"""Bounded library memory reads; mutations remain in the original memory services."""
+"""Bounded library and private memory reads; mutations remain in the memory services."""
 
 from datetime import UTC, datetime
 from typing import cast as typed_cast
@@ -9,7 +9,7 @@ from sqlalchemy.orm import aliased
 
 from app.core.errors import not_found
 from app.memory import crud
-from app.memory.access import human, normalize
+from app.memory.access import human, may_change, normalize, readable, target_owner
 from app.models.entities import Job
 from app.models.memory import Memory, MemoryFeedbackEvent, MemoryRevision
 from app.schemas.contracts import Cost, Result
@@ -27,6 +27,7 @@ from app.schemas.management_pages import (
     PageQuery,
     ResourceDetailQuery,
 )
+from app.schemas.memory_contracts import MemoryTarget
 from app.services import management_products as bounded
 from app.services.task_access import live_actor
 
@@ -97,6 +98,7 @@ def filters(body):
     return binding(
         "memory",
         {
+            "scope": body.scope,
             "tokens": bounded.search_tokens(normalize(body.q)) if body.q else [],
             "kind": body.kind,
             "status": body.status,
@@ -109,6 +111,7 @@ def filters(body):
 
 def browse_statement(actor, body, anchor=None, as_of=None):
     as_of = as_of or datetime.now(UTC)
+    owner = target_owner(actor, MemoryTarget(scope=body.scope))
     statement = (
         select(Memory, MemoryRevision)
         .join(
@@ -117,7 +120,7 @@ def browse_statement(actor, body, anchor=None, as_of=None):
             & (MemoryRevision.id == Memory.current_revision_id)
             & (MemoryRevision.revision == Memory.revision),
         )
-        .where(Memory.scope == "library")
+        .where(Memory.scope == body.scope, Memory.owner_member_id.is_not_distinct_from(owner))
     )
     if not body.include_deleted:
         statement = statement.where(Memory.deleted_at.is_(None))
@@ -153,7 +156,7 @@ def check_revision(actor, root, revision):
     if (
         revision.memory_id != root.id
         or revision.revision > root.revision
-        or root.scope != "library"
+        or root.scope not in {"library", "private"}
     ):
         bounded.fail("management_integrity_error", "Memory revision identity is invalid", 409, 4)
 
@@ -204,9 +207,7 @@ async def detail(session, actor, identifier, body: ResourceDetailQuery, settings
                     MemoryRevision,
                     (MemoryRevision.memory_id == Memory.id) & (MemoryRevision.revision == selected),
                 )
-                .where(
-                    Memory.id == identifier, Memory.deleted_at.is_(None), Memory.scope == "library"
-                )
+                .where(Memory.id == identifier, Memory.deleted_at.is_(None), readable(actor))
             )
         ).first()
         if row is None:
@@ -215,7 +216,9 @@ async def detail(session, actor, identifier, body: ResourceDetailQuery, settings
         check_revision(actor, root, revision)
         sources = await crud.visible_sources(session, actor, [revision])
         human = actor.actor_kind == "session" and actor.token_id is None
-        current = revision.revision == root.revision
+        current = revision.revision == root.revision and await may_change(
+            session, actor, root.scope
+        )
         editable = current and "memory:write" in actor.scopes
         if editable and (not human):
             editable = (
@@ -306,7 +309,7 @@ async def history(session, actor, identifier, body: PageQuery, settings):
             await session.execute(
                 select(Memory, MemoryRevision)
                 .outerjoin(MemoryRevision, relation)
-                .where(Memory.id == identifier, Memory.scope == "library")
+                .where(Memory.id == identifier, readable(actor))
                 .order_by(MemoryRevision.revision.desc(), MemoryRevision.id.desc())
                 .limit(body.limit + 1)
             )

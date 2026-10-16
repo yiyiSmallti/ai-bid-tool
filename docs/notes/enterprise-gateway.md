@@ -51,8 +51,17 @@ signs in as a member, and every human decision records which member made it.
   same with `bid task member list|add|remove`, `bid task owner` and
   `bid task sharing` and a `bid_` token holding `task:create`.
 - Grants open the shared library: `library:edit` (materials, certificates,
-  profiles, templates, attachments), `memory:edit` (memory writes and review)
-  and `confidential:reveal`. A member without a grant reads but does not write.
+  profiles, templates, attachments), `memory:edit` (public memory writes and
+  review) and `confidential:reveal`. A member without a grant reads but does
+  not write.
+- Memory written with `"target": {"scope": "private"}` (`bid memory add`)
+  belongs to the member who wrote it; `bid memory list --scope private` and
+  `bid memory browse` with `"scope": "private"` list it.
+  Only that member sees, approves and changes it, without `memory:edit`;
+  anyone else, administrators included, gets `not_found`. Retrieval with
+  `"scopes": ["library", "private"]` and a member's drafting read public memory
+  plus the member's own private memory. A personal installation refuses the
+  scope with `memory_scope_unavailable`.
 
 ## How it works
 
@@ -108,6 +117,16 @@ signs in as a member, and every human decision records which member made it.
 - `member_scopes(role, grants)` in
   [auth.py](../../server/app/services/auth.py) removes the scopes of each
   `GRANTED_SCOPES` entry the member lacks, for sessions, tokens and agents.
+- Migration `0007` adds `memories.owner_member_id`, set exactly for
+  `private` memory, and keys `memory_scope_epochs` by scope and owner, so a
+  private change advances only its owner's epoch. Its triggers require the
+  owner to be `app.actor_member_id` for a new private memory or revision,
+  check approval conflicts within one owner, and require a manifest's epochs
+  to be `library` or `library` plus the reading member's `private`.
+  `memory.access` ([access.py](../../server/app/memory/access.py)) holds the
+  read predicate (`readable`, `visible`) and the public-memory grant check
+  (`changeable`); `memory:edit` no longer removes `memory:write`,
+  `memory:approve` or `memory:manage`, so members keep them for private memory.
 - Every agent session wakes at least every 30 seconds, paused ones too. A wake
   whose member was disabled or, unless an administrator, removed from the
   project cancels the session and its own jobs and audits
@@ -124,8 +143,12 @@ signs in as a member, and every human decision records which member made it.
   `BID_PERSONAL_MODEL_ENDPOINTS`, where an empty value means no personal models.
 - The mode never changes in place; moving a project between modes uses
   [packages](../plan/enterprise-gateway.md#packages).
-- Memory has no `private` scope yet, so all memory is public and needs
-  `memory:edit` to change.
+- A saved retrieval that read private memory holds its text, so
+  `GET /memory-retrievals/{id}` answers `not_found` to anyone but the owner.
+  Job memory references (`GET /jobs/{id}/memory`) and card memory lineage show
+  other viewers only the public references.
+- A duplicate conflict key across public and private memory omits both from
+  retrieval (`same_priority_conflict`); private memory does not shadow public.
 - `export_to_personal_allowed` is stored for [packages](../plan/enterprise-gateway.md#packages);
   nothing reads it yet.
 - An agent of a removed member can run until its next wake, up to 30 seconds.

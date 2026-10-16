@@ -1,4 +1,4 @@
-"""Append-only library memory with explicit human approval."""
+"""Append-only library and private memory with explicit human approval."""
 
 import hashlib
 from datetime import UTC, datetime
@@ -9,12 +9,14 @@ from sqlalchemy import and_, or_, select
 from app.core.errors import ServiceError, not_found
 from app.memory.access import (
     access,
+    changeable,
     digest,
     human,
-    library_target,
     normalize,
     page_cursor,
     read_cursor,
+    target_owner,
+    visible,
     writable,
 )
 from app.memory.safety import reject_sensitive
@@ -138,7 +140,7 @@ async def load(session, actor, identifier, *, lock=False, deleted=False):
     memory = await session.scalar(query)
     if memory is None or (memory.deleted_at is not None and (not deleted)):
         raise not_found()
-    library_target(target(memory))
+    visible(actor, memory)
     revision = await session.scalar(
         select(MemoryRevision).where(MemoryRevision.id == memory.current_revision_id)
     )
@@ -211,14 +213,21 @@ def new_revision(
 
 async def create_memory(session, actor, body, settings):
     actor = await access(session, actor, "memory:write")
-    library_target(body.target)
+    owner = target_owner(actor, body.target)
+    await changeable(session, actor, body.target.scope)
     expiry(body.expires_at)
     await reject_sensitive(
         session, actor, [body.content.text, body.content.conflict_key, *body.content.tags], settings
     )
     await check_source(session, actor, body.source)
     source = MemorySourceView(origin="human", **body.source.model_dump() if body.source else {})
-    memory = Memory(id=uuid4(), scope="library", revision=1, current_revision_id=uuid4())
+    memory = Memory(
+        id=uuid4(),
+        scope=body.target.scope,
+        owner_member_id=owner,
+        revision=1,
+        current_revision_id=uuid4(),
+    )
     revision = new_revision(memory, actor, body.content, source, expires_at=body.expires_at)
     memory.current_revision_id = revision.id
     session.add(memory)
@@ -277,6 +286,7 @@ async def update_memory(session, actor, identifier, body, settings):
     memory, previous = await load(session, actor, identifier, lock=True)
     expected(memory, body.expected_revision)
     actor = await access(session, actor, "memory:write")
+    await changeable(session, actor, memory.scope)
     writable(actor, previous.actor_token_id, previous.status)
     if actor.actor_kind != "session" or actor.token_id is not None:
         was_active = await session.scalar(
@@ -300,6 +310,7 @@ async def decide_memory(session, actor, identifier, body, settings):
     actor = await access(session, actor, "memory:approve")
     human(actor, "memory:approve")
     memory, previous = await load(session, actor, identifier, lock=True)
+    await changeable(session, actor, memory.scope)
     expected(memory, body.expected_revision)
     if previous.status != "candidate":
         fail("memory_invalid_transition", "Only candidate memory can be reviewed", 409)
@@ -307,14 +318,20 @@ async def decide_memory(session, actor, identifier, body, settings):
     if body.action == "approve":
         expiry(previous.expires_at)
         await session.scalar(
-            select(MemoryScopeEpoch).where(MemoryScopeEpoch.scope == "library").with_for_update()
+            select(MemoryScopeEpoch)
+            .where(
+                MemoryScopeEpoch.scope == memory.scope,
+                MemoryScopeEpoch.owner_member_id.is_not_distinct_from(memory.owner_member_id),
+            )
+            .with_for_update()
         )
         rows = (
             await session.execute(
                 select(Memory, MemoryRevision)
                 .join(MemoryRevision, Memory.current_revision_id == MemoryRevision.id)
                 .where(
-                    Memory.scope == "library",
+                    Memory.scope == memory.scope,
+                    Memory.owner_member_id.is_not_distinct_from(memory.owner_member_id),
                     Memory.deleted_at.is_(None),
                     Memory.id != memory.id,
                     MemoryRevision.status == "active",
@@ -349,6 +366,7 @@ async def manage(session, actor, identifier, body, settings, deleting=False):
     actor = await access(session, actor, "memory:manage")
     human(actor, "memory:manage")
     memory, previous = await load(session, actor, identifier, lock=True)
+    await changeable(session, actor, memory.scope)
     expected(memory, body.expected_revision)
     await reject_sensitive(session, actor, [body.reason], settings)
     if not deleting and previous.status == "disabled":
@@ -378,7 +396,7 @@ async def delete_memory(session, actor, identifier, body, settings):
 
 async def list_memories(session, actor, body, settings):
     actor = await access(session, actor, "memory:read")
-    library_target(body.target)
+    owner = target_owner(actor, body.target)
     if body.include_deleted:
         human(actor, "memory:manage")
     filters = body.model_dump(mode="json", exclude={"cursor", "limit"})
@@ -386,7 +404,10 @@ async def list_memories(session, actor, body, settings):
     query = (
         select(Memory, MemoryRevision)
         .join(MemoryRevision, Memory.current_revision_id == MemoryRevision.id)
-        .where(Memory.scope == "library")
+        .where(
+            Memory.scope == body.target.scope,
+            Memory.owner_member_id.is_not_distinct_from(owner),
+        )
     )
     if not body.include_deleted:
         query = query.where(Memory.deleted_at.is_(None))

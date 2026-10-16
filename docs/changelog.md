@@ -6,6 +6,15 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Gateway private memory
+
+- On a gateway a member keeps private memory that only they see and change,
+  without the `memory:edit` grant; administrators do not see it either.
+- A member's retrieval and drafting use public memory plus their own private
+  memory, and a change to private memory marks only that member's drafting
+  inputs stale.
+- Changing public memory now needs `memory:edit` on a gateway.
+
 ## 2026-10-15: Gateway project visibility
 
 - On a gateway a project is visible only to administrators and its members;

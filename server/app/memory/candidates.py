@@ -45,9 +45,11 @@ class FeedbackCopyProvider:
     version = GENERATOR_VERSION
 
     async def propose(self, request: MemoryCandidateInput) -> MemoryCandidateOutput:
-        from app.memory.access import library_target
+        from app.memory.access import scope_unavailable
 
-        library_target(request.target)
+        # Feedback candidates are public library memory only.
+        if request.target.scope != "library":
+            raise scope_unavailable()
         if request.generator_version != self.version:
             raise ServiceError(
                 "memory_generator_version", "Candidate generator version is not supported", 409, 4

@@ -67,14 +67,78 @@ async def access(session, actor, *, task_id=None):
     return actor
 
 
-async def epoch(session, *, lock=False) -> int:
+async def epoch(session, scope="library", owner: UUID | None = None, *, lock=False) -> int:
     if lock:
         await session.execute(
-            insert(MemoryScopeEpoch).values(scope="library", epoch=0).on_conflict_do_nothing()
+            insert(MemoryScopeEpoch)
+            .values(scope=scope, owner_member_id=owner, epoch=0)
+            .on_conflict_do_nothing()
         )
-    query = select(MemoryScopeEpoch.epoch).where(MemoryScopeEpoch.scope == "library")
+    query = select(MemoryScopeEpoch.epoch).where(
+        MemoryScopeEpoch.scope == scope,
+        MemoryScopeEpoch.owner_member_id.is_not_distinct_from(owner),
+    )
     row = await session.scalar(query.with_for_update(read=True) if lock else query)
     return row if row is not None else 0
+
+
+type EpochTable = dict[tuple[str, str | None], int]
+
+
+async def epoch_table(session) -> EpochTable:
+    """Every scope's current epoch; a scope without a row is at zero."""
+    rows = await session.execute(
+        select(MemoryScopeEpoch.scope, MemoryScopeEpoch.owner_member_id, MemoryScopeEpoch.epoch)
+    )
+    return {(scope, str(owner) if owner else None): value for scope, owner, value in rows.tuples()}
+
+
+def current_epochs(manifest, table: EpochTable) -> list[dict]:
+    """The manifest's epochs as they stand now, in the same order and shape."""
+    return [
+        {**item, "epoch": table.get((item.get("scope"), item.get("owner_member_id")), 0)}
+        for item in manifest.get("epochs") or []
+    ]
+
+
+def epochs_current(manifest, table: EpochTable) -> bool:
+    entries = manifest.get("epochs") or []
+    scopes = [item.get("scope") for item in entries]
+    return (
+        scopes in (["library"], ["library", "private"])
+        and manifest.get("scopes") == scopes
+        and all(("owner_member_id" in item) == (item["scope"] == "private") for item in entries)
+        and entries == current_epochs(manifest, table)
+    )
+
+
+def private_owner(data) -> str | None:
+    for item in data.get("epochs") or []:
+        if isinstance(item, dict) and item.get("scope") == "private":
+            return item.get("owner_member_id")
+    return None
+
+
+def shown_refs(data, refs: list, viewer: UUID | None) -> list:
+    """Memory references as `viewer` may see them.
+
+    Another member's private memory is left out even by reference: a shared
+    project shows that its drafts used public memory, never whose private
+    memory or which.
+    """
+    owner = private_owner(data)
+    if owner is None or owner == (str(viewer) if viewer else None):
+        return refs
+    return [ref for ref in refs if ref.get("scope") != "private"]
+
+
+def requested_owner(actor, body: MemoryRetrievalRequest) -> UUID | None:
+    """Retrieval reads library memory, plus the acting member's private memory if asked."""
+    if sorted(body.scopes) == ["library"]:
+        return None
+    if sorted(body.scopes) == ["library", "private"] and actor.member_id is not None:
+        return actor.member_id
+    raise ServiceError("memory_scope_unavailable", "Requested memory scope is not enabled", 403, 4)
 
 
 def public_manifest(output: MemoryRetrievalOutput) -> dict:
@@ -102,14 +166,23 @@ def prompt_context(output: MemoryRetrievalOutput) -> MemoryPromptContext:
 
 
 async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, preview=False):
-    if body.scopes != ["library"]:
-        raise ServiceError("memory_scope_unavailable", "Only library memory is enabled", 403, 4)
+    owner = requested_owner(actor, body)
     if body.mode != "keyword":
         raise ServiceError(
             "embedding_unconfigured", "Embedding retrieval is not configured", 403, 4
         )
     actor = await access(session, actor, task_id=body.task_id)
-    current_epoch = await epoch(session, lock=not preview)
+    epochs = [MemoryEpochView(scope="library", epoch=await epoch(session, lock=not preview))]
+    scope = Memory.scope == "library"
+    if owner is not None:
+        epochs.append(
+            MemoryEpochView(
+                scope="private",
+                owner_member_id=owner,
+                epoch=await epoch(session, "private", owner, lock=not preview),
+            )
+        )
+        scope = or_(scope, and_(Memory.scope == "private", Memory.owner_member_id == owner))
     now = datetime.now(UTC)
     base = (
         select(MemoryRevision)
@@ -121,7 +194,7 @@ async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, pr
             ),
         )
         .where(
-            Memory.scope == "library",
+            scope,
             Memory.task_id.is_(None),
             Memory.deleted_at.is_(None),
             MemoryRevision.status == "active",
@@ -148,6 +221,17 @@ async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, pr
     )
     if len(rows) > MAX_SEARCH_ROWS:
         raise ServiceError("memory_query_limit", "Narrow the memory query", 422, 2)
+    private = (
+        set(
+            await session.scalars(
+                select(Memory.id).where(
+                    Memory.id.in_([row.memory_id for row in rows]), Memory.scope == "private"
+                )
+            )
+        )
+        if owner is not None and rows
+        else set()
+    )
     scored = []
     kind = active.c.content.op("->>")(literal_column("'kind'"))
     conflict_key = active.c.content.op("->>")(literal_column("'conflict_key'"))
@@ -176,7 +260,7 @@ async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, pr
                 memory_id=row.memory_id,
                 revision_id=row.id,
                 revision=row.revision,
-                scope="library",
+                scope="private" if row.memory_id in private else "library",
                 content_sha256=row.content_sha256,
                 sent_sha256=text_hash(content["text"]),
                 expires_at=row.expires_at,
@@ -219,7 +303,6 @@ async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, pr
             hit.rank = len(selected) + 1
             selected.append(hit)
             chars += len(hit.text)
-    epochs = [MemoryEpochView(scope="library", epoch=current_epoch)]
     query_hash = digest(body.model_dump(mode="json"))
     manifest_hash = digest(
         {
@@ -241,7 +324,7 @@ async def retrieve(session, actor, body: MemoryRetrievalRequest, settings, *, pr
             priority_version=PRIORITY_VERSION,
             query_sha256=query_hash,
             manifest_sha256=manifest_hash,
-            scopes=["library"],
+            scopes=[item.scope for item in epochs],
             epochs=epochs,
             valid_until=valid_until,
             omitted=omitted,
@@ -281,7 +364,8 @@ async def persist(session, actor, body, output, settings, *, all_hits=None):
     if all_hits is None:
         for item in output.data.omitted:
             revision = await session.get(MemoryRevision, item.revision_id)
-            if revision is None:
+            memory = await session.get(Memory, item.memory_id)
+            if revision is None or memory is None:
                 raise not_found()
             hits.append(
                 MemoryHit(
@@ -289,7 +373,7 @@ async def persist(session, actor, body, output, settings, *, all_hits=None):
                         memory_id=revision.memory_id,
                         revision_id=revision.id,
                         revision=revision.revision,
-                        scope="library",
+                        scope=memory.scope,
                         content_sha256=revision.content_sha256,
                         sent_sha256=text_hash(revision.content["text"]),
                         expires_at=revision.expires_at,
@@ -333,12 +417,12 @@ async def persist(session, actor, body, output, settings, *, all_hits=None):
     await session.flush()
 
 
-def manifest_epoch_changed(manifest, current):
+def manifest_epoch_changed(manifest, table: EpochTable):
     return (
         manifest.get("retrieval_version") != RETRIEVAL_VERSION
         or manifest.get("priority_version") != PRIORITY_VERSION
         or manifest.get("sanitizer_version") != SANITIZER_VERSION
-        or (manifest.get("epochs") != [{"scope": "library", "epoch": current}])
+        or not epochs_current(manifest, table)
         or bool(
             manifest.get("valid_until")
             and datetime.fromisoformat(manifest["valid_until"]) <= datetime.now(UTC)
@@ -358,8 +442,15 @@ async def stale_reasons(
         or manifest.get("sanitizer_version", SANITIZER_VERSION) != SANITIZER_VERSION
     ):
         reasons.append("policy_changed")
-    current = await epoch(session, lock=lock)
-    if manifest.get("epochs") != [{"scope": "library", "epoch": current}]:
+    table: EpochTable = {}
+    for item in manifest.get("epochs") or []:
+        if not isinstance(item, dict) or item.get("scope") not in {"library", "private"}:
+            continue
+        owner = item.get("owner_member_id")
+        table[item["scope"], owner] = await epoch(
+            session, item["scope"], UUID(owner) if owner else None, lock=lock
+        )
+    if not epochs_current(manifest, table):
         reasons.append("epoch_changed")
     expiry = manifest.get("valid_until")
     if expiry and datetime.fromisoformat(expiry) <= datetime.now(UTC):
@@ -387,7 +478,10 @@ async def show_retrieval(session, actor, retrieval_id, settings):
     row = await session.get(MemoryRetrieval, retrieval_id)
     if row is None:
         raise not_found()
-    await access(session, actor, task_id=row.task_id)
+    actor = await access(session, actor, task_id=row.task_id)
+    owner = private_owner(row.data)
+    if owner is not None and owner != (str(actor.member_id) if actor.member_id else None):
+        raise not_found()
     envelope = json.loads(Secrets.for_data(settings).decrypt(row.encrypted_snapshot))
     if envelope["id"] != str(row.id):
         raise ServiceError("memory_snapshot_invalid", "Memory snapshot binding is invalid", 500, 4)
@@ -408,16 +502,31 @@ async def used(session, actor, job_id, storage):
     job = await session.get(Job, job_id)
     if job is None:
         raise not_found()
-    rows = await session.scalars(
-        select(MemoryCallInput)
-        .where(MemoryCallInput.job_id == job_id)
-        .order_by(MemoryCallInput.created_at, MemoryCallInput.id)
+    rows = list(
+        await session.scalars(
+            select(MemoryCallInput)
+            .where(MemoryCallInput.job_id == job_id)
+            .order_by(MemoryCallInput.created_at, MemoryCallInput.id)
+        )
     )
+    retrievals = {
+        row.id: row.data
+        for row in await session.scalars(
+            select(MemoryRetrieval).where(
+                MemoryRetrieval.id.in_({row.retrieval_id for row in rows})
+            )
+        )
+    }
     return MemoryCallData(
         job_id=job_id,
         calls=[
             MemoryCallInputView.model_validate(
                 {field: getattr(row, field) for field in MemoryCallInputView.model_fields}
+                | {
+                    "memories": shown_refs(
+                        retrievals.get(row.retrieval_id, {}), row.memories, actor.member_id
+                    )
+                }
             )
             for row in rows
         ],
