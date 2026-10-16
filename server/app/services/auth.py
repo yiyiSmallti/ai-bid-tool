@@ -192,14 +192,15 @@ HUMAN_SCOPES.update(ATTACHMENT_HUMAN_SCOPES)
 HUMAN_SCOPES.update(BID_REVIEW_HUMAN_SCOPES)
 
 # Gateway scopes held by administrators only. Project visibility limits the
-# task-scoped scopes further, in `task_access.visible_task`.
+# task-scoped scopes further, in `task_access.visible_task`. Members hold
+# `provider:write` for their own personal models; `provider_configs` keeps
+# company models to administrators.
 ADMIN_ONLY_SCOPES = {
     "member:manage",
     "credential:manage",
     "clef:manage",
     "trust-anchor:manage",
     "confidential:write",
-    "provider:write",
 }
 # A must_change_password session may call only these routes.
 PASSWORD_CHANGE_ROUTES = {"auth_session_show", "auth_session_delete", "account_password_change"}

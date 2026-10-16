@@ -42,8 +42,9 @@ class ProviderSettingsData(Contract):
     capability: Literal["llm_extract"] = "llm_extract"
     configured: bool
     current: ProviderRevisionMetadata | None
-    # Every saved model's current revision, the default model first.
-    models: list[ProviderRevisionMetadata] = Field(default_factory=list, max_length=20)
+    # Every visible model's current revision, the default model first: up to
+    # twenty company models and twenty of the caller's own personal models.
+    models: list[ProviderRevisionMetadata] = Field(default_factory=list, max_length=40)
     default_slot: UUID | None = None
     reasoning: list[ReasoningChoice] = Field(max_length=8)
     actions: list[ActionHint] = Field(max_length=16)

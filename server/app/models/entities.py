@@ -1551,6 +1551,8 @@ class UsageRecord(Base):
     browser_units: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=sql_text("0")
     )
+    # Filled by the attribution trigger: the member on whose behalf the call ran.
+    member_id: Mapped[UUID | None] = mapped_column(nullable=True)
     __table_args__ = (
         CheckConstraint(
             "(((call_id IS NULL) OR ((job_id IS NOT NULL) AND (run_id IS NOT NULL))))",
@@ -1626,6 +1628,8 @@ class VendorCall(Base):
     provider_identity: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, default=dict, server_default=sql_text("'{}'::jsonb")
     )
+    # Filled by the attribution trigger: the member on whose behalf the call ran.
+    member_id: Mapped[UUID | None] = mapped_column(nullable=True)
     __table_args__ = (
         CheckConstraint(
             "((((capability)::text = ANY ((ARRAY['llm'::character varying, 'vision'::character varying, 'ocr'::character varying, 'search'::character varying, 'embedding'::character varying, 'browser'::character varying])::text[])) AND ((request_sha256)::text ~ '^[0-9a-f]{64}$'::text) AND (jsonb_typeof(provider_identity) = 'object'::text)))",

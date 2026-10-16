@@ -6,7 +6,7 @@ The tables stay empty in a personal database.
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -74,5 +74,29 @@ class TaskMember(Base):
     member_id: Mapped[UUID] = mapped_column(ForeignKey("members.id"), primary_key=True)
     role: Mapped[str] = mapped_column(String(10), nullable=False)
     added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
+
+
+class MemberSetting(Base):
+    """A member's own default model; null uses the company default."""
+
+    __tablename__ = "member_settings"
+    member_id: Mapped[UUID] = mapped_column(ForeignKey("members.id"), primary_key=True)
+    default_slot: Mapped[UUID | None] = mapped_column(
+        ForeignKey("provider_slots.slot"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
+
+
+class MemberQuota(Base):
+    """A member's monthly cap on company-model tokens; null is unlimited."""
+
+    __tablename__ = "member_quotas"
+    member_id: Mapped[UUID] = mapped_column(ForeignKey("members.id"), primary_key=True)
+    monthly_company_tokens: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
     )

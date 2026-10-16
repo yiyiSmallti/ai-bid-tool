@@ -6,6 +6,16 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Gateway models and quotas
+
+- On a gateway administrators manage company models; each member can add
+  personal models with their own key, on an endpoint from
+  `BID_PERSONAL_MODEL_ENDPOINTS`, that nobody else sees.
+- A member picks their own default model with `PUT /account/default-model`.
+- Administrators cap a member's monthly company-model tokens with
+  `bid member quota`; a job past the cap fails with `member_quota_exceeded`.
+  `bid member usage` reports a member's calls and tokens by model.
+
 ## 2026-10-15: Gateway private memory
 
 - On a gateway a member keeps private memory that only they see and change,
