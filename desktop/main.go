@@ -82,6 +82,7 @@ func main() {
 	}
 	runner := &WorkspaceRunner{Secrets: Keychain{}, NewBackend: newBackend}
 	app := NewNativeApp()
+	app.Runner = runner
 
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
@@ -122,17 +123,7 @@ func main() {
 				mygo.App.Quit()
 				return
 			}
-			win.Update(func() {
-				app.Client = opened.Client
-				if err != nil || (opened.Workspace.Kind == "enterprise" && opened.Account == nil) {
-					app.navigate("/login")
-					if err != nil {
-						app.Error = err.Error()
-					}
-					return
-				}
-				app.navigate("/org/tasks")
-			})
+			win.Update(func() { app.opened(opened, err) })
 		}()
 	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { runner.Stop() })
