@@ -889,7 +889,16 @@ class Job(Base):
             name="job_actor_shape",
         ),
         CheckConstraint(
-            "(((((kind)::text = 'provider_test'::text) AND (task_id IS NULL) AND (document_id IS NULL)) OR (((kind)::text = 'bid_review_prepare'::text) AND (task_id IS NOT NULL) AND (document_id IS NULL)) OR (((kind)::text = ANY ((ARRAY['bid_review'::character varying, 'bid_review_report'::character varying])::text[])) AND (task_id IS NOT NULL) AND (document_id IS NULL) AND (bid_submission_document_id IS NOT NULL)) OR (((kind)::text <> ALL ((ARRAY['provider_test'::character varying, 'bid_review_prepare'::character varying, 'bid_review'::character varying, 'bid_review_report'::character varying])::text[])) AND (task_id IS NOT NULL) AND (document_id IS NOT NULL))))",
+            "(((kind)::text = ANY (ARRAY['provider_test', 'package_import']) AND task_id IS NULL"
+            " AND document_id IS NULL)"
+            " OR ((kind)::text = ANY (ARRAY['bid_review_prepare', 'package_export'])"
+            " AND task_id IS NOT NULL AND document_id IS NULL)"
+            " OR ((kind)::text = ANY (ARRAY['bid_review', 'bid_review_report'])"
+            " AND task_id IS NOT NULL AND document_id IS NULL"
+            " AND bid_submission_document_id IS NOT NULL)"
+            " OR ((kind)::text <> ALL (ARRAY['provider_test', 'package_import',"
+            " 'bid_review_prepare', 'package_export', 'bid_review', 'bid_review_report'])"
+            " AND task_id IS NOT NULL AND document_id IS NOT NULL))",
             name="job_document_binding",
         ),
         CheckConstraint(
