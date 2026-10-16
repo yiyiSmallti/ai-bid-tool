@@ -101,7 +101,9 @@ signs in as a member, and every human decision records which member made it.
   `package_task_exists`, `package_row_conflict`, `package_library_forbidden`,
   `package_citation_unresolved` and `package_reference_unresolved` fail the
   job with nothing written. A repeat of the same package by the same member
-  returns the first import unless it failed.
+  returns the first import unless it failed. The imported project starts with
+  `export_to_personal_allowed` cleared, so the receiving administrator decides
+  whether it may leave again.
 
 ## How it works
 
