@@ -19,6 +19,7 @@ import (
 type paths struct {
 	server, python, pgBin string
 	renderer, ocrData     string // empty when the resources lack them
+	preview               string // export page-preview renderer; empty when absent
 }
 
 func locate() (paths, error) {
@@ -52,6 +53,9 @@ func locate() (paths, error) {
 	}
 	if v := filepath.Join(resources, "tessdata"); exists(v) {
 		p.ocrData = v
+	}
+	if v := filepath.Join(resources, "preview", "bid-docx-preview"); exists(v) {
+		p.preview = v
 	}
 	return p, nil
 }
@@ -151,5 +155,5 @@ func newBackend() (*Backend, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Backend{DataDir: data, LogDir: logs, SocketDir: socket, ServerDir: p.server, Python: p.python, PGBin: p.pgBin, Renderer: p.renderer, OCRData: p.ocrData}, nil
+	return &Backend{DataDir: data, LogDir: logs, SocketDir: socket, ServerDir: p.server, Python: p.python, PGBin: p.pgBin, Renderer: p.renderer, OCRData: p.ocrData, Preview: p.preview}, nil
 }

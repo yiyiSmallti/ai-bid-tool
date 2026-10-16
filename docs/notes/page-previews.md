@@ -41,8 +41,11 @@ reuses one `export_preview` job keyed by export ID and file hash, and records
 `export.preview_opened`. The job submission carries the export's immutable
 storage key, size and hash, because the worker role cannot read exports. The
 worker checks the bytes against that hash and sends them only to the private
-converter in [converter.py](../../server/app/providers/converter.py), a
-Gotenberg (LibreOffice) service set by `BID_CONVERTER_URL`. The returned PDF is
+converter in [converter.py](../../server/app/providers/converter.py): a
+Gotenberg (LibreOffice) service set by `BID_CONVERTER_URL`, or else the desktop's
+`bid-docx-preview` helper set by `BID_PREVIEW_RENDERER`, which lays the DOCX out
+with docx-preview in an offline WebKit view and prints it to A4 pages. Its
+pagination approximates Word's. The returned PDF is
 opened in a disposable PDF child and bounded by `BID_PREVIEW_MAX_PAGES` before it is stored encrypted
 under the org's prefix and recorded in the job result. An unreadable, oversized
 or failed conversion stores nothing; the job stays failed until an explicit

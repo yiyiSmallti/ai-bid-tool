@@ -272,10 +272,10 @@ class Processor:
                     await simulate(execution, self, llm)
                     return
                 if kind == "export_preview":
-                    from app.providers.converter import create_converter
+                    from app.providers.converter import create_preview_converter
                     from app.services.page_previews import convert
 
-                    converter = create_converter(self.settings, self.converter_transport)
+                    converter = create_preview_converter(self.settings, self.converter_transport)
                     await convert(execution, self.storage, converter, self.settings)
                     return
                 if kind in {"annotation_render", "annotation_release"}:

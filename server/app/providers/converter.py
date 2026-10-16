@@ -1,8 +1,14 @@
-"""DOCX to PDF conversion through an operator-run Gotenberg (LibreOffice) service.
+"""DOCX to PDF conversion through an operator-run Gotenberg (LibreOffice) service, or on
+the desktop through the bundled WebKit renderer for export page previews.
 
-Only the released export file leaves the worker, and only to this private service. The
-returned PDF is untrusted until the caller has opened and bounded it.
+Only the released export file leaves the worker, and only to this private service or a
+local child process. The returned PDF is untrusted until the caller has opened and
+bounded it.
 """
+
+import asyncio
+import tempfile
+from pathlib import Path
 
 import httpx
 
@@ -62,7 +68,71 @@ class GotenbergConverter:
         return b"".join(chunks)
 
 
+class WebKitConverter:
+    """Runs bid-docx-preview: docx-preview lays the DOCX out in WebKit, printed to A4.
+
+    Pagination approximates Word's; the preview is for reading, not layout acceptance.
+    """
+
+    name = "webkit"
+
+    def __init__(self, binary: str, timeout: float):
+        self.binary = binary
+        self.timeout = timeout
+
+    @property
+    def identity(self) -> str:
+        return f"{self.name}:docx-preview"
+
+    async def docx_to_pdf(self, content: bytes, name: str) -> bytes:
+        with tempfile.TemporaryDirectory(prefix="bid-preview-") as work:
+            source, target = Path(work, "in.docx"), Path(work, "out.pdf")
+            await asyncio.to_thread(source.write_bytes, content)
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    self.binary,
+                    str(source),
+                    str(target),
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+            except OSError as exc:
+                raise ProviderFailure(
+                    "Preview renderer is unavailable", code="converter_unavailable"
+                ) from exc
+            try:
+                async with asyncio.timeout(self.timeout):
+                    await process.communicate()
+            except TimeoutError as exc:
+                process.kill()
+                await process.wait()
+                raise ProviderFailure(
+                    "Preview renderer timed out", code="converter_failed", retryable=True
+                ) from exc
+            if process.returncode != 0:
+                raise ProviderFailure("Converter rejected the document", code="converter_failed")
+            return await asyncio.to_thread(_read_output, target)
+
+
+def _read_output(path: Path) -> bytes:
+    if not path.is_file():
+        raise ProviderFailure("Converter rejected the document", code="converter_failed")
+    if path.stat().st_size > MAX_PDF_BYTES:
+        raise ProviderFailure("Converted PDF exceeds the preview limit", code="preview_too_large")
+    return path.read_bytes()
+
+
 def create_converter(settings: Settings, transport: httpx.AsyncBaseTransport | None = None):
     if not settings.converter_url:
         return None
     return GotenbergConverter(settings.converter_url, settings.converter_timeout_seconds, transport)
+
+
+def create_preview_converter(settings: Settings, transport: httpx.AsyncBaseTransport | None = None):
+    """Export previews also accept the desktop renderer; bid review keeps Gotenberg only."""
+    if converter := create_converter(settings, transport):
+        return converter
+    if settings.preview_renderer:
+        return WebKitConverter(settings.preview_renderer, settings.converter_timeout_seconds)
+    return None

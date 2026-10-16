@@ -145,6 +145,9 @@ class Settings(PDFSettings, DeploymentSettings):
     perplexity_api_key: SecretStr | None = None
     # Private Gotenberg (LibreOffice) base URL for export page previews; unset disables them.
     converter_url: str | None = None
+    # Desktop alternative when no Gotenberg is configured: the bundled bid-docx-preview
+    # binary, which lays the DOCX out in the system WebKit (desktop/preview).
+    preview_renderer: str | None = None
     review_office_profile: str | None = Field(
         default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$"
     )

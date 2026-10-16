@@ -125,10 +125,11 @@ later version migrates the restored database again and backs it up first.
 
 Vendor search uses the Perplexity API: add a Perplexity credential under
 服务凭据 in the native app; until then search reports itself unavailable. Screenshot
-annotation and local OCR use the bundled renderer and language data. The
-developer app configures no Office converter and no browser sandbox, so export
-page previews and sandbox captures are unavailable; their desktop outcomes are
-decisions D5 and D6 in [desktop packaging](../plan/desktop-packaging.md#decisions).
+annotation and local OCR use the bundled renderer and language data. Export
+page previews use the bundled `bid-docx-preview` helper that
+`scripts/build-docx-preview.sh` builds; bid review conversion and sandbox
+captures are unavailable. Their desktop outcomes are decisions D5 and D6 in
+[desktop packaging](../plan/desktop-packaging.md#decisions).
 
 ## Verify without using default account data
 

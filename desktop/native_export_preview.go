@@ -9,6 +9,15 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+// previewFailures explains conversion outcomes; the file itself stays downloadable.
+var previewFailures = map[string]string{
+	"preview_unavailable":      "本机没有可用的在线预览转换器；请下载文件后用 Word 或 WPS 查看。",
+	"converter_unavailable":    "预览转换器暂不可用，请重试；仍失败请下载文件后查看。",
+	"converter_failed":         "转换失败，请重试；仍失败请下载文件后查看。",
+	"converter_invalid_output": "转换结果无法读取，请重试；仍失败请下载文件后查看。",
+	"preview_too_large":        "文件超出在线预览上限，请下载文件后查看。",
+}
+
 type exportPreviewPanel struct {
 	id, title, zoom, pageInput string
 	state                      Object
@@ -117,7 +126,12 @@ func (p *exportPreviewPanel) View(c *ui.Context, a *NativeApp) {
 		a.Request("POST", "/exports/"+p.id+"/preview", nil, func(r Result) { p.state = r.Data; p.poll(a) })
 	})
 	if status == "failed" {
-		nativeText(c, str(object(p.state["error"]), "message"))
+		failure := object(p.state["error"])
+		text, known := previewFailures[str(failure, "code")]
+		if !known {
+			text = str(failure, "message")
+		}
+		nativeText(c, text)
 		nativeButton(c, "重试导出预览").Disabled(a.Busy).OnClick(func() {
 			a.Request("POST", "/exports/"+p.id+"/preview?retry=true", nil, func(r Result) { p.state = r.Data; p.poll(a) })
 		})

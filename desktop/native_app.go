@@ -282,6 +282,10 @@ func (a *NativeApp) handleError(err error) bool {
 			a.Error = settingsFailures[api.Code]
 			return true
 		}
+		if api.Code == "preview_unavailable" {
+			a.Error = previewFailures[api.Code]
+			return true
+		}
 		if api.Status == 403 || api.Status == 404 {
 			a.cancel()
 			a.ctx, a.cancel = context.WithCancel(context.Background())
