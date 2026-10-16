@@ -6,6 +6,13 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Backup and restore verify
+
+- `python -m app.admin backup --dir` writes a database dump, a snapshot of
+  stored files and a manifest of row counts and file hashes, keeping 14 days.
+- `python -m app.admin restore --verify` restores a backup into a scratch
+  database and fails when a row count, the dump or any file differs.
+
 ## 2026-10-15: Package round trip
 
 - A project taken personal → gateway → personal keeps its requirement and

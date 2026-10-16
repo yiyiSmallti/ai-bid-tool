@@ -28,6 +28,20 @@ signs in as a member, and every human decision records which member made it.
 - The first administrator is created on the gateway host with
   `python -m app.admin member create --role admin --login <login>`. It prints
   the one-time password to that terminal only.
+- `python -m app.admin backup --dir <dir>` writes `bid-backup-<UTC time>`:
+  `database.dump` (`pg_dump -Fc` with the migration owner), `files/` (stored
+  objects as written, still encrypted; local volume or S3 bucket) and
+  `manifest.json` with the dump's sha256, migration revisions, every table's
+  row count and each file's size and sha256. Row counts are read in the
+  snapshot the dump uses. Backups older than `--keep-days` (14) and unfinished
+  ones are removed, never the newest. A directory inside the data directory is
+  refused (`backup_inside_storage`). `BID_PG_BIN` selects the PostgreSQL 16
+  client tools, else `PATH`.
+- `python -m app.admin restore --verify <backup>` restores the dump into a
+  scratch database, compares row counts and revisions with the manifest and
+  every file with its hash, then drops the scratch database. A changed dump
+  fails with `backup_dump_altered`; changed, missing or unlisted files and
+  differing row counts fail with `backup_verify_failed` listing them (exit 4).
 - Members sign in with `POST /auth/session` and `{"login", "password"}`. An
   initial or reset password must be changed with `POST /account/password`
   before any other route; until then the session reaches only
@@ -342,6 +356,8 @@ signs in as a member, and every human decision records which member made it.
   [packages.py](../../server/app/api/packages.py) routes,
   [packages.py](../../cli/bid_cli/packages.py) CLI
 - [admin.py](../../server/app/admin.py) `initialize_database`, `installation_mode`
+- [backup.py](../../server/app/services/backup.py) `backup`, `verify`;
+  [test_backup.py](../../server/tests/test_backup.py)
 - [db.py](../../server/app/core/db.py) `Database.verify_role`
 - [auth.py](../../server/app/services/auth.py) `authenticate`, `access_key_refused`,
   `member_session_identity`, `agent_identity`
