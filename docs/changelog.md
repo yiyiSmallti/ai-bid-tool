@@ -6,6 +6,13 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Task progress within its snapshot budget
+
+- Reading an extraction's requirements loads each chunk once instead of once
+  per requirement, and a check job's authorization reads its draft rows in one
+  query. A task with large drafts and several checks no longer times out on
+  its progress page.
+
 ## 2026-10-16: Record ids survive outbound redaction
 
 - Redaction no longer masks digit groups inside a hyphenated UUID as an account

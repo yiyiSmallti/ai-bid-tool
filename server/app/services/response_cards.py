@@ -154,19 +154,24 @@ async def extraction_scope(session: AsyncSession, task_id: UUID, job_id: UUID):
         raise not_found()
     if job.status != "succeeded":
         fail("invalid_extraction_job", "Choose a succeeded extraction job")
-    located = list(
-        (
-            await session.execute(
-                select(Requirement, Chunk)
-                .join(Chunk, Chunk.id == Requirement.chunk_id)
-                .where(
-                    Requirement.job_id == job_id,
-                    Requirement.task_id == task_id,
-                    Requirement.document_id == job.document_id,
-                )
+    found = list(
+        await session.scalars(
+            select(Requirement).where(
+                Requirement.job_id == job_id,
+                Requirement.task_id == task_id,
+                Requirement.document_id == job.document_id,
             )
-        ).all()
+        )
     )
+    # Each chunk is read once: joined per requirement, its text and blocks were
+    # sent again for every requirement it holds.
+    chunks = {
+        row.id: row
+        for row in await session.scalars(
+            select(Chunk).where(Chunk.id.in_({row.chunk_id for row in found}))
+        )
+    }
+    located = [(row, chunks[row.chunk_id]) for row in found if row.chunk_id in chunks]
 
     def position(pair):
         requirement, chunk = pair
