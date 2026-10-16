@@ -110,6 +110,8 @@ class ProviderConfigInput(Contract):
     slot: UUID | None = None
     # Save as an additional model instead of revising an existing one.
     new: bool = False
+    # A personal model is one gateway member's own; personal mode has only company models.
+    owner: Literal["company", "personal"] = "company"
     name: str | None = Field(default=None, min_length=1, max_length=60)
     provider: Literal["anthropic", "openai"]
     model: str = Field(min_length=1, max_length=100)
@@ -200,7 +202,10 @@ class ProviderConfigView(Contract):
     capability: str
     slot: UUID
     name: str | None
+    owner: Literal["company", "personal"] = "company"
+    # The company default, and the model the caller's own runs use by default.
     is_default: bool
+    is_member_default: bool = False
     provider: str
     model: str
     base_url: str | None

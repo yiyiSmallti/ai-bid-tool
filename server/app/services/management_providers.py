@@ -13,8 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
 from app.core.security import TokenSigner
-from app.models.provider_configs import ProviderConfig
-from app.providers.configured import latest_revisions, live_slots
+from app.models.provider_configs import ProviderConfig, ProviderSlot
+from app.providers.configured import hidden_slots, latest_revisions, live_slots
 from app.schemas.contracts import Cost, Result
 from app.schemas.management_pages import (
     DETAIL_BYTE_LIMIT,
@@ -68,6 +68,10 @@ CONFIG_COLUMNS = (
     ProviderConfig.slot,
     ProviderConfig.data,
     ProviderConfig.created_at,
+    select(ProviderSlot.owner_member_id)
+    .where(ProviderSlot.slot == ProviderConfig.slot)
+    .scalar_subquery()
+    .label("owner_member_id"),
 )
 
 
@@ -85,7 +89,10 @@ def safe_reasoning(levels) -> list[ReasoningChoice]:
 
 
 def config_statement(actor):
-    return select(*CONFIG_COLUMNS).where(ProviderConfig.capability == "llm_extract")
+    return select(*CONFIG_COLUMNS).where(
+        ProviderConfig.capability == "llm_extract",
+        ProviderConfig.slot.not_in(hidden_slots(actor.member_id)),
+    )
 
 
 def metadata(actor, row) -> ProviderRevisionMetadata:
@@ -96,6 +103,7 @@ def metadata(actor, row) -> ProviderRevisionMetadata:
         configuration = ProviderConfigInput(
             capability="llm_extract",
             slot=row["slot"],
+            owner="personal" if row["owner_member_id"] is not None else "company",
             **{key: saved.get(key) for key in CONFIG_FIELDS},
         )
         return ProviderRevisionMetadata(
@@ -134,14 +142,18 @@ async def settings(session: AsyncSession, actor: Identity) -> ProviderSettingsDa
         )
         reason = "human_required"
         unavailable = current is None
+        # A member configures personal models; testing the company default is an administrator's.
+        tester = write and (actor.member_id is None or actor.member_role == "admin")
         actions = [
             ActionHint(action="configure", allowed=write, reason=None if write else reason),
             ActionHint(
                 action="test",
-                allowed=write and not unavailable,
+                allowed=tester and not unavailable,
                 reason=None
-                if write and not unavailable
+                if tester and not unavailable
                 else "provider_unavailable"
+                if tester
+                else "scope_required"
                 if write
                 else reason,
             ),
