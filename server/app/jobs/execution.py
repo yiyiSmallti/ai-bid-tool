@@ -52,6 +52,8 @@ JOB_SCOPES = {
     "bid_review_prepare": "bid-review:prepare",
     "bid_review": "bid-review:run",
     "bid_review_report": "bid-review:report:render",
+    "package_export": "package:export",
+    "package_import": "package:import",
 }
 
 
