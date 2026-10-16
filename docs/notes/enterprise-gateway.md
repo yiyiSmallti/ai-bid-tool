@@ -201,6 +201,15 @@ signs in as a member, and every human decision records which member made it.
   password is shown once on that page and kept nowhere else. The task sidebar
   of every member adds 项目成员, where the owner or an administrator hands the
   project over and removes members.
+- On a gateway the model page
+  ([native_settings_models.go](../../desktop/native_settings_models.go))
+  splits 公司模型 from 我的个人模型. Only an administrator adds, edits, tests
+  or sets the default of a company model; any member saves personal models
+  and picks 我的默认 through `PUT /account/default-model`. The memory page has
+  公共记忆 and 我的私有记忆 tabs; a member without `memory:edit` cannot add
+  public memory. 我的用量 ([native_usage.go](../../desktop/native_usage.go))
+  shows the member's monthly usage, and an administrator's 用量 picks any
+  member.
 
 ## Pitfalls
 
@@ -225,6 +234,11 @@ signs in as a member, and every human decision records which member made it.
 - The client never uses a system proxy for a gateway, so a gateway reachable
   only through one cannot be added.
 - A pinned certificate that the gateway renews must be confirmed again.
+- Each saved model's `configuration` carries its `owner` in personal
+  installations too; the client rejects a model without it.
+- An administrator's model page and private-memory tab never show another
+  member's personal models or private memory; usage lists them only as
+  personal.
 - `GET /members` needs `member:manage`, so only an administrator can add
   project members from the client; an owner who is not one can hand over and
   remove but not add.
@@ -258,6 +272,7 @@ signs in as a member, and every human decision records which member made it.
   [native_workspaces.go](../../desktop/native_workspaces.go),
   [native_signin_test.go](../../desktop/native_signin_test.go),
   [native_members.go](../../desktop/native_members.go),
+  [native_usage.go](../../desktop/native_usage.go),
   [native_admin_test.go](../../desktop/native_admin_test.go) against a real
   enterprise server
 - [test_deployment_mode.py](../../server/tests/test_deployment_mode.py),
