@@ -117,14 +117,19 @@ func TestEnterpriseAdminPages(t *testing.T) {
 	updates := make(chan func(), 64)
 	app.Dispatch = func(apply func()) { updates <- apply }
 	app.ConfirmDialog = func(string, string) (bool, error) { return true, nil }
+	// A real server hashes passwords and runs migrations at its own pace, so
+	// pumping waits for the in-flight requests rather than a quiet interval.
 	pump := func() {
-		for idle := 0; idle < 8; {
+		deadline := time.After(60 * time.Second)
+		for idle := 0; app.Busy || idle < 3; {
 			select {
 			case apply := <-updates:
 				apply()
 				idle = 0
 			case <-time.After(60 * time.Millisecond):
 				idle++
+			case <-deadline:
+				t.Fatalf("requests still running at %s", app.Route.Path)
 			}
 		}
 	}
