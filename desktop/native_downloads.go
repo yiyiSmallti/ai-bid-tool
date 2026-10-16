@@ -48,7 +48,7 @@ func (c *APIClient) verifiedDownload(ctx context.Context, method, linkPath, expe
 			fixed[key] = value
 		}
 	}
-	response, err := c.send(ctx, "GET", parsed.RequestURI(), nil, "")
+	response, err := c.transfer(ctx, "GET", parsed.RequestURI(), nil, "")
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (c *APIClient) BinaryImage(ctx context.Context, path, expectedMIME string, 
 	if expectedMIME != "image/png" && expectedMIME != "image/jpeg" {
 		return nil, errors.New("预览图片类型不受支持")
 	}
-	response, err := c.send(ctx, "GET", path, nil, "")
+	response, err := c.transfer(ctx, "GET", path, nil, "")
 	if err != nil {
 		return nil, err
 	}
