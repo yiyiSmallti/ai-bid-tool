@@ -6,6 +6,17 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-15: Project package export
+
+- `POST /packages/export` and `bid package export` build a `bid-package/1`
+  zip of one project: its documents, rows and the library items it binds,
+  with a manifest of file and table hashes. Keys, credentials, tokens, memory
+  and confidential plaintext stay out.
+- `bid package status` shows the export report and `bid package download`
+  saves the package after checking its hash. On a gateway a project exports
+  only while its owner allows export to personal installations.
+- Evidence that points at a screenshot is not packaged yet.
+
 ## 2026-10-15: Client network behavior on a gateway
 
 - Uploads and downloads no longer fail at the 90-second request limit; they
