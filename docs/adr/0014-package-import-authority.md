@@ -42,17 +42,24 @@ hold:
 - the row belongs to the import's task, or is a library row the import
   creates.
 
-Updates and deletes are never admitted this way; immutability guards are
-unchanged, and consistency checks still run on
-imported rows. The import writes everything in one transaction, so no other session
-sees the task before the import commits. Imported human decisions are
-attributed to the importing member and carry `imported_from` with the source
-mode and original timestamp; agents and tokens still cannot confirm anything.
+The import conditions sit on the checks that make a row the live step of its
+workflow. Imported rows skip the lease and actor checks, currency against later
+edits (current inputs, active selections and evidence), cross-table ordering,
+run inputs the package omits, retired library items and the order of a review
+chain written in one statement. The checks on a row's own content and bindings
+still run. Updates and deletes are never admitted this way, apart from the
+search-vector refresh of library rows the import creates; immutability guards
+are unchanged. The import writes everything in one transaction, so no other
+session sees the task before the import commits. Decisions keep their
+timestamps; the `package.imported` audit entry, attributed to the importing
+member, records the source in `imported_from`. Agents and tokens still cannot
+confirm anything.
 
 ## Consequences
 
-- Each guard on an included table gains one early check. A guard added later
-  to an included table must decide whether imports pass it.
+- Each guard on an included table gains import conditions on its live-step
+  checks. A guard added later to an included table must decide whether imports
+  pass it.
 - A failure in any row aborts the whole import with no writes.
 - The authority is as strong as worker execution: code running inside the
   import job can write the imported task's history. The import code verifies the
