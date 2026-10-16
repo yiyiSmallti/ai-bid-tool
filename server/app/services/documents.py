@@ -46,7 +46,7 @@ async def list_tasks(session: AsyncSession, identity: Identity):
     identity.require("task:read")
     from app.services.task_access import visibility
 
-    query = select(Task).order_by(Task.created_at)
+    query = select(Task).order_by(Task.created_at.desc(), Task.id.desc())
     condition = visibility(identity)
     if condition is not None:
         query = query.where(condition)
