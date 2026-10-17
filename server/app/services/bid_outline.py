@@ -28,12 +28,13 @@ from app.schemas.whole_bid import (
 from app.services import documents
 
 CHAPTER = re.compile(r"^第\s*[一二三四五六七八九十百零〇\d]+\s*[章篇部]分?\s*(.*)$")
-# A table-of-contents line carries dot leaders or ends in its page number.
-TOC_LINE = re.compile(r"(\.{3,}|…{2,}|·{3,}|\s\d{1,4}$|\D\d{1,4}$)")
+# A table-of-contents line carries dot leaders or ends in its page number, bare or as - 12 -.
+TOC_LINE = re.compile(r"(\.{3,}|…{2,}|·{3,}|\s\d{1,4}$|\D\d{1,4}$|[-—]\s*\d{1,4}\s*[-—]$)")
 FORM_LABEL = re.compile(
     r"^(附件|附表|格式)\s*([0-9]+(?:[-－—][0-9]+)?|[一二三四五六七八九十]+)\s*[：:．.、]?\s*(.*)$"
 )
 LIST_HEADING = re.compile(r"^([一二三四五六七八九十]+)、\s*(.+)$")
+LIST_ITEM = re.compile(r"^(\d{1,2})、\s*(.+)$")
 PAGE_FOOTER = re.compile(r"^[-—\s]*(第\s*)?\d{1,4}(\s*页)?(\s*/\s*\d+|\s*共\s*\d+\s*页)?[-—\s]*$")
 SPACED_CHAR = re.compile(r"[\u4e00-\u9fff]")
 DATE_CHARS = set("年月日时地址间")
@@ -44,9 +45,11 @@ COVER_TITLE = re.compile(
 
 # A scoring rule row: item, score range such as 0~25 or 0-10分, then the rule.
 SCORING_ROW = re.compile(
-    r"^([^\t\d][^\t]{1,40})\t\s*(\d+(?:\.\d+)?\s*[~～\-—至]\s*\d+(?:\.\d+)?)\s*分?\s*(?:\t|$)"
+    r"^([^\t\d][^\t]{0,40})\t\s*(\d+(?:\.\d+)?\s*[~～\-—至]\s*\d+(?:\.\d+)?)\s*分?\s*(?:\t|$)"
 )
-SUBJECTIVE_ITEM = re.compile(r"方案|措施|组织|人员管理|设施|配置|建议|特色|机制|计划|保障|管理制度")
+SUBJECTIVE_ITEM = re.compile(
+    r"方案|预案|措施|组织|人员管理|设施|配置|建议|特色|机制|计划|保障|制度|需求理解"
+)
 OBJECTIVE_ITEM = re.compile(r"报价|价格|业绩|相符|编制")
 
 KIND_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -136,17 +139,54 @@ def chapter_role(title: str) -> ChapterRole:
 
 def chapter_heads(lines: list[Line]) -> list[tuple[int, str]]:
     """Chapter heading lines, skipping the table of contents and in-text references."""
-    found: dict[str, tuple[int, str]] = {}
+    candidates: list[tuple[int, int, int | None, str]] = []
     for index, line in enumerate(lines):
         match = CHAPTER.match(line.text)
         if not match or len(line.text) > 40 or SENTENCE.search(line.text):
             continue
         if TOC_LINE.search(line.text):
             continue
-        title = re.sub(r"\s+", "", line.text)
+        text, last = line.text, index
+        # A bare 第四章 often carries its title on the next line.
+        following = lines[index + 1].text if index + 1 < len(lines) else ""
+        if not match.group(1).strip(" ：:") and title_line(following):
+            text, last = text + following, index + 1
+        candidates.append((index, last, chapter_number(line.text), re.sub(r"\s+", "", text)))
+
+    # A contents page without page numbers, or a sentence listing the chapters, puts
+    # consecutively numbered headings on adjacent lines.
+    def listed(a, b) -> bool:
+        return b[0] - a[1] == 1 and a[2] is not None and b[2] == a[2] + 1
+
+    found: dict[str, tuple[int, str]] = {}
+    for position, head in enumerate(candidates):
+        before = candidates[position - 1] if position else None
+        after = candidates[position + 1] if position + 1 < len(candidates) else None
+        if (before and listed(before, head)) or (after and listed(head, after)):
+            continue
         # A repeated heading is the table of contents first and the chapter later.
-        found[title] = (index, title)
+        found[head[3]] = (head[0], head[3])
     return sorted(found.values())
+
+
+NUMERALS = "零一二三四五六七八九"
+
+
+def chapter_number(text: str) -> int | None:
+    match = re.match(r"^第\s*([一二三四五六七八九十零〇\d]+)", text)
+    if not match:
+        return None
+    value = match.group(1)
+    if value.isdigit():
+        return int(value)
+    if "十" in value:
+        tens, _, ones = value.partition("十")
+        return (NUMERALS.index(tens) if tens else 1) * 10 + (NUMERALS.index(ones) if ones else 0)
+    return NUMERALS.index(value) if len(value) == 1 and value in NUMERALS else None
+
+
+def title_line(text: str) -> bool:
+    return 0 < len(text) <= 20 and not SENTENCE.search(text) and not CHAPTER.match(text)
 
 
 def place(lines: list[Line]) -> dict:
@@ -189,8 +229,40 @@ def form_title(label_rest: str, body: list[Line]) -> tuple[str, bool]:
     return (texts[0][:80] if texts else "未命名格式"), False
 
 
+def list_forms(lines: list[Line]) -> list[tuple[int, str, str, bool]]:
+    """Forms of a format chapter numbered as a list: 一、 groups, or the 1、 2、 forms in them.
+
+    Numbered items count only in sequence from 1 under each group, so the numbered
+    clauses inside a form are not taken for forms. Groups holding such forms, like
+    一、商务响应文件有关格式, stay as divider pages before them.
+    """
+    groups: list[tuple[int, str, str, bool]] = []
+    items: list[tuple[int, str, str, bool]] = []
+    expected = 1
+    for index, line in enumerate(lines):
+        match = LIST_HEADING.match(line.text)
+        if match and len(line.text) <= 30 and not SENTENCE.search(match.group(2)):
+            groups.append((index, f"{match.group(1)}、", match.group(2), True))
+            expected = 1
+            continue
+        item = LIST_ITEM.match(line.text)
+        if (
+            groups
+            and item
+            and int(item.group(1)) == expected
+            and len(line.text) <= 40
+            and "\t" not in line.text
+            and not SENTENCE.search(item.group(2))
+        ):
+            items.append((index, f"{item.group(1)}、", item.group(2), False))
+            expected += 1
+    if len(items) > len(groups):
+        return sorted(groups + items)
+    return [(index, label, rest, False) for index, label, rest, _ in groups]
+
+
 def split_forms(lines: list[Line]) -> list[OutlineForm]:
-    marks: list[tuple[int, str, str]] = []
+    marks: list[tuple[int, str, str, bool]] = []
     seen: set[str] = set()
     for index, line in enumerate(lines):
         match = FORM_LABEL.match(line.text)
@@ -198,20 +270,19 @@ def split_forms(lines: list[Line]) -> list[OutlineForm]:
             label = f"{match.group(1)}{match.group(2)}"
             if label not in seen:
                 seen.add(label)
-                marks.append((index, label, match.group(3)))
+                marks.append((index, label, match.group(3), False))
     if not marks:
-        for index, line in enumerate(lines):
-            match = LIST_HEADING.match(line.text)
-            if match and len(line.text) <= 30 and not SENTENCE.search(match.group(2)):
-                marks.append((index, f"{match.group(1)}、", match.group(2)))
+        marks = list_forms(lines)
     forms: list[OutlineForm] = []
-    for position, (index, label, rest) in enumerate(marks):
+    for position, (index, label, rest, divider) in enumerate(marks):
         end = marks[position + 1][0] if position + 1 < len(marks) else len(lines)
         body = lines[index + 1 : end]
         title, spaced = form_title(rest, body)
         kind = cast(
             FormKind,
-            "cover" if spaced or COVER_TITLE.match(title) else classify(title, KIND_RULES, "form"),
+            "cover"
+            if divider or spaced or COVER_TITLE.match(title)
+            else classify(title, KIND_RULES, "form"),
         )
         forms.append(
             OutlineForm(
@@ -228,13 +299,22 @@ def split_forms(lines: list[Line]) -> list[OutlineForm]:
 
 def scoring_items(lines: list[Line]) -> list[OutlineScoringItem]:
     items: list[OutlineScoringItem] = []
-    rows: list[tuple[int, re.Match[str]]] = []
+    rows: list[tuple[int, int, re.Match[str], str]] = []
     for index, line in enumerate(lines):
         match = SCORING_ROW.match(line.text.strip("\t"))
         if match and not SENTENCE.search(match.group(1)):
-            rows.append((index, match))
-    for position, (index, match) in enumerate(rows):
-        title = re.sub(r"\s+", "", match.group(1))
+            # An item name wrapped in its cell leaves its first part on the line before.
+            before = lines[index - 1].text if index else ""
+            wrapped = (
+                index > 0
+                and (not rows or rows[-1][1] < index - 1)
+                and "\t" not in before
+                and len(before) <= 20
+                and not re.search(r"[，。；！？：:]", before)
+            )
+            rows.append((index - 1 if wrapped else index, index, match, before if wrapped else ""))
+    for position, (_, index, match, head) in enumerate(rows):
+        title = re.sub(r"\s+", "", head + match.group(1))
         end = rows[position + 1][0] if position + 1 < len(rows) else len(lines)
         first = lines[index].text.strip("\t")[match.end() :]
         rule = " ".join("\n".join([first, *(line.text for line in lines[index + 1 : end])]).split())

@@ -12,7 +12,9 @@ solution that answers each scoring item.
 ## Requirements
 
 1. **Outline.** The tender's format chapter is found in the parsed document and
-   split into its numbered forms (附件 N, 格式 N or a numbered list). Each form
+   split into its numbered forms (附件 N, 格式 N or a numbered list; a list of
+   一、 groups holding 1、 2、 forms gives those forms, each group kept as a
+   `cover` divider before them). Each form
    keeps its label, title, source pages or Word location, verbatim text and a
    kind: `cover`, `letter`, `price`, `declaration`, `copy`, `deviation`,
    `scoring_index`, `roster`, `solution`, or `form` for any other form. A tender without a format chapter
@@ -26,7 +28,8 @@ solution that answers each scoring item.
    text, tab-separated rows becoming editable tables. Labels the
    installation can answer (bidder name, address, phone, legal representative,
    unified social credit code, project name and number) are filled from the task and the selected
-   company profile. Unknown values, prices, signatures and seals stay
+   company profile, whether the label precedes the blank or a bracketed hint
+   such as （招标人名称） follows it or stands alone in the text. Unknown values, prices, signatures and seals stay
    highlighted placeholders `【待填：…】`.
 3. **Copies.** A form asking for a copy of a licence or certificate shows the
    confirmed certificate pages selected on the task, or a placeholder page

@@ -150,7 +150,7 @@ FIELD_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("bidder", re.compile(r"^(投标人|供应商|企业|单位)(全称|名称)?(（[^）]*）)?[：:]?$")),
     ("signature", re.compile(r"签字|签名|盖章|公章|签章|印刷体")),
     ("price", re.compile(r"总价|报价|保证金|金额|人民币|万元|元整")),
-    ("project_both", re.compile(r"项目名称、项目编号|项目名称及编号")),
+    ("project_both", re.compile(r"项目名称[、及和]((项目|招标|采购)?编号)")),
     ("project_number", re.compile(r"(项目|招标|采购)编号[：:]?$")),
     ("project_name", re.compile(r"(采购项目|项目名称[：:]?)$")),
     ("tenderee", re.compile(r"招标人|采购人")),
@@ -175,6 +175,13 @@ FIELD_NAMES = {
     "credit_code": "统一社会信用代码",
     "date": "日期",
 }
+
+
+BRACKET_HINT = re.compile(r"^\s*[（(]([^（）()]{2,20})[）)]")
+BRACKET_FIELD = re.compile(r"[（(]([^（）()]{2,20})[）)]")
+# Fields a bracketed hint inside running text may be replaced by; a person's name is not
+# among them, since the text around it decides whose name is meant.
+NAMED_FIELDS = {"project_both", "project_number", "project_name", "tenderee", "bidder"}
 
 
 def short_title(title: str) -> str:
@@ -221,7 +228,8 @@ def tender_facts(text: str, task: Task, bidder: OrgProfileData | None) -> Facts:
 
     return Facts(
         project_name=first(r"项目名称[：:]\s*([^\n：:]{4,80}?)\s*(?:\n|项目编号|$)") or task.name,
-        project_number=first(r"项目编号[：:]\s*([0-9A-Za-z\-—_/（）()]{4,60})")
+        project_number=first(r"项目编号[：:]\s*([^\s，。；、：:]{4,40})")
+        or first(r"招标编号[：:]\s*([^\s，。；、：:]{4,40})")
         or task.tender_number,
         tenderee=first(r"(?:采购人|采购单位|招标人)(?:名称)?[：:]\s*([^\n，,。；]{2,60})"),
         bidder=bidder.name if bidder else None,
@@ -604,14 +612,40 @@ class Renderer:
                 self.run(paragraph, line["tail"] or "")
                 return
         label = ""
-        for piece in block.pieces:
+        pieces = list(block.pieces)
+        for position, piece in enumerate(pieces):
             if isinstance(piece, Text):
                 size = piece.size if piece.size and abs(piece.size - 12) > 1.5 else None
-                self.run(paragraph, piece.text, size=None if heading else size, bold=piece.bold)
+                self.hinted_text(
+                    paragraph, piece.text, size=None if heading else size, bold=piece.bold
+                )
                 label = (label + piece.text)[-16:]
-            else:
-                self.blank(paragraph, piece, label)
-                label = ""
+                continue
+            # A hint printed in brackets after the blank, like ____（投标人名称）, names it.
+            after = pieces[position + 1] if position + 1 < len(pieces) else None
+            hint = BRACKET_HINT.match(after.text) if isinstance(after, Text) else None
+            if (
+                isinstance(after, Text)
+                and hint
+                and not piece.hint
+                and field_of("", hint.group(1)) in FIELD_NAMES
+            ):
+                pieces[position + 1] = Text(after.text[hint.end() :], after.size, after.bold)
+                piece = Blank(width=piece.width, hint=hint.group(1))
+            self.blank(paragraph, piece, label)
+            label = ""
+
+    def hinted_text(self, paragraph, text: str, *, size=None, bold=False) -> None:
+        """Text whose bracketed hint names a project or party, like 致：（招标人名称）, gets the value."""
+        start = 0
+        for match in BRACKET_FIELD.finditer(text):
+            name = field_of("", match.group(1))
+            value = value_of(name, self.facts)
+            if match.group(1).endswith(("名称", "编号")) and value and name in NAMED_FIELDS:
+                self.run(paragraph, text[start : match.start()], size=size, bold=bold)
+                self.run(paragraph, f" {value} ", size=size, bold=bold, underline=True)
+                start = match.end()
+        self.run(paragraph, text[start:], size=size, bold=bold)
 
     def grid(
         self,
@@ -805,20 +839,33 @@ class Renderer:
 
 
 def split_by_form(blocks: list[Paragraph | Grid], forms: list[OutlineForm]):
-    """Blocks of each form, cut at the paragraph that starts with the form's label."""
+    """Blocks of each form, cut at the paragraph that starts with the form's label.
+
+    A paragraph that also starts with the title is preferred, since list-numbered
+    forms repeat labels (1、 in each group) and their clauses reuse the numbers.
+    """
+    texts = [
+        re.sub(r"\s", "", plain(block)) if isinstance(block, Paragraph) else None
+        for block in blocks
+    ]
     starts: list[int] = []
     cursor = 0
     for form in forms:
-        for position in range(cursor, len(blocks)):
-            block = blocks[position]
-            if isinstance(block, Paragraph) and re.sub(r"\s", "", plain(block)).startswith(
-                form.label
-            ):
-                starts.append(position)
-                cursor = position + 1
-                break
-        else:
+        titled = form.label + re.sub(r"\s", "", form.title)[:4]
+        found = next(
+            (p for p in range(cursor, len(blocks)) if (texts[p] or "").startswith(titled)),
+            None,
+        )
+        if found is None:
+            found = next(
+                (p for p in range(cursor, len(blocks)) if (texts[p] or "").startswith(form.label)),
+                None,
+            )
+        if found is None:
             starts.append(-1)
+        else:
+            starts.append(found)
+            cursor = found + 1
     out = []
     for position, start in enumerate(starts):
         if start < 0:
