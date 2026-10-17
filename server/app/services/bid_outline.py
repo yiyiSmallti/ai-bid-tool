@@ -46,6 +46,8 @@ COVER_TITLE = re.compile(
 SCORING_ROW = re.compile(
     r"^([^\t\d][^\t]{1,40})\t\s*(\d+(?:\.\d+)?\s*[~～\-—至]\s*\d+(?:\.\d+)?)\s*分?\s*(?:\t|$)"
 )
+SUBJECTIVE_ITEM = re.compile(r"方案|措施|组织|人员管理|设施|配置|建议|特色|机制|计划|保障|管理制度")
+OBJECTIVE_ITEM = re.compile(r"报价|价格|业绩|相符|编制")
 
 KIND_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("deviation", re.compile(r"偏离")),
@@ -226,12 +228,28 @@ def split_forms(lines: list[Line]) -> list[OutlineForm]:
 
 def scoring_items(lines: list[Line]) -> list[OutlineScoringItem]:
     items: list[OutlineScoringItem] = []
-    for line in lines:
+    rows: list[tuple[int, re.Match[str]]] = []
+    for index, line in enumerate(lines):
         match = SCORING_ROW.match(line.text.strip("\t"))
         if match and not SENTENCE.search(match.group(1)):
-            title = re.sub(r"\s+", "", match.group(1))
-            if all(item.title != title for item in items):
-                items.append(OutlineScoringItem(title=title, score_range=match.group(2)))
+            rows.append((index, match))
+    for position, (index, match) in enumerate(rows):
+        title = re.sub(r"\s+", "", match.group(1))
+        end = rows[position + 1][0] if position + 1 < len(rows) else len(lines)
+        first = lines[index].text.strip("\t")[match.end() :]
+        rule = " ".join("\n".join([first, *(line.text for line in lines[index + 1 : end])]).split())
+        text = title + rule
+        if all(item.title != title for item in items):
+            items.append(
+                OutlineScoringItem(
+                    title=title,
+                    score_range=match.group(2),
+                    rule=rule,
+                    subjective=bool(
+                        SUBJECTIVE_ITEM.search(text) and not OBJECTIVE_ITEM.search(text)
+                    ),
+                )
+            )
     return items
 
 

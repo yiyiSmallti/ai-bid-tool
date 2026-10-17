@@ -6,6 +6,53 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Whole-bid desktop page
+
+- The task's 整本标书 page lists the tender's subjective scoring items, drafts
+  the chosen ones, shows each chapter's revision, state and placeholder
+  count in scoring order, and opens a chapter to read, edit as plain text
+  (`#` section, `##` subsection, `|` table rows) or confirm. The same page
+  downloads the whole bid. Implements slice 5 of the
+  [whole-bid plan](plan/whole-bid.md).
+
+## 2026-10-16: Company facts in whole-bid forms
+
+- Company profiles gain optional address, phone, legal representative and
+  unified social credit code, editable on the desktop profile form and quotable
+  as materials. Whole-bid forms fill the matching blanks from the task's
+  selected profile; signatures, authorised persons and dates stay for a human.
+  Implements slice 4 of the [whole-bid plan](plan/whole-bid.md).
+
+## 2026-10-16: Solution chapter drafting and review
+
+- `bid solution draft` plans each selected subjective scoring item from its
+  complete rule, bounded procurement needs and project facts, then drafts each
+  planned section in its own call: an introduction and subsections with
+  tables where they fit. Higher-scored items get more sections. Service
+  commitments carry concrete numbers, and a section that leaves one as a
+  placeholder is redrafted; unknown company facts stay
+  `【待填：…】`. A section cut off at its output cap or failing its schema is
+  retried with a tighter length, then without tables. Each chapter keeps to
+  its own scoring item, and repeated or empty subsections and sentences about
+  the document itself are dropped. Drafting
+  uses the model's default reasoning level, and calls use the existing
+  admission, masking and usage-accounting path.
+- `bid solution list`, `show`, `edit` and `confirm` expose current chapters.
+  Editing appends a draft; confirmation appends a human decision. Expected
+  revisions reject stale writes, and database gates reject confirmation by
+  tokens, agents or workers. Migration `0018` retains the revision history;
+  migration `0019` lets agent principals hold `solution:draft` and
+  `solution:read` and records the acting member on each revision.
+- Whole bids insert these chapters in scoring order after the technical cover,
+  solution form or last form. Missing chapters remain highlighted, and
+  unconfirmed chapters appear in the download receipt. Every chapter starts a
+  new page; the contents page, which lists each chapter's sections, and the
+  scoring index's page column carry page
+  references that Word and WPS fill in when the file is opened. A file with an
+  unconfirmed chapter or a placeholder stays an 审阅稿; submission copies
+  require a human. Implements slice 3 of the
+  [whole-bid plan](plan/whole-bid.md).
+
 ## 2026-10-16: Whole-bid assembly
 
 - `GET /documents/{id}/whole-bid-link` signs a download of the assembled whole
@@ -40,8 +87,9 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - The macOS app bundles `bid-docx-preview`, a small helper that renders an
   export DOCX with docx-preview in the system WebKit and prints it to PDF, so
   released exports open page by page without LibreOffice. Page breaks
-  approximate Word's. When no converter is available the app says so in Chinese
-  and suggests opening the file in Word or WPS.
+  approximate Word's. Printing waits for fonts to load, so a heading in 黑体
+  no longer leaves every page blank. When no converter is available the app
+  says so in Chinese and suggests opening the file in Word or WPS.
 
 ## 2026-10-16: PDF text in paragraphs and table rows
 

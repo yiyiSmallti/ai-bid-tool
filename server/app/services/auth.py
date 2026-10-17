@@ -16,6 +16,8 @@ from app.schemas.bid_review import HUMAN_ONLY_SCOPES as BID_REVIEW_HUMAN_SCOPES
 from app.schemas.bid_review import TOKEN_SCOPES as BID_REVIEW_TOKEN_SCOPES
 
 AGENT_SCOPES = {
+    "solution:draft",
+    "solution:read",
     "card:generate",
     "card:read",
     "certificate:file:read",
@@ -30,6 +32,8 @@ AGENT_SCOPES = {
 }
 
 SCOPES = {
+    "solution:draft",
+    "solution:read",
     "attachment:read",
     "card:generate",
     "card:read",
@@ -84,6 +88,8 @@ SCOPES.update(BID_REVIEW_TOKEN_SCOPES)
 # Accounts are managed only by an administrator signed in in person; a token or
 # an agent never holds `member:manage`.
 HUMAN_ONLY_SCOPES = {
+    "solution:confirm",
+    "solution:edit",
     "member:manage",
     "credential:manage",
     "clef:manage",
@@ -116,6 +122,10 @@ HUMAN_ONLY_SCOPES.update(ATTACHMENT_HUMAN_SCOPES)
 HUMAN_ONLY_SCOPES.update(BID_REVIEW_HUMAN_SCOPES)
 
 HUMAN_SCOPES = {
+    "solution:draft",
+    "solution:read",
+    "solution:confirm",
+    "solution:edit",
     "credential:manage",
     "clef:manage",
     "trust-anchor:manage",

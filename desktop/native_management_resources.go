@@ -83,6 +83,10 @@ func (p *resourcePage) blank() {
 		add("project_types", "适用项目类型（每行一项）", true, false)
 	case "profiles":
 		add("name", "单位名称", false, false)
+		add("address", "地址", false, false)
+		add("phone", "电话", false, false)
+		add("legal_representative", "法定代表人", false, false)
+		add("credit_code", "统一社会信用代码", false, false)
 		add("registration_details", "登记信息", true, true)
 		add("performance_summary", "履约业绩摘要", true, true)
 		add("standard_wording", "标准表述", true, true)
@@ -342,7 +346,8 @@ func (p *resourcePage) formData() (Object, error) {
 	for _, input := range p.inputs {
 		value := strings.TrimSpace(input.Value)
 		switch input.Key {
-		case "official_url", "whitepaper_url", "model_version", "valid_from", "valid_until":
+		case "official_url", "whitepaper_url", "model_version", "valid_from", "valid_until",
+			"address", "phone", "legal_representative", "credit_code":
 			data[input.Key] = mgNull(value)
 		case "project_types":
 			if value == "" {

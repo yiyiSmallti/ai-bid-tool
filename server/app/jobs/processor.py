@@ -157,6 +157,7 @@ class Processor:
                     "draft",
                     "check",
                     "score_rubric",
+                    "solution_draft",
                     "score",
                     "card_generate",
                     "memory_candidate",
@@ -200,6 +201,11 @@ class Processor:
             rejected: list[dict[str, str]] = []
 
             try:
+                if kind == "solution_draft":
+                    from app.jobs.solution_draft import process as draft_solution
+
+                    await draft_solution(execution)
+                    return
                 if kind == "package_export":
                     from app.services.packages import run_export
 

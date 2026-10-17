@@ -55,6 +55,11 @@ def test_schema_tracks_actual_commands():
         (["tender", "parse"], "tender parse"),
         (["tender", "outline"], "tender outline"),
         (["tender", "whole-bid"], "tender whole-bid"),
+        (["solution", "draft"], "solution draft"),
+        (["solution", "list"], "solution list"),
+        (["solution", "show"], "solution show"),
+        (["solution", "edit"], "solution edit"),
+        (["solution", "confirm"], "solution confirm"),
         (["req", "extract"], "req extract"),
         (["req", "list"], "req list"),
         (["req", "repair-citations"], "req repair-citations"),
@@ -118,7 +123,7 @@ def test_source_requires_valid_page_and_rejects_extra_fields():
             }
         )
     with pytest.raises(ValidationError):
-        TaskCreate(name="x", org_id=str(uuid4()))
+        TaskCreate.model_validate({"name": "x", "org_id": str(uuid4())})
 
 
 @pytest.mark.parametrize("case", ["malformed", "invalid_model", "oversized"])
@@ -250,3 +255,65 @@ def test_card_decisions_reject_invalid_input_before_transport(case, tmp_path, ca
     body = json.loads(capsys.readouterr().out)
     assert error.value.code == 2 and body["ok"] is False
     assert "private-" not in json.dumps(body)
+
+
+@pytest.mark.parametrize(
+    "case", ["malformed", "not_array", "invalid_section", "oversized", "revision"]
+)
+def test_solution_edit_rejects_private_invalid_input_before_transport(
+    case, tmp_path, capsys, monkeypatch
+):
+    from bid_cli import main as cli_module
+
+    def forbidden_transport(*args, **kwargs):
+        raise AssertionError("Invalid solution input must never reach a server")
+
+    monkeypatch.setattr(cli_module, "call", forbidden_transport)
+    source = tmp_path / "private-sections.json"
+    source.write_text(
+        {
+            "malformed": "{private-solution-text",
+            "not_array": json.dumps({"private-solution-text": []}),
+            "invalid_section": json.dumps([{"heading": "private-solution-text", "paragraphs": []}]),
+            "oversized": "x" * (128 * 1024 + 1),
+            "revision": json.dumps(
+                [{"heading": "Methods", "paragraphs": ["private-solution-text"]}]
+            ),
+        }[case]
+    )
+    with pytest.raises(SystemExit) as error:
+        main(
+            [
+                "solution",
+                "edit",
+                str(uuid4()),
+                "--expected-revision",
+                "0" if case == "revision" else "1",
+                "--sections",
+                str(source),
+                "--json",
+            ]
+        )
+    body = json.loads(capsys.readouterr().out)
+    assert error.value.code == 2 and body["command"] == "solution edit"
+    assert body["ok"] is False and "private-solution-text" not in json.dumps(body)
+
+
+def test_agent_solution_scopes_match_runtime_allowlist():
+    from typing import get_args
+
+    from app.schemas.agent_contracts import AgentLimits, AgentScope, AgentStartRequest
+    from app.services.auth import AGENT_SCOPES
+
+    assert set(get_args(AgentScope)) == AGENT_SCOPES
+    request = AgentStartRequest.model_validate(
+        {
+            "extraction_job_id": uuid4(),
+            "message": "Prepare solution chapters for human review",
+            "requested_scopes": sorted(AGENT_SCOPES),
+            "limits": AgentLimits(),
+            "idempotency_key": uuid4(),
+        }
+    )
+    assert {"solution:draft", "solution:read"} <= set(request.requested_scopes)
+    assert "solution:confirm" not in AGENT_SCOPES

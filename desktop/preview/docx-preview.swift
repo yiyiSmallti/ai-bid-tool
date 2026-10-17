@@ -1,5 +1,7 @@
 // bid-docx-preview renders a DOCX to an A4 PDF for export page previews:
 // docx-preview lays the document out as HTML in WebKit, which prints it to pages.
+// Printing waits for fonts and a short pause: a system font loaded on first use, such
+// as 黑体 in a heading, otherwise leaves every page blank.
 // Usage: bid-docx-preview IN.docx OUT.pdf. The scripts sit next to the binary.
 // Exit 0 writes the PDF; any failure prints one line to stderr and exits non-zero.
 import AppKit
@@ -38,6 +40,8 @@ section.docx + section.docx { break-before: page }
 const bytes = Uint8Array.from(atob("\(docx.base64EncodedString())"), c => c.charCodeAt(0));
 docx.renderAsync(bytes, document.getElementById("out"), null,
     {inWrapper: false, breakPages: true, ignoreLastRenderedPageBreak: true, useBase64URL: true})
+  .then(() => document.fonts.ready)
+  .then(() => new Promise(done => setTimeout(done, 200)))
   .then(() => webkit.messageHandlers.done.postMessage("ok"),
         e => webkit.messageHandlers.done.postMessage("render failed: " + e));
 </script></body></html>

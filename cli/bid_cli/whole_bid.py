@@ -64,6 +64,7 @@ async def download(client: Client, document: UUID, output: Path) -> dict:
         draft=headers.get("X-Whole-Bid-Draft") == "1",
         placeholders=int(headers.get("X-Whole-Bid-Placeholders", "0")),
         unconfirmed_rows=int(headers.get("X-Whole-Bid-Unconfirmed-Rows", "0")),
+        unconfirmed_chapters=int(headers.get("X-Whole-Bid-Unconfirmed-Chapters", "0")),
         copies=int(headers.get("X-Whole-Bid-Copies", "0")),
     )
     return Result(

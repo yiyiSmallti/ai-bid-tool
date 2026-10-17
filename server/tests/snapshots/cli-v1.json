@@ -5976,6 +5976,8 @@
                         "card:generate",
                         "draft:read",
                         "draft:run",
+                        "solution:draft",
+                        "solution:read",
                         "resource:read",
                         "certificate:read",
                         "certificate:file:read",
@@ -6345,6 +6347,8 @@
                     "card:generate",
                     "draft:read",
                     "draft:run",
+                    "solution:draft",
+                    "solution:read",
                     "resource:read",
                     "certificate:read",
                     "certificate:file:read",
@@ -6353,7 +6357,7 @@
                   ],
                   "type": "string"
                 },
-                "maxItems": 12,
+                "maxItems": 13,
                 "minItems": 1,
                 "title": "Requested Scopes",
                 "type": "array"
@@ -6698,6 +6702,8 @@
                         "card:generate",
                         "draft:read",
                         "draft:run",
+                        "solution:draft",
+                        "solution:read",
                         "resource:read",
                         "certificate:read",
                         "certificate:file:read",
@@ -6951,6 +6957,8 @@
                         "card:generate",
                         "draft:read",
                         "draft:run",
+                        "solution:draft",
+                        "solution:read",
                         "resource:read",
                         "certificate:read",
                         "certificate:file:read",
@@ -74573,6 +74581,45 @@
               "OrgProfileData": {
                 "additionalProperties": false,
                 "properties": {
+                  "address": {
+                    "anyOf": [
+                      {
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Address"
+                  },
+                  "credit_code": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Credit Code"
+                  },
+                  "legal_representative": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Legal Representative"
+                  },
                   "name": {
                     "maxLength": 200,
                     "minLength": 1,
@@ -74591,6 +74638,19 @@
                     ],
                     "default": null,
                     "title": "Performance Summary"
+                  },
+                  "phone": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Phone"
                   },
                   "registration_details": {
                     "anyOf": [
@@ -76305,6 +76365,45 @@
               "OrgProfileData": {
                 "additionalProperties": false,
                 "properties": {
+                  "address": {
+                    "anyOf": [
+                      {
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Address"
+                  },
+                  "credit_code": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Credit Code"
+                  },
+                  "legal_representative": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Legal Representative"
+                  },
                   "name": {
                     "maxLength": 200,
                     "minLength": 1,
@@ -76323,6 +76422,19 @@
                     ],
                     "default": null,
                     "title": "Performance Summary"
+                  },
+                  "phone": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Phone"
                   },
                   "registration_details": {
                     "anyOf": [
@@ -76517,6 +76629,45 @@
               "OrgProfileData": {
                 "additionalProperties": false,
                 "properties": {
+                  "address": {
+                    "anyOf": [
+                      {
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Address"
+                  },
+                  "credit_code": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Credit Code"
+                  },
+                  "legal_representative": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Legal Representative"
+                  },
                   "name": {
                     "maxLength": 200,
                     "minLength": 1,
@@ -76535,6 +76686,19 @@
                     ],
                     "default": null,
                     "title": "Performance Summary"
+                  },
+                  "phone": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Phone"
                   },
                   "registration_details": {
                     "anyOf": [
@@ -103469,6 +103633,1525 @@
             "type": "object"
           }
         },
+        "solution confirm": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "chapter",
+              "options": [
+                "chapter"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "expected_revision"
+            ],
+            "title": "SolutionConfirm",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "SolutionRevision": {
+                "additionalProperties": false,
+                "properties": {
+                  "actor_kind": {
+                    "title": "Actor Kind",
+                    "type": "string"
+                  },
+                  "actor_token_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Actor Token Id"
+                  },
+                  "agent_session_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Agent Session Id"
+                  },
+                  "confirmed_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Confirmed At"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Job Id"
+                  },
+                  "origin": {
+                    "enum": [
+                      "model",
+                      "human"
+                    ],
+                    "title": "Origin",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "sections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSection"
+                    },
+                    "title": "Sections",
+                    "type": "array"
+                  },
+                  "state": {
+                    "enum": [
+                      "draft",
+                      "confirmed"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "revision",
+                  "state",
+                  "origin",
+                  "sections",
+                  "actor_kind",
+                  "actor_token_id",
+                  "agent_session_id",
+                  "job_id",
+                  "created_at",
+                  "confirmed_at"
+                ],
+                "title": "SolutionRevision",
+                "type": "object"
+              },
+              "SolutionSection": {
+                "additionalProperties": false,
+                "description": "A chapter section: lead paragraphs, then numbered subsections.",
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "subsections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSubsection"
+                    },
+                    "maxItems": 12,
+                    "title": "Subsections",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "heading"
+                ],
+                "title": "SolutionSection",
+                "type": "object"
+              },
+              "SolutionSubsection": {
+                "additionalProperties": false,
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "table": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SolutionTable"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "heading",
+                  "paragraphs"
+                ],
+                "title": "SolutionSubsection",
+                "type": "object"
+              },
+              "SolutionTable": {
+                "additionalProperties": false,
+                "description": "A plain grid: a header row and body rows of the same width.",
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "minItems": 2,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "rows": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Rows",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "columns",
+                  "rows"
+                ],
+                "title": "SolutionTable",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "current": {
+                "$ref": "#/$defs/SolutionRevision"
+              },
+              "document_id": {
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "placeholder_count": {
+                "minimum": 0,
+                "title": "Placeholder Count",
+                "type": "integer"
+              },
+              "score_range": {
+                "title": "Score Range",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "task_id",
+              "document_id",
+              "title",
+              "score_range",
+              "current",
+              "placeholder_count"
+            ],
+            "title": "SolutionChapter",
+            "type": "object"
+          }
+        },
+        "solution draft": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "document",
+              "options": [
+                "--document"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": true,
+              "name": "title",
+              "options": [
+                "--title"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "model",
+              "options": [
+                "--model"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reasoning",
+              "options": [
+                "--reasoning"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "document_id": {
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "model": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Model"
+              },
+              "reasoning": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reasoning"
+              },
+              "titles": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Titles"
+              }
+            },
+            "required": [
+              "document_id"
+            ],
+            "title": "SolutionDraftRequest",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "document_id": {
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "job_id": {
+                "format": "uuid",
+                "title": "Job Id",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "titles": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Titles",
+                "type": "array"
+              }
+            },
+            "required": [
+              "job_id",
+              "task_id",
+              "document_id",
+              "titles"
+            ],
+            "title": "SolutionDraftReceipt",
+            "type": "object"
+          }
+        },
+        "solution edit": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "chapter",
+              "options": [
+                "chapter"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "sections",
+              "options": [
+                "--sections"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "SolutionSection": {
+                "additionalProperties": false,
+                "description": "A chapter section: lead paragraphs, then numbered subsections.",
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "subsections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSubsection"
+                    },
+                    "maxItems": 12,
+                    "title": "Subsections",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "heading"
+                ],
+                "title": "SolutionSection",
+                "type": "object"
+              },
+              "SolutionSubsection": {
+                "additionalProperties": false,
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "table": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SolutionTable"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "heading",
+                  "paragraphs"
+                ],
+                "title": "SolutionSubsection",
+                "type": "object"
+              },
+              "SolutionTable": {
+                "additionalProperties": false,
+                "description": "A plain grid: a header row and body rows of the same width.",
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "minItems": 2,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "rows": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Rows",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "columns",
+                  "rows"
+                ],
+                "title": "SolutionTable",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "sections": {
+                "items": {
+                  "$ref": "#/$defs/SolutionSection"
+                },
+                "maxItems": 30,
+                "minItems": 1,
+                "title": "Sections",
+                "type": "array"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "sections"
+            ],
+            "title": "SolutionEdit",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "SolutionRevision": {
+                "additionalProperties": false,
+                "properties": {
+                  "actor_kind": {
+                    "title": "Actor Kind",
+                    "type": "string"
+                  },
+                  "actor_token_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Actor Token Id"
+                  },
+                  "agent_session_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Agent Session Id"
+                  },
+                  "confirmed_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Confirmed At"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Job Id"
+                  },
+                  "origin": {
+                    "enum": [
+                      "model",
+                      "human"
+                    ],
+                    "title": "Origin",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "sections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSection"
+                    },
+                    "title": "Sections",
+                    "type": "array"
+                  },
+                  "state": {
+                    "enum": [
+                      "draft",
+                      "confirmed"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "revision",
+                  "state",
+                  "origin",
+                  "sections",
+                  "actor_kind",
+                  "actor_token_id",
+                  "agent_session_id",
+                  "job_id",
+                  "created_at",
+                  "confirmed_at"
+                ],
+                "title": "SolutionRevision",
+                "type": "object"
+              },
+              "SolutionSection": {
+                "additionalProperties": false,
+                "description": "A chapter section: lead paragraphs, then numbered subsections.",
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "subsections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSubsection"
+                    },
+                    "maxItems": 12,
+                    "title": "Subsections",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "heading"
+                ],
+                "title": "SolutionSection",
+                "type": "object"
+              },
+              "SolutionSubsection": {
+                "additionalProperties": false,
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "table": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SolutionTable"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "heading",
+                  "paragraphs"
+                ],
+                "title": "SolutionSubsection",
+                "type": "object"
+              },
+              "SolutionTable": {
+                "additionalProperties": false,
+                "description": "A plain grid: a header row and body rows of the same width.",
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "minItems": 2,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "rows": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Rows",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "columns",
+                  "rows"
+                ],
+                "title": "SolutionTable",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "current": {
+                "$ref": "#/$defs/SolutionRevision"
+              },
+              "document_id": {
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "placeholder_count": {
+                "minimum": 0,
+                "title": "Placeholder Count",
+                "type": "integer"
+              },
+              "score_range": {
+                "title": "Score Range",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "task_id",
+              "document_id",
+              "title",
+              "score_range",
+              "current",
+              "placeholder_count"
+            ],
+            "title": "SolutionChapter",
+            "type": "object"
+          }
+        },
+        "solution list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "document",
+              "options": [
+                "--document"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "items": {
+            "$defs": {
+              "SolutionRevision": {
+                "additionalProperties": false,
+                "properties": {
+                  "actor_kind": {
+                    "title": "Actor Kind",
+                    "type": "string"
+                  },
+                  "actor_token_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Actor Token Id"
+                  },
+                  "agent_session_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Agent Session Id"
+                  },
+                  "confirmed_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Confirmed At"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Job Id"
+                  },
+                  "origin": {
+                    "enum": [
+                      "model",
+                      "human"
+                    ],
+                    "title": "Origin",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "sections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSection"
+                    },
+                    "title": "Sections",
+                    "type": "array"
+                  },
+                  "state": {
+                    "enum": [
+                      "draft",
+                      "confirmed"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "revision",
+                  "state",
+                  "origin",
+                  "sections",
+                  "actor_kind",
+                  "actor_token_id",
+                  "agent_session_id",
+                  "job_id",
+                  "created_at",
+                  "confirmed_at"
+                ],
+                "title": "SolutionRevision",
+                "type": "object"
+              },
+              "SolutionSection": {
+                "additionalProperties": false,
+                "description": "A chapter section: lead paragraphs, then numbered subsections.",
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "subsections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSubsection"
+                    },
+                    "maxItems": 12,
+                    "title": "Subsections",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "heading"
+                ],
+                "title": "SolutionSection",
+                "type": "object"
+              },
+              "SolutionSubsection": {
+                "additionalProperties": false,
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "table": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SolutionTable"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "heading",
+                  "paragraphs"
+                ],
+                "title": "SolutionSubsection",
+                "type": "object"
+              },
+              "SolutionTable": {
+                "additionalProperties": false,
+                "description": "A plain grid: a header row and body rows of the same width.",
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "minItems": 2,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "rows": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Rows",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "columns",
+                  "rows"
+                ],
+                "title": "SolutionTable",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "current": {
+                "$ref": "#/$defs/SolutionRevision"
+              },
+              "document_id": {
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "placeholder_count": {
+                "minimum": 0,
+                "title": "Placeholder Count",
+                "type": "integer"
+              },
+              "score_range": {
+                "title": "Score Range",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "task_id",
+              "document_id",
+              "title",
+              "score_range",
+              "current",
+              "placeholder_count"
+            ],
+            "title": "SolutionChapter",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "document_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Document Id"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "total": {
+                "minimum": 0,
+                "title": "Total",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "task_id",
+              "total"
+            ],
+            "title": "SolutionList",
+            "type": "object"
+          }
+        },
+        "solution show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "chapter",
+              "options": [
+                "chapter"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "SolutionRevision": {
+                "additionalProperties": false,
+                "properties": {
+                  "actor_kind": {
+                    "title": "Actor Kind",
+                    "type": "string"
+                  },
+                  "actor_token_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Actor Token Id"
+                  },
+                  "agent_session_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Agent Session Id"
+                  },
+                  "confirmed_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Confirmed At"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Job Id"
+                  },
+                  "origin": {
+                    "enum": [
+                      "model",
+                      "human"
+                    ],
+                    "title": "Origin",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "sections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSection"
+                    },
+                    "title": "Sections",
+                    "type": "array"
+                  },
+                  "state": {
+                    "enum": [
+                      "draft",
+                      "confirmed"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "revision",
+                  "state",
+                  "origin",
+                  "sections",
+                  "actor_kind",
+                  "actor_token_id",
+                  "agent_session_id",
+                  "job_id",
+                  "created_at",
+                  "confirmed_at"
+                ],
+                "title": "SolutionRevision",
+                "type": "object"
+              },
+              "SolutionSection": {
+                "additionalProperties": false,
+                "description": "A chapter section: lead paragraphs, then numbered subsections.",
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "subsections": {
+                    "items": {
+                      "$ref": "#/$defs/SolutionSubsection"
+                    },
+                    "maxItems": 12,
+                    "title": "Subsections",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "heading"
+                ],
+                "title": "SolutionSection",
+                "type": "object"
+              },
+              "SolutionSubsection": {
+                "additionalProperties": false,
+                "properties": {
+                  "heading": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "Heading",
+                    "type": "string"
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Paragraphs",
+                    "type": "array"
+                  },
+                  "table": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SolutionTable"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "heading",
+                  "paragraphs"
+                ],
+                "title": "SolutionSubsection",
+                "type": "object"
+              },
+              "SolutionTable": {
+                "additionalProperties": false,
+                "description": "A plain grid: a header row and body rows of the same width.",
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "minItems": 2,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "rows": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "maxItems": 40,
+                    "minItems": 1,
+                    "title": "Rows",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "columns",
+                  "rows"
+                ],
+                "title": "SolutionTable",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "current": {
+                "$ref": "#/$defs/SolutionRevision"
+              },
+              "document_id": {
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "placeholder_count": {
+                "minimum": 0,
+                "title": "Placeholder Count",
+                "type": "integer"
+              },
+              "score_range": {
+                "title": "Score Range",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "task_id",
+              "document_id",
+              "title",
+              "score_range",
+              "current",
+              "placeholder_count"
+            ],
+            "title": "SolutionChapter",
+            "type": "object"
+          }
+        },
         "source read": {
           "cli_parameters": [
             {
@@ -109773,9 +111456,19 @@
                 "additionalProperties": false,
                 "description": "One row of the scoring chapter's rule table: the item and its score range.",
                 "properties": {
+                  "rule": {
+                    "default": "",
+                    "title": "Rule",
+                    "type": "string"
+                  },
                   "score_range": {
                     "title": "Score Range",
                     "type": "string"
+                  },
+                  "subjective": {
+                    "default": false,
+                    "title": "Subjective",
+                    "type": "boolean"
                   },
                   "title": {
                     "minLength": 1,
@@ -110051,6 +111744,12 @@
               "size_bytes": {
                 "minimum": 1,
                 "title": "Size Bytes",
+                "type": "integer"
+              },
+              "unconfirmed_chapters": {
+                "default": 0,
+                "minimum": 0,
+                "title": "Unconfirmed Chapters",
                 "type": "integer"
               },
               "unconfirmed_rows": {
@@ -110440,6 +112139,208 @@
         "type": "object"
       },
       "version": "5.0"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "solution confirm": {
+    "command": "solution confirm",
+    "cost": {
+      "browser_units": 0,
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "unresolved_calls": 0
+    },
+    "data": {
+      "current": {
+        "actor_kind": "human",
+        "actor_token_id": null,
+        "agent_session_id": null,
+        "confirmed_at": "2027-01-02T03:05:05Z",
+        "created_at": "2027-01-02T03:04:05Z",
+        "id": "00000000-0000-0000-0000-000000000004",
+        "job_id": "00000000-0000-0000-0000-000000000004",
+        "origin": "model",
+        "revision": 1,
+        "sections": [
+          {
+            "heading": "Service methods",
+            "paragraphs": [
+              "Proposed delivery process."
+            ]
+          }
+        ],
+        "state": "confirmed"
+      },
+      "document_id": "00000000-0000-0000-0000-000000000002",
+      "id": "00000000-0000-0000-0000-000000000003",
+      "placeholder_count": 0,
+      "score_range": "0-20",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "title": "Service solution"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "solution draft": {
+    "command": "solution draft",
+    "cost": {
+      "browser_units": 0,
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "unresolved_calls": 0
+    },
+    "data": {
+      "document_id": "00000000-0000-0000-0000-000000000002",
+      "job_id": "00000000-0000-0000-0000-000000000004",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "titles": [
+        "Service solution",
+        "Staff management"
+      ]
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "solution edit": {
+    "command": "solution edit",
+    "cost": {
+      "browser_units": 0,
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "unresolved_calls": 0
+    },
+    "data": {
+      "current": {
+        "actor_kind": "human",
+        "actor_token_id": null,
+        "agent_session_id": null,
+        "confirmed_at": null,
+        "created_at": "2027-01-02T03:04:05Z",
+        "id": "00000000-0000-0000-0000-000000000004",
+        "job_id": null,
+        "origin": "human",
+        "revision": 2,
+        "sections": [
+          {
+            "heading": "Service methods",
+            "paragraphs": [
+              "Proposed delivery process."
+            ]
+          }
+        ],
+        "state": "draft"
+      },
+      "document_id": "00000000-0000-0000-0000-000000000002",
+      "id": "00000000-0000-0000-0000-000000000003",
+      "placeholder_count": 0,
+      "score_range": "0-20",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "title": "Service solution"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "solution list": {
+    "command": "solution list",
+    "cost": {
+      "browser_units": 0,
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "unresolved_calls": 0
+    },
+    "data": {
+      "document_id": "00000000-0000-0000-0000-000000000002",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "total": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "current": {
+          "actor_kind": "human",
+          "actor_token_id": null,
+          "agent_session_id": null,
+          "confirmed_at": null,
+          "created_at": "2027-01-02T03:04:05Z",
+          "id": "00000000-0000-0000-0000-000000000004",
+          "job_id": "00000000-0000-0000-0000-000000000004",
+          "origin": "model",
+          "revision": 1,
+          "sections": [
+            {
+              "heading": "Service methods",
+              "paragraphs": [
+                "Proposed delivery process."
+              ]
+            }
+          ],
+          "state": "draft"
+        },
+        "document_id": "00000000-0000-0000-0000-000000000002",
+        "id": "00000000-0000-0000-0000-000000000003",
+        "placeholder_count": 0,
+        "score_range": "0-20",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "title": "Service solution"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "solution show": {
+    "command": "solution show",
+    "cost": {
+      "browser_units": 0,
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "unresolved_calls": 0
+    },
+    "data": {
+      "current": {
+        "actor_kind": "human",
+        "actor_token_id": null,
+        "agent_session_id": null,
+        "confirmed_at": null,
+        "created_at": "2027-01-02T03:04:05Z",
+        "id": "00000000-0000-0000-0000-000000000004",
+        "job_id": "00000000-0000-0000-0000-000000000004",
+        "origin": "model",
+        "revision": 1,
+        "sections": [
+          {
+            "heading": "Service methods",
+            "paragraphs": [
+              "Proposed delivery process."
+            ]
+          }
+        ],
+        "state": "draft"
+      },
+      "document_id": "00000000-0000-0000-0000-000000000002",
+      "id": "00000000-0000-0000-0000-000000000003",
+      "placeholder_count": 0,
+      "score_range": "0-20",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "title": "Service solution"
     },
     "duration_ms": 0,
     "items": [],
@@ -111057,6 +112958,7 @@
       "output_path": "<download-output>",
       "placeholders": 9,
       "size_bytes": 52000,
+      "unconfirmed_chapters": 2,
       "unconfirmed_rows": 28
     },
     "duration_ms": 0,

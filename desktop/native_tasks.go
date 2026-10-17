@@ -35,6 +35,8 @@ func taskPage(r Route) NativePage {
 		return newResponsesPage(r)
 	case base + "/drafts":
 		return newDraftsPage(r)
+	case base + "/solution":
+		return newSolutionPage(r)
 	case base + "/checks", base + "/scores", base + "/score-rubrics":
 		return newAssessmentPage(r)
 	case base + "/bid-submissions":
@@ -67,7 +69,7 @@ type nativeNavigationGroup struct {
 
 var nativeTaskNavigation = []nativeNavigationGroup{
 	{"准备与核对", []nativeNavigationItem{{"文件与解析", "", "file-text"}, {"要求确认", "/requirements", "list-checks"}, {"任务附件", "/attachments", "paperclip"}}},
-	{"响应与审阅", []nativeNavigationItem{{"任务看板", "/board", "square-kanban"}, {"响应与证据", "/review", "message-square-text"}, {"初稿与导出", "/drafts", "file-output"}}},
+	{"响应与审阅", []nativeNavigationItem{{"任务看板", "/board", "square-kanban"}, {"响应与证据", "/review", "message-square-text"}, {"初稿与导出", "/drafts", "file-output"}, {"整本标书", "/solution", "scroll-text"}}},
 	{"检查与评分", []nativeNavigationItem{{"检查", "/checks", "shield-check"}, {"评分规则", "/score-rubrics", "ruler"}, {"评分", "/scores", "gauge"}, {"标书检验", "/bid-submissions", "scan-search"}}},
 	{"任务记录", []nativeNavigationItem{{"作业进度", "/progress", "activity"}, {"记忆反馈", "/memory-feedback", "brain"}}},
 }

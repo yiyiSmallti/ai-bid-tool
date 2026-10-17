@@ -41,6 +41,7 @@ JOB_SCOPES = {
     "check": "check:run",
     "score": "score:run",
     "score_rubric": "score:rubric:generate",
+    "solution_draft": "solution:draft",
     "provider_test": "provider:write",
     "screenshot_search": "screenshot:write",
     "screenshot_render": "screenshot:write",

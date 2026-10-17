@@ -83,6 +83,7 @@ def create_app(
     from app.api.response_cards import create_router as create_response_router
     from app.api.sandbox import create_router as create_sandbox_router
     from app.api.score import create_router as create_score_router
+    from app.api.solution import create_router as create_solution_router
     from app.api.task_board import create_router as create_task_board_router
     from app.api.tenders import create_router as create_tender_router
     from app.jobs.processor import Processor
@@ -468,6 +469,7 @@ def create_app(
     app.state.workflow_stream_caps = task_board_router.stream_caps
     app.include_router(task_board_router)
     app.include_router(create_response_router(context, db, storage, queue, settings, llm, resolve))
+    app.include_router(create_solution_router(context, queue, settings, llm, resolve))
     app.include_router(
         create_provider_router(context, db, settings, llm, resolve, processor, llm_transport)
     )
