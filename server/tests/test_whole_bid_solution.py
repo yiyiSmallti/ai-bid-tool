@@ -384,7 +384,9 @@ async def test_download_enforces_human_only_submission_copy(monkeypatch, human, 
         return None, actor
 
     async def assemble(*args):
-        return b"synthetic-docx", whole_bid.Tally(unconfirmed_chapters=int(draft))
+        buffer = io.BytesIO()
+        Document().save(buffer)
+        return buffer.getvalue(), whole_bid.Tally(unconfirmed_chapters=int(draft))
 
     monkeypatch.setattr(whole_bid, "assemble", assemble)
     monkeypatch.setattr(tenders, "check_signature", lambda *args, **kwargs: None)

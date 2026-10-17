@@ -56,6 +56,9 @@ async def download(client: Client, document: UUID, output: Path) -> dict:
         raise ServiceError("network_unavailable", "Download unavailable", 503, 3) from exc
     if not content:
         raise ServiceError("invalid_server_response", "Server returned an empty file", 502, 4)
+    if headers.get("Content-Type", "").startswith("application/zip"):
+        # A tender split into volumes gives a ZIP of one DOCX per volume.
+        output = await asyncio.to_thread(new_output_path, output.with_suffix(".zip"))
     await asyncio.to_thread(save_download, output, content)
     receipt = WholeBidReceipt(
         document_id=document,

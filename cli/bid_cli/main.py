@@ -1170,7 +1170,10 @@ def tender_whole_bid(
     output: Annotated[Path, typer.Option()],
     json_output: JsonOption = False,
 ):
-    """Assemble the whole bid from the tender's format chapter into a new DOCX file."""
+    """Assemble the whole bid from the tender's format chapter into a new DOCX file.
+
+    A tender whose forms are grouped into volumes gives a ZIP of one DOCX per volume.
+    """
     from bid_cli import whole_bid
 
     emit(

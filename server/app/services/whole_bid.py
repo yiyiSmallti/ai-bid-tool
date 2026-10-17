@@ -4,12 +4,15 @@ Every form of the outline is reproduced in order from the tender's own layout,
 blanks the installation can answer are filled from the tender and the task's
 selected company profile, and the procurement deviation table is filled with the
 needs chapter's clauses. Whatever is unknown stays a highlighted placeholder, and
-the file says it is a review draft (审阅稿) while any remain.
+the file says it is a review draft (审阅稿) while any remain. A format chapter
+grouped into volumes (商务、技术、资格 parts or 分册) gives one file per volume,
+packed in a ZIP.
 """
 
 import io
 import math
 import re
+import zipfile
 from dataclasses import dataclass, field, replace
 from typing import cast
 from uuid import UUID
@@ -42,6 +45,11 @@ SENTENCE_END = re.compile(r"[。；]")
 DRAFT_RESPONSE, DRAFT_DEVIATION = "完全响应", "无偏离"
 PRICE_SCORE = re.compile(r"(投标)?(报价|价格)(分|得分)?")
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+ZIP = "application/zip"
+BROKEN_FIELD = re.compile(r"错误[!！]\s*未(定义|找到)(书签|引用源)[。.]?")
+# A cover form that starts a volume: a 分册, or a group named for the part it holds.
+BOOK = re.compile(r"第[一二三四五六七八九十]+册|分册")
+PART = re.compile(r"(资格证明|商务技术|资格|资信|商务|技术|价格|报价)(投标|响应)?(文件|部分)")
 
 
 @dataclass(frozen=True)
@@ -225,7 +233,9 @@ def tender_facts(text: str, task: Task, bidder: OrgProfileData | None) -> Facts:
 
     def first(pattern: str) -> str | None:
         match = re.search(pattern, text)
-        return match.group(1).strip(" ：:，。") if match else None
+        # A broken cross-reference in the tender's own Word file prints its error text.
+        value = BROKEN_FIELD.sub("", match.group(1)) if match else ""
+        return value.strip(" ：:，。") or None
 
     return Facts(
         project_name=first(r"项目名称[：:]\s*([^\n：:]{4,80}?)\s*(?:\n|项目编号|$)") or task.name,
@@ -363,8 +373,10 @@ TEXT_WIDTH = Cm(16)
 class Renderer:
     """Writes outline forms into one DOCX in the house style: A4, 宋体 body, 黑体 headings."""
 
-    def __init__(self, facts: Facts, tally: Tally):
+    def __init__(self, facts: Facts, tally: Tally, solution_file: str | None = None):
         self.facts, self.tally = facts, tally
+        # The other file holding the solution, which page cells name instead of a page.
+        self.solution_file = solution_file
         self.pending_break = False
         # A bookmark for the next page's first paragraph, which contents entries point at.
         self.pending_anchor: str | None = None
@@ -475,6 +487,7 @@ class Renderer:
         forms: list[OutlineForm],
         solution_after: int | None = None,
         chapters: list[SolutionChapter] | None = None,
+        volume: str | None = None,
     ) -> None:
         for _ in range(6):
             self._new()
@@ -489,6 +502,10 @@ class Renderer:
         paragraph = self._new()
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         self.run(paragraph, "投 标 文 件", size=36, bold=True)
+        if volume:
+            paragraph = self._new()
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            self.run(paragraph, f"（{volume}）", size=18, bold=True)
         for _ in range(4):
             self._new()
         for label, value in (("投标人", self.facts.bidder), ("日期", None)):
@@ -819,7 +836,10 @@ class Renderer:
         for row, item in zip(table.rows[1:], scored, strict=False):
             if item.title in chapters:
                 paragraph = row.cells[page].paragraphs[0]
-                self._field(paragraph, f"PAGEREF solution_{chapters[item.title]} \\h")
+                if self.solution_file:
+                    self.run(paragraph, f"见{self.solution_file}第{chapters[item.title]}章")
+                else:
+                    self._field(paragraph, f"PAGEREF solution_{chapters[item.title]} \\h")
 
     def deviation_pages(self, answers: list[str | None]) -> None:
         """Point each clause's page cell at the solution subsection answering it; a clause
@@ -830,7 +850,9 @@ class Renderer:
         if page is None:
             return
         for row, number in zip(table.rows[1:], answers, strict=False):
-            if number:
+            if number and self.solution_file:
+                self.run(row.cells[page].paragraphs[0], f"见{self.solution_file}{number} 节")
+            elif number:
                 paragraph = row.cells[page].paragraphs[0]
                 self.run(paragraph, f"{number} 节第 ")
                 self._field(paragraph, f"PAGEREF {solution_anchor(number)} \\h")
@@ -1042,21 +1064,93 @@ def build(
     )
     solution_after = technical_cover if technical_cover is not None else solution_form
     answers = answering_subsections(clauses, outline.scoring_items, chapters or [])
-    renderer.cover(outline, outline.forms, solution_after, chapters)
-    for index, (form, blocks) in enumerate(zip(outline.forms, per_form, strict=True)):
-        renderer.page_break(form_anchor(form))
-        renderer.form(
-            form, blocks or text_blocks(form), clauses, outline.scoring_items, responses, answers
+    parts = volumes(outline.forms)
+    holder = next(name for name, forms in parts if solution_after in forms)
+    renderers = []
+    for name, indices in parts:
+        renderer = Renderer(facts, tally, None if name == holder else holder)
+        forms = [outline.forms[index] for index in indices]
+        after = indices.index(solution_after) if solution_after in indices else None
+        renderer.cover(outline, forms, after, chapters, name)
+        for index in indices:
+            form = outline.forms[index]
+            renderer.page_break(form_anchor(form))
+            renderer.form(
+                form,
+                per_form[index] or text_blocks(form),
+                clauses,
+                outline.scoring_items,
+                responses,
+                answers,
+            )
+            if index == solution_after:
+                renderer.solution(outline.scoring_items, chapters or [])
+        renderers.append(renderer)
+    # The draft mark waits for every file, as any of them can hold a placeholder.
+    for renderer in renderers:
+        first_paragraph = renderer.word.paragraphs[0]
+        first_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        renderer.run(
+            first_paragraph,
+            "审阅稿" if tally.draft else "提交稿",
+            size=14,
+            bold=True,
+            mark=tally.draft,
         )
-        if index == solution_after:
-            renderer.solution(outline.scoring_items, chapters or [])
-    first_paragraph = renderer.word.paragraphs[0]
-    first_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    renderer.run(
-        first_paragraph, "审阅稿" if tally.draft else "提交稿", size=14, bold=True, mark=tally.draft
+        renderer.word.core_properties.title = facts.project_name or "投标文件"
+    if len(renderers) == 1:
+        return renderers[0].finish(), tally
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for number, ((name, _), renderer) in enumerate(zip(parts, renderers, strict=True), 1):
+            archive.writestr(f"{number}-投标文件（{name}）.docx", renderer.finish())
+    return buffer.getvalue(), tally
+
+
+def volumes(forms: list[OutlineForm]) -> list[tuple[str | None, list[int]]]:
+    """The files the forms go into, each a name and its form positions in order.
+
+    A volume starts at a cover form naming a 分册, or, when there is none, at a
+    cover naming the part it holds (商务文件, 技术部分) and at the covers numbered
+    like it; covers in a row start one
+    volume, and forms before the first start go into it. Fewer than two starts
+    leave a single unnamed file.
+    """
+    covers = [index for index, form in enumerate(forms) if form.kind == "cover"]
+    books = [index for index in covers if BOOK.search(forms[index].title)]
+    starts = books or [index for index in covers if PART.search(forms[index].title)]
+    if not books:
+        # A group numbered like the parts (三、银行保函格式) is a file of its own.
+        styles = {label_style(forms[index].label) for index in starts} - {""}
+        starts = [index for index in covers if label_style(forms[index].label) in styles] or starts
+    starts = [index for index in starts if index - 1 not in starts]
+    if len(starts) < 2:
+        return [(None, list(range(len(forms))))]
+    bounds = [0, *starts[1:], len(forms)]
+    return [
+        (volume_name(forms[start].title), list(range(begin, end)))
+        for start, begin, end in zip(starts, bounds, bounds[1:], strict=False)
+    ]
+
+
+def label_style(label: str) -> str:
+    return re.sub(r"[一二三四五六七八九十]+|\d+", "N", label.strip())
+
+
+def volume_name(title: str) -> str:
+    book = re.search(r"(第[一二三四五六七八九十]+册)[：:\s]*([^）)]*)", title)
+    if book:
+        return " ".join(part for part in book.groups() if part)
+    part = PART.search(title)
+    return (
+        f"{part.group(1)}文件" if part else re.sub(r"(有关)?(表格)?格式$", "", short_title(title))
     )
-    renderer.word.core_properties.title = facts.project_name or "投标文件"
-    return renderer.finish(), tally
+
+
+def packed(content: bytes) -> bool:
+    """Whether `content` is the ZIP of several volumes rather than one DOCX."""
+    with zipfile.ZipFile(io.BytesIO(content)) as archive:
+        return "[Content_Types].xml" not in archive.namelist()
 
 
 async def assemble(
