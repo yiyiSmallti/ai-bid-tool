@@ -28,23 +28,19 @@ from app.services.versioned import audit
 from app.services.whole_bid import tender_facts
 
 
-def source_inputs(chunks: list[dict], titles: list[str] | None) -> dict:
+def source_inputs(chunks: list[dict], titles: list[str] | None, review: dict | None = None) -> dict:
     """Use actual chapter line ranges for PDF and Word, never matching whole pages."""
     lines = bid_outline.lines_of(chunks)
-    heads = bid_outline.chapter_heads(lines)
-    needs, scored = [], []
-    for position, (start, title) in enumerate(heads):
-        end = heads[position + 1][0] if position + 1 < len(heads) else len(lines)
-        chapter = lines[start + 1 : end]
-        role = bid_outline.chapter_role(title)
+    spans = bid_outline.chapter_spans(lines)
+    needs = []
+    for start, end, title, role in spans:
         if role == "needs":
-            needs.extend([title, *(line.text for line in chapter)])
-        elif role == "scoring":
-            scored.extend(
-                {"title": item.title, "score_range": item.score_range, "rule": item.rule}
-                for item in bid_outline.scoring_items(chapter)
-                if item.subjective and all(row["title"] != item.title for row in scored)
-            )
+            needs.extend([title, *(line.text for line in lines[start + 1 : end])])
+    scored = [
+        {"title": item.title, "score_range": item.score_range, "rule": item.rule}
+        for item in bid_outline.scoring(lines, spans, review)["scoring_items"]
+        if item.subjective
+    ]
     # Each chapter names the other subjective items, which have chapters of their own.
     every = [row["title"] for row in scored]
     for row in scored:
@@ -82,7 +78,8 @@ async def snapshot(session, actor, task_id, document_id, titles, provider, setti
     if document.status != "parsed":
         raise ServiceError("not_parsed", "Parse the document before drafting solutions", 400, 2)
     chunks = await bid_outline.load_chunks(session, document_id)
-    raw = source_inputs(chunks, titles)
+    review = await bid_outline.latest_review(session, document_id, chunks)
+    raw = source_inputs(chunks, titles, review)
     facts = tender_facts("\n".join(line.text for line in bid_outline.lines_of(chunks)), task, None)
     entries = await confidential.task_entries(session, task_id)
     library = (

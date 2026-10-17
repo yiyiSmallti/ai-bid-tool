@@ -228,7 +228,12 @@ from app.schemas.task_board import (
 )
 from app.schemas.task_board import PageData as BoardPageData
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
-from app.schemas.whole_bid import BidOutline, WholeBidReceipt
+from app.schemas.whole_bid import (
+    BidOutline,
+    ScoringReviewReceipt,
+    ScoringReviewRequest,
+    WholeBidReceipt,
+)
 from pydantic import TypeAdapter
 
 from bid_cli.attachments import COMMAND_DATA as ATTACHMENT_DATA
@@ -369,6 +374,7 @@ COMMANDS = {
     "tender upload": None,
     "tender parse": JobAction,
     "tender outline": None,
+    "tender outline-review": ScoringReviewRequest,
     "tender whole-bid": None,
     "solution draft": SolutionDraftRequest,
     "solution list": None,
@@ -564,7 +570,11 @@ OUTPUTS = (
     | MEMORY_OUTPUTS
     | CREDENTIAL_OUTPUTS
     | AGENT_OUTPUTS
-    | {"tender outline": TypeAdapter(BidOutline), "tender whole-bid": TypeAdapter(WholeBidReceipt)}
+    | {
+        "tender outline": TypeAdapter(BidOutline),
+        "tender outline-review": TypeAdapter(ScoringReviewReceipt),
+        "tender whole-bid": TypeAdapter(WholeBidReceipt),
+    }
     | {
         "solution draft": TypeAdapter(SolutionDraftReceipt),
         "solution list": TypeAdapter(SolutionList),

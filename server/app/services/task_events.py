@@ -127,6 +127,7 @@ def hidden_job_kinds(actor):
         "score": "score:read",
         "score_rubric": "score:read",
         "solution_draft": "solution:read",
+        "scoring_review": "solution:read",
         "draft": "draft:read",
         "card_generate": "card:read",
         "provider_test": "provider:read",
