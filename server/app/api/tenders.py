@@ -142,7 +142,10 @@ def create_router(
         content, tally = await whole_bid.assemble(session, document_id, storage)
         if not tally.draft:
             identity.require("export")
-        response = attachment(content, whole_bid.DOCX, "投标文件.docx")
+        if whole_bid.packed(content):
+            response = attachment(content, whole_bid.ZIP, "投标文件.zip")
+        else:
+            response = attachment(content, whole_bid.DOCX, "投标文件.docx")
         response.headers.update(tally.headers())
         return response
 

@@ -6,6 +6,14 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-17: Whole bids split into volumes
+
+- A tender whose format chapter groups its forms into 商务、技术 or 资格 parts,
+  or into 分册, now exports one DOCX per part in a ZIP, each with its own cover,
+  contents and page numbers; the desktop client and `bid tender whole-bid`
+  save it as a `.zip`. See requirement 6a of the
+  [whole-bid plan](plan/whole-bid.md).
+
 ## 2026-10-17: Whole-bid layout on public tenders
 
 - Exported forms keep whole lines on tenders that mix page templates, open

@@ -109,6 +109,16 @@ solution that answers each scoring item.
    A4, 宋体 body, headings in 黑体, page numbers. The file is a
    draft (审阅稿) while any chapter is unconfirmed or any placeholder remains,
    and says so on its cover; otherwise it is a submission copy (提交稿).
+6a. **Volumes.** A format chapter grouped into volumes gives one DOCX per
+   volume in a ZIP, numbered in order and named 投标文件（商务文件）, and so on.
+   A volume starts at a cover form naming a 分册; without one, at each cover
+   naming the part it holds (资格、商务、技术、价格 文件 or 部分) and each cover
+   numbered like it. Covers in a row start one volume, and forms before the
+   first start join it. Each file has its own cover with the volume name,
+   contents and page numbers, and the draft mark of the whole set; the
+   solution goes in the volume holding its anchor form, and page cells in
+   other volumes name that file and chapter instead of a page. Fewer than two
+   volume starts give a single DOCX.
 7. **Access.** Outline and assembly are human or agent reads; drafting is a
    model job available to the human and actors holding `solution:draft`;
    chapter reads and exports containing chapter text require `solution:read`.

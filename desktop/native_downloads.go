@@ -16,20 +16,24 @@ import (
 	"github.com/egoist/mygo"
 )
 
-// VerifiedDownload binds a signed URL to the exact immutable resource the page inspected.
-func (c *APIClient) VerifiedDownload(ctx context.Context, linkPath, expectedPath string, metadata Object) ([]byte, error) {
-	return c.verifiedDownload(ctx, "GET", linkPath, expectedPath, metadata)
-}
+// verifiedDownload binds a signed URL to the exact immutable resource the page inspected.
 func (c *APIClient) verifiedDownload(ctx context.Context, method, linkPath, expectedPath string, metadata Object) ([]byte, error) {
+	data, _, err := c.typedDownload(ctx, method, linkPath, expectedPath, metadata)
+	return data, err
+}
+
+// typedDownload also returns the verified media type, for downloads whose type
+// the server chooses, such as a whole bid split into volumes.
+func (c *APIClient) typedDownload(ctx context.Context, method, linkPath, expectedPath string, metadata Object) ([]byte, string, error) {
 	result, err := c.Request(ctx, method, linkPath, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	descriptor := result.Data
 	parsed, err := url.Parse(str(descriptor, "url"))
 	base, baseErr := url.Parse(c.BaseURL)
 	if err != nil || baseErr != nil || parsed.Fragment != "" || parsed.Path != expectedPath || integer(descriptor, "expires_in") != 300 || len(parsed.Query()) != 1 || len(parsed.Query()["signature"]) != 1 || parsed.Query().Get("signature") == "" || parsed.Host != "" && (parsed.Scheme != base.Scheme || parsed.Host != base.Host) {
-		return nil, errors.New("下载链接不属于所选精确资源")
+		return nil, "", errors.New("下载链接不属于所选精确资源")
 	}
 	fixed := Object{}
 	for _, key := range []string{"file", "image", "artifact"} {
@@ -43,65 +47,65 @@ func (c *APIClient) verifiedDownload(ctx context.Context, method, linkPath, expe
 	for _, key := range []string{"sha256", "size_bytes", "media_type"} {
 		if value := metadata[key]; value != nil && value != "" {
 			if actual := fixed[key]; actual != nil && str(Object{"v": actual}, "v") != str(Object{"v": value}, "v") {
-				return nil, errors.New("下载元数据与所选修订不一致")
+				return nil, "", errors.New("下载元数据与所选修订不一致")
 			}
 			fixed[key] = value
 		}
 	}
 	response, err := c.transfer(ctx, "GET", parsed.RequestURI(), nil, "")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		_, err = decodeResult(response)
-		return nil, err
+		return nil, "", err
 	}
 	defer response.Body.Close()
 	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil {
-		return nil, errors.New("下载文件类型无法核验")
+		return nil, "", errors.New("下载文件类型无法核验")
 	}
 	if expected := str(fixed, "media_type"); expected != "" && mediaType != expected {
-		return nil, errors.New("下载文件类型与固定原件不同")
+		return nil, "", errors.New("下载文件类型与固定原件不同")
 	}
-	allowed := []string{"application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "image/png", "image/jpeg"}
+	allowed := []string{"application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "image/png", "image/jpeg", "application/zip"}
 	if !containsString(allowed, mediaType) {
-		return nil, errors.New("下载文件类型不符合契约")
+		return nil, "", errors.New("下载文件类型不符合契约")
 	}
 	const limit = 128 << 20
 	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if len(data) > limit {
-		return nil, errors.New("文件超过下载上限")
+		return nil, "", errors.New("文件超过下载上限")
 	}
 	if response.ContentLength >= 0 && int64(len(data)) != response.ContentLength {
-		return nil, errors.New("下载文件长度不完整")
+		return nil, "", errors.New("下载文件长度不完整")
 	}
 	if size := integer(fixed, "size_bytes"); size > 0 && len(data) != size {
-		return nil, errors.New("下载文件大小与固定原件不一致")
+		return nil, "", errors.New("下载文件大小与固定原件不一致")
 	}
 	if hash := str(fixed, "sha256"); hash != "" {
 		expected, err := hex.DecodeString(hash)
 		digest := sha256.Sum256(data)
 		if err != nil || len(expected) != sha256.Size || !bytes.Equal(expected, digest[:]) {
-			return nil, errors.New("下载文件 SHA-256 与固定原件不一致")
+			return nil, "", errors.New("下载文件 SHA-256 与固定原件不一致")
 		}
 	}
 	if mediaType == "image/png" && !bytes.HasPrefix(data, []byte{137, 80, 78, 71, 13, 10, 26, 10}) {
-		return nil, errors.New("下载内容不是有效 PNG")
+		return nil, "", errors.New("下载内容不是有效 PNG")
 	}
 	if mediaType == "application/pdf" && !bytes.HasPrefix(data, []byte("%PDF-")) {
-		return nil, errors.New("下载内容不是 PDF")
+		return nil, "", errors.New("下载内容不是 PDF")
 	}
-	if mediaType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" && !bytes.HasPrefix(data, []byte("PK\x03\x04")) {
-		return nil, errors.New("下载内容不是 DOCX")
+	if (mediaType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || mediaType == "application/zip") && !bytes.HasPrefix(data, []byte("PK\x03\x04")) {
+		return nil, "", errors.New("下载内容不是 DOCX")
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return data, nil
+	return data, mediaType, nil
 }
 
 func completeDownloadMetadata(metadata Object) bool {
@@ -160,9 +164,12 @@ func (a *NativeApp) DownloadVerified(linkPath, expectedPath, filename string, me
 		if inspected != nil && !completeDownloadMetadata(metadata) {
 			return nil, errors.New("原件缺少可信摘要、长度或类型，不能完成审阅")
 		}
-		data, err := a.Client.VerifiedDownload(ctx, linkPath, expectedPath, metadata)
+		data, mediaType, err := a.Client.typedDownload(ctx, "GET", linkPath, expectedPath, metadata)
 		if err != nil {
 			return nil, err
+		}
+		if mediaType == "application/zip" {
+			filename = strings.TrimSuffix(filename, filepath.Ext(filename)) + ".zip"
 		}
 		if saved, err := a.saveDownload(ctx, filename, data); !saved || err != nil {
 			return nil, err
