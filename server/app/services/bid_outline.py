@@ -416,6 +416,7 @@ def list_forms(lines: list[Line]) -> list[tuple[int, str, str, bool]]:
                 sub, subsub = sub + 1, 1
             elif (
                 third is not None
+                and minor is not None
                 and number == expected - 1
                 and int(minor) == sub - 1
                 and int(third) == subsub
