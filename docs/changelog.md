@@ -6,6 +6,15 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-17: Outline acceptance on public tenders
+
+- Outlines now find unnumbered forms by their title (index tables, （格式）
+  pages, sparse cover pages, page-top form titles), format chapters split into
+  第N部分 parts, （1） sub-forms, and the 须知前附表 front section. The model
+  scoring review recovers the source name of a split cell, merges unnamed
+  sub-rows, and stops the last item at the next package. See requirements 1
+  and 1a of the [whole-bid plan](plan/whole-bid.md).
+
 ## 2026-10-17: Model scoring review
 
 - A tender whose scoring table the parser cannot read can have its scoring
