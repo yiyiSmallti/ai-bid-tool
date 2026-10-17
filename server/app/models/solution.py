@@ -45,6 +45,7 @@ class SolutionRevision(Base):
     actor_token_id: Mapped[UUID | None] = mapped_column(ForeignKey("api_tokens.id"))
     agent_session_id: Mapped[UUID | None] = mapped_column(ForeignKey("agent_sessions.id"))
     job_id: Mapped[UUID | None] = mapped_column(ForeignKey("jobs.id"))
+    actor_member_id: Mapped[UUID | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )

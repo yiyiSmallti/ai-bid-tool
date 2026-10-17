@@ -40,7 +40,9 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - `bid solution list`, `show`, `edit` and `confirm` expose current chapters.
   Editing appends a draft; confirmation appends a human decision. Expected
   revisions reject stale writes, and database gates reject confirmation by
-  tokens, agents or workers. Migration `0018` retains the revision history.
+  tokens, agents or workers. Migration `0018` retains the revision history;
+  migration `0019` lets agent principals hold `solution:draft` and
+  `solution:read` and records the acting member on each revision.
 - Whole bids insert these chapters in scoring order after the technical cover,
   solution form or last form. Missing chapters remain highlighted, and
   unconfirmed chapters appear in the download receipt. Every chapter starts a

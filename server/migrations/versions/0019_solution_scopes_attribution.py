@@ -1,7 +1,9 @@
-"""Agents may hold `solution:draft` and `solution:read` (whole-bid plan, requirement 7).
+"""Solution revisions: agent scopes and member attribution.
 
-Editing and confirming a chapter stay human-only; only the two scopes an agent
-may be granted join the principal guard's list.
+Agents may hold `solution:draft` and `solution:read` (whole-bid plan,
+requirement 7); editing and confirming a chapter stay human-only, so only those
+two scopes join the principal guard's list. A solution revision is a decision
+table, so like the tables 0005 lists it records the acting member.
 """
 
 from alembic import op
@@ -38,9 +40,12 @@ BEGIN
    RAISE EXCEPTION 'agent authority cannot expand or change owner' USING ERRCODE='23514'; END IF;
  RETURN NEW;
 END $$;
+ALTER TABLE public.solution_revisions ADD COLUMN actor_member_id uuid;
+CREATE TRIGGER actor_member_attribution BEFORE INSERT ON public.solution_revisions
+    FOR EACH ROW EXECUTE FUNCTION public.actor_member_attribution('actor_member_id');
 """
     )
 
 
 def downgrade():
-    raise NotImplementedError("Agent solution scopes have no earlier representation")
+    raise NotImplementedError("Solution scopes and attribution have no earlier representation")
