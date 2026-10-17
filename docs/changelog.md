@@ -12,7 +12,8 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   complete rule, bounded procurement needs and project facts, then drafts each
   planned section in its own call: an introduction and subsections with
   tables where they fit. Higher-scored items get more sections. Service
-  commitments carry concrete numbers; unknown company facts stay
+  commitments carry concrete numbers, and a section that leaves one as a
+  placeholder is redrafted; unknown company facts stay
   `【待填：…】`. A section cut off at its output cap or failing its schema is
   retried with a tighter length, then without tables. Each chapter keeps to
   its own scoring item, and repeated or empty subsections and sentences about

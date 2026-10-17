@@ -59,7 +59,7 @@ def synthetic_output(name: str) -> dict:
     }
 
 
-@pytest.mark.parametrize("failure", [None, "looped", "short", "truncated", "malformed"])
+@pytest.mark.parametrize("failure", [None, "looped", "vague", "short", "truncated", "malformed"])
 async def test_solution_plan_then_one_accounted_call_per_section(tmp_path, failure):
     sent = []
 
@@ -70,6 +70,8 @@ async def test_solution_plan_then_one_accounted_call_per_section(tmp_path, failu
         output = synthetic_output(name)
         if failure == "short":
             output["sections"] = output["sections"][:3]
+        if failure == "vague" and len(sent) == 2:
+            output["paragraphs"][0] += "合同签订后【待填：具体天数】内完成。"
         return httpx.Response(
             200,
             json={
@@ -92,7 +94,7 @@ async def test_solution_plan_then_one_accounted_call_per_section(tmp_path, failu
     accounting = Accounting()
     token = current_accounting.set(accounting)
     try:
-        if failure and failure != "looped":
+        if failure not in (None, "looped", "vague"):
             with pytest.raises(ProviderFailure) as error:
                 await provider.draft(draft_request())
             assert error.value.code == (
@@ -107,7 +109,7 @@ async def test_solution_plan_then_one_accounted_call_per_section(tmp_path, failu
             assert result.usages[0].input_tokens == 120
     finally:
         current_accounting.reset(token)
-    calls = {None: 5, "looped": 6}.get(failure, 1)
+    calls = {None: 5, "looped": 6, "vague": 6}.get(failure, 1)
     assert len(sent) == len(accounting.completed) == calls
     assert not accounting.unknown_calls
     plan = json.loads(sent[0]["messages"][-1]["content"])
@@ -116,12 +118,13 @@ async def test_solution_plan_then_one_accounted_call_per_section(tmp_path, failu
     for body in sent:
         system = body["messages"][0]["content"]
         assert "不可信" in system and "【待填：" in system and "我方" in system
-    if failure == "looped":
+    if failure in ("looped", "vague"):
         first, retried = (json.loads(sent[i]["messages"][-1]["content"]) for i in (1, 5))
-        assert "retry" not in first and "2500" in retried["retry"]
+        expected = "2500" if failure == "looped" else "【待填：具体天数】"
+        assert "retry" not in first and expected in retried["retry"]
         assert retried["section"] == first["section"]
         assert all(body["max_tokens"] <= 12000 and body["temperature"] > 0 for body in sent[1:])
-    if failure in (None, "looped"):
+    if failure in (None, "looped", "vague"):
         written = json.loads(sent[1]["messages"][-1]["content"])
         assert written["item"] == draft_request().model_dump(mode="json")
         assert len(written["plan"]) == 4 and written["section"] in written["plan"]

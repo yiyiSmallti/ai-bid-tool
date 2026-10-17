@@ -48,8 +48,9 @@ solution that answers each scoring item.
    or malformed. Each chapter covers only its own item; other items' chapters
    are named to the model so it does not repeat them. Totals the tender does
    not state are not counted by the model.
-   Service commitments (response times, frequencies, deadlines) are concrete
-   numbers. Headings carry no numbering; the file numbers them
+   Service commitments (response times, frequencies, deadlines, the post
+   doing each task) are concrete; a section that leaves one as a placeholder
+   is redrafted. Headings carry no numbering; the file numbers them
    (`N、`, `N.M`, `N.M.K`). The needs text is bounded by
    `Settings.solution_needs_max_chars` in
    [config.py](../../server/app/core/config.py). Drafts describe methods and plans;
