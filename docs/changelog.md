@@ -66,8 +66,9 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - The macOS app bundles `bid-docx-preview`, a small helper that renders an
   export DOCX with docx-preview in the system WebKit and prints it to PDF, so
   released exports open page by page without LibreOffice. Page breaks
-  approximate Word's. When no converter is available the app says so in Chinese
-  and suggests opening the file in Word or WPS.
+  approximate Word's. Printing waits for fonts to load, so a heading in 黑体
+  no longer leaves every page blank. When no converter is available the app
+  says so in Chinese and suggests opening the file in Word or WPS.
 
 ## 2026-10-16: PDF text in paragraphs and table rows
 
