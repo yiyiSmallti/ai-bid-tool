@@ -469,7 +469,7 @@ def create_app(
     app.state.workflow_stream_caps = task_board_router.stream_caps
     app.include_router(task_board_router)
     app.include_router(create_response_router(context, db, storage, queue, settings, llm, resolve))
-    app.include_router(create_solution_router(context, queue, settings, llm, resolve))
+    app.include_router(create_solution_router(context, queue, settings, llm, resolve, storage))
     app.include_router(
         create_provider_router(context, db, settings, llm, resolve, processor, llm_transport)
     )

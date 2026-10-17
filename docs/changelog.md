@@ -6,6 +6,16 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-17: System figures in solution chapters
+
+- A solution chapter can carry one figure per subsection. 生成系统界面图 in the
+  desktop chapter view (`bid solution figures`) has the model draw up to six
+  pages of the proposed system as HTML, rendered to PNG by the local WebKit
+  renderer with scripts and loads blocked; a real screenshot is uploaded under
+  its subsection (`bid solution figure-upload`). Exports place each figure
+  under its subsection, captioned 图N-K. See requirement 5a of the
+  [whole-bid plan](plan/whole-bid.md).
+
 ## 2026-10-17: Whole bids split into volumes
 
 - A tender whose format chapter groups its forms into 商务、技术 or 资格 parts,

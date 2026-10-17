@@ -102,6 +102,30 @@ async def show_chapter(session, actor, chapter_id):
     return view(chapter, revision).model_dump(mode="json")
 
 
+def figure_numbers(sections: list[dict]) -> dict[str, dict]:
+    return {
+        f"{position}.{sub_position}": sub["figure"]
+        for position, section in enumerate(sections, 1)
+        for sub_position, sub in enumerate(section.get("subsections", []), 1)
+        if sub.get("figure")
+    }
+
+
+def kept_figures(previous: list[dict], sections: list) -> None:
+    """An edit may recaption or remove figures, never add one or swap its image."""
+    known = {
+        (figure["sha256"], figure["media_type"], figure["origin"])
+        for figure in figure_numbers(previous).values()
+    }
+    for section in sections:
+        for sub in section.subsections:
+            figure = sub.figure
+            if figure and (figure.sha256, figure.media_type, figure.origin) not in known:
+                raise ServiceError(
+                    "invalid_figure", "Add figures by drawing or uploading them", 400, 2
+                )
+
+
 def expected(chapter, number):
     if chapter.current_revision != number:
         raise ServiceError("revision_conflict", "Read the current revision before writing", 409, 2)
@@ -141,9 +165,10 @@ async def append(session, actor, chapter, sections, *, origin, state="draft", jo
 
 
 async def edit(session, actor, chapter_id, body: SolutionEdit):
-    chapter, _ = await load(session, actor, chapter_id, "solution:edit", write=True)
+    chapter, revision = await load(session, actor, chapter_id, "solution:edit", write=True)
     actor.require("solution:edit")
     expected(chapter, body.expected_revision)
+    kept_figures(revision.sections, body.sections)
     return await append(session, actor, chapter, body.sections, origin="human")
 
 

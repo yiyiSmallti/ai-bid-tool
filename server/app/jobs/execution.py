@@ -43,6 +43,7 @@ JOB_SCOPES = {
     "score_rubric": "score:rubric:generate",
     "solution_draft": "solution:draft",
     "scoring_review": "solution:draft",
+    "solution_figures": "solution:draft",
     "provider_test": "provider:write",
     "screenshot_search": "screenshot:write",
     "screenshot_render": "screenshot:write",

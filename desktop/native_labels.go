@@ -43,6 +43,10 @@ func nativeWarning(code string) string {
 		return "此文件由本人提供；档案审阅不等同于证据确认。"
 	case code == "Memory is guidance, never evidence or human confirmation":
 		return "记忆仅供参考，不能替代证据或人工确认。"
+	case code == "no_figures":
+		return "本章没有适合配系统界面图的小节。"
+	case strings.HasPrefix(code, "figure_failed:"):
+		return "第 " + strings.TrimPrefix(code, "figure_failed:") + " 小节的界面图两次生成都不可用，已跳过；可重新生成或上传真实截图。"
 	case code == "historical_extraction" || strings.HasPrefix(code, "historical_extraction:"):
 		message := "正在查看历史抽取集合，已有更新的抽取结果"
 		if _, id, ok := strings.Cut(code, ":"); ok {

@@ -7,7 +7,14 @@ from uuid import UUID
 
 import typer
 from app.core.errors import ServiceError
-from app.schemas.solution import SolutionConfirm, SolutionDraftRequest, SolutionEdit
+from app.schemas.solution import (
+    SolutionConfirm,
+    SolutionDraftRequest,
+    SolutionEdit,
+    SolutionFiguresRequest,
+)
+
+MAX_FIGURE_BYTES = 15 * 1024 * 1024
 
 
 def register(app: typer.Typer):
@@ -94,5 +101,56 @@ def register(app: typer.Typer):
         cli.emit(
             cli.call("POST", f"/solutions/{chapter}/confirm", json=request.model_dump(mode="json")),
             "solution confirm",
+            json_output,
+        )
+
+    @solution.command("figures")
+    def figures(
+        chapter: Annotated[UUID, typer.Argument()],
+        expected_revision: Annotated[int, typer.Option(min=1)],
+        model: Annotated[UUID | None, typer.Option()] = None,
+        reasoning: Annotated[str | None, typer.Option()] = None,
+        json_output: cli.JsonOption = False,
+    ):
+        """Draw the chapter's system pages as figures in a new draft revision."""
+        request = SolutionFiguresRequest(
+            expected_revision=expected_revision, model=model, reasoning=reasoning
+        )
+        cli.emit(
+            cli.call(
+                "POST",
+                f"/solutions/{chapter}/figures",
+                json=request.model_dump(mode="json", exclude_none=True),
+            ),
+            "solution figures",
+            json_output,
+        )
+
+    @solution.command("figure-upload")
+    def figure_upload(
+        chapter: Annotated[UUID, typer.Argument()],
+        expected_revision: Annotated[int, typer.Option(min=1)],
+        subsection: Annotated[str, typer.Option(help="Subsection number, such as 2.3")],
+        caption: Annotated[str, typer.Option()],
+        file: Annotated[Path, typer.Option(help="PNG or JPEG screenshot")],
+        json_output: cli.JsonOption = False,
+    ):
+        """Attach a real screenshot to one subsection."""
+        with file.open("rb") as source:
+            content = source.read(MAX_FIGURE_BYTES + 1)
+        if len(content) > MAX_FIGURE_BYTES:
+            raise ServiceError("input_too_large", "A figure is at most 15 MiB", 413, 2)
+        cli.emit(
+            cli.call(
+                "POST",
+                f"/solutions/{chapter}/figures/upload",
+                data={
+                    "expected_revision": str(expected_revision),
+                    "subsection": subsection,
+                    "caption": caption,
+                },
+                files={"file": (file.name, content)},
+            ),
+            "solution figure-upload",
             json_output,
         )

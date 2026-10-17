@@ -99,11 +99,26 @@ solution that answers each scoring item.
    placeholders. A human confirms each chapter; editing a chapter replaces its
    text and clears its confirmation. Both editing and confirmation require
    the expected current revision; model jobs never confirm a chapter.
+5a. **Figures.** A subsection may hold one figure: a page of the proposed
+   system, or a real product screenshot the company uploads. A figure job on
+   a chapter has a model pick the subsections that describe a page or
+   function of the system, at most six and none for a chapter that is not
+   about software, and write each page as one self-contained HTML document:
+   inline CSS and SVG only, Chinese interface text, neutral sample data, and
+   no wording that marks it as a prototype or mock-up, since these pages are
+   the basis of the delivered front end. The local WebKit renderer draws the
+   page to PNG with scripts disabled and every resource load blocked; without
+   it the job fails as unavailable. The job writes a new draft revision fenced
+   on the revision it read, replacing generated figures and keeping uploaded
+   ones, whose subsections it does not redraw. A human uploads a PNG or JPEG
+   to set or replace any figure, and removes or recaptions one by editing.
 6. **File.** One DOCX: cover, table of contents, then every form in order, each
    starting a new page with its tender label and title as a heading, and the
    solution immediately after the technical cover form, or after the solution
    form when there is no technical cover, or after the last form when neither
    exists. Missing subjective chapters remain visible as `【待起草：…】`.
+   A figure ends its subsection, centred at the text width, captioned
+   `图N-K caption` and numbered within its chapter, with no generated mark.
    The contents page lists forms, chapters and their sections, and the scoring index's page
    column points at each solution chapter, both as page-reference fields.
    A4, 宋体 body, headings in 黑体, page numbers. The file is a
@@ -122,7 +137,8 @@ solution that answers each scoring item.
 7. **Access.** Outline and assembly are human or agent reads; drafting is a
    model job available to the human and actors holding `solution:draft`;
    chapter reads and exports containing chapter text require `solution:read`.
-   The scoring review needs `solution:draft`.
+   The scoring review and the figure job need `solution:draft`; uploading a
+   figure is human-only (`solution:edit`).
    Editing and confirmation are
    human-only (`solution:edit` and `solution:confirm`), as is assembling a
    submission copy.

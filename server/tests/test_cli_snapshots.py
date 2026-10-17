@@ -645,6 +645,21 @@ async def fake_request(self, method, path, **kwargs):
         assert method == "GET" and kwargs["params"] == {"document": IDENTIFIER_2}
         data = {"task_id": IDENTIFIER, "document_id": IDENTIFIER_2, "total": 1}
         items = [SOLUTION_CHAPTER]
+    elif path == f"/solutions/{IDENTIFIER_3}/figures":
+        assert method == "POST" and kwargs["json"] == {"expected_revision": 1}
+        data = {"job_id": IDENTIFIER_4, "chapter_id": IDENTIFIER_3, "revision": 1}
+    elif path == f"/solutions/{IDENTIFIER_3}/figures/upload":
+        assert method == "POST"
+        assert kwargs["data"] == {
+            "expected_revision": "1",
+            "subsection": "1.1",
+            "caption": "Synthetic page",
+        }
+        assert kwargs["files"]["file"][1].startswith(b"\x89PNG")
+        data = {
+            **SOLUTION_CHAPTER,
+            "current": {**SOLUTION_CHAPTER["current"], "revision": 2, "origin": "human"},
+        }
     elif path in {f"/solutions/{IDENTIFIER_3}", f"/solutions/{IDENTIFIER_3}/confirm"}:
         data = SOLUTION_CHAPTER
         if method == "PUT":
@@ -1104,6 +1119,8 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         tmp_path / name for name in ("product.json", "update.json", "selection.json")
     )
     sections_input = tmp_path / "solution-sections.json"
+    figure_input = tmp_path / "figure.png"
+    figure_input.write_bytes(b"\x89PNG\r\n\x1a\nsynthetic")
     sections_input.write_text(json.dumps(SOLUTION_SECTIONS))
     product_input.write_text(json.dumps({"data": PRODUCT["data"]}))
     update_input.write_text(json.dumps({"expected_revision": 1, "data": PRODUCT["data"]}))
@@ -1512,6 +1529,8 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "solution show": ["solution", "show", IDENTIFIER_3],
         "solution edit": ["solution", "edit", IDENTIFIER_3, "--expected-revision", "1", "--sections", str(sections_input)],
         "solution confirm": ["solution", "confirm", IDENTIFIER_3, "--expected-revision", "1"],
+        "solution figures": ["solution", "figures", IDENTIFIER_3, "--expected-revision", "1"],
+        "solution figure-upload": ["solution", "figure-upload", IDENTIFIER_3, "--expected-revision", "1", "--subsection", "1.1", "--caption", "Synthetic page", "--file", str(figure_input)],
         "req extract": ["req", "extract", "--document", IDENTIFIER, "--reasoning", "high"],
         "req list": ["req", "list", "--task", IDENTIFIER, "--job", IDENTIFIER],
         "req history": ["req", "history", "--task", IDENTIFIER],

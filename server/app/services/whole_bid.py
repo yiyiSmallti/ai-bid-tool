@@ -23,7 +23,7 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Cm, Pt, RGBColor
+from docx.shared import Cm, Emu, Pt, RGBColor
 from docx.styles.style import CharacterStyle, ParagraphStyle
 from docx.text.paragraph import Paragraph as DocxParagraph
 from sqlalchemy import select
@@ -368,6 +368,8 @@ def solution_anchor(number: str) -> str:
 
 
 TEXT_WIDTH = Cm(16)
+# A figure and its caption fit one page.
+FIGURE_HEIGHT = Cm(21)
 
 
 class Renderer:
@@ -538,7 +540,12 @@ class Renderer:
                             3,
                         )
 
-    def solution(self, items: list[OutlineScoringItem], chapters: list[SolutionChapter]) -> None:
+    def solution(
+        self,
+        items: list[OutlineScoringItem],
+        chapters: list[SolutionChapter],
+        figures: dict[str, bytes],
+    ) -> None:
         """Render the current revision in scoring order, keeping absent drafts visible."""
         by_item = {(chapter.title, chapter.score_range): chapter for chapter in chapters}
         for chapter_number, item in enumerate((item for item in items if item.subjective), 1):
@@ -551,6 +558,7 @@ class Renderer:
                 continue
             if chapter.current.state != "confirmed":
                 self.tally.unconfirmed_chapters += 1
+            figure_number = 0
             for position, section in enumerate(chapter.current.sections, 1):
                 number = f"{chapter_number}.{position}"
                 heading = self._new(style="Heading 2")
@@ -566,6 +574,12 @@ class Renderer:
                     self.solution_paragraphs(sub.paragraphs)
                     if sub.table:
                         self.solution_table(sub.table)
+                    if sub.figure:
+                        figure_number += 1
+                        self.solution_figure(
+                            figures.get(sub.figure.sha256),
+                            f"图{chapter_number}-{figure_number} {sub.figure.caption}",
+                        )
 
     def solution_paragraphs(self, texts: list[str]) -> None:
         for text in texts:
@@ -588,6 +602,22 @@ class Renderer:
                     cell._tc.get_or_add_tcPr().append(shading)
                 self.solution_text(cell.paragraphs[0], value, size=10.5, bold=row == 0)
         self._new()
+
+    def solution_figure(self, image: bytes | None, caption: str) -> None:
+        """A centred image at the text width, kept on one page with its caption below."""
+        picture = self._new()
+        picture.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        picture.paragraph_format.keep_with_next = True
+        if image is None:
+            self.run(picture, f"【缺少图片：{caption}】", mark=True)
+        else:
+            shape = picture.add_run().add_picture(io.BytesIO(image), width=TEXT_WIDTH)
+            if shape.height > FIGURE_HEIGHT:
+                shape.width = Emu(int(shape.width * FIGURE_HEIGHT / shape.height))
+                shape.height = FIGURE_HEIGHT
+        label = self._new()
+        label.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self.solution_text(label, caption, size=10.5)
 
     def solution_text(self, paragraph, text: str, *, size=None, bold=False) -> None:
         start = 0
@@ -1028,8 +1058,10 @@ def build(
     bidder: OrgProfileData | None,
     responses: list[Response],
     chapters: list[SolutionChapter] | None = None,
+    figures: dict[str, bytes] | None = None,
 ) -> tuple[bytes, Tally]:
-    """The DOCX for an outline; `content` is the PDF, or None for a Word tender."""
+    """The DOCX for an outline; `content` is the PDF, or None for a Word tender.
+    `figures` holds each solution figure's image by its SHA-256."""
     if not outline.forms:
         raise ServiceError(
             "format_chapter_missing", "The tender has no format chapter with numbered forms", 409, 2
@@ -1084,7 +1116,7 @@ def build(
                 answers,
             )
             if index == solution_after:
-                renderer.solution(outline.scoring_items, chapters or [])
+                renderer.solution(outline.scoring_items, chapters or [], figures or {})
         renderers.append(renderer)
     # The draft mark waits for every file, as any of them can hold a placeholder.
     for renderer in renderers:
@@ -1156,7 +1188,7 @@ def packed(content: bytes) -> bool:
 async def assemble(
     session: AsyncSession, document_id: UUID, storage: Storage
 ) -> tuple[bytes, Tally]:
-    from app.services import solution
+    from app.services import solution, solution_figures
 
     document = await documents.require_document(session, document_id)
     outline = await bid_outline.outline(session, document_id)
@@ -1171,6 +1203,14 @@ async def assemble(
     is_pdf = document.media_type == "application/pdf"
     content = await storage.read(document.storage_key) if is_pdf else None
     bidder = await selected_bidder(session, task.id)
+    figures = {}
+    for chapter in chapters:
+        for section in chapter.current.sections:
+            for sub in section.subsections:
+                if sub.figure and sub.figure.sha256 not in figures:
+                    figures[sub.figure.sha256] = await storage.read(
+                        solution_figures.storage_key(task.id, sub.figure)
+                    )
     return build(
         outline,
         chunks,
@@ -1179,6 +1219,7 @@ async def assemble(
         bidder,
         await card_responses(session, document.id),
         chapters,
+        figures,
     )
 
 

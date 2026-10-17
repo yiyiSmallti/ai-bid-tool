@@ -3,7 +3,9 @@
 // Printing waits for fonts and a short pause: a system font loaded on first use, such
 // as 黑体 in a heading, otherwise leaves every page blank.
 // Usage: bid-docx-preview IN.docx OUT.pdf. The scripts sit next to the binary.
-// Exit 0 writes the PDF; any failure prints one line to stderr and exits non-zero.
+// bid-docx-preview --html IN.html OUT.png draws one page of a generated system
+// screen instead (see Screen below).
+// Exit 0 writes the output; any failure prints one line to stderr and exits non-zero.
 import AppKit
 import WebKit
 
@@ -12,6 +14,7 @@ func fail(_ message: String, _ code: Int32) -> Never {
     FileHandle.standardError.write((message + "\n").data(using: .utf8)!)
     exit(code)
 }
+if args.count == 4 && args[1] == "--html" { Screen.run(input: args[2], output: args[3]) }
 guard args.count == 3 else { fail("usage: bid-docx-preview IN.docx OUT.pdf", 2) }
 let here = URL(fileURLWithPath: args[0]).resolvingSymlinksInPath().deletingLastPathComponent()
 func script(_ name: String) -> String {
@@ -248,3 +251,78 @@ view.loadHTMLString(html, baseURL: nil)
 // The server bounds the whole conversion; this only stops a stalled renderer.
 DispatchQueue.main.asyncAfter(deadline: .now() + 300) { fail("render timed out", 5) }
 app.run()
+
+// A model-written page of the proposed system, drawn at a 1440-point desktop width
+// and the height of its content. The page is untrusted: its scripts never run, and
+// the CSP put ahead of its own markup blocks every load but inline styles and data
+// images, so the image shows only what the HTML itself holds.
+final class Screen: NSObject, WKNavigationDelegate {
+    static let width: CGFloat = 1440
+    static let policy = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:\">"
+    var view: WKWebView!
+    let output: URL
+
+    init(output: URL) { self.output = output }
+
+    static func run(input: String, output: String) -> Never {
+        guard let page = try? String(contentsOf: URL(fileURLWithPath: input), encoding: .utf8) else {
+            fail("cannot read input", 2)
+        }
+        let app = NSApplication.shared
+        app.setActivationPolicy(.prohibited)
+        let screen = Screen(output: URL(fileURLWithPath: output))
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+        config.defaultWebpagePreferences.allowsContentJavaScript = false
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
+        let view = WKWebView(frame: window.contentView!.bounds, configuration: config)
+        window.contentView = view
+        view.navigationDelegate = screen
+        screen.view = view
+        // After the doctype, so the page keeps standards mode; the parser moves the
+        // policy into the page's head ahead of anything the page itself declares.
+        var html = policy + page
+        if page.lowercased().hasPrefix("<!doctype"), let end = page.firstIndex(of: ">") {
+            html = String(page[...end]) + policy + String(page[page.index(after: end)...])
+        }
+        view.loadHTMLString(html, baseURL: nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 60) { fail("render timed out", 5) }
+        app.run()
+        exit(0)
+    }
+
+    // Only the page itself loads; a link or form in it never navigates away.
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        decisionHandler(action.request.url?.absoluteString == "about:blank" ? .allow : .cancel)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // System fonts such as PingFang load on first use and change line heights.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            webView.evaluateJavaScript("Math.ceil(document.documentElement.scrollHeight)") { value, _ in
+                let height = min(max(CGFloat((value as? NSNumber)?.doubleValue ?? 900), 600), 2400)
+                webView.window?.setContentSize(NSSize(width: Screen.width, height: height))
+                webView.frame = NSRect(x: 0, y: 0, width: Screen.width, height: height)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.snapshot(height) }
+            }
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        fail("render failed: \(error.localizedDescription)", 3)
+    }
+
+    func snapshot(_ height: CGFloat) {
+        let config = WKSnapshotConfiguration()
+        config.rect = NSRect(x: 0, y: 0, width: Screen.width, height: height)
+        config.snapshotWidth = NSNumber(value: Double(Screen.width))
+        view.takeSnapshot(with: config) { image, error in
+            guard let image, let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+                  let png = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:]) else {
+                fail("snapshot failed: \(error?.localizedDescription ?? "no image")", 4)
+            }
+            do { try png.write(to: self.output) } catch { fail("cannot write output", 4) }
+            exit(0)
+        }
+    }
+}
