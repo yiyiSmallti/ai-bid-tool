@@ -22,6 +22,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 from docx.styles.style import CharacterStyle, ParagraphStyle
+from docx.text.paragraph import Paragraph as DocxParagraph
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -754,6 +755,7 @@ class Renderer:
             blocks = _fit_title(blocks, heading, title, stripped)
         if heading is None and form.kind != "cover":
             self._new(f"{form.label} {form.title}", style="Heading 1")
+        start = len(self.word.element.body)
         bare_label = False
         for index, block in enumerate(blocks):
             if isinstance(block, Grid):
@@ -782,6 +784,20 @@ class Renderer:
             if index == heading and bare_label:
                 block = replace(block, pieces=[Text(f"{form.label}："), *block.pieces])
             self.paragraph(block, heading=index == heading)
+        # The closing address and signature lines move to the next page together
+        # rather than leaving 日期 alone on it.
+        closing = []
+        for element in reversed(self.word.element.body[start:]):
+            if element.tag == qn("w:sectPr"):
+                continue
+            if element.tag != qn("w:p") or len(closing) == 10:
+                break
+            paragraph = DocxParagraph(element, self.word._body)
+            if len(paragraph.text.strip()) > 40:
+                break
+            closing.append(paragraph)
+        for paragraph in closing[1:]:
+            paragraph.paragraph_format.keep_with_next = True
         if form.kind == "copy":
             paragraph = self._new()
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER

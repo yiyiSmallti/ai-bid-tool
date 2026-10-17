@@ -99,10 +99,55 @@ def _inside(box, rect) -> bool:
     return x0 >= rect[0] - 2 and x1 <= rect[2] + 2 and y0 >= rect[1] - 2 and y1 <= rect[3] + 2
 
 
+def _dark(colour) -> bool:
+    if not colour:
+        return False
+    # CMYK white is all zeros; grey and RGB white are all ones.
+    return max(colour) > 0.1 if len(colour) == 4 else min(colour) < 0.9
+
+
+def _inked(page: pymupdf.Page) -> list[dict]:
+    """Drawings that show on the page: a white fill laid under text draws nothing."""
+    return [
+        drawing
+        for drawing in page.get_drawings()
+        if ("s" in drawing["type"] and _dark(drawing.get("color")))
+        or ("f" in drawing["type"] and _dark(drawing.get("fill")))
+    ]
+
+
+def _drawn(table, drawings: list[dict]) -> bool:
+    """Whether visible line pieces cover half of the table's top or bottom edge;
+    a table found only in invisible fills is running text, not a grid."""
+    x0, y0, x1, y1 = table.bbox
+    covered: dict[float, list[tuple[float, float]]] = {y0: [], y1: []}
+    for drawing in drawings:
+        for item in drawing["items"]:
+            if item[0] == "l" and abs(item[1].y - item[2].y) < 1.5:
+                segments = [(item[1].y, *sorted((item[1].x, item[2].x)))]
+            elif item[0] == "re":
+                rect = item[1]
+                segments = [(rect.y0, rect.x0, rect.x1), (rect.y1, rect.x0, rect.x1)]
+            else:
+                continue
+            for y, a, b in segments:
+                for edge, pieces in covered.items():
+                    if abs(y - edge) <= 3 and min(b, x1) > max(a, x0):
+                        pieces.append((max(a, x0), min(b, x1)))
+    for pieces in covered.values():
+        length, reach = 0.0, x0
+        for a, b in sorted(pieces):
+            length += max(0.0, b - max(a, reach))
+            reach = max(reach, b)
+        if length >= (x1 - x0) / 2:
+            return True
+    return False
+
+
 def _rules(page: pymupdf.Page) -> list[tuple[float, float, float]]:
     """Horizontal rules as (y, x0, x1): drawn lines and hairline rectangles."""
     found = []
-    for drawing in page.get_drawings():
+    for drawing in _inked(page):
         for item in drawing["items"]:
             if item[0] == "l" and abs(item[1].y - item[2].y) < 0.6:
                 x0, x1 = sorted((item[1].x, item[2].x))
@@ -318,7 +363,8 @@ def page_blocks(
     """Blocks of one page; `carry` is the last row and paragraph of the previous page,
     so a sentence broken by the page continues in the same paragraph."""
     page = pdf[page_number - 1]
-    tables = list(cast(Any, page.find_tables()).tables)
+    drawings = _inked(page)
+    tables = [table for table in cast(Any, page.find_tables()).tables if _drawn(table, drawings)]
     rules = [
         rule
         for rule in _rules(page)
