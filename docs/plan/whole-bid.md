@@ -21,7 +21,21 @@ solution that answers each scoring item.
    has no forms in its outline; nothing is invented. The outline also lists
    the scoring chapter's items with their score ranges; the scoring index form
    lists them, except the price score, with the page column left for the
-   final layout.
+   final layout. The outline states where the items came from, the total the
+   tender states, the sum of the items' top scores, and why the items may be
+   incomplete: none found, no stated total, a sum that differs from the total,
+   several packages, or a scoring table too long to read whole.
+1a. **Scoring review.** When the rule table parser cannot read a scoring
+   table, a model job reads the table as numbered source lines and lists each
+   scored item with the line it starts on and its top score. An item is kept
+   only when its name starts on that line (whole, wrapped, or assembled from
+   the leading words of a PDF cell split between rule lines) and its top score
+   appears between it and the next item; rows of one item scored separately on
+   one line are added together. Where several packages each have a table, the
+   first package's items are listed. The outline and solution drafting use the
+   newest succeeded review of the same parsed text; a reparsed tender falls
+   back to the parser until reviewed again. The review sends masked text and
+   is a model job like drafting (requirement 7).
 2. **Forms.** A PDF form is rebuilt from its page layout: paragraphs with
    their indents and alignment, drawn or typed blanks with the hint printed on
    them, and tables with merged cells. A Word form is rebuilt from its verbatim
@@ -77,6 +91,7 @@ solution that answers each scoring item.
 7. **Access.** Outline and assembly are human or agent reads; drafting is a
    model job available to the human and actors holding `solution:draft`;
    chapter reads and exports containing chapter text require `solution:read`.
+   The scoring review needs `solution:draft`.
    Editing and confirmation are
    human-only (`solution:edit` and `solution:confirm`), as is assembling a
    submission copy.

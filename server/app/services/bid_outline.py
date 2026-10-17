@@ -1,13 +1,18 @@
 """Outline a parsed tender: its chapters, and the numbered forms of its format chapter.
 
-The outline is derived from stored chunk text on every read, so it needs no model,
-no job and no table. PDF chunks contribute their page lines; Word chunks contribute
-paragraphs and table rows rebuilt from cell positions, with tab-separated cells like
-PDF table rows. A tender whose chapters cannot be found yields no forms rather than a
-guessed structure.
+The outline is derived from stored chunk text on every read. PDF chunks contribute
+their page lines; Word chunks contribute paragraphs and table rows rebuilt from cell
+positions, with tab-separated cells like PDF table rows. A tender whose chapters
+cannot be found yields no forms rather than a guessed structure.
+
+Scoring items come from the rule table parser unless a model review of the same
+chunks succeeded; a review's items are only those verified against the source lines.
 """
 
+import hashlib
+import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import cast
 from uuid import UUID
@@ -16,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError
-from app.models.entities import Chunk
+from app.models.entities import Chunk, Job
 from app.schemas.whole_bid import (
     BidOutline,
     ChapterRole,
@@ -24,6 +29,8 @@ from app.schemas.whole_bid import (
     OutlineChapter,
     OutlineForm,
     OutlineScoringItem,
+    ScoringReviewOutput,
+    ScoringWarning,
 )
 from app.services import documents
 
@@ -51,6 +58,16 @@ SUBJECTIVE_ITEM = re.compile(
     r"方案|预案|措施|组织|人员管理|设施|配置|建议|特色|机制|计划|保障|制度|需求理解"
 )
 OBJECTIVE_ITEM = re.compile(r"报价|价格|业绩|相符|编制")
+# An explicit marker in the item's row overrides the keyword guess.
+SUBJECTIVE_MARK = re.compile(r"主观分|主观评分|主观项")
+OBJECTIVE_MARK = re.compile(r"客观分|客观评分|客观项")
+SCORING_TOTAL = re.compile(r"(?:总分|满分|合计|总计)[^\d\n]{0,8}?(\d{2,3}(?:\.\d+)?)\s*分")
+SCORING_HEADER = re.compile(r"评分|评审|评价|分值|权重|区间|分数|满分")
+NUMBER = re.compile(r"\d+(?:\.\d+)?")
+# The lines sent for review: the scoring table from just above its header row.
+REVIEW_LEAD = 5
+REVIEW_MAX_LINES = 600
+REVIEW_LINE_CHARS = 300
 
 KIND_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("deviation", re.compile(r"偏离")),
@@ -333,19 +350,214 @@ def scoring_items(lines: list[Line]) -> list[OutlineScoringItem]:
     return items
 
 
-def build_outline(document_id: UUID, chunks: list[dict]) -> BidOutline:
-    lines = lines_of(chunks)
+def chapter_spans(lines: list[Line]) -> list[tuple[int, int, str, ChapterRole]]:
     heads = chapter_heads(lines)
+    return [
+        (
+            index,
+            heads[position + 1][0] if position + 1 < len(heads) else len(lines),
+            title,
+            chapter_role(title),
+        )
+        for position, (index, title) in enumerate(heads)
+    ]
+
+
+def header_row(text: str) -> bool:
+    return "\t" in text and len(SCORING_HEADER.findall(text)) >= 2
+
+
+def review_region(lines: list[Line]) -> tuple[int, int, bool] | None:
+    """Lines a model reads for scoring items: from the scoring table's header row.
+
+    The header is looked for in the scoring chapter first, then anywhere, since some
+    tenders put the table under an instructions chapter or have no chapters at all.
+    """
+    scoring = [(start, end) for start, end, _, role in chapter_spans(lines) if role == "scoring"]
+    for start, end in [*scoring, (0, len(lines))]:
+        header = next((i for i in range(start, end) if header_row(lines[i].text)), None)
+        if header is None and (start, end) in scoring and end - start > 1:
+            header = start + REVIEW_LEAD
+        if header is not None:
+            first = max(start, header - REVIEW_LEAD)
+            last = min(end, first + REVIEW_MAX_LINES)
+            return first, last, last < end
+    return None
+
+
+def review_lines(lines: list[Line], start: int, end: int) -> list[str]:
+    return [
+        f"L{index}|{lines[index].text.replace(chr(9), ' | ')[:REVIEW_LINE_CHARS]}"
+        for index in range(start, end)
+    ]
+
+
+def squeeze(text: str) -> str:
+    return re.sub(r"[\s|]+", "", unicodedata.normalize("NFKC", text))
+
+
+def numbers(text: str) -> set[float]:
+    return {float(value) for value in NUMBER.findall(unicodedata.normalize("NFKC", text))}
+
+
+def title_at(texts: dict[int, str], line: int, stop: int, title: str) -> bool:
+    """Whether `title` starts on `line`, whole or wrapped over the next two lines, or
+    is assembled from the leading words of the item's lines, as a PDF table cell
+    whose name wraps between rule lines prints it. A row number before the name is
+    skipped."""
+    own = squeeze(texts[line])
+    window = own + "".join(squeeze(texts.get(line + k, "")) for k in (1, 2))
+    found = window.find(title)
+    if 0 <= found < len(own):
+        return True
+    rest = title
+    for number in range(line, stop):
+        taken = False
+        for word in map(squeeze, texts.get(number, "").replace(" | ", " ").split()):
+            shared = len(word) if rest.startswith(word) else len(rest) * word.startswith(rest)
+            if not shared:
+                if taken or not re.fullmatch(r"[\d.、]+", word):
+                    break
+                continue
+            rest, taken = rest[shared:], True
+            if not rest:
+                return True
+        if number == line and not taken:
+            return False
+    return False
+
+
+def verify_review(
+    texts: dict[int, str], output: ScoringReviewOutput
+) -> tuple[list[dict], float | None, int]:
+    """Keep the items whose title and top score are on the source lines they name.
+
+    `texts` maps line numbers to the text the model was shown. A title must start on
+    its line (see `title_at`); the top score must appear as a number between the line
+    before the item and the next item. Rows of one item scored separately on the same
+    line are merged. Returns kept items, the verified total and the number of
+    rejected items.
+    """
+    starts = sorted({item.line for item in output.items if item.line in texts})
+    kept: list[dict] = []
+    rejected = 0
+    for item in sorted(output.items, key=lambda item: item.line):
+        title = re.sub(r"\s+", "", item.title)
+        if item.line not in texts or not squeeze(title) or item.max <= 0:
+            rejected += 1
+            continue
+        later = [line for line in starts if line > item.line]
+        stop = later[0] if later else max(texts) + 1
+        span = " ".join(texts.get(line, "") for line in range(item.line - 1, stop))
+        if not title_at(texts, item.line, stop, squeeze(title)) or float(item.max) not in numbers(
+            span
+        ):
+            rejected += 1
+            continue
+        same = next(
+            (row for row in kept if row["line"] == item.line and row["title"] == title), None
+        )
+        if same is not None:
+            same["max"] += item.max
+        elif all(row["title"] != title for row in kept):
+            kept.append({"line": item.line, "title": title, "max": item.max})
+    total = output.total
+    if total is not None and float(total) not in numbers("\n".join(texts.values())):
+        total = None
+    return kept, total, rejected
+
+
+def range_top(score_range: str) -> float | None:
+    values = NUMBER.findall(score_range)
+    return float(values[-1]) if values else None
+
+
+def subjective(title: str, rule: str, row: str) -> bool:
+    if SUBJECTIVE_MARK.search(row) and not OBJECTIVE_MARK.search(row):
+        return True
+    if OBJECTIVE_MARK.search(row) and not SUBJECTIVE_MARK.search(row):
+        return False
+    text = title + rule
+    return bool(SUBJECTIVE_ITEM.search(text) and not OBJECTIVE_ITEM.search(text))
+
+
+def reviewed_items(lines: list[Line], review: dict) -> list[OutlineScoringItem]:
+    """Items of a verified review, each with the source text up to the next item as rule."""
+    rows = review["items"]
+    items = []
+    for position, row in enumerate(rows):
+        later = [other["line"] for other in rows[position + 1 :] if other["line"] > row["line"]]
+        stop = min(later[0] if later else review["end"], len(lines))
+        rule = " ".join(" ".join(line.text for line in lines[row["line"] : stop]).split())
+        items.append(
+            OutlineScoringItem(
+                title=row["title"],
+                score_range=f"0~{row['max']:g}",
+                rule=rule,
+                subjective=subjective(row["title"], rule, lines[row["line"]].text),
+            )
+        )
+    return items
+
+
+def scoring(
+    lines: list[Line], spans: list[tuple[int, int, str, ChapterRole]], review: dict | None
+) -> dict:
+    """Scoring items with their origin, stated total, item sum and any warnings."""
+    warnings: list[ScoringWarning] = []
+    scored = [(start, end) for start, end, _, role in spans if role == "scoring"]
+    stated = "\n".join(line.text for start, end in scored for line in lines[start + 1 : end])
+    if review is not None and review["items"]:
+        items = reviewed_items(lines, review)
+        total = review["total"]
+        stated += "\n" + "\n".join(line.text for line in lines[review["start"] : review["end"]])
+        origin = "model"
+        if review["multiple_packages"]:
+            warnings.append("multiple_packages")
+    else:
+        items = []
+        for start, end in scored:
+            items.extend(
+                item
+                for item in scoring_items(lines[start + 1 : end])
+                if all(item.title != other.title for other in items)
+            )
+        found = SCORING_TOTAL.search(stated)
+        total = float(found.group(1)) if found else None
+        origin = "rules"
+    tops = [range_top(item.score_range) for item in items]
+    total_sum = sum(top for top in tops if top is not None) if items else None
+    # Subtotals also read 合计…分; a stated figure equal to the item sum is the total.
+    if total_sum is not None and total_sum in {
+        float(value) for value in SCORING_TOTAL.findall(stated)
+    }:
+        total = total_sum
+    if not items:
+        warnings.append("no_items")
+    elif total is None:
+        warnings.append("no_total")
+    elif total_sum is not None and abs(total_sum - total) > 0.01:
+        warnings.append("sum_mismatch")
+    # A cut region matters only while the items do not add up to the stated total.
+    if review is not None and review["items"] and review["truncated"] and warnings:
+        warnings.append("region_truncated")
+    return {
+        "scoring_items": items,
+        "scoring_origin": origin,
+        "scoring_total": total,
+        "scoring_sum": total_sum,
+        "scoring_warnings": warnings,
+    }
+
+
+def build_outline(document_id: UUID, chunks: list[dict], review: dict | None = None) -> BidOutline:
+    lines = lines_of(chunks)
+    spans = chapter_spans(lines)
     chapters: list[OutlineChapter] = []
     forms: list[OutlineForm] = []
-    scoring: list[OutlineScoringItem] = []
     format_titles: list[str] = []
-    for position, (index, title) in enumerate(heads):
-        end = heads[position + 1][0] if position + 1 < len(heads) else len(lines)
-        role = chapter_role(title)
+    for index, end, title, role in spans:
         chapters.append(OutlineChapter(title=title, role=role, **place(lines[index:end])))
-        if role == "scoring":
-            scoring.extend(scoring_items(lines[index + 1 : end]))
         if role == "format":
             format_titles.append(title)
             for form in split_forms(lines[index + 1 : end]):
@@ -355,8 +567,36 @@ def build_outline(document_id: UUID, chunks: list[dict]) -> BidOutline:
         chapters=chapters,
         format_chapter="；".join(format_titles) or None,
         forms=forms,
-        scoring_items=scoring,
+        **scoring(lines, spans, review),
     )
+
+
+def chunks_digest(chunks: list[dict]) -> str:
+    """The same digest job manifests record as `chunks_sha256`."""
+    return hashlib.sha256(
+        json.dumps(
+            {"chunks": chunks}, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+        ).encode()
+    ).hexdigest()
+
+
+async def latest_review(
+    session: AsyncSession, document_id: UUID, chunks: list[dict]
+) -> dict | None:
+    """The newest succeeded scoring review of exactly these chunks."""
+    job = await session.scalar(
+        select(Job)
+        .where(
+            Job.document_id == document_id,
+            Job.kind == "scoring_review",
+            Job.status == "succeeded",
+        )
+        .order_by(Job.finished_at.desc())
+        .limit(1)
+    )
+    if job is None or job.result.get("chunks_sha256") != chunks_digest(chunks):
+        return None
+    return job.result["review"]
 
 
 async def load_chunks(session: AsyncSession, document_id: UUID) -> list[dict]:
@@ -374,4 +614,5 @@ async def outline(session: AsyncSession, document_id: UUID) -> BidOutline:
     document = await documents.require_document(session, document_id)
     if document.status != "parsed":
         raise ServiceError("not_parsed", "Parse the document before outlining it", 400, 2)
-    return build_outline(document.id, await load_chunks(session, document.id))
+    chunks = await load_chunks(session, document.id)
+    return build_outline(document.id, chunks, await latest_review(session, document.id, chunks))

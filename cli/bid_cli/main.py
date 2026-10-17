@@ -1149,6 +1149,21 @@ def tender_outline(
     emit(call("GET", f"/documents/{document}/outline"), "tender outline", json_output)
 
 
+@tender_app.command("outline-review")
+def tender_outline_review(
+    document: Annotated[UUID, typer.Option()],
+    model: Annotated[UUID | None, typer.Option()] = None,
+    json_output: JsonOption = False,
+):
+    """Start a model job listing the scoring items; only items found on their source lines are kept."""
+    body = {"model": str(model)} if model else {}
+    emit(
+        call("POST", f"/documents/{document}/outline/review", json=body),
+        "tender outline review",
+        json_output,
+    )
+
+
 @tender_app.command("whole-bid")
 def tender_whole_bid(
     document: Annotated[UUID, typer.Option()],

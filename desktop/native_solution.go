@@ -22,6 +22,9 @@ type solutionPage struct {
 	text, original   string
 	generation       uint64
 	jobPanel         jobPanel
+	// The outline's scoring summary: where the items came from and why they may be incomplete.
+	scoring     Object
+	reviewPanel jobPanel
 }
 
 func newSolutionPage(r Route) NativePage {
@@ -29,7 +32,7 @@ func newSolutionPage(r Route) NativePage {
 }
 func (*solutionPage) Title() string { return "整本标书" }
 func (p *solutionPage) Dirty() bool { return p.editing && p.text != p.original }
-func (p *solutionPage) Close()      { p.generation++; p.jobPanel.Close() }
+func (p *solutionPage) Close()      { p.generation++; p.jobPanel.Close(); p.reviewPanel.Close() }
 func (p *solutionPage) Open(a *NativeApp) {
 	a.Request("GET", "/tasks/"+p.task+"/documents", nil, func(r Result) {
 		p.documents = nil
@@ -55,6 +58,7 @@ func (p *solutionPage) load(a *NativeApp) {
 			return
 		}
 		p.items = nil
+		p.scoring = r.Data
 		for _, item := range objects(r.Data["scoring_items"]) {
 			if item["subjective"] == true {
 				p.items = append(p.items, item)
@@ -131,6 +135,7 @@ func (p *solutionPage) View(c *ui.Context, a *NativeApp) {
 	})
 
 	nativeHeading(c, "起草方案章节")
+	p.scoringView(c, a)
 	if len(p.items) == 0 {
 		nativeText(c, "评分章节中没有识别到方案类评分项。")
 	}
@@ -173,6 +178,50 @@ func (p *solutionPage) View(c *ui.Context, a *NativeApp) {
 	if p.detail != nil {
 		p.chapterView(c, a)
 	}
+}
+
+// scoringWarnings explains why the scoring items may be incomplete.
+var scoringWarnings = map[string]string{
+	"no_items":          "没有识别到评分项",
+	"no_total":          "原文未写明总分，无法核对",
+	"sum_mismatch":      "各项分值之和与总分不一致",
+	"multiple_packages": "招标文件有多个包件，只列出第一个包件的评分项",
+	"region_truncated":  "评分表过长，只读取了前一部分",
+}
+
+func (p *solutionPage) scoringView(c *ui.Context, a *NativeApp) {
+	if p.scoring == nil {
+		return
+	}
+	origin := "规则识别"
+	if str(p.scoring, "scoring_origin") == "model" {
+		origin = "模型识别并逐项回原文核验"
+	}
+	summary := fmt.Sprintf("评分项 %d 项（%s）", len(objects(p.scoring["scoring_items"])), origin)
+	if total, ok := p.scoring["scoring_total"].(float64); ok {
+		summary += fmt.Sprintf("，总分 %g", total)
+	}
+	if sum, ok := p.scoring["scoring_sum"].(float64); ok {
+		summary += fmt.Sprintf("，各项合计 %g", sum)
+	}
+	nativeText(c, summary+"。")
+	notes := []string{}
+	for _, code := range stringList(p.scoring["scoring_warnings"]) {
+		if note, ok := scoringWarnings[code]; ok {
+			notes = append(notes, note)
+		}
+	}
+	if len(notes) > 0 {
+		nativeText(c, "请核对："+strings.Join(notes, "；")+"。")
+	}
+	if len(notes) > 0 || str(p.scoring, "scoring_origin") == "model" {
+		nativeIconButton(c, "sparkles", "用模型识别评分项", false).Disabled(a.Busy).OnClick(func() {
+			a.Request("POST", "/documents/"+p.document+"/outline/review", Object{}, func(r Result) {
+				p.reviewPanel.Load(a, str(r.Data, "job_id"), func() { p.load(a) })
+			})
+		})
+	}
+	p.reviewPanel.View(c, a)
 }
 
 func (p *solutionPage) chapterView(c *ui.Context, a *NativeApp) {

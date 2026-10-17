@@ -111482,6 +111482,16 @@
                 ],
                 "title": "OutlineScoringItem",
                 "type": "object"
+              },
+              "ScoringWarning": {
+                "enum": [
+                  "no_items",
+                  "no_total",
+                  "sum_mismatch",
+                  "multiple_packages",
+                  "region_truncated"
+                ],
+                "type": "string"
               }
             },
             "additionalProperties": false,
@@ -111522,6 +111532,47 @@
                 },
                 "title": "Scoring Items",
                 "type": "array"
+              },
+              "scoring_origin": {
+                "default": "rules",
+                "enum": [
+                  "rules",
+                  "model"
+                ],
+                "title": "Scoring Origin",
+                "type": "string"
+              },
+              "scoring_sum": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Scoring Sum"
+              },
+              "scoring_total": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Scoring Total"
+              },
+              "scoring_warnings": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/ScoringWarning"
+                },
+                "title": "Scoring Warnings",
+                "type": "array"
               }
             },
             "required": [
@@ -111532,6 +111583,81 @@
               "scoring_items"
             ],
             "title": "BidOutline",
+            "type": "object"
+          }
+        },
+        "tender outline-review": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "document",
+              "options": [
+                "--document"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "model",
+              "options": [
+                "--model"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "model": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Model"
+              }
+            },
+            "title": "ScoringReviewRequest",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "document_id": {
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "job_id": {
+                "format": "uuid",
+                "title": "Job Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "job_id",
+              "document_id"
+            ],
+            "title": "ScoringReviewReceipt",
             "type": "object"
           }
         },

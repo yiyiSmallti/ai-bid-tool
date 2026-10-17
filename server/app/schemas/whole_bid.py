@@ -59,12 +59,46 @@ class OutlineScoringItem(Contract):
     subjective: bool = False
 
 
+type ScoringWarning = Literal[
+    "no_items", "no_total", "sum_mismatch", "multiple_packages", "region_truncated"
+]
+
+
 class BidOutline(Contract):
     document_id: UUID
     chapters: list[OutlineChapter]
     format_chapter: str | None
     forms: list[OutlineForm]
     scoring_items: list[OutlineScoringItem]
+    # Items come from the rule table parser, or from a verified model review.
+    scoring_origin: Literal["rules", "model"] = "rules"
+    scoring_total: float | None = None
+    scoring_sum: float | None = None
+    # Reasons the scoring items may be incomplete; any of them suggests a review.
+    scoring_warnings: list[ScoringWarning] = []
+
+
+class ScoringReviewRequest(Contract):
+    model: UUID | None = None
+
+
+class ScoringReviewItem(Contract):
+    """One scored item the model found: the line it starts on, its title and top score."""
+
+    line: int
+    title: str
+    max: float
+
+
+class ScoringReviewOutput(Contract):
+    total: float | None
+    multiple_packages: bool
+    items: list[ScoringReviewItem]
+
+
+class ScoringReviewReceipt(Contract):
+    job_id: UUID
+    document_id: UUID
 
 
 class WholeBidReceipt(Contract):

@@ -158,6 +158,7 @@ class Processor:
                     "check",
                     "score_rubric",
                     "solution_draft",
+                    "scoring_review",
                     "score",
                     "card_generate",
                     "memory_candidate",
@@ -205,6 +206,11 @@ class Processor:
                     from app.jobs.solution_draft import process as draft_solution
 
                     await draft_solution(execution)
+                    return
+                if kind == "scoring_review":
+                    from app.jobs.scoring_review import process as review_scoring
+
+                    await review_scoring(execution)
                     return
                 if kind == "package_export":
                     from app.services.packages import run_export
