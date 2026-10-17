@@ -6,6 +6,15 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Whole-bid desktop page
+
+- The task's 整本标书 page lists the tender's subjective scoring items, drafts
+  the chosen ones, shows each chapter's revision, state and placeholder
+  count in scoring order, and opens a chapter to read, edit as plain text
+  (`#` section, `##` subsection, `|` table rows) or confirm. The same page
+  downloads the whole bid. Implements slice 5 of the
+  [whole-bid plan](plan/whole-bid.md).
+
 ## 2026-10-16: Company facts in whole-bid forms
 
 - Company profiles gain optional address, phone, legal representative and

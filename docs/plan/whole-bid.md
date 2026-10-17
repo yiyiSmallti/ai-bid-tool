@@ -84,7 +84,7 @@ solution that answers each scoring item.
 | 2 | Assembly of forms, copies placeholders and deviation table; download (`bid tender whole-bid`) | Done |
 | 3 | Solution planning and drafting job, chapter review and confirmation | Done |
 | 4 | Structured company fields for form filling | Done |
-| 5 | Desktop page for outline, drafting, chapter review and assembly | Planned |
+| 5 | Desktop page for outline, drafting, chapter review and assembly | Done |
 | 6 | Acceptance on real tenders against the winning-bid reference | Planned |
 
 ## Out of scope
