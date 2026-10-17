@@ -26,14 +26,18 @@ guard let docx = try? Data(contentsOf: URL(fileURLWithPath: args[1])) else { fai
 // Page margins come from the print margins, so sections drop their own top and
 // bottom padding and every printed page keeps the same space. Each section is a
 // page docx-preview split at a page break, so printing starts each on a new page.
+// The page places every printed page break itself, because each break WebKit
+// makes shifts the pages after it: it pushes a line that crosses the page end to
+// the next page, drops the top margin of a block it moves there, and cuts table
+// rows. A spacer before a block reaches the page end instead, as a page break
+// (break-inside or break-before) would clip the moved block.
 // docx-preview drops keep-with-next, so each run of such paragraphs is wrapped
-// with the block after it, and a group that would cross a printed page is
-// pushed down to the next one, as Word keeps them together. WebKit clips a
-// block that a page break (break-inside or break-before) moves to the next
-// page, so a spacer before the group reaches the page end instead.
-// A table is split the same way: at the last whole row that fits, the rest
-// becomes a new table on the next page that opens with the header rows
-// (w:tblHeader), so no row is cut and each page's part is closed.
+// with the block after it, and a group that would cross a printed page moves
+// down to the next one, as Word keeps them together. A paragraph that crosses a
+// page is split before the crossing line, and the rest starts the next page.
+// A table is split at the last whole row that fits: the rest becomes a new table
+// on the next page that opens with the header rows (w:tblHeader), so no row is
+// cut and each page's part is closed.
 let html = """
 <!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:">
@@ -68,12 +72,11 @@ function space(element, size) {
   spacer.style.height = Math.max(0, size) + "px";
   element.before(spacer);
 }
-// Print wraps a narrow cell slightly differently from the screen, sometimes a line
-// more, so a table part leaves about one line free at the page end.
+// A printed page can start a few pixels away from where the page counts it, so a
+// table part leaves room at the page end and starts a little below the page
+// start, where its top border cannot show at the bottom of the page before.
 const slack = 24;
-// A part starts just below the page start, so its top border does not show at the
-// bottom of the page before.
-const edge = 6;
+const edge = 16;
 function split(table, origin) {
   for (let part = table, tries = table.rows.length; tries > 0; tries--) {
     const rows = [...part.rows];
@@ -103,6 +106,40 @@ function split(table, origin) {
     part = next;
   }
 }
+// The paragraph from the line that crosses `end` on becomes a new paragraph that
+// starts the next page, so print never moves a line itself; returns it, or nothing
+// when the whole paragraph moved.
+function broken(paragraph, end) {
+  const characters = [];
+  const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode())
+    for (let offset = 0; offset < node.length; offset++) characters.push([node, offset]);
+  const box = character => {
+    const range = document.createRange();
+    range.setStart(...character);
+    range.setEnd(character[0], character[1] + 1);
+    return range.getBoundingClientRect();
+  };
+  const crossing = characters.find(character => { const rect = box(character); return rect.height && rect.bottom > end; });
+  const line = crossing && box(crossing).top;
+  const at = crossing ? characters.findIndex(character => { const rect = box(character); return rect.height && rect.bottom > line + 1; }) : 0;
+  if (at <= 0) {
+    space(paragraph, end - paragraph.getBoundingClientRect().top);
+    return null;
+  }
+  const range = document.createRange();
+  range.setStart(...characters[at]);
+  range.setEndAfter(paragraph.lastChild);
+  const rest = paragraph.cloneNode(false);
+  rest.append(range.extractContents());
+  rest.style.textIndent = "0";
+  rest.style.marginTop = "0";
+  paragraph.style.marginBottom = "0";
+  if (getComputedStyle(paragraph).textAlign === "justify") paragraph.style.textAlignLast = "justify";
+  paragraph.after(rest);
+  space(rest, end - rest.getBoundingClientRect().top);
+  return rest;
+}
 function headers(items) {
   for (const item of items)
     if (item.type === "table")
@@ -131,7 +168,9 @@ docx.parseAsync(bytes, options)
       while (keep(group.lastElementChild) && next);
     }
     let origin = 0;
-    for (const block of document.querySelectorAll("section.docx, article > *")) {
+    const blocks = [...document.querySelectorAll("section.docx, article > *")];
+    for (let index = 0; index < blocks.length; index++) {
+      const block = blocks[index];
       const box = block.getBoundingClientRect();
       const style = getComputedStyle(block);
       if (block.tagName === "SECTION" || style.breakBefore === "page") {
@@ -142,17 +181,17 @@ docx.parseAsync(bytes, options)
           - parseFloat(getComputedStyle(first).marginTop)) : box.top;
         continue;
       }
-      if (block.className === "keep") {
-        const end = pageEnd(origin, box.top);
-        if (box.bottom > end && box.height < height) {
-          space(block, end - box.top);
-          origin = end;
-        }
-      }
+      const end = pageEnd(origin, box.top);
       const table = block.tagName === "TABLE" ? block
         : block.className === "keep" && block.lastElementChild?.tagName === "TABLE"
           ? block.lastElementChild : null;
-      if (table) split(table, origin);
+      if (block.className === "keep" && box.bottom > end && box.height < height)
+        space(block, end - box.top);
+      else if (table) split(table, origin);
+      else if (block.tagName === "P" && box.bottom > end) {
+        const rest = broken(block, end);
+        if (rest) blocks.splice(index + 1, 0, rest);
+      } else if (box.bottom > end && box.height < height) space(block, end - box.top);
     }
   })
   .then(() => webkit.messageHandlers.done.postMessage("ok"),

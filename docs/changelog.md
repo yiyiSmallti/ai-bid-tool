@@ -16,7 +16,9 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   on one page, and text over white fills is no longer read as a table.
   A tender table cut by its page break is one table again, and table rows
   are no longer cut at a page end in exports or page previews: the table
-  breaks between rows and repeats its header. See requirement 2 of the
+  breaks between rows and repeats its header. Long chapters no longer drift
+  out of step with the printed pages, which had cut table rows again further
+  into a chapter. See requirement 2 of the
   [whole-bid plan](plan/whole-bid.md).
 
 ## 2026-10-17: Outline acceptance on public tenders
