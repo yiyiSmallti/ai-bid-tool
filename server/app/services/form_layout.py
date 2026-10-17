@@ -10,7 +10,7 @@ joined back into paragraphs. Nothing is reworded.
 
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, cast
 
 import pymupdf
@@ -448,8 +448,57 @@ def form_blocks(content: bytes, pages: list[int]) -> list[Block]:
         carry = None
         for number, (left, right) in zip(pages, margins(pdf, pages), strict=True):
             blocks, carry = page_blocks(pdf, number, left, right, carry)
+            if out and blocks and _continues(out[-1], blocks[0]):
+                out[-1] = _joined(cast(Grid, out[-1]), cast(Grid, blocks.pop(0)))
             out.extend(blocks)
         return out
+
+
+def _continues(before: Block, after: Block) -> bool:
+    """A table the page break cut: the next page opens with a table of the same columns."""
+    if not isinstance(before, Grid) or not isinstance(after, Grid):
+        return False
+    if len(before.widths) != len(after.widths):
+        return False
+    return all(abs(a - b) <= 3 for a, b in zip(before.widths, after.widths, strict=True))
+
+
+def _row(grid: Grid, row: int) -> list[str]:
+    return [cell.text for cell in sorted(grid.cells, key=lambda c: c.column) if cell.row == row]
+
+
+def _joined(before: Grid, after: Grid) -> Grid:
+    """One table from both parts. A header the tender repeats is dropped, and a first row
+    with an empty first cell continues the row the page cut."""
+    rows = len(before.heights)
+    last = rows - 1
+    skip = 0
+    if _row(after, 0) == _row(before, 0):
+        skip = 1
+    elif after.heights:
+        first = [cell for cell in after.cells if cell.row == 0]
+        ends = {
+            cell.column: cell
+            for cell in before.cells
+            if cell.row + cell.rows - 1 == last and cell.rows == 1
+        }
+        lead = next((cell for cell in first if cell.column == 0), None)
+        if (
+            lead is not None
+            and not lead.text
+            and any(cell.text for cell in first)
+            and all(cell.rows == 1 and cell.column in ends for cell in first)
+            and 0 in ends
+            and ends[0].text
+        ):
+            for cell in first:
+                ends[cell.column].text += cell.text
+            before.heights[last] += after.heights[0]
+            skip = 1
+    cells = before.cells + [
+        replace(cell, row=cell.row - skip + rows) for cell in after.cells if cell.row >= skip
+    ]
+    return replace(before, cells=cells, heights=before.heights + after.heights[skip:])
 
 
 def plain(block: Block) -> str:

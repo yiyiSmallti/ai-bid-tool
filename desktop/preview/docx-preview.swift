@@ -30,7 +30,10 @@ guard let docx = try? Data(contentsOf: URL(fileURLWithPath: args[1])) else { fai
 // with the block after it, and a group that would cross a printed page is
 // pushed down to the next one, as Word keeps them together. WebKit clips a
 // block that a page break (break-inside or break-before) moves to the next
-// page, so the group gets a top margin that reaches the page end instead.
+// page, so a spacer before the group reaches the page end instead.
+// A table is split the same way: at the last whole row that fits, the rest
+// becomes a new table on the next page that opens with the header rows
+// (w:tblHeader), so no row is cut and each page's part is closed.
 let html = """
 <!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:">
@@ -47,13 +50,76 @@ const options = {inWrapper: false, breakPages: true, ignoreLastRenderedPageBreak
 function keep(element) {
   return element && element.tagName === "P" && element.style.breakAfter === "avoid";
 }
+// Printed page height in CSS pixels: the page width is scaled to the paper.
+const height = (841.9 - 56 * 2) / (595.3 / 794);
+// The end of the page `top` is on; a block within a pixel of a page start is on that page.
+function pageEnd(origin, top) {
+  return origin + (Math.floor((top - origin + 1) / height) + 1) * height;
+}
+// Whether a cell merged down from an earlier row reaches row `at`.
+function spanned(rows, at) {
+  return rows.slice(0, at).some((row, index) =>
+    [...row.cells].some(cell => cell.style.display !== "none" && index + cell.rowSpan > at));
+}
+// A block of the given height before `element`; a margin would collapse into the
+// margin of the paragraph above and not move it.
+function space(element, size) {
+  const spacer = document.createElement("div");
+  spacer.style.height = Math.max(0, size) + "px";
+  element.before(spacer);
+}
+// Print wraps a narrow cell slightly differently from the screen, sometimes a line
+// more, so a table part leaves about one line free at the page end.
+const slack = 24;
+// A part starts just below the page start, so its top border does not show at the
+// bottom of the page before.
+const edge = 6;
+function split(table, origin) {
+  for (let part = table, tries = table.rows.length; tries > 0; tries--) {
+    const rows = [...part.rows];
+    const header = rows.findIndex(row => !row.dataset.header);
+    if (header < 0) return;
+    const top = part.getBoundingClientRect().top;
+    const end = pageEnd(origin, top);
+    const cut = rows.findIndex((row, index) =>
+      index >= header && row.getBoundingClientRect().bottom > end - slack);
+    if (cut < 0) return;
+    let at = cut;
+    while (at > header && spanned(rows, at)) at--;
+    if (at === header) {
+      // Not even the first row fits under the header: the table starts on the next
+      // page, unless it already starts a page and the row is taller than one.
+      if (top - (end - height) < edge + 2) return;
+      space(part, end - top + edge);
+      continue;
+    }
+    const next = part.cloneNode(false);
+    for (const child of part.children)
+      if (child.tagName === "COLGROUP") next.append(child.cloneNode(true));
+    for (const row of rows.slice(0, header)) next.append(row.cloneNode(true));
+    for (const row of rows.slice(at)) next.append(row);
+    part.after(next);
+    space(next, end - part.getBoundingClientRect().bottom + edge);
+    part = next;
+  }
+}
+function headers(items) {
+  for (const item of items)
+    if (item.type === "table")
+      for (const row of item.children)
+        if (row.isHeader) row.cssStyle = {...row.cssStyle, "$data-header": "1"};
+}
 docx.parseAsync(bytes, options)
   .then(parsed => {
     for (const item of parsed.documentPart.body.children)
       if (item.type === "paragraph" && item.keepNext)
         item.cssStyle = {...item.cssStyle, breakAfter: "avoid"};
+    headers(parsed.documentPart.body.children);
     return docx.renderDocument(parsed, document.getElementById("out"), null, options);
   })
+  // Pages are measured once the fonts are in: a font loaded later changes line heights.
+  .then(() => document.fonts.ready)
+  .then(() => new Promise(done => setTimeout(done, 200)))
   .then(() => {
     for (const first of [...document.querySelectorAll("p")]) {
       if (!keep(first) || keep(first.previousElementSibling)) continue;
@@ -64,27 +130,31 @@ docx.parseAsync(bytes, options)
       do { const after = next.nextElementSibling; group.append(next); next = after; }
       while (keep(group.lastElementChild) && next);
     }
-    // Printed page height in CSS pixels: the page width is scaled to the paper.
-    const height = (841.9 - 56 * 2) / (595.3 / 794);
     let origin = 0;
     for (const block of document.querySelectorAll("section.docx, article > *")) {
       const box = block.getBoundingClientRect();
-      if (block.tagName === "SECTION" || getComputedStyle(block).breakBefore === "page") {
-        origin = box.top;
+      const style = getComputedStyle(block);
+      if (block.tagName === "SECTION" || style.breakBefore === "page") {
+        // A page a forced break starts keeps the block's top margin; a section's first
+        // paragraph margin collapses out of the section on screen but not in print.
+        const first = block.tagName === "SECTION" ? block.querySelector("article > *") : block;
+        origin = first ? Math.min(box.top, first.getBoundingClientRect().top
+          - parseFloat(getComputedStyle(first).marginTop)) : box.top;
         continue;
       }
       if (block.className === "keep") {
-        const end = origin + (Math.floor((box.top - origin) / height) + 1) * height;
-        // Pages end a little earlier where a line would be cut; leave a margin.
+        const end = pageEnd(origin, box.top);
         if (box.bottom > end && box.height < height) {
-          block.style.marginTop = (end - box.top) + "px";
+          space(block, end - box.top);
           origin = end;
         }
       }
+      const table = block.tagName === "TABLE" ? block
+        : block.className === "keep" && block.lastElementChild?.tagName === "TABLE"
+          ? block.lastElementChild : null;
+      if (table) split(table, origin);
     }
   })
-  .then(() => document.fonts.ready)
-  .then(() => new Promise(done => setTimeout(done, 200)))
   .then(() => webkit.messageHandlers.done.postMessage("ok"),
         e => webkit.messageHandlers.done.postMessage("render failed: " + e));
 </script></body></html>

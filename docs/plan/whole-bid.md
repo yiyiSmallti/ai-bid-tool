@@ -55,7 +55,10 @@ solution that answers each scoring item.
    with one heading of its label and title, the label joining the title when
    the tender prints it on its own line, a title wrapped onto a second line
    kept whole, and body text set against it split off; a form's closing signature lines stay
-   on one page; a table found only in invisible fills under the text is text; a right-indented signature line that
+   on one page; a table found only in invisible fills under the text is text; a table the
+   tender's page break cut is one table, without the header the tender repeats
+   and with a row the break split joined again; tables keep their rows whole
+   and repeat their header rows on each page; a right-indented signature line that
    a filled value would push past the margin moves left. A Word form is rebuilt from its verbatim
    text, tab-separated rows becoming editable tables. Labels the
    installation can answer (bidder name, address, phone, legal representative,
