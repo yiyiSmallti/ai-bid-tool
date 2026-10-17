@@ -13,7 +13,10 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   it; a tender's "1 投标函" matches an outline's 1、), and keep filled
   signature lines on one line. A wrapped form title stays one heading and
   body text set against a title is split off. Closing signature lines stay
-  on one page, and text over white fills is no longer read as a table. See requirement 2 of the
+  on one page, and text over white fills is no longer read as a table.
+  A tender table cut by its page break is one table again, and table rows
+  are no longer cut at a page end in exports or page previews: the table
+  breaks between rows and repeats its header. See requirement 2 of the
   [whole-bid plan](plan/whole-bid.md).
 
 ## 2026-10-17: Outline acceptance on public tenders

@@ -560,10 +560,7 @@ class Renderer:
         table = self.word.add_table(rows=1 + len(grid.rows), cols=len(grid.columns))
         table.style = "Table Grid"
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        # The header row repeats on each page a long table spans.
-        repeat = OxmlElement("w:tblHeader")
-        repeat.set(qn("w:val"), "true")
-        table.rows[0]._tr.get_or_add_trPr().append(repeat)
+        rows_whole(table, 1)
         for row, values in enumerate([grid.columns, *grid.rows]):
             for column, value in enumerate(values):
                 cell = table.cell(row, column)
@@ -699,6 +696,7 @@ class Renderer:
                 target = table.cell(header_rows + offset, column)
                 draft = offset in (drafted or set()) and value in {DRAFT_RESPONSE, DRAFT_DEVIATION}
                 self._cell(target, value, None, mark=draft)
+        rows_whole(table, header_rows if rows is not None else _header_rows(grid))
         self._new()
 
     @staticmethod
@@ -1128,3 +1126,27 @@ def _fit_title(
     if rest:
         blocks.insert(heading + 1, replace(block, pieces=rest, align="left"))
     return blocks
+
+
+def rows_whole(table, header: int) -> None:
+    """Rows are not split across pages, and the first `header` rows repeat on each page
+    a long table spans."""
+    for position, row in enumerate(table.rows):
+        properties = row._tr.get_or_add_trPr()
+        properties.append(OxmlElement("w:cantSplit"))
+        if position < header:
+            repeat = OxmlElement("w:tblHeader")
+            repeat.set(qn("w:val"), "true")
+            properties.append(repeat)
+
+
+def _header_rows(grid: Grid) -> int:
+    """The rows of a tender table that head its columns: the first one or two rows, every
+    cell titled and none spanning below them, in a table with rows under them."""
+    for header in (1, 2):
+        if len(grid.heights) <= header + 1:
+            return 0
+        top = [cell for cell in grid.cells if cell.row < header]
+        if all(cell.row + cell.rows <= header for cell in top):
+            return header if all(cell.text for cell in top) else 0
+    return 0
