@@ -18,6 +18,7 @@ from app.core.errors import ServiceError
 from app.core.security import TokenSigner
 from app.models.entities import Task
 from app.providers.storage import Storage
+from app.schemas.profile_contracts import OrgProfileData
 from app.schemas.solution import (
     SolutionChapter,
     SolutionRevision,
@@ -44,6 +45,8 @@ TITLES = [
     "项目物力配置情况",
     "合理化建议及特色服务",
 ]
+
+BIDDER = OrgProfileData(name="合成投标人")
 
 
 def tender(extra_forms="附件2 服务方案\n按要求提供方案"):
@@ -174,7 +177,7 @@ async def test_assembly_loads_current_chapters_and_rejects_stale_score_range(
     )
     monkeypatch.setattr(bid_outline, "outline", AsyncMock(return_value=outline))
     monkeypatch.setattr(bid_outline, "load_chunks", AsyncMock(return_value=chunks))
-    monkeypatch.setattr(whole_bid, "selected_bidder", AsyncMock(return_value="合成投标人"))
+    monkeypatch.setattr(whole_bid, "selected_bidder", AsyncMock(return_value=BIDDER))
     monkeypatch.setattr(whole_bid, "card_responses", AsyncMock(return_value=[]))
     actor = Identity({"task:read", "solution:read"} if solution_read else {"task:read"})
 
@@ -234,7 +237,7 @@ def test_solution_docx_order_styles_placeholders_and_missing_chapters(placement)
         chunks,
         None,
         Task(name="合成服务项目", tender_number=None),
-        "合成投标人",
+        BIDDER,
         [],
         chapters,
     )
@@ -298,7 +301,7 @@ def test_confirmed_chapter_with_missing_fact_still_marks_review_draft():
         chunks,
         None,
         Task(name="合成项目", tender_number=None),
-        "合成投标人",
+        BIDDER,
         [],
         chapters,
     )
@@ -314,7 +317,7 @@ def test_legacy_build_defaults_missing_chapters_to_review_draft():
         chunks,
         None,
         Task(name="合成项目", tender_number=None),
-        "合成投标人",
+        BIDDER,
         [],
     )
     assert tally.unconfirmed_chapters == 6

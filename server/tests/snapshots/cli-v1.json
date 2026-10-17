@@ -74581,6 +74581,45 @@
               "OrgProfileData": {
                 "additionalProperties": false,
                 "properties": {
+                  "address": {
+                    "anyOf": [
+                      {
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Address"
+                  },
+                  "credit_code": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Credit Code"
+                  },
+                  "legal_representative": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Legal Representative"
+                  },
                   "name": {
                     "maxLength": 200,
                     "minLength": 1,
@@ -74599,6 +74638,19 @@
                     ],
                     "default": null,
                     "title": "Performance Summary"
+                  },
+                  "phone": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Phone"
                   },
                   "registration_details": {
                     "anyOf": [
@@ -76313,6 +76365,45 @@
               "OrgProfileData": {
                 "additionalProperties": false,
                 "properties": {
+                  "address": {
+                    "anyOf": [
+                      {
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Address"
+                  },
+                  "credit_code": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Credit Code"
+                  },
+                  "legal_representative": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Legal Representative"
+                  },
                   "name": {
                     "maxLength": 200,
                     "minLength": 1,
@@ -76331,6 +76422,19 @@
                     ],
                     "default": null,
                     "title": "Performance Summary"
+                  },
+                  "phone": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Phone"
                   },
                   "registration_details": {
                     "anyOf": [
@@ -76525,6 +76629,45 @@
               "OrgProfileData": {
                 "additionalProperties": false,
                 "properties": {
+                  "address": {
+                    "anyOf": [
+                      {
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Address"
+                  },
+                  "credit_code": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Credit Code"
+                  },
+                  "legal_representative": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Legal Representative"
+                  },
                   "name": {
                     "maxLength": 200,
                     "minLength": 1,
@@ -76543,6 +76686,19 @@
                     ],
                     "default": null,
                     "title": "Performance Summary"
+                  },
+                  "phone": {
+                    "anyOf": [
+                      {
+                        "maxLength": 50,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Phone"
                   },
                   "registration_details": {
                     "anyOf": [

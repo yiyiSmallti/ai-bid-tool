@@ -28,6 +28,7 @@ from app.core.errors import ServiceError, not_found
 from app.models.entities import OrgProfileRevision, Requirement, Task, TaskOrgProfile
 from app.models.response_cards import ResponseCard, ResponseCardRevision
 from app.providers.storage import Storage
+from app.schemas.profile_contracts import OrgProfileData
 from app.schemas.solution import SolutionChapter, SolutionTable
 from app.schemas.whole_bid import BidOutline, OutlineForm, OutlineScoringItem
 from app.services import bid_outline, documents, task_access
@@ -49,6 +50,10 @@ class Facts:
     project_number: str | None
     tenderee: str | None
     bidder: str | None
+    address: str | None = None
+    phone: str | None = None
+    legal_rep: str | None = None
+    credit_code: str | None = None
 
 
 @dataclass
@@ -192,12 +197,21 @@ def value_of(name: str | None, facts: Facts) -> str | None:
         if facts.project_name and facts.project_number:
             return f"{facts.project_name}（{facts.project_number}）"
         return None
-    if name in {"project_name", "project_number", "tenderee", "bidder"}:
+    if name in {
+        "project_name",
+        "project_number",
+        "tenderee",
+        "bidder",
+        "address",
+        "phone",
+        "legal_rep",
+        "credit_code",
+    }:
         return getattr(facts, name)
     return None
 
 
-def tender_facts(text: str, task: Task, bidder: str | None) -> Facts:
+def tender_facts(text: str, task: Task, bidder: OrgProfileData | None) -> Facts:
     """Project and tenderee as the tender states them; the task's own fields are fallbacks."""
 
     def first(pattern: str) -> str | None:
@@ -209,7 +223,11 @@ def tender_facts(text: str, task: Task, bidder: str | None) -> Facts:
         project_number=first(r"项目编号[：:]\s*([0-9A-Za-z\-—_/（）()]{4,60})")
         or task.tender_number,
         tenderee=first(r"(?:采购人|采购单位|招标人)(?:名称)?[：:]\s*([^\n，,。；]{2,60})"),
-        bidder=bidder,
+        bidder=bidder.name if bidder else None,
+        address=bidder.address if bidder else None,
+        phone=bidder.phone if bidder else None,
+        legal_rep=bidder.legal_representative if bidder else None,
+        credit_code=bidder.credit_code if bidder else None,
     )
 
 
@@ -760,7 +778,7 @@ def text_blocks(form: OutlineForm) -> list[Paragraph | Grid]:
     return blocks
 
 
-async def selected_bidder(session: AsyncSession, task_id: UUID) -> str | None:
+async def selected_bidder(session: AsyncSession, task_id: UUID) -> OrgProfileData | None:
     data = await session.scalar(
         select(OrgProfileRevision.data)
         .join(TaskOrgProfile, TaskOrgProfile.profile_revision_id == OrgProfileRevision.id)
@@ -768,7 +786,7 @@ async def selected_bidder(session: AsyncSession, task_id: UUID) -> str | None:
         .order_by(TaskOrgProfile.created_at.desc())
         .limit(1)
     )
-    return (data or {}).get("name")
+    return OrgProfileData.model_validate(data) if data else None
 
 
 async def card_responses(session: AsyncSession, document_id: UUID) -> list[Response]:
@@ -796,7 +814,7 @@ def build(
     chunks: list[dict],
     content: bytes | None,
     task: Task,
-    bidder: str | None,
+    bidder: OrgProfileData | None,
     responses: list[Response],
     chapters: list[SolutionChapter] | None = None,
 ) -> tuple[bytes, Tally]:

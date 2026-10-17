@@ -12,8 +12,22 @@ class OrgProfileData(Contract):
     registration_details: str | None = Field(default=None, max_length=10000)
     performance_summary: str | None = Field(default=None, max_length=20000)
     standard_wording: str | None = Field(default=None, max_length=20000)
+    # Short facts that whole-bid forms print verbatim.
+    address: str | None = Field(default=None, max_length=200)
+    phone: str | None = Field(default=None, max_length=50)
+    legal_representative: str | None = Field(default=None, max_length=50)
+    credit_code: str | None = Field(default=None, max_length=50)
 
-    @field_validator("name", "registration_details", "performance_summary", "standard_wording")
+    @field_validator(
+        "name",
+        "registration_details",
+        "performance_summary",
+        "standard_wording",
+        "address",
+        "phone",
+        "legal_representative",
+        "credit_code",
+    )
     @classmethod
     def nonblank_when_supplied(cls, value: str | None) -> str | None:
         if value is not None:

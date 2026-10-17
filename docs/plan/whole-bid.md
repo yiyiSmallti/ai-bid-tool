@@ -24,8 +24,8 @@ solution that answers each scoring item.
    their indents and alignment, drawn or typed blanks with the hint printed on
    them, and tables with merged cells. A Word form is rebuilt from its verbatim
    text, tab-separated rows becoming editable tables. Labels the
-   installation can answer (bidder name, address, legal representative,
-   project name and number, date) are filled from the task and the selected
+   installation can answer (bidder name, address, phone, legal representative,
+   unified social credit code, project name and number) are filled from the task and the selected
    company profile. Unknown values, prices, signatures and seals stay
    highlighted placeholders `【待填：…】`.
 3. **Copies.** A form asking for a copy of a licence or certificate shows the
@@ -83,7 +83,7 @@ solution that answers each scoring item.
 | 1 | Outline service, API and CLI (`bid tender outline`) | Done |
 | 2 | Assembly of forms, copies placeholders and deviation table; download (`bid tender whole-bid`) | Done |
 | 3 | Solution planning and drafting job, chapter review and confirmation | Done |
-| 4 | Structured company fields for form filling | Planned |
+| 4 | Structured company fields for form filling | Done |
 | 5 | Desktop page for outline, drafting, chapter review and assembly | Planned |
 | 6 | Acceptance on real tenders against the winning-bid reference | Planned |
 

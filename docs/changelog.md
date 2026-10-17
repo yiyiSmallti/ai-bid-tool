@@ -6,6 +6,14 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Company facts in whole-bid forms
+
+- Company profiles gain optional address, phone, legal representative and
+  unified social credit code, editable on the desktop profile form and quotable
+  as materials. Whole-bid forms fill the matching blanks from the task's
+  selected profile; signatures, authorised persons and dates stay for a human.
+  Implements slice 4 of the [whole-bid plan](plan/whole-bid.md).
+
 ## 2026-10-16: Solution chapter drafting and review
 
 - `bid solution draft` plans each selected subjective scoring item from its

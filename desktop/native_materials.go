@@ -22,7 +22,7 @@ var materialFields = map[string][]string{
 	"product":     {"name", "vendor", "model", "model_version", "official_url", "whitepaper_url"},
 	"feature":     {"product_id", "name", "description", "status"},
 	"certificate": {"kind", "name", "number", "valid_from", "valid_until"},
-	"org_profile": {"name", "registration_details", "performance_summary", "standard_wording"},
+	"org_profile": {"name", "address", "phone", "legal_representative", "credit_code", "registration_details", "performance_summary", "standard_wording"},
 }
 var materialPaths = map[string]string{"product": "products", "feature": "features", "certificate": "certificates", "org_profile": "profiles"}
 var materialIDs = map[string]string{"product": "product_id", "feature": "feature_id", "certificate": "certificate_id", "org_profile": "profile_id"}

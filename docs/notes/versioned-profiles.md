@@ -8,8 +8,9 @@ registration or performance evidence, or automatically change organization ident
 
 ## Usage
 
-Supply a nonblank name and optional registration_details, performance_summary and
-standard_wording. Unknown text stays null. Updates require expected_revision and
+Supply a nonblank name and optional registration_details, performance_summary,
+standard_wording, and the short facts address, phone, legal_representative and
+credit_code that whole-bid forms print verbatim. Unknown text stays null. Updates require expected_revision and
 complete data. Select a profile for a task; replace explicitly to change it. History
 retains every version and selection. Every result warns that authenticity,
 performance and qualification have not been verified.
