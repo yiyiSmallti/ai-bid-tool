@@ -84,6 +84,11 @@ function split(table, origin) {
     if (header < 0) return;
     const top = part.getBoundingClientRect().top;
     const end = pageEnd(origin, top);
+    // A table that starts a page on its own starts at `edge` too.
+    if (top - (end - height) < edge - 1) {
+      space(part, end - height + edge - top);
+      continue;
+    }
     const cut = rows.findIndex((row, index) =>
       index >= header && row.getBoundingClientRect().bottom > end - slack);
     if (cut < 0) return;
