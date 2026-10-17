@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -25,14 +28,22 @@ type solutionPage struct {
 	// The outline's scoring summary: where the items came from and why they may be incomplete.
 	scoring     Object
 	reviewPanel jobPanel
+	figurePanel jobPanel
+	// Figure images by SHA-256, verified against the revision that names them.
+	figures map[string]*ui.Bitmap
 }
 
 func newSolutionPage(r Route) NativePage {
-	return &solutionPage{task: r.Params["taskId"], document: r.Query.Get("document"), picked: map[string]bool{}}
+	return &solutionPage{task: r.Params["taskId"], document: r.Query.Get("document"), picked: map[string]bool{}, figures: map[string]*ui.Bitmap{}}
 }
 func (*solutionPage) Title() string { return "整本标书" }
 func (p *solutionPage) Dirty() bool { return p.editing && p.text != p.original }
-func (p *solutionPage) Close()      { p.generation++; p.jobPanel.Close(); p.reviewPanel.Close() }
+func (p *solutionPage) Close() {
+	p.generation++
+	p.jobPanel.Close()
+	p.reviewPanel.Close()
+	p.figurePanel.Close()
+}
 func (p *solutionPage) Open(a *NativeApp) {
 	a.Request("GET", "/tasks/"+p.task+"/documents", nil, func(r Result) {
 		p.documents = nil
@@ -110,6 +121,46 @@ func (p *solutionPage) show(a *NativeApp, id string) {
 			return
 		}
 		p.detail = r.Data
+		p.loadFigures(a, id, generation)
+	})
+}
+
+// loadFigures fetches each figure of the current revision not yet shown, checking its digest.
+func (p *solutionPage) loadFigures(a *NativeApp, id string, generation uint64) {
+	for _, section := range objects(object(p.detail["current"])["sections"]) {
+		for _, sub := range objects(section["subsections"]) {
+			figure := object(sub["figure"])
+			hash := str(figure, "sha256")
+			if figure == nil || p.figures[hash] != nil {
+				continue
+			}
+			a.Do(func(ctx context.Context) (func(), error) {
+				data, err := a.Client.BinaryImage(ctx, "/solutions/"+id+"/figures/"+hash, str(figure, "media_type"), Object{"sha256": hash})
+				if err != nil {
+					return nil, err
+				}
+				bitmap, err := ui.DecodeBitmap(data)
+				return func() {
+					if generation == p.generation {
+						p.figures[hash] = bitmap
+					}
+				}, err
+			})
+		}
+	}
+}
+
+// uploadFigure attaches a real screenshot to subsection `number`, captioned with its heading.
+func (p *solutionPage) uploadFigure(a *NativeApp, revision int, number, heading string) {
+	caption := heading
+	if utf8.RuneCountInString(caption) > 60 {
+		caption = string([]rune(caption)[:60])
+	}
+	a.PickFiles(false, func(paths []string) {
+		fields := map[string]string{"expected_revision": fmt.Sprint(revision), "subsection": number, "caption": caption}
+		a.Upload("/solutions/"+p.selected+"/figures/upload", fields, []UploadFile{{Field: "file", Path: paths[0]}}, func(Result) {
+			p.loadChapters(a)
+		})
 	})
 }
 
@@ -237,7 +288,7 @@ func (p *solutionPage) chapterView(c *ui.Context, a *NativeApp) {
 					a.Error = err.Error()
 					return
 				}
-				a.Request("PUT", "/solutions/"+p.selected, Object{"expected_revision": revision, "sections": sections}, func(Result) {
+				a.Request("PUT", "/solutions/"+p.selected, Object{"expected_revision": revision, "sections": withFigures(sections, objects(current["sections"]))}, func(Result) {
 					p.editing = false
 					p.loadChapters(a)
 				})
@@ -253,18 +304,26 @@ func (p *solutionPage) chapterView(c *ui.Context, a *NativeApp) {
 		nativeIconButton(c, "circle-check", "确认本章", false).Disabled(a.Busy || str(current, "state") == "confirmed").OnClick(func() {
 			a.Request("POST", "/solutions/"+p.selected+"/confirm", Object{"expected_revision": revision}, func(Result) { p.loadChapters(a) })
 		})
+		nativeIconButton(c, "image", "生成系统界面图", false).Disabled(a.Busy).OnClick(func() {
+			a.Request("POST", "/solutions/"+p.selected+"/figures", Object{"expected_revision": revision}, func(r Result) {
+				p.figurePanel.Load(a, str(r.Data, "job_id"), func() { p.loadChapters(a) })
+			})
+		})
 	})
+	p.figurePanel.View(c, a)
 	if p.editing {
-		nativeText(c, "“# ”开头为节标题，“## ”开头为小节标题，“| ”开头的连续行为小节表格（首行为表头），其余每行一个段落。保存后本章回到草稿，需要重新确认。")
+		nativeText(c, "“# ”开头为节标题，“## ”开头为小节标题，“| ”开头的连续行为小节表格（首行为表头），“![图题](编号)”为小节配图，可改图题或删去该行；其余每行一个段落。保存后本章回到草稿，需要重新确认。")
 		ui.TextArea(c, &p.text).Label("章节正文").Height(560).FillWidth().Radius(8).Background(nativePalette(c).Card)
 		return
 	}
-	for _, section := range objects(current["sections"]) {
+	nativeText(c, "“生成系统界面图”按本章内容为至多 6 个小节绘制系统页面图，替换此前生成的图，保留上传的真实截图；有真实系统时在小节下上传截图。")
+	for position, section := range objects(current["sections"]) {
 		ui.Text(c, str(section, "heading")).FontSize(16).FontWeight(600).TextColor(c.Theme().Text)
 		for _, paragraph := range stringList(section["paragraphs"]) {
 			nativeText(c, paragraph)
 		}
-		for _, sub := range objects(section["subsections"]) {
+		for subPosition, sub := range objects(section["subsections"]) {
+			number := fmt.Sprintf("%d.%d", position+1, subPosition+1)
 			ui.Text(c, str(sub, "heading")).FontSize(14.5).FontWeight(600).TextColor(c.Theme().Text)
 			for _, paragraph := range stringList(sub["paragraphs"]) {
 				nativeText(c, paragraph)
@@ -277,6 +336,22 @@ func (p *solutionPage) chapterView(c *ui.Context, a *NativeApp) {
 				}
 				nativeTable(c, stringList(table["columns"]), body, nil)
 			}
+			heading := str(sub, "heading")
+			label := "上传真实截图"
+			if figure := object(sub["figure"]); figure != nil {
+				if bitmap := p.figures[str(figure, "sha256")]; bitmap != nil {
+					ui.Image(c.Key("figure-"+number), bitmap).FillWidth().Height(420).Fit(ui.Contain).Label(str(figure, "caption"))
+				}
+				origin := "生成"
+				if str(figure, "origin") == "uploaded" {
+					origin = "上传"
+				}
+				nativeText(c, "图："+str(figure, "caption")+"（"+origin+"）")
+				label = "替换为真实截图"
+			}
+			nativeGhostButton(c.Key("upload-"+number), "upload", label, a.Busy).OnClick(func() {
+				p.uploadFigure(a, revision, number, heading)
+			})
 		}
 	}
 }
@@ -301,10 +376,38 @@ func formatSolutionText(sections []Object) string {
 					b.WriteString("| " + strings.Join(stringList(row), " | ") + " |\n")
 				}
 			}
+			if figure := object(sub["figure"]); figure != nil {
+				b.WriteString("![" + str(figure, "caption") + "](" + str(figure, "sha256") + ")\n")
+			}
 		}
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+var figureLine = regexp.MustCompile(`^!\[(.+)\]\(([0-9a-f]{64})\)$`)
+
+// withFigures completes each parsed figure from the revision's figure of the same image.
+func withFigures(sections []Object, previous []Object) []Object {
+	known := map[string]Object{}
+	for _, section := range previous {
+		for _, sub := range objects(section["subsections"]) {
+			if figure := object(sub["figure"]); figure != nil {
+				known[str(figure, "sha256")] = figure
+			}
+		}
+	}
+	for _, section := range sections {
+		subs, _ := section["subsections"].([]Object)
+		for _, sub := range subs {
+			if figure, ok := sub["figure"].(Object); ok {
+				if found := known[str(figure, "sha256")]; found != nil {
+					figure["media_type"], figure["origin"] = found["media_type"], found["origin"]
+				}
+			}
+		}
+	}
+	return sections
 }
 
 func parseSolutionText(text string) ([]Object, error) {
@@ -325,6 +428,12 @@ func parseSolutionText(text string) ([]Object, error) {
 		case strings.HasPrefix(line, "# "):
 			section, sub, table = Object{"heading": strings.TrimSpace(line[2:]), "paragraphs": []string{}, "subsections": []Object{}}, nil, nil
 			sections = append(sections, section)
+		case figureLine.MatchString(line):
+			if sub == nil {
+				return nil, fmt.Errorf("第 %d 行：配图只能放在小节中", number+1)
+			}
+			match := figureLine.FindStringSubmatch(line)
+			sub["figure"] = Object{"caption": strings.TrimSpace(match[1]), "sha256": match[2]}
 		case strings.HasPrefix(line, "|"):
 			if sub == nil {
 				return nil, fmt.Errorf("第 %d 行：表格只能放在小节中", number+1)

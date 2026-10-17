@@ -210,6 +210,8 @@ from app.schemas.solution import (
     SolutionDraftReceipt,
     SolutionDraftRequest,
     SolutionEdit,
+    SolutionFiguresReceipt,
+    SolutionFiguresRequest,
     SolutionList,
 )
 from app.schemas.source_contracts import SourceReadArguments, SourceSearchArguments
@@ -381,6 +383,8 @@ COMMANDS = {
     "solution show": None,
     "solution edit": SolutionEdit,
     "solution confirm": SolutionConfirm,
+    "solution figures": SolutionFiguresRequest,
+    "solution figure-upload": None,
     "req extract": JobAction,
     "req list": None,
     "req history": None,
@@ -581,6 +585,8 @@ OUTPUTS = (
         "solution show": TypeAdapter(SolutionChapter),
         "solution edit": TypeAdapter(SolutionChapter),
         "solution confirm": TypeAdapter(SolutionChapter),
+        "solution figures": TypeAdapter(SolutionFiguresReceipt),
+        "solution figure-upload": TypeAdapter(SolutionChapter),
     }
 )
 

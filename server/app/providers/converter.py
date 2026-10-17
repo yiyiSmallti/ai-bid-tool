@@ -85,34 +85,43 @@ class WebKitConverter:
         return f"{self.name}:docx-preview"
 
     async def docx_to_pdf(self, content: bytes, name: str) -> bytes:
-        with tempfile.TemporaryDirectory(prefix="bid-preview-") as work:
-            source, target = Path(work, "in.docx"), Path(work, "out.pdf")
-            await asyncio.to_thread(source.write_bytes, content)
-            try:
-                process = await asyncio.create_subprocess_exec(
-                    self.binary,
-                    str(source),
-                    str(target),
-                    stdin=asyncio.subprocess.DEVNULL,
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-            except OSError as exc:
-                raise ProviderFailure(
-                    "Preview renderer is unavailable", code="converter_unavailable"
-                ) from exc
-            try:
-                async with asyncio.timeout(self.timeout):
-                    await process.communicate()
-            except TimeoutError as exc:
-                process.kill()
-                await process.wait()
-                raise ProviderFailure(
-                    "Preview renderer timed out", code="converter_failed", retryable=True
-                ) from exc
-            if process.returncode != 0:
-                raise ProviderFailure("Converter rejected the document", code="converter_failed")
-            return await asyncio.to_thread(_read_output, target)
+        return await _run(self.binary, [], content, "in.docx", "out.pdf", self.timeout)
+
+    async def html_to_png(self, html: bytes) -> bytes:
+        """One generated system page drawn to PNG, scripts off and every load blocked."""
+        return await _run(self.binary, ["--html"], html, "in.html", "out.png", self.timeout)
+
+
+async def _run(binary, flags, content, source_name, target_name, seconds) -> bytes:
+    with tempfile.TemporaryDirectory(prefix="bid-preview-") as work:
+        source, target = Path(work, source_name), Path(work, target_name)
+        await asyncio.to_thread(source.write_bytes, content)
+        try:
+            process = await asyncio.create_subprocess_exec(
+                binary,
+                *flags,
+                str(source),
+                str(target),
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+        except OSError as exc:
+            raise ProviderFailure(
+                "Preview renderer is unavailable", code="converter_unavailable"
+            ) from exc
+        try:
+            async with asyncio.timeout(seconds):
+                await process.communicate()
+        except TimeoutError as exc:
+            process.kill()
+            await process.wait()
+            raise ProviderFailure(
+                "Preview renderer timed out", code="converter_failed", retryable=True
+            ) from exc
+        if process.returncode != 0:
+            raise ProviderFailure("Converter rejected the document", code="converter_failed")
+        return await asyncio.to_thread(_read_output, target)
 
 
 def _read_output(path: Path) -> bytes:

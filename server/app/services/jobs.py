@@ -126,6 +126,10 @@ async def read_access(
         from app.services.scoring_review import job_access as review_access
 
         await review_access(session, identity, job)
+    if job.kind == "solution_figures":
+        from app.services.solution_figures import job_access as figures_access
+
+        await figures_access(session, identity, job)
     if job.kind == "memory_candidate":
         from app.memory.candidates import job_access
 
@@ -351,6 +355,10 @@ async def cancel(session: AsyncSession, identity: Identity, job_id: UUID, storag
         from app.services.scoring_review import job_access as review_access
 
         await review_access(session, identity, job, cancel=True)
+    if job.kind == "solution_figures":
+        from app.services.solution_figures import job_access as figures_access
+
+        await figures_access(session, identity, job, cancel=True)
     if job.kind == "memory_candidate":
         from app.memory.candidates import job_access
 

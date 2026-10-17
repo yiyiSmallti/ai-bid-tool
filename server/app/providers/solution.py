@@ -20,6 +20,7 @@ from app.schemas.solution import (
     SolutionSectionOutput,
     SolutionSectionRequest,
     SolutionSubsection,
+    SolutionSubsectionText,
 )
 
 ADAPTER_VERSION = "http-solution-v2"
@@ -112,7 +113,7 @@ def plain(paragraphs: list[str]) -> list[str]:
     return [text for text in kept if text]
 
 
-def distinct(subsections: list[SolutionSubsection]) -> list[SolutionSubsection]:
+def distinct(subsections: list[SolutionSubsectionText]) -> list[SolutionSubsection]:
     """Drop a subsection the model wrote twice under the same heading, or left empty."""
     seen: set[str] = set()
     kept = []
@@ -123,7 +124,11 @@ def distinct(subsections: list[SolutionSubsection]) -> list[SolutionSubsection]:
         )
         if not empty and subsection.heading not in seen:
             seen.add(subsection.heading)
-            kept.append(subsection.model_copy(update={"paragraphs": paragraphs}))
+            kept.append(
+                SolutionSubsection(
+                    heading=subsection.heading, paragraphs=paragraphs, table=subsection.table
+                )
+            )
     return kept
 
 

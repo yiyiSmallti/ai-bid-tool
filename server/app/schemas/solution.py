@@ -47,7 +47,23 @@ class SolutionTable(Contract):
         return self
 
 
-class SolutionSubsection(Contract):
+class SolutionFigure(Contract):
+    """An image ending a subsection: a generated page of the system or an uploaded screenshot."""
+
+    caption: str = Field(min_length=1, max_length=60)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    media_type: Literal["image/png", "image/jpeg"]
+    origin: Literal["generated", "uploaded"]
+
+    @field_validator("caption")
+    @classmethod
+    def nonblank_caption(cls, value: str) -> str:
+        return _nonblank([value], "caption")[0]
+
+
+class SolutionSubsectionText(Contract):
+    """A subsection as the model drafts it."""
+
     heading: str = Field(min_length=1, max_length=300)
     paragraphs: list[str] = Field(min_length=1, max_length=40)
     table: SolutionTable | None = None
@@ -61,6 +77,10 @@ class SolutionSubsection(Contract):
     @classmethod
     def nonblank_paragraphs(cls, value: list[str]) -> list[str]:
         return _nonblank(value, "paragraphs")
+
+
+class SolutionSubsection(SolutionSubsectionText):
+    figure: SolutionFigure | None = None
 
 
 class SolutionSection(Contract):
@@ -93,6 +113,8 @@ class SolutionSection(Contract):
             out += [sub.heading, *sub.paragraphs]
             if sub.table:
                 out += sub.table.columns + [cell for row in sub.table.rows for cell in row]
+            if sub.figure:
+                out.append(sub.figure.caption)
         return out
 
 
@@ -164,7 +186,7 @@ class SolutionSectionOutput(Contract):
     """Stage two: one planned section written out, one subsection per planned point."""
 
     paragraphs: list[str] = Field(min_length=1, max_length=6)
-    subsections: list[SolutionSubsection] = Field(min_length=2, max_length=6)
+    subsections: list[SolutionSubsectionText] = Field(min_length=2, max_length=6)
 
 
 class SolutionProviderRequest(Contract):
@@ -188,4 +210,72 @@ class SolutionSectionRequest(Contract):
 
 class SolutionProviderResult(Contract):
     sections: list[SolutionSection]
+    usages: list[ProviderUsage]
+
+
+class SolutionFiguresRequest(Contract):
+    expected_revision: int = Field(ge=1)
+    model: UUID | None = None
+    reasoning: str | None = None
+
+
+class SolutionFiguresReceipt(Contract):
+    job_id: UUID
+    chapter_id: UUID
+    revision: int = Field(ge=1)
+
+
+class FigureSubsection(Contract):
+    """A subsection the figure model may illustrate; `number` is `section.subsection`."""
+
+    number: str
+    section: str
+    heading: str
+    text: str
+
+
+class FigureProviderRequest(Contract):
+    title: str
+    project_name: str | None
+    subsections: list[FigureSubsection]
+
+
+class FigurePick(Contract):
+    subsection: str = Field(min_length=3, max_length=7)
+    caption: str = Field(min_length=1, max_length=30)
+    brief: str = Field(min_length=1, max_length=800)
+
+
+class FigurePlanOutput(Contract):
+    """Stage one: the subsections to illustrate, and one name and style for every page."""
+
+    system_name: str = Field(min_length=1, max_length=30)
+    style: str = Field(min_length=1, max_length=200)
+    figures: list[FigurePick] = Field(max_length=6)
+
+
+class FigurePageRequest(Contract):
+    system_name: str
+    style: str
+    project_name: str | None
+    subsection: FigureSubsection
+    caption: str
+    brief: str
+    retry: str | None = None
+
+
+class FigurePageOutput(Contract):
+    html: str = Field(min_length=1)
+
+
+class FigurePage(Contract):
+    subsection: str
+    caption: str
+    html: bytes
+
+
+class FigureProviderResult(Contract):
+    pages: list[FigurePage]
+    # Subsections whose page came back unusable twice; the other pages still publish.
+    failed: list[str] = []
     usages: list[ProviderUsage]
