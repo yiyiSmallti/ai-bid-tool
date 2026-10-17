@@ -8,6 +8,7 @@ the file says it is a review draft (审阅稿) while any remain.
 """
 
 import io
+import math
 import re
 from dataclasses import dataclass, field
 from typing import cast
@@ -261,6 +262,58 @@ def needs_clauses(blocks: list[Paragraph | Grid], chapter_title: str) -> list[Cl
     return clauses
 
 
+# The share of a subsection heading's weight a clause must cover to be answered there.
+ANSWER_SHARE = 0.3
+
+
+def bigrams(text: str) -> set[str]:
+    han = re.sub(r"[^\u4e00-\u9fff]", "", text)
+    return {han[i : i + 2] for i in range(len(han) - 1)}
+
+
+def answering_subsections(
+    clauses: list[Clause], items: list[OutlineScoringItem], chapters: list[SolutionChapter]
+) -> list[str | None]:
+    """The solution subsection (`N.M.K`) whose heading a needs clause best covers, or None.
+
+    Section bodies restate the whole needs chapter, so only headings are compared.
+    Bigrams common to many headings and clauses (公用, 人防, 工程) weigh little; a
+    clause covering too little of any heading, such as a payment term, has no answer.
+    """
+    by_item = {(chapter.title, chapter.score_range): chapter for chapter in chapters}
+    heads: list[tuple[str, set[str]]] = []
+    for chapter_number, item in enumerate((item for item in items if item.subjective), 1):
+        chapter = by_item.get((item.title, item.score_range))
+        for position, section in enumerate(chapter.current.sections if chapter else [], 1):
+            for sub_position, sub in enumerate(section.subsections, 1):
+                heads.append(
+                    (
+                        f"{chapter_number}.{position}.{sub_position}",
+                        bigrams(section.heading + sub.heading),
+                    )
+                )
+    texts = [bigrams(clause.text) for clause in clauses]
+    documents = [grams for _, grams in heads] + texts
+    frequency: dict[str, int] = {}
+    for grams in documents:
+        for gram in grams:
+            frequency[gram] = frequency.get(gram, 0) + 1
+
+    def weight(gram: str) -> float:
+        return math.log((len(documents) + 1) / (frequency.get(gram, 0) + 1))
+
+    answers: list[str | None] = []
+    for grams in texts:
+        best, number = 0.0, None
+        for candidate, head in heads:
+            total = sum(weight(gram) for gram in head) or 1
+            share = sum(weight(gram) for gram in grams & head) / total
+            if share > best:
+                best, number = share, candidate
+        answers.append(number if best >= ANSWER_SHARE else None)
+    return answers
+
+
 COLUMN_WEIGHTS = {
     "number": 1.0,
     "topic": 1.6,
@@ -289,6 +342,10 @@ def deviation_column(header: str) -> str:
 
 def form_anchor(form: OutlineForm) -> str:
     return f"form_{form.index}"
+
+
+def solution_anchor(number: str) -> str:
+    return "solution_" + number.replace(".", "_")
 
 
 class Renderer:
@@ -472,9 +529,10 @@ class Renderer:
                 self.solution_text(heading, f"{number} {unnumbered(section.heading)}")
                 self.solution_paragraphs(section.paragraphs)
                 for sub_position, sub in enumerate(section.subsections, 1):
+                    sub_heading = self._new(style="Heading 3")
+                    self.bookmark(sub_heading, solution_anchor(f"{number}.{sub_position}"))
                     self.solution_text(
-                        self._new(style="Heading 3"),
-                        f"{number}.{sub_position} {unnumbered(sub.heading)}",
+                        sub_heading, f"{number}.{sub_position} {unnumbered(sub.heading)}"
                     )
                     self.solution_paragraphs(sub.paragraphs)
                     if sub.table:
@@ -626,6 +684,7 @@ class Renderer:
         deviation: list[Clause] | None,
         scoring: list[OutlineScoringItem],
         responses: list[Response],
+        answers: list[str | None],
     ) -> None:
         title_done = False
         for block in blocks:
@@ -633,6 +692,7 @@ class Renderer:
                 if form.kind == "deviation" and deviation is not None:
                     rows, weights, drafted = self.deviation_rows(block, deviation, responses)
                     self.grid(block, rows, weights, drafted)
+                    self.deviation_pages(answers)
                     self.tally.unconfirmed_rows += len(drafted)
                     deviation = None
                 elif form.kind == "scoring_index" and scoring:
@@ -679,6 +739,21 @@ class Renderer:
                 paragraph = row.cells[page].paragraphs[0]
                 self._field(paragraph, f"PAGEREF solution_{chapters[item.title]} \\h")
 
+    def deviation_pages(self, answers: list[str | None]) -> None:
+        """Point each clause's page cell at the solution subsection answering it; a clause
+        with no answering subsection keeps an empty cell for the bidder."""
+        table = self.word.tables[-1]
+        header = [cell.text for cell in table.rows[0].cells]
+        page = next((index for index, text in enumerate(header) if "页" in text), None)
+        if page is None:
+            return
+        for row, number in zip(table.rows[1:], answers, strict=False):
+            if number:
+                paragraph = row.cells[page].paragraphs[0]
+                self.run(paragraph, f"{number} 节第 ")
+                self._field(paragraph, f"PAGEREF {solution_anchor(number)} \\h")
+                self.run(paragraph, " 页")
+
     @staticmethod
     def scoring_rows(grid: Grid, items: list[OutlineScoringItem]) -> list[list[str]]:
         """Scored items other than the price score, in the item column; the page
@@ -695,8 +770,7 @@ class Renderer:
         grid: Grid, clauses: list[Clause], responses: list[Response]
     ) -> tuple[list[list[str]], list[float], set[int]]:
         """Rows under the tender's own header, column weights that give the requirement
-        text room, and the rows still drafted; page references stay empty for the final
-        layout."""
+        text room, and the rows still drafted; `deviation_pages` fills the page column."""
         headers = [
             cell.text for cell in sorted(grid.cells, key=lambda c: c.column) if cell.row == 0
         ]
@@ -866,10 +940,13 @@ def build(
         len(outline.forms) - 1,
     )
     solution_after = technical_cover if technical_cover is not None else solution_form
+    answers = answering_subsections(clauses, outline.scoring_items, chapters or [])
     renderer.cover(outline, outline.forms, solution_after, chapters)
     for index, (form, blocks) in enumerate(zip(outline.forms, per_form, strict=True)):
         renderer.page_break(form_anchor(form))
-        renderer.form(form, blocks or text_blocks(form), clauses, outline.scoring_items, responses)
+        renderer.form(
+            form, blocks or text_blocks(form), clauses, outline.scoring_items, responses, answers
+        )
         if index == solution_after:
             renderer.solution(outline.scoring_items, chapters or [])
     first_paragraph = renderer.word.paragraphs[0]

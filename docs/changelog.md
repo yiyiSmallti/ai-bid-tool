@@ -6,6 +6,13 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-16: Deviation table page references
+
+- The deviation table's page column points each needs clause at the solution
+  subsection whose heading it best covers, as a page-reference field
+  (`N.M.K 节第 X 页`); clauses no heading answers keep an empty cell. See
+  requirement 4 of the [whole-bid plan](plan/whole-bid.md).
+
 ## 2026-10-16: Whole-bid desktop page
 
 - The task's 整本标书 page lists the tender's subjective scoring items, drafts
