@@ -6,6 +6,18 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-17: Outline of list-numbered format chapters
+
+- A format chapter numbered as a list (一、 groups holding 1、 2、 forms) splits
+  into its forms, with each group kept as a divider page; numbered clauses
+  inside a form are not taken for forms. Scoring items whose name wraps in its
+  cell keep the whole name, a contents page without page numbers no longer
+  adds chapters, and a bare 第N章 line takes its title from the next line.
+- Form text such as 致：（招标人名称） or a blank followed by （投标人名称）
+  is filled with the tender's or the selected company's value, and project
+  numbers containing Chinese characters are recognised. See requirements 1
+  and 2 of the [whole-bid plan](plan/whole-bid.md).
+
 ## 2026-10-16: Deviation table page references
 
 - The deviation table's page column points each needs clause at the solution
