@@ -33,7 +33,7 @@ from app.schemas.profile_contracts import OrgProfileData
 from app.schemas.solution import SolutionChapter, SolutionTable
 from app.schemas.whole_bid import BidOutline, OutlineForm, OutlineScoringItem
 from app.services import bid_outline, documents, task_access
-from app.services.form_layout import Blank, Cell, Grid, Paragraph, Text, form_blocks, plain
+from app.services.form_layout import Blank, Cell, Grid, Paragraph, Piece, Text, form_blocks, plain
 
 BODY_FONT, HEADING_FONT = "宋体", "黑体"
 HEADING = re.compile(r"^([一二三四五六七八九十]+、|（[一二三四五六七八九十]+）)\s*(.{1,30})$")
@@ -750,6 +750,8 @@ class Renderer:
             ),
             None,
         )
+        if heading is not None:
+            blocks = _fit_title(blocks, heading, title, stripped)
         if heading is None and form.kind != "cover":
             self._new(f"{form.label} {form.title}", style="Heading 1")
         bare_label = False
@@ -1070,3 +1072,43 @@ async def assemble(
         await card_responses(session, document.id),
         chapters,
     )
+
+
+def _fit_title(
+    blocks: list[Paragraph | Grid], heading: int, title: str, stripped
+) -> list[Paragraph | Grid]:
+    """Make the heading block hold exactly the form title: a title wrapped onto
+    the next lines takes them back, and body text joined after it is split off."""
+    blocks = list(blocks)
+    block = blocks[heading]
+    assert isinstance(block, Paragraph)
+    while (
+        heading + 1 < len(blocks)
+        and isinstance(after := blocks[heading + 1], Paragraph)
+        and len(text := stripped(block)) < len(title)
+        and title.startswith(text + stripped(after))
+    ):
+        block = replace(block, pieces=[*block.pieces, *after.pieces])
+        del blocks[heading + 1]
+    rest: list[Piece] = []
+    if len(stripped(block)) > len(title):
+        for index, piece in enumerate(block.pieces):
+            if not isinstance(piece, Text):
+                continue
+            for cut in range(len(piece.text) + 1):
+                head = [*block.pieces[:index], replace(piece, text=piece.text[:cut])]
+                if stripped(replace(block, pieces=head)) == title:
+                    tail = replace(piece, text=piece.text[cut:].lstrip())
+                    rest = (
+                        [tail, *block.pieces[index + 1 :]]
+                        if tail.text
+                        else block.pieces[index + 1 :]
+                    )
+                    block = replace(block, pieces=head)
+                    break
+            if rest:
+                break
+    blocks[heading] = block
+    if rest:
+        blocks.insert(heading + 1, replace(block, pieces=rest, align="left"))
+    return blocks
