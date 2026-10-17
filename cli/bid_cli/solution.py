@@ -14,7 +14,6 @@ from app.schemas.solution import (
     SolutionFiguresRequest,
 )
 
-
 MAX_FIGURE_BYTES = 15 * 1024 * 1024
 
 
