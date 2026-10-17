@@ -363,11 +363,11 @@ class Renderer:
         paragraph._p.append(start)
         paragraph._p.append(end)
 
-    def contents_entry(self, text: str, anchor: str) -> None:
+    def contents_entry(self, text: str, anchor: str, level: int = 1) -> None:
         """A contents line whose page number is a PAGEREF field; Word and WPS fill it in
         when fields update, which the document asks for on opening."""
         entry = self._new()
-        entry.paragraph_format.left_indent = Cm(0.5)
+        entry.paragraph_format.left_indent = Cm(0.5 * level)
         entry.paragraph_format.tab_stops.add_tab_stop(
             Cm(16), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS
         )
@@ -401,7 +401,11 @@ class Renderer:
         self.run(paragraph, f"【{prefix}：{label}】", mark=True, underline=prefix == "待填")
 
     def cover(
-        self, outline: BidOutline, forms: list[OutlineForm], solution_after: int | None = None
+        self,
+        outline: BidOutline,
+        forms: list[OutlineForm],
+        solution_after: int | None = None,
+        chapters: list[SolutionChapter] | None = None,
     ) -> None:
         for _ in range(6):
             self._new()
@@ -433,10 +437,20 @@ class Renderer:
         for position, form in enumerate(forms):
             self.contents_entry(f"{form.label}  {short_title(form.title)}", form_anchor(form))
             if position == solution_after:
+                by_item = {(c.title, c.score_range): c for c in chapters or []}
                 for number, item in enumerate(
                     (item for item in outline.scoring_items if item.subjective), 1
                 ):
-                    self.contents_entry(f"{number}、{item.title}", f"solution_{number}")
+                    self.contents_entry(f"{number}、{item.title}", f"solution_{number}", 2)
+                    chapter = by_item.get((item.title, item.score_range))
+                    for position, section in enumerate(
+                        chapter.current.sections if chapter else [], 1
+                    ):
+                        self.contents_entry(
+                            f"{number}.{position} {unnumbered(section.heading)}",
+                            f"solution_{number}_{position}",
+                            3,
+                        )
 
     def solution(self, items: list[OutlineScoringItem], chapters: list[SolutionChapter]) -> None:
         """Render the current revision in scoring order, keeping absent drafts visible."""
@@ -453,9 +467,9 @@ class Renderer:
                 self.tally.unconfirmed_chapters += 1
             for position, section in enumerate(chapter.current.sections, 1):
                 number = f"{chapter_number}.{position}"
-                self.solution_text(
-                    self._new(style="Heading 2"), f"{number} {unnumbered(section.heading)}"
-                )
+                heading = self._new(style="Heading 2")
+                self.bookmark(heading, f"solution_{chapter_number}_{position}")
+                self.solution_text(heading, f"{number} {unnumbered(section.heading)}")
                 self.solution_paragraphs(section.paragraphs)
                 for sub_position, sub in enumerate(section.subsections, 1):
                     self.solution_text(
@@ -852,7 +866,7 @@ def build(
         len(outline.forms) - 1,
     )
     solution_after = technical_cover if technical_cover is not None else solution_form
-    renderer.cover(outline, outline.forms, solution_after)
+    renderer.cover(outline, outline.forms, solution_after, chapters)
     for index, (form, blocks) in enumerate(zip(outline.forms, per_form, strict=True)):
         renderer.page_break(form_anchor(form))
         renderer.form(form, blocks or text_blocks(form), clauses, outline.scoring_items, responses)

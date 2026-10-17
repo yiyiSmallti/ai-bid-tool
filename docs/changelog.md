@@ -44,7 +44,8 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Whole bids insert these chapters in scoring order after the technical cover,
   solution form or last form. Missing chapters remain highlighted, and
   unconfirmed chapters appear in the download receipt. Every chapter starts a
-  new page; the contents page and the scoring index's page column carry page
+  new page; the contents page, which lists each chapter's sections, and the
+  scoring index's page column carry page
   references that Word and WPS fill in when the file is opened. A file with an
   unconfirmed chapter or a placeholder stays an 审阅稿; submission copies
   require a human. Implements slice 3 of the

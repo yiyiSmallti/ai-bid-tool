@@ -64,7 +64,7 @@ solution that answers each scoring item.
    solution immediately after the technical cover form, or after the solution
    form when there is no technical cover, or after the last form when neither
    exists. Missing subjective chapters remain visible as `【待起草：…】`.
-   The contents page lists forms and chapters, and the scoring index's page
+   The contents page lists forms, chapters and their sections, and the scoring index's page
    column points at each solution chapter, both as page-reference fields.
    A4, 宋体 body, headings in 黑体, page numbers. The file is a
    draft (审阅稿) while any chapter is unconfirmed or any placeholder remains,
