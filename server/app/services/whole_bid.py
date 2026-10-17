@@ -46,6 +46,7 @@ DRAFT_RESPONSE, DRAFT_DEVIATION = "完全响应", "无偏离"
 PRICE_SCORE = re.compile(r"(投标)?(报价|价格)(分|得分)?")
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ZIP = "application/zip"
+BROKEN_FIELD = re.compile(r"错误[!！]\s*未(定义|找到)(书签|引用源)[。.]?")
 # A cover form that starts a volume: a 分册, or a group named for the part it holds.
 BOOK = re.compile(r"第[一二三四五六七八九十]+册|分册")
 PART = re.compile(r"(资格证明|商务技术|资格|资信|商务|技术|价格|报价)(投标|响应)?(文件|部分)")
@@ -232,7 +233,9 @@ def tender_facts(text: str, task: Task, bidder: OrgProfileData | None) -> Facts:
 
     def first(pattern: str) -> str | None:
         match = re.search(pattern, text)
-        return match.group(1).strip(" ：:，。") if match else None
+        # A broken cross-reference in the tender's own Word file prints its error text.
+        value = BROKEN_FIELD.sub("", match.group(1)) if match else ""
+        return value.strip(" ：:，。") or None
 
     return Facts(
         project_name=first(r"项目名称[：:]\s*([^\n：:]{4,80}?)\s*(?:\n|项目编号|$)") or task.name,
