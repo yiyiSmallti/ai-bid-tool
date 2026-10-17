@@ -13,7 +13,10 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   planned section in its own call: an introduction and subsections with
   tables where they fit. Higher-scored items get more sections. Service
   commitments carry concrete numbers; unknown company facts stay
-  `【待填：…】`. A section cut off at its output cap is retried once. Drafting
+  `【待填：…】`. A section cut off at its output cap or failing its schema is
+  retried with a tighter length, then without tables. Each chapter keeps to
+  its own scoring item, and repeated or empty subsections and sentences about
+  the document itself are dropped. Drafting
   uses the model's default reasoning level, and calls use the existing
   admission, masking and usage-accounting path.
 - `bid solution list`, `show`, `edit` and `confirm` expose current chapters.
@@ -22,7 +25,9 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   tokens, agents or workers. Migration `0018` retains the revision history.
 - Whole bids insert these chapters in scoring order after the technical cover,
   solution form or last form. Missing chapters remain highlighted, and
-  unconfirmed chapters appear in the download receipt. A file with an
+  unconfirmed chapters appear in the download receipt. Every chapter starts a
+  new page; the contents page and the scoring index's page column carry page
+  references that Word and WPS fill in when the file is opened. A file with an
   unconfirmed chapter or a placeholder stays an 审阅稿; submission copies
   require a human. Implements slice 3 of the
   [whole-bid plan](plan/whole-bid.md).

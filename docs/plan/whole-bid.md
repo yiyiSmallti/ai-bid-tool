@@ -44,7 +44,10 @@ solution that answers each scoring item.
    chapter: four to six sections, six to eight from 10 points, eight to ten
    from 20 points. Each section is then drafted in its own call as an
    introduction and one subsection per point, with a table where one fits.
-   A section call has a bounded output and is retried once when cut off.
+   A section call has a bounded output and is retried, shorter, when cut off
+   or malformed. Each chapter covers only its own item; other items' chapters
+   are named to the model so it does not repeat them. Totals the tender does
+   not state are not counted by the model.
    Service commitments (response times, frequencies, deadlines) are concrete
    numbers. Headings carry no numbering; the file numbers them
    (`N、`, `N.M`, `N.M.K`). The needs text is bounded by
@@ -60,6 +63,8 @@ solution that answers each scoring item.
    solution immediately after the technical cover form, or after the solution
    form when there is no technical cover, or after the last form when neither
    exists. Missing subjective chapters remain visible as `【待起草：…】`.
+   The contents page lists forms and chapters, and the scoring index's page
+   column points at each solution chapter, both as page-reference fields.
    A4, 宋体 body, headings in 黑体, page numbers. The file is a
    draft (审阅稿) while any chapter is unconfirmed or any placeholder remains,
    and says so on its cover; otherwise it is a submission copy (提交稿).
