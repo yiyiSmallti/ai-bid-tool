@@ -14,7 +14,14 @@ solution that answers each scoring item.
 1. **Outline.** The tender's format chapter is found in the parsed document and
    split into its numbered forms (附件 N, 格式 N or a numbered list; a list of
    一、 groups holding 1、 2、 forms gives those forms, each group kept as a
-   `cover` divider before them). Each form
+   `cover` divider before them; a chapter split into 第N部分 parts numbers
+   its 一、 forms within each part, and （1） sub-forms under a form make that
+   form their `cover`). Unnumbered forms are found by their own title: an
+   index or （格式） title, a title alone on a sparse page or right after a
+   divider, a form title heading a page before the first numbered form, and,
+   after it, a page-top title over a letter addressed 致：. The front table
+   (须知前附表) before the first chapter is kept as an instructions section.
+   Each form
    keeps its label, title, source pages or Word location, verbatim text and a
    kind: `cover`, `letter`, `price`, `declaration`, `copy`, `deviation`,
    `scoring_index`, `roster`, `solution`, or `form` for any other form. A tender without a format chapter
@@ -31,8 +38,13 @@ solution that answers each scoring item.
    only when its name starts on that line (whole, wrapped, or assembled from
    the leading words of a PDF cell split between rule lines) and its top score
    appears between it and the next item; rows of one item scored separately on
-   one line are added together. Where several packages each have a table, the
-   first package's items are listed. The outline and solution drafting use the
+   one line are added together. A model name that differs from the source
+   only by cell splitting or a dropped character takes the source's name; an
+   unnamed sub-row adds its score to the item above. Where several packages
+   each have a table, the first package's items are listed, the last item's
+   rule ending at the next package or total. An item is subjective when its
+   rule is judged (优/良/中, 分析, 综合评审) rather than counted (每提供…得 N
+   分) or met-or-not. The outline and solution drafting use the
    newest succeeded review of the same parsed text; a reparsed tender falls
    back to the parser until reviewed again. The review sends masked text and
    is a model job like drafting (requirement 7).
