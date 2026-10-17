@@ -35,9 +35,11 @@ from task_fixtures import actor_context_async, finish_scope, seed_task
 
 
 @pytest.fixture
-def resource_rows(admin_engine):
+def resource_rows(database):
+    # `database` empties the tables first; a gateway installation row left by an earlier
+    # test on the worker would otherwise reject these member-less writes.
     ids = {}
-    with Session(admin_engine) as session, session.begin():
+    with Session(database) as session, session.begin():
         for group in range(2):
             task = Task(id=uuid4(), name="Synthetic resource task")
             seed_task(session, task)
