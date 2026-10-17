@@ -263,13 +263,21 @@ def test_solution_docx_order_styles_placeholders_and_missing_chapters(placement)
         for p in headings
     )
     texts = [p.text for p in paragraphs]
+    # Each form opens with one heading carrying its label and title.
+    starts = {
+        p.text.split()[0]: index
+        for index, p in enumerate(paragraphs)
+        if p.style is not None
+        and p.style.name == "Form Start Heading"
+        and p.text.startswith("附件")
+    }
     first = paragraphs.index(headings[0])
     if placement == "technical_cover":
-        assert first < texts.index("附件3")
+        assert first < starts["附件3"]
     elif placement == "solution":
-        assert texts.index("附件2") < first < texts.index("附件3")
+        assert starts["附件2"] < first < starts["附件3"]
     else:
-        assert texts.index("附件2") < first
+        assert starts["附件2"] < first
     number = texts[first].split("、")[0]
     section = next(p for p in paragraphs if p.text == f"{number}.1 执行安排")
     assert section.style is not None

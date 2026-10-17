@@ -10,7 +10,7 @@ the file says it is a review draft (审阅稿) while any remain.
 import io
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import cast
 from uuid import UUID
 
@@ -356,6 +356,9 @@ def solution_anchor(number: str) -> str:
     return "solution_" + number.replace(".", "_")
 
 
+TEXT_WIDTH = Cm(16)
+
+
 class Renderer:
     """Writes outline forms into one DOCX in the house style: A4, 宋体 body, 黑体 headings."""
 
@@ -597,6 +600,17 @@ class Renderer:
 
     def paragraph(self, block: Paragraph, *, heading: bool) -> None:
         paragraph = self._new(style="Heading 1" if heading else None)
+        self._fill(paragraph, block, heading=heading)
+        fmt = paragraph.paragraph_format
+        start = (fmt.left_indent or 0) + (fmt.first_line_indent or 0)
+        width = Pt(sum(12 if ord(char) > 0xFF else 6 for char in paragraph.text))
+        if start > Pt(100) and start + width > TEXT_WIDTH >= width:
+            # A signature line indented to the right outgrows the line once a name
+            # fills its blank; move it left so it stays one line.
+            fmt.left_indent = Pt(0)
+            fmt.first_line_indent = TEXT_WIDTH - width
+
+    def _fill(self, paragraph, block: Paragraph, *, heading: bool) -> None:
         if block.align == "center" or heading:
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         else:
@@ -720,8 +734,26 @@ class Renderer:
         responses: list[Response],
         answers: list[str | None],
     ) -> None:
-        title_done = False
-        for block in blocks:
+        title = re.sub(r"[\s：:]", "", form.title)
+        label = re.compile(f"^{re.escape(form.label.rstrip('、.．'))}[、.．]?")
+
+        def stripped(block: Paragraph) -> str:
+            return label.sub("", re.sub(r"[\s：:]", "", plain(block)))
+
+        heading = next(
+            (
+                index
+                for index, block in enumerate(blocks)
+                if isinstance(block, Paragraph)
+                and len(text := stripped(block)) >= 2
+                and (text.startswith(title[:30]) or title.startswith(text))
+            ),
+            None,
+        )
+        if heading is None and form.kind != "cover":
+            self._new(f"{form.label} {form.title}", style="Heading 1")
+        bare_label = False
+        for index, block in enumerate(blocks):
             if isinstance(block, Grid):
                 if form.kind == "deviation" and deviation is not None:
                     rows, weights, drafted = self.deviation_rows(block, deviation, responses)
@@ -736,18 +768,18 @@ class Renderer:
                 else:
                     self.grid(block)
                 continue
-            text = re.sub(r"[\s：:]", "", plain(block)).removeprefix(form.label)
-            title = re.sub(r"[\s：:]", "", form.title)
-            is_title = (
-                not title_done
-                and len(text) >= 2
-                and (text.startswith(title[:30]) or title.startswith(text))
-            )
-            if is_title:
-                title_done = True
-            self.paragraph(block, heading=is_title)
-        if not title_done and form.kind != "cover":
-            self._new(f"{form.label} {form.title}", style="Heading 1")
+            if (
+                (index < heading if heading is not None else form.kind != "cover")
+                and form.label
+                and not stripped(block)
+                and plain(block).strip()
+            ):
+                # 附件11 printed on its own line joins the title heading.
+                bare_label = True
+                continue
+            if index == heading and bare_label:
+                block = replace(block, pieces=[Text(f"{form.label}："), *block.pieces])
+            self.paragraph(block, heading=index == heading)
         if form.kind == "copy":
             paragraph = self._new()
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -851,9 +883,15 @@ def split_by_form(blocks: list[Paragraph | Grid], forms: list[OutlineForm]):
     starts: list[int] = []
     cursor = 0
     for form in forms:
-        titled = form.label + re.sub(r"\s", "", form.title)[:4]
+        # The outline writes 1、 where the tender may print "1 投标函", so the
+        # separator after the number is optional.
+        titled = re.compile(
+            re.escape(form.label.rstrip("、.．"))
+            + r"[、.．]?"
+            + re.escape(re.sub(r"\s", "", form.title)[:4])
+        )
         found = next(
-            (p for p in range(cursor, len(blocks)) if (texts[p] or "").startswith(titled)),
+            (p for p in range(cursor, len(blocks)) if titled.match(texts[p] or "")),
             None,
         )
         if found is None:

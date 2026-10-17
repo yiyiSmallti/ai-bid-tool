@@ -9,6 +9,7 @@ joined back into paragraphs. Nothing is reworded.
 """
 
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, cast
 
@@ -358,36 +359,48 @@ def page_blocks(
     return blocks, state
 
 
-def margins(pdf: pymupdf.Document, pages: list[int]) -> tuple[float, float]:
-    """The text column: the leftmost common left edge and the most common right edge.
+def _edges(page: pymupdf.Page) -> list[tuple[int, int]]:
+    """Left and right edges of a page's full-width text lines, the ones that define
+    its column; signature blocks and short lines do not."""
+    edges = []
+    for block in cast(dict, page.get_text("dict"))["blocks"]:
+        for line in block.get("lines", []):
+            # Spacer lines of blanks sit at the page edge, outside the text column.
+            if not "".join(span["text"] for span in line["spans"]).strip():
+                continue
+            x0, _, x1, _ = line["bbox"]
+            if x1 - x0 > page.rect.width * 0.55:
+                edges.append((round(x0), round(x1)))
+    return edges
 
-    Hanging indents make continuation lines outnumber first lines, so the left edge
-    is the smallest one that several lines share, not the most frequent.
+
+def _column(edges: list[tuple[int, int]]) -> tuple[float, float] | None:
+    """The leftmost full line near the usual left edge, and the most common right edge.
+
+    Paragraphs indent their first line, so the usual edge may be an indent; the
+    column starts at the leftmost full line within a first-line indent of it.
     """
-    lefts: dict[int, int] = {}
-    rights: dict[int, int] = {}
-    for number in pages:
-        page = pdf[number - 1]
-        for block in cast(dict, page.get_text("dict"))["blocks"]:
-            for line in block.get("lines", []):
-                x0, _, x1, _ = line["bbox"]
-                lefts[round(x0)] = lefts.get(round(x0), 0) + 1
-                if x1 > page.rect.width * 0.7:
-                    rights[round(x1)] = rights.get(round(x1), 0) + 1
-    if not lefts:
-        return 72.0, 523.0
-    common = [x for x, count in lefts.items() if count >= 3] or list(lefts)
-    right = max(rights, key=lambda x: rights[x]) if rights else 523
-    return float(min(common)), float(right)
+    if not edges:
+        return None
+    usual = Counter(left for left, _ in edges).most_common(1)[0][0]
+    left = min(x for x, _ in edges if x >= usual - 40)
+    return float(left), float(Counter(right for _, right in edges).most_common(1)[0][0])
+
+
+def margins(pdf: pymupdf.Document, pages: list[int]) -> list[tuple[float, float]]:
+    """Each page's text column. Forms copied from different templates keep different
+    margins, so a page with full lines has its own; other pages take the range's."""
+    edges = [_edges(pdf[number - 1]) for number in pages]
+    shared = _column([edge for page in edges for edge in page]) or (72.0, 523.0)
+    return [_column(page) or shared for page in edges]
 
 
 def form_blocks(content: bytes, pages: list[int]) -> list[Block]:
     """Blocks of the given pages in order; the tender's own page breaks are not kept."""
     with pymupdf.open(stream=content, filetype="pdf") as pdf:
-        left, right = margins(pdf, pages)
         out: list[Block] = []
         carry = None
-        for number in pages:
+        for number, (left, right) in zip(pages, margins(pdf, pages), strict=True):
             blocks, carry = page_blocks(pdf, number, left, right, carry)
             out.extend(blocks)
         return out

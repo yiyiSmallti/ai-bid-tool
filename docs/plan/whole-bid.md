@@ -49,8 +49,12 @@ solution that answers each scoring item.
    back to the parser until reviewed again. The review sends masked text and
    is a model job like drafting (requirement 7).
 2. **Forms.** A PDF form is rebuilt from its page layout: paragraphs with
-   their indents and alignment, drawn or typed blanks with the hint printed on
-   them, and tables with merged cells. A Word form is rebuilt from its verbatim
+   their indents and alignment (measured against each page's own text column,
+   so pages of different templates keep whole lines), drawn or typed blanks
+   with the hint printed on them, and tables with merged cells. A form opens
+   with one heading of its label and title, the label joining the title when
+   the tender prints it on its own line; a right-indented signature line that
+   a filled value would push past the margin moves left. A Word form is rebuilt from its verbatim
    text, tab-separated rows becoming editable tables. Labels the
    installation can answer (bidder name, address, phone, legal representative,
    unified social credit code, project name and number) are filled from the task and the selected
