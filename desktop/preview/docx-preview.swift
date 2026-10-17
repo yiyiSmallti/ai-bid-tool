@@ -26,6 +26,11 @@ guard let docx = try? Data(contentsOf: URL(fileURLWithPath: args[1])) else { fai
 // Page margins come from the print margins, so sections drop their own top and
 // bottom padding and every printed page keeps the same space. Each section is a
 // page docx-preview split at a page break, so printing starts each on a new page.
+// docx-preview drops keep-with-next, so each run of such paragraphs is wrapped
+// with the block after it, and a group that would cross a printed page is
+// pushed down to the next one, as Word keeps them together. WebKit clips a
+// block that a page break (break-inside or break-before) moves to the next
+// page, so the group gets a top margin that reaches the page end instead.
 let html = """
 <!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:">
@@ -38,8 +43,46 @@ section.docx + section.docx { break-before: page }
 <script>\(script("jszip.min.js"))</script><script>\(script("docx-preview.min.js"))</script>
 </head><body><div id="out"></div><script>
 const bytes = Uint8Array.from(atob("\(docx.base64EncodedString())"), c => c.charCodeAt(0));
-docx.renderAsync(bytes, document.getElementById("out"), null,
-    {inWrapper: false, breakPages: true, ignoreLastRenderedPageBreak: true, useBase64URL: true})
+const options = {inWrapper: false, breakPages: true, ignoreLastRenderedPageBreak: true, useBase64URL: true};
+function keep(element) {
+  return element && element.tagName === "P" && element.style.breakAfter === "avoid";
+}
+docx.parseAsync(bytes, options)
+  .then(parsed => {
+    for (const item of parsed.documentPart.body.children)
+      if (item.type === "paragraph" && item.keepNext)
+        item.cssStyle = {...item.cssStyle, breakAfter: "avoid"};
+    return docx.renderDocument(parsed, document.getElementById("out"), null, options);
+  })
+  .then(() => {
+    for (const first of [...document.querySelectorAll("p")]) {
+      if (!keep(first) || keep(first.previousElementSibling)) continue;
+      const group = document.createElement("div");
+      group.className = "keep";
+      first.before(group);
+      let next = first;
+      do { const after = next.nextElementSibling; group.append(next); next = after; }
+      while (keep(group.lastElementChild) && next);
+    }
+    // Printed page height in CSS pixels: the page width is scaled to the paper.
+    const height = (841.9 - 56 * 2) / (595.3 / 794);
+    let origin = 0;
+    for (const block of document.querySelectorAll("section.docx, article > *")) {
+      const box = block.getBoundingClientRect();
+      if (block.tagName === "SECTION" || getComputedStyle(block).breakBefore === "page") {
+        origin = box.top;
+        continue;
+      }
+      if (block.className === "keep") {
+        const end = origin + (Math.floor((box.top - origin) / height) + 1) * height;
+        // Pages end a little earlier where a line would be cut; leave a margin.
+        if (box.bottom > end && box.height < height) {
+          block.style.marginTop = (end - box.top) + "px";
+          origin = end;
+        }
+      }
+    }
+  })
   .then(() => document.fonts.ready)
   .then(() => new Promise(done => setTimeout(done, 200)))
   .then(() => webkit.messageHandlers.done.postMessage("ok"),

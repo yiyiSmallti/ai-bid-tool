@@ -54,7 +54,8 @@ solution that answers each scoring item.
    with the hint printed on them, and tables with merged cells. A form opens
    with one heading of its label and title, the label joining the title when
    the tender prints it on its own line, a title wrapped onto a second line
-   kept whole, and body text set against it split off; a right-indented signature line that
+   kept whole, and body text set against it split off; a form's closing signature lines stay
+   on one page; a table found only in invisible fills under the text is text; a right-indented signature line that
    a filled value would push past the margin moves left. A Word form is rebuilt from its verbatim
    text, tab-separated rows becoming editable tables. Labels the
    installation can answer (bidder name, address, phone, legal representative,

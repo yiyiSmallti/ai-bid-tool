@@ -45,7 +45,8 @@ converter in [converter.py](../../server/app/providers/converter.py): a
 Gotenberg (LibreOffice) service set by `BID_CONVERTER_URL`, or else the desktop's
 `bid-docx-preview` helper set by `BID_PREVIEW_RENDERER`, which lays the DOCX out
 with docx-preview in an offline WebKit view and prints it to A4 pages. Its
-pagination approximates Word's. The returned PDF is
+pagination approximates Word's; paragraphs kept with the next one move to a
+new page together with it. The returned PDF is
 opened in a disposable PDF child and bounded by `BID_PREVIEW_MAX_PAGES` before it is stored encrypted
 under the org's prefix and recorded in the job result. An unreadable, oversized
 or failed conversion stores nothing; the job stays failed until an explicit
