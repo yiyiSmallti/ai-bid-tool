@@ -11,7 +11,8 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Exported forms keep whole lines on tenders that mix page templates, open
   with one heading of label and title (附件11 printed above its title joins
   it; a tender's "1 投标函" matches an outline's 1、), and keep filled
-  signature lines on one line. See requirement 2 of the
+  signature lines on one line. A wrapped form title stays one heading and
+  body text set against a title is split off. See requirement 2 of the
   [whole-bid plan](plan/whole-bid.md).
 
 ## 2026-10-17: Outline acceptance on public tenders
